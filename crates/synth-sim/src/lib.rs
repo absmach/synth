@@ -791,6 +791,8 @@ pub struct MeasureResult {
     pub value: f64,
     pub min: Option<f64>,
     pub max: Option<f64>,
+    /// Unit of `value`: `V`, `A`, `dB`, `Hz` or `mA`.
+    pub unit: &'static str,
 }
 
 impl MeasureResult {
@@ -799,6 +801,18 @@ impl MeasureResult {
             limit_outcome(self.min, self.max, self.value),
             LimitOutcome::Pass
         )
+    }
+}
+
+/// The unit `simulate` reports for a measure. An `at_frequency` node voltage
+/// reads `vdb`, so it is dB rather than V.
+fn measure_unit(measure: &Measure) -> &'static str {
+    match measure.kind {
+        MeasureKind::NodeVoltage if measure.at_frequency.is_some() => "dB",
+        MeasureKind::NodeVoltage => "V",
+        MeasureKind::Current => "A",
+        MeasureKind::RelativeDb => "Hz",
+        MeasureKind::PinCurrent => "mA",
     }
 }
 
@@ -980,10 +994,13 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
             measures.push(MeasureResult {
                 name: measure.name.clone(),
                 value,
-                min: None,
+                min: Some(0.0),
                 max: Some(limit.limit_ma),
+                unit: measure_unit(measure),
             });
-            let diagnostic = if matches!(
+            let diagnostic = if value < 0.0 {
+                pin_current_wrong_way(&measure.name, value, limit)
+            } else if matches!(
                 limit_outcome(None, Some(limit.limit_ma), value),
                 LimitOutcome::Pass
             ) {
@@ -1003,6 +1020,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
             value,
             min: measure.min,
             max: measure.max,
+            unit: measure_unit(measure),
         };
         match limit_outcome(measure.min, measure.max, value) {
             LimitOutcome::Pass => {
@@ -1335,6 +1353,25 @@ fn pin_current_info(name: &str, value: f64, limit: &PinDriveLimit) -> Diagnostic
 fn pin_current_error(name: &str, value: f64, limit: &PinDriveLimit) -> Diagnostic {
     sim_builder(E_SYNTH_SIM_004, Severity::Error, "measurement limit")
         .message(pin_current_message(name, value, "is above", limit))
+        .build()
+}
+
+/// A pin current whose sign says the circuit drives the pin the wrong way:
+/// a high pin is sinking current, or a low pin is sourcing it.
+fn pin_current_wrong_way(name: &str, value: f64, limit: &PinDriveLimit) -> Diagnostic {
+    let direction = match limit.level {
+        SourceLevel::High => "sinking",
+        SourceLevel::Low => "sourcing",
+    };
+    sim_builder(E_SYNTH_SIM_004, Severity::Error, "measurement limit")
+        .message(format!(
+            "measure `{name}` = {value} mA: pin is being driven against its level: \
+             {direction} {} mA while {} on `{}` (datasheet: {}); ngspice prints 6 significant digits",
+            value.abs(),
+            limit.level.as_str(),
+            limit.pin,
+            limit.datasheet_ref
+        ))
         .build()
 }
 
@@ -2124,8 +2161,15 @@ fn emit_deck(
                 };
                 let vector = format!("@{}[i]", limit.element);
                 current_saves.insert(vector.clone());
+                // High sources read negative when sourcing; low sources read
+                // positive when sinking. Flip high so positive always means
+                // the pin is working in its declared direction.
+                let signed = match limit.level {
+                    SourceLevel::High => format!("-{vector}"),
+                    SourceLevel::Low => vector,
+                };
                 measure_lines.push(format!(
-                    "let m{index} = abs({vector}) * 1000\necho SYNTH_MEAS {} $&m{index}",
+                    "let m{index} = {signed} * 1000\necho SYNTH_MEAS {} $&m{index}",
                     measure.name
                 ));
             }

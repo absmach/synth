@@ -31,9 +31,9 @@ The design must have a testbench sidecar beside it, named
 The command prints one line per measure:
 
 ```
-PASS vmid = 6 (min 5.7, max 6.3)
-MEASURED bias = 1.65
-FAIL iled = 0.026 (min 0.019, max 0.021)
+PASS vmid = 6 V (min 5.7, max 6.3)
+MEASURED bias = 1.65 V
+FAIL iled = 0.026 A (min 0.019, max 0.021)
 ```
 
 `MEASURED` means the measure declared no limits; it has nothing to pass or
@@ -163,7 +163,8 @@ the tool has no argument for it, so a remote caller cannot choose a command.
 <-- { "jsonrpc": "2.0", "id": 4,
       "result": { "passed": true,
                   "measures": [ { "name": "vmid", "value": 6.0,
-                                  "min": 5.7, "max": 6.3, "passed": true } ],
+                                  "unit": "V", "min": 5.7, "max": 6.3,
+                                  "passed": true } ],
                   "diagnostics": [ ... ] } }
 ```
 
@@ -377,9 +378,13 @@ Rules per kind:
   the pin's datasheet `max_source_ma` (level `high`) or `max_sink_ma` (level
   `low`), never a number in the sidecar. The pin must have a matching
   `[[source]]`; otherwise the measure is `E-SYNTH-SIM-007`. The deck emits
-  `save all @V<N>[i]` and `let m<index> = abs(@V<N>[i]) * 1000`, so the reported
-  value and the `E-SYNTH-SIM-004` message are milliamps. The failure names the
-  pin, the measured current, the datasheet field and limit, and the
+  `save all @V<N>[i]` and a signed expression: `let m<index> = -@V<N>[i] * 1000`
+  for level `high` (positive = sourcing) and `let m<index> = @V<N>[i] * 1000`
+  for `low` (positive = sinking). A positive value is compared with the
+  matching limit; a negative value means the circuit drives the pin against
+  its level and is always a blocking failure. The reported value, the
+  `E-SYNTH-SIM-004` message and the JSON `unit` are milliamps. The failure
+  names the pin, the measured current, the datasheet field and limit, and the
   `datasheet_ref`; a pass is informational.
 - `relative_db` measures a corner in an `ac` analysis:
 
@@ -396,7 +401,10 @@ Rules per kind:
   a message naming the Synth measure, node and drop band.
 
 `min` must not exceed `max`. Limits are inclusive and compared at ngspice's
-print precision (see below).
+print precision (see below). Every result carries a unit: `V` for a node
+voltage, `dB` for a node voltage with `at_frequency`, `A` for a device
+current, `Hz` for `relative_db` and `mA` for `pin_current`. The CLI prints it
+after the value and the MCP JSON carries it as `unit`.
 
 ### `[options]`
 

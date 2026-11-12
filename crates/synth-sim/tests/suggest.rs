@@ -1215,6 +1215,88 @@ fn two_driven_pins_on_the_supply_net_are_reported_as_ambiguous() {
     );
 }
 
+/// One output pin with drive data plus another output-capable pin without it
+/// is not a usable supply: the second pin could drive the net too, so the
+/// draft must name both and guess neither.
+#[test]
+fn one_driven_and_one_undriven_output_pin_on_the_supply_net_are_ambiguous() {
+    let board = board_with_registry(
+        &GPIO_LED_BOARD.replace(
+            "net \"VCC\" { U1.gpio5, R1.p1 }",
+            "net \"VCC\" { U1.gpio5, U1.gpio6, R1.p1 }",
+        ),
+        |registry| {
+            fixture_led(registry);
+            patch_two_output_pins(registry);
+        },
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("two drivers"))
+        .unwrap_or_else(|| panic!("no ambiguity line in {:?}", suggestion.not_covered));
+    assert!(
+        line.contains("net \"VCC\" has two drivers: U1.gpio5 has drive data, U1.gpio6 does not"),
+        "{line}"
+    );
+}
+
+/// The divider shape consults the same supply ambiguity: a second
+/// output-capable pin with no drive data must not be silently ignored while
+/// the first pin's `high_v` is treated as the rail.
+#[test]
+fn an_ambiguous_pin_supply_on_a_divider_is_reported_not_drafted() {
+    let board = board_with_registry(
+        r#"
+board "divider-ambiguous-pin" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+  net "VCC" { U1.gpio5, U1.gpio6, R1.p1 }
+  net "GND" { U1.gnd, R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}
+"#,
+        patch_two_output_pins,
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(suggestion.toml.is_none(), "{:?}", suggestion.toml);
+    let line = suggestion
+        .not_covered
+        .iter()
+        .find(|line| line.contains("divider") && line.contains("two drivers"))
+        .unwrap_or_else(|| panic!("no divider ambiguity line in {:?}", suggestion.not_covered));
+    assert!(
+        line.contains("net \"VCC\" has two drivers: U1.gpio5 has drive data, U1.gpio6 does not"),
+        "{line}"
+    );
+}
+
+/// Rename `gp5`/`gp6` to `gpio5`/`gpio6`; only `gpio5` carries drive data.
+fn patch_two_output_pins(registry: &mut synth_registry::Registry) {
+    let mut mcu = registry.lookup("rp2350").expect("rp2350").clone();
+    for (from, to, drive) in [
+        ("gp5", "gpio5", Some(fixture_drive())),
+        ("gp6", "gpio6", None),
+    ] {
+        let pin = mcu
+            .pins
+            .iter_mut()
+            .find(|pin| pin.name == from)
+            .expect(from);
+        pin.name = to.to_string();
+        pin.drive = drive;
+    }
+    registry.insert(mcu);
+}
+
 /// Two pull-downs on a regulator output are not a divider, so they must not
 /// be reported as "divider R1/R2".
 #[test]
@@ -1749,6 +1831,13 @@ fn a_suggested_rc_testbench_passes_a_5v_board_and_measures_the_slope() {
     let report = simulate_suggested(&board, &testbench, &ngspice);
     assert!(report.passed(), "{:?}", report.measures);
 
+    let corner = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "corner")
+        .expect("corner measured");
+    assert_eq!(corner.unit, "Hz");
+
     let fc = 1.0 / (2.0 * std::f64::consts::PI * 1e3 * 100e-9);
     for name in ["passband", "stopband"] {
         let frequency = measure(&testbench, name)
@@ -1759,8 +1848,9 @@ fn a_suggested_rc_testbench_passes_a_5v_board_and_measures_the_slope() {
             .measures
             .iter()
             .find(|measure| measure.name == name)
-            .unwrap_or_else(|| panic!("{name} not measured"))
-            .value;
+            .unwrap_or_else(|| panic!("{name} not measured"));
+        assert_eq!(measured.unit, "dB", "{name}");
+        let measured = measured.value;
         assert!(
             (measured - expected).abs() < 0.01,
             "{name} at {frequency} Hz is {measured} dB, expected {expected} dB"

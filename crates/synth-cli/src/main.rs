@@ -3362,7 +3362,11 @@ fn sim(
             (None, Some(max)) => format!(" (max {max})"),
             (None, None) => String::new(),
         };
-        writeln!(out, "{status} {} = {}{limits}", measure.name, measure.value)?;
+        writeln!(
+            out,
+            "{status} {} = {} {}{limits}",
+            measure.name, measure.value, measure.unit
+        )?;
     }
     let blocking: Vec<_> = report
         .diagnostics

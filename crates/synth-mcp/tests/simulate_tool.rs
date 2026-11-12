@@ -150,6 +150,7 @@ fn a_passing_measurement_returns_passed() {
     assert_eq!(result["passed"], true, "{result}");
     assert_eq!(result["measures"][0]["name"], "vmid");
     assert_eq!(result["measures"][0]["value"], 6.0);
+    assert_eq!(result["measures"][0]["unit"], "V");
     assert_eq!(result["measures"][0]["passed"], true);
 }
 

@@ -2317,6 +2317,7 @@ fn sim_json(
         "measures": measures.iter().map(|measure| serde_json::json!({
             "name": &measure.name,
             "value": measure.value,
+            "unit": measure.unit,
             "min": measure.min,
             "max": measure.max,
             // A measure with no limits has nothing to pass or fail; the CLI
@@ -5238,11 +5239,17 @@ fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result
     // author who names a stock footprint has no reason to measure it.
     ensure_footprint_dimensions(&mut part)?;
 
+    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
+    // Reuse the registry loader's post-parse checks so the tool cannot write
+    // a part that every later registry load rejects.
+    let filename = format!("{}.synth.toml", part.id.as_str());
+    synth_registry::load_from_strs(&[(&filename, &serialized)])
+        .map_err(|e| format!("invalid part TOML: {e}"))?;
+
     let user_dir = resolve_user_registry(args)?;
     std::fs::create_dir_all(&user_dir).map_err(|e| format!("cannot create user registry: {e}"))?;
 
-    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
-    let path = user_dir.join(format!("{}.synth.toml", part.id.as_str()));
+    let path = user_dir.join(filename);
     std::fs::write(&path, serialized).map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
@@ -5637,6 +5644,90 @@ electrical_type = "input"
             dims.courtyard_margin_mm,
             Some(synth_registry::footprint_svg::COURTYARD_MARGIN_MM)
         );
+    }
+
+    /// A drive block without `datasheet_ref` parses but would break every
+    /// subsequent registry load. The tool must run the loader checks before
+    /// it creates the user registry or writes anything.
+    #[test]
+    fn author_part_rejects_an_invalid_drive_block_before_writing() {
+        let dir = scratch("author_bad_drive");
+        let user = dir.join("user_registry");
+        let toml_src = r#"
+id = "test_bad_drive_ic"
+kind = "ic"
+[[pins]]
+name = "gpio5"
+number = "1"
+electrical_type = "bidirectional"
+[pins.drive]
+high_v = 3.3
+low_v = 0.0
+max_source_ma = 4.0
+max_sink_ma = 4.0
+"#;
+        let res = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": user.to_str().unwrap() }),
+            None,
+        );
+
+        assert!(
+            res.is_err(),
+            "a drive block without datasheet_ref must fail"
+        );
+        assert!(
+            res.unwrap_err().contains("datasheet_ref"),
+            "the loader error should name datasheet_ref"
+        );
+        assert!(
+            !user.exists(),
+            "the user registry must not be created before validation"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The loader checks also accept a valid drive block, and the written
+    /// part reloads through the same path `synth registry list` uses.
+    #[test]
+    fn author_part_writes_valid_drive_data_that_reloads() {
+        let dir = scratch("author_drive");
+        let toml_src = r#"
+id = "test_drive_ic"
+kind = "ic"
+[[pins]]
+name = "gpio5"
+number = "1"
+electrical_type = "bidirectional"
+[pins.drive]
+high_v = 3.3
+low_v = 0.0
+max_source_ma = 4.0
+max_sink_ma = 4.0
+output_resistance_ohm = 25.0
+datasheet_ref = "Table 5-1"
+"#;
+        let res = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": dir.to_str().unwrap() }),
+            None,
+        )
+        .expect("a valid drive block should be authored");
+
+        assert_eq!(res["status"], "authored");
+        let registry = synth_registry::load_dir(&dir).expect("the written part reloads");
+        let drive = registry
+            .lookup("test_drive_ic")
+            .expect("test_drive_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .drive
+            .as_ref()
+            .expect("drive block");
+        assert_eq!(drive.high_v, 3.3);
+        assert_eq!(drive.max_source_ma, 4.0);
+        assert_eq!(drive.datasheet_ref.as_deref(), Some("Table 5-1"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

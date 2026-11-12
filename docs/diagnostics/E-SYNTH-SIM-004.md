@@ -27,14 +27,28 @@ is derived from the matching `[[source]]` and the pin's `[pins.drive]` data:
 | `high`       | `max_source_ma` |
 | `low`        | `max_sink_ma`   |
 
-The measured value is milliamps (`abs(@V<N>[i]) * 1000`). A pass is an
-informational diagnostic. A failure is blocking and names all of: the measure,
-the measured milliamps, the pin, the level, the datasheet field and limit, and
-the `datasheet_ref`:
+The emitted expression is signed. For a `high` source it is
+`-@V<N>[i] * 1000`, so a positive value means the pin is sourcing current; for
+a `low` source it is `@V<N>[i] * 1000`, so a positive value means the pin is
+sinking. A positive value is compared with the matching limit. A negative
+value means the circuit drives the pin against its level (a high pin sinking,
+or a low pin sourcing) and is always a blocking failure, whatever the limit.
+A pass is an informational diagnostic. A failure is blocking and names all of:
+the measure, the measured milliamps, the pin, the level, the datasheet field
+and limit, and the `datasheet_ref`:
 
 ```
 measure `pin_current` = 6.6 mA is above the `U1.gpio5` high pin limit
 max_source_ma = 4 mA (datasheet: Table 5-1); ngspice prints 6 significant digits
+```
+
+A high pin with an external 5 V pull-up through 1 kΩ sinks 1.65854 mA into a
+3.3 V source with 25 Ω output resistance:
+
+```
+measure `pin_current` = -1.65854 mA: pin is being driven against its level:
+sinking 1.65854 mA while high on `U1.gpio5` (datasheet: Table 5-1); ngspice
+prints 6 significant digits
 ```
 
 ## Minimal reproduction

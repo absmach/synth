@@ -124,7 +124,10 @@ fn divider_example_prints_pass() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("PASS vmid = 6"), "{stdout}");
+    assert!(
+        stdout.contains("PASS vmid = 6 V (min 5.7, max 6.3)"),
+        "{stdout}"
+    );
 }
 
 #[test]

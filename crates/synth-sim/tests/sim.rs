@@ -521,6 +521,44 @@ kind = "pin_current"
 pin = "U1.gpio5"
 "#;
 
+/// A GPIO pin with an external 1 k resistor back to a rail it does not drive.
+const GPIO_BACKDRIVE: &str = r#"
+board "gpio-backdrive" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "VCC" { U1.gpio5, R1.p1 }
+  net "RAIL" { R1.p2 }
+  net "GND" { U1.gnd }
+}
+"#;
+
+fn backdrive_tb(volts: f64, level: &str) -> String {
+    format!(
+        r#"
+ground = "GND"
+ignore = ["U1"]
+
+[[source]]
+pin = "U1.gpio5"
+level = "{level}"
+
+[[source]]
+net = "RAIL"
+kind = "dc"
+dc = {volts}
+
+[analysis]
+op = true
+
+[[measure]]
+name = "pin_current"
+kind = "pin_current"
+pin = "U1.gpio5"
+"#
+    )
+}
+
 fn fixture_led(registry: &mut synth_registry::Registry) {
     let mut led = registry
         .lookup("ltst_c190krkt")
@@ -660,10 +698,7 @@ fn a_pin_source_emits_its_level_and_output_resistance() {
     assert!(deck.contains("V1 vpin_1 0 DC 3.3e0"), "deck:\n{deck}");
     assert!(deck.contains("Rpin1 n_VCC vpin_1 2.5e1"), "deck:\n{deck}");
     assert!(deck.contains("save all @V1[i]"), "deck:\n{deck}");
-    assert!(
-        deck.contains("let m0 = abs(@V1[i]) * 1000"),
-        "deck:\n{deck}"
-    );
+    assert!(deck.contains("let m0 = -@V1[i] * 1000"), "deck:\n{deck}");
     assert!(
         deck.contains("echo SYNTH_MEAS pin_current $&m0"),
         "deck:\n{deck}"
@@ -733,7 +768,8 @@ fn a_pin_current_measure_passes_on_real_ngspice() {
         .find(|measure| measure.name == "pin_current")
         .expect("pin_current result");
     assert_eq!(pin_current.max, Some(4.0));
-    assert_eq!(pin_current.min, None);
+    assert_eq!(pin_current.min, Some(0.0));
+    assert_eq!(pin_current.unit, "mA");
     assert!(
         (0.8..1.8).contains(&pin_current.value),
         "pin current {} should be about 1.3 mA",
@@ -830,6 +866,135 @@ fn a_low_pin_source_reports_the_sink_limit_on_real_ngspice() {
     assert!(message.contains("max_sink_ma"), "{message}");
     assert!(message.contains("Table 5-1"), "{message}");
     assert!(message.contains("above"), "{message}");
+}
+
+/// A high pin held at 3.3 V through 25 ohms and back-driven from 5 V through
+/// 1 k sinks 1.65854 mA into the pin source. The raw vector is positive, so
+/// `abs()` used to turn this wrong-way current into a PASS; it must fail as
+/// a pin being driven against its level.
+#[test]
+fn a_high_pin_back_driven_from_5v_fails_wrong_way_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(GPIO_BACKDRIVE, |registry| {
+        fixture_mcu(registry, Some(fixture_drive()));
+    });
+    let testbench = testbench(&backdrive_tb(5.0, "high"));
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(
+        !report.passed(),
+        "a 5 V back-drive must not pass: {:?}",
+        report.measures
+    );
+    let pin_current = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "pin_current")
+        .expect("pin_current result");
+    assert_eq!(pin_current.min, Some(0.0));
+    assert!(
+        (pin_current.value + 1.65854).abs() < 1e-4,
+        "back-driven high pin current {} should be -1.65854 mA",
+        pin_current.value
+    );
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_004 && diagnostic.severity.is_blocking()
+        })
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_default();
+    for expected in [
+        "U1.gpio5",
+        "pin is being driven against its level",
+        "sinking 1.65854 mA while high",
+        "Table 5-1",
+    ] {
+        assert!(message.contains(expected), "{message}");
+    }
+    assert!(!message.contains("above"), "{message}");
+}
+
+/// At 12 V the back-drive is 8.4878 mA into the high pin source. `abs()`
+/// already failed this one, but with "above max_source_ma"; the direction is
+/// the real fault, so the message must say the pin is driven against its
+/// level.
+#[test]
+fn a_high_pin_back_driven_from_12v_fails_wrong_way_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(GPIO_BACKDRIVE, |registry| {
+        fixture_mcu(registry, Some(fixture_drive()));
+    });
+    let testbench = testbench(&backdrive_tb(12.0, "high"));
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_004 && diagnostic.severity.is_blocking()
+        })
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_default();
+    for expected in [
+        "U1.gpio5",
+        "pin is being driven against its level",
+        "sinking 8.4878 mA while high",
+    ] {
+        assert!(message.contains(expected), "{message}");
+    }
+    assert!(!message.contains("above"), "{message}");
+}
+
+/// A low pin pulled up to 5 V through 1 k is sinking 4.87805 mA, which is the
+/// right direction for a low level but above the datasheet 4 mA sink limit.
+#[test]
+fn a_low_pin_pulled_up_through_1k_fails_above_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(GPIO_BACKDRIVE, |registry| {
+        fixture_mcu(registry, Some(fixture_drive()));
+    });
+    let testbench = testbench(&backdrive_tb(5.0, "low"));
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(!report.passed(), "{:?}", report.measures);
+    let pin_current = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "pin_current")
+        .expect("pin_current result");
+    assert_eq!(pin_current.min, Some(0.0));
+    assert!(
+        (pin_current.value - 4.87805).abs() < 1e-4,
+        "pulled-up low pin current {} should be +4.87805 mA sinking",
+        pin_current.value
+    );
+    let message = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_004 && diagnostic.severity.is_blocking()
+        })
+        .and_then(|diagnostic| diagnostic.message.as_deref())
+        .unwrap_or_default();
+    for expected in ["U1.gpio5", "max_sink_ma", "4 mA", "above"] {
+        assert!(message.contains(expected), "{message}");
+    }
+    assert!(!message.contains("against its level"), "{message}");
 }
 
 #[test]
@@ -3025,6 +3190,32 @@ fn emits_a_device_current_measure() {
     assert!(deck.contains("save all @DLED1[id]"), "deck:\n{deck}");
     assert!(deck.contains("let m0 = @DLED1[id]"), "deck:\n{deck}");
     assert!(deck.contains("echo SYNTH_MEAS iled $&m0"), "deck:\n{deck}");
+}
+
+/// A device current is reported in amps, unlike a pin current's milliamps.
+#[test]
+fn a_current_measure_reports_amps_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(LED);
+    let testbench = testbench(CURRENT_TB);
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let current = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "iled")
+        .expect("iled result");
+    assert_eq!(current.unit, "A");
+    assert!(
+        (0.019..0.021).contains(&current.value),
+        "LED current {} A should be about 0.020 A",
+        current.value
+    );
 }
 
 fn tb_with(analysis: &str, measure: &str) -> String {

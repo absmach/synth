@@ -548,7 +548,7 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
             }
         }
         if let Some(drive) = &pin.drive {
-            validate_pin_drive(path, &pin.name, drive)?;
+            validate_pin_drive(path, &pin.name, pin.electrical_type, drive)?;
         }
     }
 
@@ -677,6 +677,7 @@ fn check_kicad_pin_roles(part: &Part, path: &Path) -> Result<(), LoadError> {
 fn validate_pin_drive(
     path: &Path,
     pin: &str,
+    electrical_type: crate::ElectricalType,
     drive: &crate::part::PinDrive,
 ) -> Result<(), LoadError> {
     let invalid = |message: String| LoadError::InvalidPinDrive {
@@ -684,6 +685,11 @@ fn validate_pin_drive(
         pin: pin.to_string(),
         message,
     };
+    if !electrical_type.can_output() {
+        return Err(invalid(format!(
+            "`[pins.drive]` requires an output-capable electrical type, not `{electrical_type:?}`"
+        )));
+    }
     if drive
         .datasheet_ref
         .as_deref()
@@ -702,6 +708,18 @@ fn validate_pin_drive(
         if !value.is_finite() {
             return Err(invalid(format!("`{label}` must be finite")));
         }
+    }
+    if drive.high_v < 0.0 {
+        return Err(invalid("`high_v` must not be negative".to_string()));
+    }
+    if drive.low_v < 0.0 {
+        return Err(invalid("`low_v` must not be negative".to_string()));
+    }
+    if drive.high_v <= drive.low_v {
+        return Err(invalid(format!(
+            "`high_v` ({}) must be greater than `low_v` ({})",
+            drive.high_v, drive.low_v
+        )));
     }
     for (label, value) in [
         ("max_source_ma", drive.max_source_ma),
@@ -1520,6 +1538,74 @@ label_side = "inside"
                     "output_resistance_ohm = 25.0",
                     "output_resistance_ohm = 0.0",
                 ),
+            ),
+        ] {
+            let toml = drive_part(&drive);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
+    }
+
+    fn drive_part_with_type(electrical_type: &str, drive: &str) -> String {
+        drive_part(drive).replace(
+            "electrical_type = \"bidirectional\"",
+            &format!("electrical_type = \"{electrical_type}\""),
+        )
+    }
+
+    /// Only pins that can drive a net may carry datasheet drive data: the
+    /// registry README lists output, three-statable, open-drain and
+    /// bidirectional, never an input or passive terminal.
+    #[test]
+    fn a_pin_drive_requires_an_output_capable_electrical_type() {
+        for electrical_type in ["input", "power_input", "passive", "unclassified"] {
+            let toml = drive_part_with_type(electrical_type, COMPLETE_DRIVE);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("drive on a {electrical_type} pin must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{electrical_type}: {error:?}"
+            );
+            assert!(
+                error.to_string().contains("output-capable"),
+                "{electrical_type}: {error}"
+            );
+        }
+        for electrical_type in [
+            "output",
+            "three_statable",
+            "open_drain_low",
+            "open_drain_high",
+            "bidirectional",
+        ] {
+            let toml = drive_part_with_type(electrical_type, COMPLETE_DRIVE);
+            load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .unwrap_or_else(|error| panic!("drive on a {electrical_type} pin: {error}"));
+        }
+    }
+
+    #[test]
+    fn a_pin_drive_rejects_non_positive_level_order_and_negative_levels() {
+        for (label, drive) in [
+            (
+                "high equal to low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = 3.3"),
+            ),
+            (
+                "high below low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = 5.0"),
+            ),
+            (
+                "negative high",
+                COMPLETE_DRIVE.replace("high_v = 3.3", "high_v = -0.1"),
+            ),
+            (
+                "negative low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = -0.1"),
             ),
         ] {
             let toml = drive_part(&drive);

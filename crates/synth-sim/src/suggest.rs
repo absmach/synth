@@ -673,6 +673,12 @@ impl<'a> Draft<'a> {
                     self.describe(bottom),
                     toml_string(&supply_name)
                 ));
+            } else if let Some(reason) = self.pin_supply_issue(supply_net) {
+                self.not_covered.push(format!(
+                    "the divider {} + {}, {reason}",
+                    self.describe(top),
+                    self.describe(bottom)
+                ));
             } else {
                 self.todo_nets.insert(supply_net);
                 self.not_covered.push(format!(
@@ -1575,6 +1581,7 @@ impl<'a> Draft<'a> {
         }
 
         let mut driven = Vec::new();
+        let mut undriven_output = false;
         for endpoint in &net.endpoints {
             let Some(component) = design.component(endpoint.component) else {
                 continue;
@@ -1582,12 +1589,11 @@ impl<'a> Draft<'a> {
             let Some(pin) = design.pin(endpoint.component, endpoint.pin) else {
                 continue;
             };
-            if !(pin.electrical_type.is_output_driver()
-                || pin.electrical_type == ElectricalType::Bidirectional)
-            {
+            if !pin.electrical_type.can_output() {
                 continue;
             }
             let Some(drive) = pin.drive.as_ref() else {
+                undriven_output = true;
                 continue;
             };
             driven.push((
@@ -1595,6 +1601,11 @@ impl<'a> Draft<'a> {
                 format!("{}.{}", component.refdes, pin.name),
                 drive.clone(),
             ));
+        }
+        // One driven pin plus another output-capable pin without drive data is
+        // ambiguous: that pin could drive the net too, so never guess one.
+        if undriven_output {
+            return None;
         }
         // Several driven pins on one net are ambiguous; never guess one.
         let (component, pin, drive) = match driven.as_slice() {
@@ -1639,7 +1650,7 @@ impl<'a> Draft<'a> {
         let net = design.net(net_id)?;
         let mut driven = Vec::new();
         let mut missing_datasheet = Vec::new();
-        let mut output_pin = None;
+        let mut undriven = Vec::new();
         for endpoint in &net.endpoints {
             let Some(component) = design.component(endpoint.component) else {
                 continue;
@@ -1647,9 +1658,7 @@ impl<'a> Draft<'a> {
             let Some(pin) = design.pin(endpoint.component, endpoint.pin) else {
                 continue;
             };
-            if !(pin.electrical_type.is_output_driver()
-                || pin.electrical_type == ElectricalType::Bidirectional)
-            {
+            if !pin.electrical_type.can_output() {
                 continue;
             }
             let label = format!("{}.{}", component.refdes, pin.name);
@@ -1664,11 +1673,7 @@ impl<'a> Draft<'a> {
                     driven.push(label);
                 }
                 Some(_) => missing_datasheet.push(label),
-                None => {
-                    if output_pin.is_none() {
-                        output_pin = Some(label);
-                    }
-                }
+                None => undriven.push(label),
             }
         }
         if driven.len() > 1 {
@@ -1686,7 +1691,13 @@ impl<'a> Draft<'a> {
                 toml_string(&net.name)
             ));
         }
-        output_pin.map(|label| {
+        if let ([driver], Some(other)) = (driven.as_slice(), undriven.first()) {
+            return Some(format!(
+                "net {} has two drivers: {driver} has drive data, {other} does not",
+                toml_string(&net.name)
+            ));
+        }
+        undriven.first().map(|label| {
             format!(
                 "pin has no drive data for `{label}` on net {}; add a `[pins.drive]` block \
                  with the datasheet levels, limits and `datasheet_ref`",
