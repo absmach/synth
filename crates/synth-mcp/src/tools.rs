@@ -5656,6 +5656,11 @@ electrical_type = "input"
         let toml_src = r#"
 id = "test_bad_drive_ic"
 kind = "ic"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 2.0
+
 [[pins]]
 name = "gpio5"
 number = "1"
@@ -5695,6 +5700,11 @@ max_sink_ma = 4.0
         let toml_src = r#"
 id = "test_drive_ic"
 kind = "ic"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 2.0
+
 [[pins]]
 name = "gpio5"
 number = "1"
