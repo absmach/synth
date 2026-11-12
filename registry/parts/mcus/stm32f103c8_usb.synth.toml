@@ -10,8 +10,8 @@ lcsc_pn = "C8734"
 required_decoupling = []
 kicad_symbol = "MCU_ST_STM32F1:STM32F103C8Tx"
 kicad_footprint = "Package_QFP:LQFP-48_7x7mm_P0.5mm"
-reviewed_at = "2026-11-11"
-datasheet_url = "https://www.lcsc.com/product-detail/C8734.html"
+reviewed_at = "2026-11-10"
+datasheet_url = "https://www.st.com/en/product/stm32f103c8.html"
 
 [[pins]]
 name = "vbat"

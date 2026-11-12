@@ -8,10 +8,10 @@ substitutes = []
 mpn = "TLV70012DDCR"
 kicad_symbol = "Regulator_Linear:TLV70012_SOT23-5"
 kicad_footprint = "Package_TO_SOT_SMD:TSOT-23-5"
-reviewed_at = "2026-11-11"
+reviewed_at = "2026-11-10"
 reviewed_by = "JeffMboya"
-lcsc_pn = "C69446"
 datasheet_url = "https://lcsc.com/datasheet/lcsc_datasheet_2304140030_Texas-Instruments-TLV70012DDCR_C69446.pdf"
+lcsc_pn = "C69446"
 
 [[pins]]
 name = "vin"

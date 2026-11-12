@@ -102,7 +102,7 @@ board "multirail_compute_node" {
     component C23: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
     component C24: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
     component C25: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U6" priority: hard } }
-    component Y1: crystal "xtal_8mhz_3225_4p" { placement_hint { near: "U6" priority: hard } }
+    component Y1: crystal "xtal_8mhz_3225_jyje_4p" { placement_hint { near: "U6" priority: hard } }
     component C26: capacitor "c_generic_0603" value "10pF" { placement_hint { near: "Y1" priority: hard } }
     component C27: capacitor "c_generic_0603" value "10pF" { placement_hint { near: "Y1" priority: hard } }
     component R9: resistor "r_generic_0603" value "10k" { placement_hint { near: "U6" priority: hard } }

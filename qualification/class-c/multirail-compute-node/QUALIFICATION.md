@@ -15,7 +15,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 | Copper | `GND` is poured on all four layers (a zone on each); the rails are routed as tracks, not planes |
 | DRC with the library tables | 0 errors, 0 unconnected, 77 warnings, all `lib_footprint_mismatch` (silkscreen cut back from vias and pads by the exporter, #425; the footprint comparison shows no difference in pads, courtyard or fabrication layers) |
 | ERC with the library tables | 0 violations |
-| Synth validation | `synth validate` with the board's registry overlay exits 0 with 48 warnings (the `synth validate` run); the 19 schematic-layout findings are among them: 9 `E-SYNTH-SCHEM-003` (decoupling capacitors in another schematic sheet group than their IC, up to 455 mm apart on the sheet), 7 `E-SYNTH-SCHEM-001` (a power flag drawn pointing down), 2 `E-SYNTH-SCHEM-004` (a wire longer than 100 mm) and 1 `E-SYNTH-SCHEM-005` (a node with 4 wire lines). They concern the drawing of the generated schematic, not the netlist or the board, and are accepted. `E-SYNTH-CONNECT-009` is explained under "Power good" |
+| Synth validation | `synth validate` exits 0 with 48 warnings (the `synth validate` run); the 19 schematic-layout findings are among them: 9 `E-SYNTH-SCHEM-003` (decoupling capacitors in another schematic sheet group than their IC, up to 455 mm apart on the sheet), 7 `E-SYNTH-SCHEM-001` (a power flag drawn pointing down), 2 `E-SYNTH-SCHEM-004` (a wire longer than 100 mm) and 1 `E-SYNTH-SCHEM-005` (a node with 4 wire lines). They concern the drawing of the generated schematic, not the netlist or the board, and are accepted. `E-SYNTH-CONNECT-009` is explained under "Power good" |
 | Return-via advisories | 22 non-blocking `W-SYNTH-DRC-016` findings on nets that carry no fast edge (`V3V3` 6, `VBUS` 3, `VCC_BUCK` 2, `NRST` 2, `SEQ_ON` 2, `V3V6_SW` 2, `FL_HOLD`, `CC2`, `V3V6`, `FB`, `V1V8` 1 each), 0 blockers |
 | Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy, which rejects any track or via narrower than the size its net class declares. The delivered board has 10 such narrowings: 8 vias from 0.6 to 0.46 mm at pads (the board's via floor) and 2 tracks narrowed at a terminal (0.6 to 0.5458 mm and to 0.3458 mm). The engine reports no rule below the board floor ([`kicad/multirail_compute_node.routing.json`](kicad/multirail_compute_node.routing.json)). The engine's own counters (`claimed_total_vias: 62`, `claimed_via_in_pad: 50`) count the vias of its routing and fanout steps; Synth's later steps move and add vias; the 8 narrowings above are what its strict-size policy measured on the delivered board, whose own counts (125 vias, 23 of them 0.46/0.2 mm) are the ones this README uses. The delivered board is judged by the KiCad DRC above |
 
@@ -90,10 +90,10 @@ From this directory, with the KiCad 10 footprint and symbol library tables confi
 sha256sum -c SHA256SUMS
 kicad-cli pcb drc --severity-error kicad/multirail_compute_node.kicad_pcb
 kicad-cli sch erc kicad/multirail_compute_node.kicad_sch
-SYNTH_USER_REGISTRY_DIR=registry synth validate multirail_compute_node.synth
+synth validate multirail_compute_node.synth
 ```
 
-The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. `registry/` holds the parts this board needs that the shipped registry does not carry.
+The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
@@ -113,4 +113,4 @@ PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber
 | Placement | |
 | Parts and values | |
 
-Every part of the board that carries no other reviewer in `registry/parts` is recorded as reviewed by JeffMboya (2026-11-11), with the review date and the datasheet or product page where one is sourced, in the part files of `registry/` (`reviewed_by`, `reviewed_at`, `datasheet_url`).
+The parts this board adds to `registry/parts/` (`stm32f103c8_usb`, `header_1x5_swd`, `tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.

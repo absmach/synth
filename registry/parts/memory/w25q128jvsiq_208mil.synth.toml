@@ -9,7 +9,7 @@ mpn = "W25Q128JVSIQ"
 lcsc_pn = "C97521"
 kicad_symbol = "Memory_Flash:W25Q128JVS"
 kicad_footprint = "Package_SO:SOIC-8_5.3x5.3mm_P1.27mm"
-reviewed_at = "2026-11-11"
+reviewed_at = "2026-11-10"
 reviewed_by = "JeffMboya"
 datasheet_url = "https://datasheet.lcsc.com/lcsc/Winbond-Elec-W25Q128JVSIQTR_C97521.pdf"
 
