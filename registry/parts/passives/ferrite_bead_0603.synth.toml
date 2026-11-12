@@ -3,6 +3,9 @@ kind = "inductor"
 description = "0603 ferrite bead, 600Ω @ 100MHz — EMI suppression"
 kicad_symbol = "Device:FerriteBead"
 kicad_footprint = "Inductor_SMD:L_0603_1608Metric"
+mpn = "BLM18AG601SN1D"
+lcsc_pn = "C19330"
+datasheet_url = "https://www.lcsc.com/product-detail/Ferrite-Beads_Murata-Electronics-BLM18AG601SN1D_C19330.html"
 
 [footprint_dimensions]
 width_mm = 2.96
