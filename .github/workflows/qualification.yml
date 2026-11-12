@@ -97,6 +97,12 @@ jobs:
       # board takes roughly ten times as long and overruns the stage budget,
       # which reports `unknown` and blocks for no real reason.
       - name: Run the qualification matrix
+        env:
+          # irrigation_controller and multirail_compute crossed the old 600 s
+          # cap under runner load and reported `unknown` even though the DRC
+          # completes (fail and pass respectively) when given the time. Keep
+          # 900 s in both jobs so the two budgets cannot disagree.
+          SYNTH_CHECK_DRC_TIMEOUT_SECS: "900"
         run: cargo test --release -p synth-cli --test qualification_matrix -- --ignored --nocapture
 
       # The matrix says which boards drifted; this says why, when the cause is
@@ -185,9 +191,9 @@ jobs:
         env:
           SYNTH_QUALIFY_FAB: "1"
           SYNTH_CHECK_FAB_TIMEOUT_SECS: "900"
-          # The test defaults DRC to 600 s; leave it there in both jobs so a
-          # board cannot pass the source job and time out to `unknown` here.
-          SYNTH_CHECK_DRC_TIMEOUT_SECS: "600"
+          # The same DRC budget as the source job: a board that passed there
+          # must not time out to `unknown` here.
+          SYNTH_CHECK_DRC_TIMEOUT_SECS: "900"
         run: cargo test --release -p synth-cli --test qualification_matrix -- --ignored --nocapture
 
       - name: Upload manufacturing baseline
