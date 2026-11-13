@@ -42,11 +42,11 @@ The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdra
 
 ## Sourcing
 
-[`fab/ice40_sdram_node_bom_orderable.csv`](fab/ice40_sdram_node_bom_orderable.csv) has 73 lines: 64 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`fab/sourcing/sourcing.csv`](fab/sourcing/sourcing.csv), and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
+[`fab/bom.csv`](fab/bom.csv) has 73 lines: 64 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
 
 ## Fabrication package
 
-[`fab/`](fab/): the Gerbers and drill file (15 files, including the four inner layers), the placement file, the orderable BOM and the STEP model, with [`SHA256SUMS`](SHA256SUMS). The Gerber content hash is `e4663ac189` ([`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256)); the hash masks the creation time KiCad writes into the headers. the STEP model is exported with KiCad; the STEP check reopens it in OpenCASCADE and compares it with the PCB: 71 components with a body, 2 mounting holes, identities and positions agree (worst difference 0.0000 mm and 0.000 degrees), the outline is 71.99 x 66.99 mm as in Edge.Cuts, and no body leaves its courtyard by more than 0.25 mm. The STEP geometry hash is `1a98a33706`. The test points are 1 oz copper discs and the fuse is a block of the Bourns datasheet's mid-range dimensions (A 4.55, B 3.24, C 0.70 mm), both written from datasheet dimensions.
+[`fab/`](fab/): `gerbers.zip` (the Gerbers and drill file, 15 files, including the four inner layers), `bom.csv` (the orderable BOM) and `cpl.csv` (the placement file); the STEP model is in [`models/`](models/); every file is listed in [`SHA256SUMS`](SHA256SUMS). The Gerber content hash is `e4663ac189`; the hash masks the creation time KiCad writes into the headers. the STEP model is exported with KiCad; the STEP check reopens it in OpenCASCADE and compares it with the PCB: 71 components with a body, 2 mounting holes, identities and positions agree (worst difference 0.0000 mm and 0.000 degrees), the outline is 71.99 x 66.99 mm as in Edge.Cuts, and no body leaves its courtyard by more than 0.25 mm. The STEP geometry hash is `1a98a33706`. The test points are 1 oz copper discs and the fuse is a block of the Bourns datasheet's mid-range dimensions (A 4.55, B 3.24, C 0.70 mm), both written from datasheet dimensions.
 
 ## Reproducibility
 
@@ -77,7 +77,7 @@ kicad-cli sch erc kicad/ice40_sdram_node.kicad_sch
 synth validate ice40_sdram_node.synth
 ```
 
-The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
+The first command verifies every file below `SHA256SUMS`; the Gerber content hash and the STEP geometry hash are stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
