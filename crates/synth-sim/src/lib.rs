@@ -1559,7 +1559,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
                 &waveform,
             ) {
                 Ok(value) => {
-                    tran_values.insert(measure.name.clone(), value);
+                    tran_values.insert(measure.name.clone(), printed_precision(value));
                 }
                 Err(error) => tran_diagnostics.push(with_location_span(
                     measure_error(format!("measure `{}` failed: {error}", measure.name)),
@@ -2180,6 +2180,13 @@ fn timeout_error(seconds: f64) -> Diagnostic {
              Raise `[options] timeout` or shorten the analysis."
         ))
         .build()
+}
+
+/// A transient value is computed in Rust at full precision, but every other
+/// measure is read back at ngspice's six printed digits. Rounding here keeps
+/// the print-precision limit rule and the CLI output consistent.
+fn printed_precision(value: f64) -> f64 {
+    format!("{value:.5e}").parse().unwrap_or(value)
 }
 
 /// Trimmed stderr lines whose lowercased form matches `predicate`.

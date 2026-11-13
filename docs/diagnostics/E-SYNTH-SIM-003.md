@@ -14,6 +14,13 @@ crossing that cannot be found is a failed `.meas` (`Error: measure ...`) and
 is this code too. ngspice commonly exits 0 for all of these. A value is never
 defaulted to 0.
 
+A transient convergence failure aborts ngspice's control block, so
+`SYNTH_DONE` is never printed; this code then carries ngspice's reason
+(`doAnalyses: Timestep too small …`) in the message. The same is true of a
+transient measure that cannot be evaluated over its window: a waveform that
+never enters its settling band, never crosses its rise thresholds, or ends at
+0 V where a percentage overshoot would be meaningless.
+
 ## Minimal reproduction
 
 A measure whose vector cannot be evaluated:

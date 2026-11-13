@@ -1325,9 +1325,9 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
     (
         "spice_simulation",
         None,
-        "`synth sim` runs an operating point or an AC decade sweep only; transient and DC-sweep \
-         analyses, pulse/pwl/sin sources, expression measures and vendor model import are not \
-         implemented yet.",
+        "`synth sim` runs an operating point, an AC decade sweep or a pulse-driven transient \
+         only; DC-sweep analyses, pwl/sin sources, expression measures and vendor model \
+         import are not implemented yet.",
     ),
     (
         "coupled_diff_pair_routing",
