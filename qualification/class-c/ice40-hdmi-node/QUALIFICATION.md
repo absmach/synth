@@ -75,7 +75,6 @@ The source and sidecar in this directory were exported three times through the S
 | `pnp.csv` | 37179498a3 | 37179498a3 | 37179498a3 | byte-identical |
 | `ice40_hdmi_node.synth.kicad_pcb` | 28c6dd9da1 | 28c6dd9da1 | 28c6dd9da1 | byte-identical |
 | `ice40_hdmi_node.kicad_pcb` | d8648ae55c | d607683b8d | ef5d807e5d | not byte-identical; identical after the router's and KiCad's random ids are masked (`e045b457d7`) |
-| the 6 sub-sheet `.kicad_sch` files | | | | byte-identical in all three exports |
 | Gerber and drill content | 92d05ff69b | 92d05ff69b | 92d05ff69b | identical after the creation time in the headers is masked |
 
 Everything committed comes from export 1. The authoritative evidence of how the board was made is the prompts and the agent and MCP runs described in [`PROVENANCE.md`](PROVENANCE.md).
@@ -87,7 +86,6 @@ From this directory, with the KiCad 10 footprint and symbol library tables confi
 ```bash
 sha256sum -c SHA256SUMS
 kicad-cli pcb drc --severity-error kicad/ice40_hdmi_node.kicad_pcb
-kicad-cli sch erc kicad/ice40_hdmi_node.kicad_sch
 synth validate ice40_hdmi_node.synth
 ```
 
