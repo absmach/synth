@@ -16,11 +16,12 @@ use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
     DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
-    KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
-    NetDeclAst, NetclassAttr, NetclassStmt, NoConnectStmt, NotesDeclAst, OutlineStmt, ParamDeclAst,
-    PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst,
-    RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
-    StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
+    KeepoutAttr, KeepoutStmt, LabelsStmt, LayersStmt, LegendsStmt, ManufacturerStmt,
+    ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt, NoConnectStmt, NotesDeclAst,
+    OutlineStmt, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst,
+    PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst,
+    SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit,
+    VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -310,6 +311,7 @@ impl Parser {
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
             TokenKind::KwLegends => self.parse_legends().map(StatementAst::Legends),
+            TokenKind::KwLabels => self.parse_labels().map(StatementAst::Labels),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
             TokenKind::KwVariant => self.parse_variant().map(StatementAst::Variant),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
@@ -337,7 +339,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, legends, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet, requires",
+                    "one of: layers, manufacturer, revision, company, legends, labels, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet, requires",
                     self.describe_current(),
                     None,
                 );
@@ -556,6 +558,46 @@ impl Parser {
         };
         let end = self.last_offset();
         Some(LegendsStmt {
+            enabled,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parse a `labels on|off` board statement (absmach/synth#374). The
+    /// default is `on`; anything but the bare identifiers `on`/`off` is
+    /// `E-SYNTH-PARSE-033` with a patch inserting the valid form, as
+    /// `legends` does.
+    fn parse_labels(&mut self) -> Option<LabelsStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `labels`
+        let val_span = self.peek().span;
+        let word =
+            self.expect_ident("E-SYNTH-PARSE-033", "expected `on` or `off` after `labels`")?;
+        let enabled = match word.as_str() {
+            "on" => true,
+            "off" => false,
+            _ => {
+                self.emit(
+                    val_span,
+                    "E-SYNTH-PARSE-033",
+                    "expected `on` or `off` after `labels`",
+                    "`on` or `off`",
+                    word,
+                    Some(Patch {
+                        confidence: 0.8,
+                        rationale: Some("labels takes only `on` or `off`".into()),
+                        patch_consequence_preview: None,
+                        kind: PatchKind::ReplaceRange {
+                            range: val_span,
+                            replacement: "on".into(),
+                        },
+                    }),
+                );
+                return None;
+            }
+        };
+        let end = self.last_offset();
+        Some(LabelsStmt {
             enabled,
             span: Span::new(start, end),
         })
@@ -2806,6 +2848,7 @@ impl Parser {
                 | TokenKind::KwNet
                 | TokenKind::KwPower
                 | TokenKind::KwNotes
+                | TokenKind::KwLabels
                 | TokenKind::KwModule
                 | TokenKind::KwInterface
                 | TokenKind::KwBus
@@ -2851,6 +2894,7 @@ impl Parser {
             TokenKind::KwStackup => "`stackup`".to_string(),
             TokenKind::KwRequires => "`requires`".to_string(),
             TokenKind::KwLegends => "`legends`".to_string(),
+            TokenKind::KwLabels => "`labels`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
             TokenKind::KwNet => "`net`".to_string(),
@@ -3650,6 +3694,41 @@ mod tests {
             };
             assert_eq!(l.enabled, enabled);
         }
+    }
+
+    #[test]
+    fn parse_labels_on_and_off() {
+        for (word, enabled) in [("on", true), ("off", false)] {
+            let src = format!("board \"b\" {{\n labels {word}\n}}");
+            let tokens = lex(&src);
+            let res = parse(tokens, "test.synth".into());
+            assert!(
+                res.diagnostics.is_empty(),
+                "Diagnostics should be empty: {:?}",
+                res.diagnostics
+            );
+            let ast = res.ast.unwrap();
+            let StatementAst::Labels(l) = &ast.board.statements[0] else {
+                panic!("Expected labels statement");
+            };
+            assert_eq!(l.enabled, enabled);
+        }
+    }
+
+    #[test]
+    fn parse_labels_rejects_other_words() {
+        let src = r#"board "b" {
+            labels maybe
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-033"),
+            "expected E-SYNTH-PARSE-033, got {:?}",
+            res.diagnostics
+        );
     }
 
     #[test]

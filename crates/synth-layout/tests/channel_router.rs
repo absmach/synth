@@ -119,6 +119,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "channel".to_string(),
         layers: 2,
         manufacturer: None,

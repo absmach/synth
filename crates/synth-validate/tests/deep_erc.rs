@@ -1160,6 +1160,7 @@ fn multi_unit_rails_split_is_an_error() {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "t".into(),
         layers: 2,
         manufacturer: None,

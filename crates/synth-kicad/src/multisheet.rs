@@ -464,6 +464,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,

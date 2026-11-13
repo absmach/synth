@@ -105,6 +105,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "semantic".to_string(),
         layers: 2,
         manufacturer: None,

@@ -51,6 +51,7 @@ pub enum StatementAst {
     Revision(RevisionStmt),
     Company(CompanyStmt),
     Legends(LegendsStmt),
+    Labels(LabelsStmt),
     Component(ComponentDeclAst),
     Variant(VariantDeclStmt),
     Connection(ConnectionAst),
@@ -82,6 +83,7 @@ impl StatementAst {
             StatementAst::Revision(s) => s.span,
             StatementAst::Company(s) => s.span,
             StatementAst::Legends(s) => s.span,
+            StatementAst::Labels(s) => s.span,
             StatementAst::Component(s) => s.span,
             StatementAst::Variant(s) => s.span,
             StatementAst::Connection(s) => s.span,
@@ -326,6 +328,16 @@ pub struct CompanyStmt {
 /// note instead of a pin dump.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LegendsStmt {
+    pub enabled: bool,
+    pub span: Span,
+}
+
+/// Board-level silkscreen/fab label control (`labels on|off`, default on).
+/// When off, the PCB exporter suppresses the reference-designator and value
+/// text *it* adds to footprints; text owned by the library footprint itself
+/// (silk lines, court lines) is untouched (absmach/synth#374).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelsStmt {
     pub enabled: bool,
     pub span: Span,
 }

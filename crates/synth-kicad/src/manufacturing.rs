@@ -376,6 +376,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             legends: false,
+            labels: true,
             keepouts: vec![],
             no_connects: Vec::new(),
             stackup: None,

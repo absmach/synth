@@ -1113,6 +1113,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "legends on"
                 },
                 {
+                    "form": "labels <on|off>",
+                    "description": "Board-level silkscreen labels, default on. When off, the exported PCB carries none of the reference-designator or value text the exporter itself adds; text the library footprint owns (silk lines, courtyards) is untouched. Use off for boards whose silkscreen is drawn by hand or whose assembly wants a clean top.",
+                    "example": "labels off"
+                },
+                {
                     "form": "company \"<name>\"",
                     "description": "Design-authority name for the schematic title block's Company field. Distinct from `manufacturer`, which names who builds the board.",
                     "example": "company \"Acme Robotics\""

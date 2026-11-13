@@ -141,6 +141,7 @@ pub fn board(
         diff_pairs,
         notes: Vec::new(),
         legends: false,
+        labels: true,
         keepouts: Vec::new(),
         no_connects: Vec::new(),
         stackup: None,

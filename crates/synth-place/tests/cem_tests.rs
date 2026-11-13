@@ -77,6 +77,7 @@ fn create_test_board() -> Board {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "cem_test_board".to_string(),
         layers: 2,
         manufacturer: None,

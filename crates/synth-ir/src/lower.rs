@@ -176,6 +176,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // Schematic-quality plan Phase A3: connector pin legends are
     // opt-in (`legends on`), default off.
     let mut legends: bool = false;
+    // Board-level silkscreen labels are on by default; `labels off`
+    // suppresses the exporter-added reference/value text
+    // (absmach/synth#374).
+    let mut labels: bool = true;
     // Page size is design-wide: a `schematic { … }` nested in a group is
     // still a statement about the one rendered sheet, so it is honoured
     // wherever it appears rather than being scoped to its block.
@@ -206,6 +210,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Revision(r) => revision = Some(r.rev.clone()),
             StatementAst::Company(c) => company = Some(c.name.clone()),
             StatementAst::Legends(l) => legends = l.enabled,
+            StatementAst::Labels(l) => labels = l.enabled,
             StatementAst::Schematic(sc) => {
                 if let Some(paper) = sc.paper {
                     schematic_paper = Some(match paper {
@@ -473,6 +478,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
 
     let board = Board {
         legends,
+        labels,
         schematic_paper,
         schematic_overflow,
         name: ast.board.name.clone(),
@@ -2818,6 +2824,30 @@ mod tests {
             }"#,
         );
         assert!(board.legends, "legends on lowers to true");
+    }
+
+    #[test]
+    fn test_labels_flag_lowered_default_on() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(board.labels, "labels default on");
+        let board = lower_ok(
+            r#"board "b" {
+                labels off
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(!board.labels, "labels off lowers to false");
+        let board = lower_ok(
+            r#"board "b" {
+                labels on
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(board.labels, "labels on lowers to true");
     }
 
     #[test]

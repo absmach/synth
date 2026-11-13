@@ -92,6 +92,7 @@ fn board() -> Board {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "head_on".to_string(),
         layers: 2,
         manufacturer: None,

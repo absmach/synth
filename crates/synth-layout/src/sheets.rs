@@ -667,6 +667,7 @@ fn place_sheet_notes(
     let scoped = Board {
         groups: Vec::new(),
         legends: board.legends,
+        labels: board.labels,
         schematic_paper: board.schematic_paper,
         schematic_overflow: board.schematic_overflow,
         name: board.name.clone(),
@@ -809,6 +810,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,

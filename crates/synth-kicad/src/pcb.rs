@@ -219,6 +219,7 @@ pub fn build_pcb(
             project,
             &pad_net_lookup,
             labels[&component.id],
+            board.labels,
         ));
     }
 
@@ -2717,6 +2718,7 @@ fn label_override(entry: &synth_layout::sidecar::SidecarLabel) -> silk_labels::L
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_footprint_instance(
     component: &synth_ir::Component,
     part: &synth_registry::Part,
@@ -2725,6 +2727,7 @@ fn build_footprint_instance(
     project: &Uuid,
     pad_net_lookup: &PadNetLookup,
     ref_label: silk_labels::LabelPos,
+    labels_on: bool,
 ) -> Sexp {
     // Route the origin through the same helper the external placement
     // contract uses (`synth_place::to_external`), so the exported `(at x y)`
@@ -2888,8 +2891,15 @@ fn build_footprint_instance(
         Sexp::list("layer", vec![Sexp::str(layer_name)]),
         str_pair("uuid", fp_uuid.to_string()),
         Sexp::list("at", at_args),
-        Sexp::list("property", reference_property),
-        Sexp::list(
+    ];
+    // Board-level `labels off` (absmach/synth#374): the exporter's own
+    // reference and value text is suppressed. Text the library footprint
+    // itself owns — silk lines, courtyard outlines, everything the inline
+    // body below carries — is untouched, so a library footprint's silk stays
+    // byte-identical whatever the board says.
+    if labels_on {
+        children.push(Sexp::list("property", reference_property));
+        children.push(Sexp::list(
             "property",
             vec![
                 Sexp::str("Value"),
@@ -2918,28 +2928,28 @@ fn build_footprint_instance(
                     )],
                 ),
             ],
-        ),
-        doc_property("Datasheet", &datasheet_prop_uuid),
-        doc_property("Description", &description_prop_uuid),
-        assignment_property(
-            "MPN",
-            component
-                .part
-                .as_ref()
-                .and_then(|part| part.mpn.as_deref())
-                .unwrap_or(""),
-            &mpn_prop_uuid,
-        ),
-        assignment_property(
-            "LCSC",
-            component
-                .part
-                .as_ref()
-                .and_then(|part| part.lcsc_pn.as_deref())
-                .unwrap_or(""),
-            &lcsc_prop_uuid,
-        ),
-    ];
+        ));
+    }
+    children.push(doc_property("Datasheet", &datasheet_prop_uuid));
+    children.push(doc_property("Description", &description_prop_uuid));
+    children.push(assignment_property(
+        "MPN",
+        component
+            .part
+            .as_ref()
+            .and_then(|part| part.mpn.as_deref())
+            .unwrap_or(""),
+        &mpn_prop_uuid,
+    ));
+    children.push(assignment_property(
+        "LCSC",
+        component
+            .part
+            .as_ref()
+            .and_then(|part| part.lcsc_pn.as_deref())
+            .unwrap_or(""),
+        &lcsc_prop_uuid,
+    ));
 
     let has_model = if let Some(body) = inlined_body.as_deref() {
         // Strip the outer `(footprint "name" ...)` head so the geometry is
@@ -4036,6 +4046,7 @@ mod tests {
                 angle_deg: 0.0,
                 hidden: false,
             },
+            true,
         )
         .to_string_pretty();
         let pad_ats: Vec<&str> = instance
@@ -4088,6 +4099,7 @@ mod tests {
                 angle_deg: 0.0,
                 hidden: false,
             },
+            true,
         )
         .to_string_pretty();
         assert!(rendered.contains("MPN") && rendered.contains("MFG-123"));
@@ -4151,6 +4163,7 @@ mod tests {
                 angle_deg: 0.0,
                 hidden: false,
             },
+            true,
         );
         let instance_text = instance.to_string_pretty();
 
@@ -4320,6 +4333,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test_netclass".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4454,6 +4468,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test_declared_netclass".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4540,6 +4555,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "via_geometry".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4739,6 +4755,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test_roundtrip".to_string(),
             layers: 4,
             manufacturer: Some("jlcpcb".to_string()),
