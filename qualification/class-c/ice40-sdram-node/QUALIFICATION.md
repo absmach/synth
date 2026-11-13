@@ -64,6 +64,10 @@ The source and sidecar in this directory were exported three times through the S
 
 Everything committed comes from export 1. The authoritative evidence of how the board was made is the prompts and the agent and MCP runs described in [`PROVENANCE.md`](PROVENANCE.md).
 
+## Images
+
+[`images/`](images/) holds `top.png`, `bottom.png` and `angled.png` (3D renders of the board) and `schematic.png` (every schematic sheet on one page).
+
 ## How to check
 
 From this directory, with the KiCad 10 footprint and symbol library tables configured:
