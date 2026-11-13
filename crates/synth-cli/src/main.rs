@@ -1651,7 +1651,8 @@ fn check(
     if let Some(dir) = registry {
         validate_args.extend(["--registry".into(), dir.display().to_string()]);
     }
-    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, 120)?;
+    let budget = check_stage_budget_secs();
+    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, budget)?;
     let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
     let validate_pass = !validate_timed_out && validate_output.status.success();
@@ -1662,7 +1663,10 @@ fn check(
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
-        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
+        // The stage routes the board with the selected external engine and
+        // then runs `kicad-cli pcb drc`, so its budget is the stage budget,
+        // not a parse-and-print one.
+        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, budget)?;
         (
             serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
                 .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
@@ -1735,7 +1739,7 @@ fn check(
         if allow_unverified_parts {
             export_args.push("--allow-unverified-parts".into());
         }
-        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
+        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, budget)?;
         fab_pass = !export_timed_out && export_output.status.success();
         let native = std::fs::read_to_string(&verification_path)
             .ok()
@@ -2130,6 +2134,21 @@ fn read_capped(pipe: &mut impl std::io::Read, cap: usize) -> (Vec<u8>, bool) {
         }
     }
     (kept, truncated)
+}
+
+/// The per-stage child budget of `synth check`.
+///
+/// The gate routes real boards through its DRC stage now, and a reference
+/// board's external route takes minutes, so the release matrix can raise the
+/// budget with `SYNTH_CHECK_STAGE_BUDGET_SECS` without editing the command.
+/// An unparsable or non-positive value keeps the default, exactly like the
+/// other `SYNTH_*` budgets.
+fn check_stage_budget_secs() -> u64 {
+    std::env::var("SYNTH_CHECK_STAGE_BUDGET_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(120)
 }
 
 fn run_check_child(

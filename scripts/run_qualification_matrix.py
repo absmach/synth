@@ -55,6 +55,35 @@ except ModuleNotFoundError:  # re-exec under a Python that has one (3.11+)
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MATRIX_PATH = REPO_ROOT / "qualification" / "matrix.toml"
 
+# Interpreters that may carry KiCad's `pcbnew` bindings, most likely first.
+# The FreeRouting helper pours and fans out through `pcbnew`, and the Python
+# first on PATH usually cannot import it — this is the same list
+# `scripts/setup-routing-engines.sh` probes, so the matrix and the setup
+# script cannot disagree about which interpreter runs.
+PCBNEW_PYTHON_CANDIDATES = (
+    "python3.14",
+    "python3.13",
+    "python3.12",
+    "/usr/bin/python3.14",
+    "/usr/bin/python3",
+    "python3",
+)
+
+
+def find_pcbnew_python() -> str | None:
+    import shutil
+
+    for name in PCBNEW_PYTHON_CANDIDATES:
+        python = shutil.which(name) or (name if name.startswith("/") else None)
+        if not python:
+            continue
+        probe = subprocess.run(
+            [python, "-c", "import pcbnew"], capture_output=True, timeout=120
+        )
+        if probe.returncode == 0:
+            return python
+    return None
+
 
 def sha256_of(path: Path) -> str:
     digest = hashlib.sha256()
@@ -152,6 +181,11 @@ def run_row(
             }
 
     started = invoke(command, 60 * 60, environment)
+    # Everything the row produced, kept for the human reviewing a verdict:
+    # the check report, and the bytes around it when the report is not the
+    # whole story.
+    (out_dir / f"{row['id']}.stdout").write_text(started["stdout"])
+    (out_dir / f"{row['id']}.stderr").write_text(started["stderr"] or "")
     try:
         report = json.loads(started["stdout"]) if started["stdout"].strip() else {}
     except json.JSONDecodeError:
@@ -171,10 +205,15 @@ def run_row(
         "exit": started["exit"],
         "source_status": stages.get("source", {}).get("status"),
         "drc_status": stages.get("drc", {}).get("status"),
+        "drc_state": (stages.get("drc", {}).get("result") or {}).get("state"),
+        "drc_engine": (stages.get("drc", {}).get("result") or {}).get("engine"),
         "source_sha256": report.get("source_sha256"),
         "drc_counts": (stages.get("drc", {}).get("result") or {}).get("validation", {}).get(
             "kicad_drc"
         ),
+        # The routing stage's own words, for the human reading a result that
+        # says "unknown": an unexplained unknown is not reviewable.
+        "stderr_tail": "\n".join((started["stderr"] or "").splitlines()[-8:]),
         "artifacts": stages.get("manufacturing", {}).get("artifacts", {}),
         "native_stages": [
             {"stage": stage.get("stage"), "status": stage.get("status")}
@@ -194,6 +233,9 @@ def run_row(
         fab_environment["SYNTH_QUALIFY_ROUTER"] = fab_router
         fab_argv = [str(synth), "check", str(board), "--fab", "--json", *flags]
         fab = invoke(fab_argv, 90 * 60, fab_environment)
+        (out_dir / f"{row['id']}.fab.stdout").write_text(fab["stdout"])
+        (out_dir / f"{row['id']}.fab.stderr").write_text(fab["stderr"] or "")
+        record["fab_stderr_tail"] = "\n".join((fab["stderr"] or "").splitlines()[-8:])
         try:
             fab_report = json.loads(fab["stdout"]) if fab["stdout"].strip() else {}
         except json.JSONDecodeError:
@@ -264,6 +306,14 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # The FreeRouting helper needs KiCad's own Python for `pcbnew`; point the
+    # pipeline at it the way `scripts/setup-routing-engines.sh` discovered it.
+    if not os.environ.get("SYNTH_FREEROUTING_PYTHON"):
+        pcbnew = find_pcbnew_python()
+        if pcbnew:
+            os.environ["SYNTH_FREEROUTING_PYTHON"] = pcbnew
+            print(f"SYNTH_FREEROUTING_PYTHON={pcbnew}")
+
     matrix = tomllib.loads(MATRIX_PATH.read_text())
     boards = matrix.get("board", [])
     out_dir = args.out or Path(tempfile.mkdtemp(prefix="synth-matrix-"))
@@ -271,8 +321,18 @@ def main() -> int:
 
     synth = args.synth
     if synth is None:
-        candidate = REPO_ROOT / "target" / "debug" / "synth"
-        synth = candidate if candidate.is_file() else Path("synth")
+        # The binary the matrix judges must be the one built from this tree,
+        # never whatever older `synth` happens to be first on PATH.
+        candidates = []
+        if os.environ.get("CARGO_TARGET_DIR"):
+            candidates.append(Path(os.environ["CARGO_TARGET_DIR"]) / "debug" / "synth")
+        candidates.append(REPO_ROOT / "target" / "debug" / "synth")
+        synth = next((c for c in candidates if c.is_file()), None)
+        if synth is None:
+            raise SystemExit(
+                "no synth binary found: build one (cargo build -p synth-cli) "
+                "or pass --synth"
+            )
 
     selected = [
         row

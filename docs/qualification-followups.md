@@ -7,8 +7,12 @@ Status: accepted, 2026-11-13. Covers #396 and #423.
 The buck board is an approved **experimental** contribution, not a Class B
 release. Remaining release blockers:
 
-1. Eleven signal vias have no compliant ground return via. The routed artifact
-   is regenerated only after the return-path fix lands.
+1. ~~Eleven signal vias have no compliant ground return via.~~ No longer
+   reproduces: with KiCadRoutingTools 9399bfb on this branch (2026-11-13) the
+   routed package passes the release gate with no return-via findings, and
+   the matrix row asserts the manufacturing stage as `pass`. The routed
+   artifact should be regenerated and its DRC record refreshed from that
+   route before a release.
 2. The LMR38010 thermal-via array is 2x3; the manufacturer's example is 4x3.
    It needs the declared filled/capped process and a regenerated DRC record.
 3. The final schematic needs the professional-readability pass (no
@@ -17,8 +21,8 @@ release. Remaining release blockers:
    converter stability, derating, switch-node/EMI, grounding/feedback or
    power-good behaviour.
 
-Until all four close, `synth check --fab` is expected to be
-`review_required` and `QUALIFICATION.md` says so.
+Until the rest close, the board stays `experimental` and `QUALIFICATION.md`
+says so.
 
 ## Class A I2C sensor node (#423)
 

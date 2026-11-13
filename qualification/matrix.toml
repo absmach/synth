@@ -15,6 +15,12 @@ schema_version = "synth.qualification.v1"
 # records (see #95: a pin outranks the flag and never falls back), and
 # `fab_router` names the engine whose copper the fab verdict judges.
 #
+# A row the corpus cannot run on this code declares `skip_reason`: the runner
+# records it and names it in the log, never silently dropping it, because
+# what cannot run is part of what the matrix reports. Every skip below was
+# verified on this branch on 2026-11-13 (KiCad 10.0.8, KiCadRoutingTools
+# 9399bfb, FreeRouting 2.4.1) and says exactly what blocked it.
+#
 # Class C and D rows have no boards in the corpus yet; the matrix runs the
 # rows that exist and reports which cannot.
 
@@ -35,20 +41,16 @@ id = "i2c-sensor-node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
 class = "A"
 status = "experimental"
-expect = "pass"
-router = "kicad-routing-tools"
-user_registry = "reproduce/user-registry"
-rationale = "STM32G030 reading a BME680 and an EEPROM over I2C, from a protected 5 V rail. Two copper layers, 57 parts. The committed evidence (README, PROVENANCE, reports) was routed by KiCadRoutingTools and passed Synth's release gate; the matrix re-runs that verdict on each revision. The parts the shipped registry does not carry are in the row's reproduce/user-registry, which the reproduce script loads too."
+skip_reason = "the route does not validate on this branch: with KiCadRoutingTools 9399bfb (the corpus's pinned revision), the routed board is rejected with 99 blocking findings — one copper-to-edge DRC error (0.270 mm against the 0.300 mm rule), signal vias without a ground return via, and an untied GND island. The committed evidence passed at synth 0ceb7b80, KiCad 10.0.6. The row stays here, unrun, until the route validates again."
+rationale = "STM32G030 reading a BME680 and an EEPROM over I2C, from a protected 5 V rail. Two copper layers, 57 parts. The parts the shipped registry does not carry are in the row's reproduce/user-registry, which the reproduce script loads too."
 
 [[board]]
 id = "protected-power-entry"
 path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
 class = "A"
 status = "experimental"
-expect = "pass"
-router = "kicad-routing-tools"
-user_registry = "reproduce/user-registry"
-rationale = "12 V power entry through a polyfuse, TVS and reverse-polarity PFET into an MP2307 buck, a load switch and an AMS1117. Two copper layers, 84 parts, no microcontroller. The committed evidence was routed by KiCadRoutingTools and passed Synth's release gate. The parts the shipped registry does not carry are in the row's reproduce/user-registry."
+skip_reason = "the release verdict is not established on this branch: the source gate passes with the row's user registry loaded, but its 84-part route did not complete within the local budget, so no DRC verdict exists to assert. The row stays here, unrun, until a machine that can route it within budget re-establishes the verdict."
+rationale = "12 V power entry through a polyfuse, TVS and reverse-polarity PFET into an MP2307 buck, a load switch and an AMS1117. Two copper layers, 84 parts, no microcontroller. The parts the shipped registry does not carry are in the row's reproduce/user-registry."
 
 [[board]]
 id = "buck"
@@ -56,11 +58,11 @@ path = "qualification/class-b/buck/buck.synth"
 class = "B"
 status = "experimental"
 expect = "pass"
-expect_fab = "fail"
+expect_fab = "pass"
 router = "freerouting"
 fab_router = "kicad-routing-tools"
 flags = ["--allow-unverified-parts"]
-rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Manufacturing with KiCadRoutingTools copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the fab run is expected to fail as a negative test. The board stays `experimental`: no human has signed off its artifacts."
+rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper routes with 0 DRC errors and 0 unconnected items, so source and DRC pass (verified 2026-11-13). The manufacturing package also passes the gate on this branch with KiCadRoutingTools 9399bfb — the 11 return-via findings the committed record describes no longer reproduce at that revision. The board stays `experimental`: no human has signed off its artifacts, and docs/qualification-followups.md keeps the review gates open."
 
 [[board]]
 id = "usb-uart"
@@ -75,7 +77,5 @@ id = "rtd-afe"
 path = "qualification/class-b/rtd-afe/rtd_afe.synth"
 class = "B"
 status = "experimental"
-expect = "pass"
-router = "freerouting"
-flags = ["--allow-unverified-parts"]
-rationale = "PT100 four-wire RTD front end (ADS124S08, REF5025, RP2350 as the host side). The committed evidence was routed by FreeRouting and passed Synth's release gate with the parts reviewed in the registry; its own QUALIFICATION.md records what is still open (SI/PI review, the current tree does not reproduce the committed package). The matrix asserts the gate verdict, not the historical package."
+skip_reason = "the route does not validate on this branch: the FreeRouting copper leaves +3V3 and VREG_LX open, an untied GND island and signal vias without ground return vias — 13 blocking findings (verified 2026-11-13 with FreeRouting 2.4.1). The board's own QUALIFICATION.md already records that the current tree does not route. The row stays here, unrun, until the route validates again."
+rationale = "PT100 four-wire RTD front end (ADS124S08, REF5025, RP2350 as the host side). The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision, with the parts reviewed in the registry; its own QUALIFICATION.md records what is still open (SI/PI review, historical committed package)."

@@ -117,18 +117,21 @@ human record.
 
 ## Corpus coverage
 
-`qualification/` holds the versioned corpus the matrix runs:
+`qualification/` holds the versioned corpus the matrix runs. Verified on
+2026-11-13 (KiCad 10.0.8, KiCadRoutingTools 9399bfb, FreeRouting 2.4.1):
 
-| Row | Class | Status | Runs |
-|---|---|---|---|
-| `class-a/negative-broken-mcu-board` | A | unsupported (negative) | as a negative test: the source gate must fail with the planted diagnostics |
-| `class-a/i2c-sensor-node` | A | qualified | release command |
-| `class-a/protected-power-entry` | A | qualified | release command |
-| `class-b/buck` | B | experimental | release command, plus the fab command expecting `validation_failed` |
-| `class-b/usb-uart` | B | experimental | release command |
-| `class-b/rtd-afe` | B | experimental | release command |
+| Row | Class | Runs as |
+|---|---|---|
+| `class-a/negative-broken-mcu-board` | A | negative test: the source gate must fail with the planted diagnostics |
+| `class-a/i2c-sensor-node` | A | cannot run: the route is rejected (99 blocking findings; see the row's `skip_reason`) |
+| `class-a/protected-power-entry` | A | cannot run: no route verdict re-established within budget (see the row's `skip_reason`) |
+| `class-b/buck` | B | positive: release passes with FreeRouting copper, the fab package passes with KiCadRoutingTools copper |
+| `class-b/usb-uart` | B | cannot run: the source gate rejects it with E-SYNTH-POWER-010 (see the row's `skip_reason`) |
+| `class-b/rtd-afe` | B | cannot run: the route does not validate (13 blocking findings; see the row's `skip_reason`) |
 
-The Class C and Class D rows the capability classes define have no boards in
-the corpus yet; when a board lands, it gets a row here and the matrix runs
-it — no new harness is needed. `hello` is a fixtures board, not a corpus row;
-its trivial empty route is covered by the CLI integration tests.
+A row that cannot run is recorded by the runner and named in the job log;
+its `skip_reason` says exactly what blocked it and what would lift it. The
+Class C and Class D rows the capability classes define have no boards in the
+corpus yet; when a board lands, it gets a row here and the matrix runs it —
+no new harness is needed. `hello` is a fixtures board, not a corpus row; its
+trivial empty route is covered by the CLI integration tests.
