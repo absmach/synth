@@ -1636,6 +1636,7 @@ fn route_design_externally_with(
     );
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
+    request.use_board_diff_pairs(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -3119,6 +3120,7 @@ fn evaluate_candidate_mcp(
     // or a chosen method would change the winner.
     request.use_board_escapes(board);
     request.use_board_layer_pins(board);
+    request.use_board_diff_pairs(board);
     // Granting only. Reporting belongs to the run the caller keeps: this is
     // reached from `select_placement_by_route` inside `execute_export`, which
     // grants again for the chosen placement and puts any unmet requirement in
@@ -3356,6 +3358,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     );
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
+    request.use_board_diff_pairs(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;

@@ -5416,6 +5416,7 @@ fn build_route_request(
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
     request.use_board_escapes(board);
     request.use_board_layer_pins(board);
+    request.use_board_diff_pairs(board);
     request.use_profile_floor(
         &board
             .manufacturer

@@ -505,6 +505,35 @@ impl RouteRequest {
             .collect();
     }
 
+    /// Take the declared differential pairs the verdict must enforce.
+    ///
+    /// Carried by net name with the declared `max_skew`, so the independent
+    /// validation pass — which reads only the delivered board — can re-derive
+    /// each pair's skew from the copper and block a pair outside its budget.
+    /// Lives here for the reason [`Self::use_board_escapes`] does: there are
+    /// several routing entry points, and a declaration honoured by only one of
+    /// them is a pair the others silently release.
+    pub fn use_board_diff_pairs(&mut self, board: &synth_ir::Board) {
+        self.diff_pairs = synth_ir::resolve_pairs_with_budgets(board)
+            .into_iter()
+            .map(|(pair, budget)| {
+                let name_of = |net: synth_ir::NetId| {
+                    board
+                        .nets
+                        .iter()
+                        .find(|net_ir| net_ir.id == net)
+                        .map_or_else(String::new, |net_ir| net_ir.name.clone())
+                };
+                DiffPairRequest {
+                    positive: name_of(pair.positive_net),
+                    negative: name_of(pair.negative_net),
+                    max_skew_nm: budget,
+                }
+            })
+            .filter(|pair| !pair.positive.is_empty() && !pair.negative.is_empty())
+            .collect();
+    }
+
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
     /// Keeps whatever via-in-pad permission was already granted: an operator
@@ -613,6 +642,11 @@ pub struct RouteRequest {
     /// the file it was written into.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declared_layers: Option<u32>,
+    /// The declared `diff_pair` requests, by net name with the declared
+    /// `max_skew`. The verdict re-derives each pair's intra-pair skew from the
+    /// delivered copper and blocks a pair outside its budget.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diff_pairs: Vec<DiffPairRequest>,
 }
 
 /// One net's layer pin: the copper layers it may be routed on.
@@ -620,6 +654,34 @@ pub struct RouteRequest {
 pub struct NetLayers {
     pub net: String,
     pub layers: Vec<String>,
+}
+
+/// One declared differential pair, as the routing verdict must enforce it.
+///
+/// The request carries the pair by net *name* — what the exported board file
+/// and the independent connectivity pass key copper on — because the verdict
+/// never consults the IR; it re-derives everything from the delivered copper.
+/// The declared `max_skew` travels with the pair: a pair whose halves differ
+/// by more than it blocks the release, in the same verdict pipeline as the
+/// return-via blockers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffPairRequest {
+    /// Net name of the positive half.
+    pub positive: String,
+    /// Net name of the negative half.
+    pub negative: String,
+    /// The length the halves may differ by, in nanometres. `None` records the
+    /// pair but sets no budget, so no skew is enforced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_skew_nm: Option<i64>,
+}
+
+impl DiffPairRequest {
+    /// Whether the pair declares a skew budget at all.
+    #[must_use]
+    pub fn declares_skew(&self) -> bool {
+        self.max_skew_nm.is_some_and(|nm| nm > 0)
+    }
 }
 
 impl RouteRequest {
@@ -819,6 +881,7 @@ impl RouteRequest {
             tools: crate::tools::ToolPaths::from_env(),
 
             declared_layers: None,
+            diff_pairs: Vec::new(),
         }
     }
 
@@ -1242,5 +1305,82 @@ mod tests {
 
         assert!(request.policy.allow_via_in_pad);
         assert!(!request.policy.process_fills_via_in_pad);
+    }
+
+    /// A board that declares a `diff_pair` with a budget hands the verdict a
+    /// request carrying the pair by net name, budget included, so the
+    /// delivered copper can be measured against it (absmach/synth#447).
+    #[test]
+    fn a_declared_diff_pair_reaches_the_verdict_request() {
+        let mut board = empty_board();
+        board.nets = vec![
+            synth_ir::Net {
+                id: synth_ir::NetId(0),
+                name: "USB_DP".to_string(),
+                auto_named: false,
+                endpoints: vec![synth_ir::NetEndpoint {
+                    component: synth_ir::ComponentId(1),
+                    pin: synth_ir::PinId(0),
+                    source_span: synth_diagnostics::Span::new(0, 0),
+                }],
+                netclass: None,
+                voltage: None,
+            },
+            synth_ir::Net {
+                id: synth_ir::NetId(1),
+                name: "USB_DN".to_string(),
+                auto_named: false,
+                endpoints: vec![synth_ir::NetEndpoint {
+                    component: synth_ir::ComponentId(1),
+                    pin: synth_ir::PinId(1),
+                    source_span: synth_diagnostics::Span::new(0, 0),
+                }],
+                netclass: None,
+                voltage: None,
+            },
+        ];
+        board.diff_pairs = vec![synth_ir::DiffPair {
+            positive: "U1_usb_dp".to_string(),
+            negative: "U1_usb_dn".to_string(),
+            positive_net: Some(synth_ir::NetId(0)),
+            negative_net: Some(synth_ir::NetId(1)),
+            impedance: None,
+            max_skew: Some(synth_ir::Length(150_000)),
+            couple: None,
+            source_span: synth_diagnostics::Span::new(0, 0),
+        }];
+
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.use_board_diff_pairs(&board);
+
+        assert_eq!(request.diff_pairs.len(), 1, "{:?}", request.diff_pairs);
+        let pair = &request.diff_pairs[0];
+        assert_eq!(pair.positive, "USB_DP");
+        assert_eq!(pair.negative, "USB_DN");
+        assert_eq!(pair.max_skew_nm, Some(150_000));
+        assert!(pair.declares_skew());
+    }
+
+    /// A board with no `diff_pair` leaves the request without any, and a
+    /// pair without a budget is carried without enforcing one.
+    #[test]
+    fn a_board_with_no_declared_pair_enforces_no_skew() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.use_board_diff_pairs(&empty_board());
+        assert!(request.diff_pairs.is_empty());
+        assert!(!DiffPairRequest {
+            positive: "A".to_string(),
+            negative: "B".to_string(),
+            max_skew_nm: None,
+        }
+        .declares_skew());
     }
 }

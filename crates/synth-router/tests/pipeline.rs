@@ -195,6 +195,9 @@ enum Behaviour {
     Write(&'static str),
     /// Exit 0 and write nothing — the signature "success with no board".
     Silent,
+    /// Exit 0 and write the baseline back as the candidate: a stub for boards
+    /// built at run time, which a `&'static str` cannot carry.
+    CopyBaseline,
     /// Exit non-zero without writing a board.
     Crash,
     /// Exit 0 after writing something that is not a board.
@@ -263,7 +266,7 @@ impl StubRouter {
 /// stub that hard-coded its own would not test it.
 fn script_body(behaviour: Behaviour) -> String {
     let action = match behaviour {
-        Behaviour::Write(_) => "route",
+        Behaviour::Write(_) | Behaviour::CopyBaseline => "route",
         Behaviour::Silent => "silent",
         Behaviour::Crash => "crash",
         Behaviour::Malformed => "malformed",
@@ -275,14 +278,21 @@ fn script_body(behaviour: Behaviour) -> String {
         Behaviour::Write(board) => board.trim_end(),
         _ => "",
     };
+    let copy_baseline = if matches!(behaviour, Behaviour::CopyBaseline) {
+        "yes"
+    } else {
+        ""
+    };
     format!(
         r#"#!/bin/sh
-# Stub external router. Parses the argv the production adapter builds:
+# Stub external router. Parses the argv a real helper would:
 #   <helper> <baseline> <candidate> --jar <jar> --java <java> ...
 # Flag values are skipped, so the last positional really is the board this
 # engine must write — and the board it is handed is the baseline, never the
 # delivery path.
 POSITIONAL=""
+BASELINE=""
+POSITIONAL_COUNT=0
 REPORT=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -291,11 +301,18 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --*) shift ;;
-    *) POSITIONAL="$1"; shift ;;
+    *)
+      POSITIONAL_COUNT=$((POSITIONAL_COUNT + 1))
+      # The first positional is the helper itself, the second the baseline
+      # the engine was handed.
+      if [ "$POSITIONAL_COUNT" = 2 ]; then BASELINE="$1"; fi
+      POSITIONAL="$1"; shift
+      ;;
   esac
 done
 
 echo "stub-router argv: $*" >&2
+COPY_BASELINE="{copy_baseline}"
 
 if [ -n "$REPORT" ]; then
   printf '{{"router":"stub","jar":"stub-1.0.jar","java_version":"stub-jvm","imported_segments":1,"imported_vias":0,"notes":[]}}' > "$REPORT"
@@ -303,6 +320,10 @@ fi
 
 case "{action}" in
   route)
+    if [ -n "{copy_baseline}" ]; then
+      cp "$BASELINE" "$POSITIONAL"
+      exit 0
+    fi
     cat > "$POSITIONAL" <<'STUB_BOARD_EOF'
 {board}
 STUB_BOARD_EOF
@@ -1256,5 +1277,167 @@ fn an_unknown_engine_name_is_refused_rather_than_defaulted() {
     assert_eq!(
         RouterEngine::parse("kicad-routing-tools"),
         Some(RouterEngine::KiCadRoutingTools)
+    );
+}
+
+// ── Declared differential pairs (absmach/synth#447) ─────────────────────────
+
+/// A routed board carrying a declared pair's copper: `USB_DP` runs 11.65 mm
+/// and `USB_DN` runs `SKEW_MM` mm more, both fully connected. Written in the
+/// style of `ROUTED_BOARD` so the verdict under test does not depend on the
+/// exporter's output.
+fn diff_pair_board(dn_end: &str) -> String {
+    format!(
+        r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "USB_DP")
+  (net 2 "USB_DN")
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 10 20)
+    (property "Reference" "R1" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "USB_DP")))
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 20 20)
+    (property "Reference" "R2" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "USB_DP")))
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 10 22)
+    (property "Reference" "R3" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "USB_DN")))
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 20 22)
+    (property "Reference" "R4" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "USB_DN")))
+  (segment (start 9.175 20) (end 20.825 20) (width 0.25) (layer "F.Cu") (net 1))
+  (segment (start 9.175 22) (end {dn_end} 22) (width 0.25) (layer "F.Cu") (net 2))
+  (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#
+    )
+}
+
+/// The request for a stub run over `board`, with the declared pair carried.
+fn diff_pair_request(scratch: &Scratch, board: &str, max_skew_nm: i64) -> RouteRequest {
+    let board_path = scratch.write("demo.kicad_pcb", board);
+    let mut request = RouteRequest::new(&board_path, &scratch.path, RouterEngine::Freerouting);
+    request.stem = "demo".to_string();
+    request.limits = RouterLimits::default().with_wall_clock(120);
+    request.policy = FabricationPolicy::default();
+    request.input_hash = "test-input-hash".to_string();
+    request.profile_name = "jlc-standard".to_string();
+    request.diff_pairs = vec![synth_router::contract::DiffPairRequest {
+        positive: "USB_DP".to_string(),
+        negative: "USB_DN".to_string(),
+        max_skew_nm: Some(max_skew_nm),
+    }];
+    request.preserve_baseline().expect("baseline preserved");
+    request
+}
+
+/// A pair delivering more skew than its declared budget blocks the release,
+/// with a finding naming the pair — in the same verdict pipeline as the
+/// return-via blockers, not a silent release (absmach/synth#447).
+#[test]
+fn a_declared_pair_outside_its_skew_budget_blocks_the_release() {
+    let scratch = Scratch::new("skewed-pair");
+    // 12.05 mm against 11.65 mm: 0.4 mm of skew on a 0.15 mm budget.
+    let board = diff_pair_board("21.225");
+    // The board is built at run time, so the stub copies the baseline back
+    // as its candidate: the same copper the request was built from.
+    let router = StubRouter::new("skewed_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let _env = router.activate(&jar, &java);
+
+    let request = diff_pair_request(&scratch, &board, 150_000);
+    let report = synth_router::route(&request);
+    assert_eq!(report.state, RouteState::ValidationFailed);
+    assert!(!report.is_fabrication_ready());
+    let validation = report.validation.expect("validation ran");
+    let finding = validation
+        .blocking_reasons
+        .iter()
+        .find(|reason| reason.contains("E-SYNTH-DRC-014"))
+        .expect("the skew finding must block");
+    assert!(finding.contains("pair `USB_DP`/`USB_DN`"), "{finding}");
+    assert!(finding.contains("0.400 mm"), "{finding}");
+    assert!(finding.contains("0.150 mm"), "{finding}");
+    // The unvalidated candidate is retained for review, never installed.
+    assert_eq!(
+        std::fs::read_to_string(scratch.file("demo.kicad_pcb")).unwrap(),
+        board,
+        "a blocked board must not be promoted"
+    );
+}
+
+/// A pair inside its budget releases exactly as a board without a declared
+/// pair does: measured, inside, no finding.
+#[test]
+fn a_declared_pair_inside_its_skew_budget_releases() {
+    let scratch = Scratch::new("matched-pair");
+    let board = diff_pair_board("20.825");
+    let router = StubRouter::new("matched_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let _env = router.activate(&jar, &java);
+
+    let request = diff_pair_request(&scratch, &board, 150_000);
+    let report = synth_router::route(&request);
+    let validation = report.validation.as_ref();
+    assert!(
+        validation.is_none_or(|v| {
+            !v.blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("E-SYNTH-DRC-014"))
+        }),
+        "{:?}",
+        validation.map(|v| v.blocking_reasons.clone())
+    );
+    // Whatever the DRC gate says about KiCad's presence, the skew itself
+    // contributed nothing blocking.
+    if kicad_cli_available() {
+        assert_eq!(report.state, RouteState::Routed, "{:?}", report.validation);
+    }
+}
+
+/// A board with no declared pair is unchanged: the same copper with no
+/// `diff_pairs` on the request produces no skew finding at all.
+#[test]
+fn a_board_without_a_declared_pair_is_unchanged() {
+    let scratch = Scratch::new("no-pair");
+    let board = diff_pair_board("21.225");
+    let router = StubRouter::new("no-pair_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let _env = router.activate(&jar, &java);
+
+    let board_path = scratch.write("demo.kicad_pcb", &board);
+    let mut request = RouteRequest::new(&board_path, &scratch.path, RouterEngine::Freerouting);
+    request.stem = "demo".to_string();
+    request.limits = RouterLimits::default().with_wall_clock(120);
+    request.policy = FabricationPolicy::default();
+    request.input_hash = "test-input-hash".to_string();
+    request.profile_name = "jlc-standard".to_string();
+    request.preserve_baseline().expect("baseline preserved");
+    let report = synth_router::route(&request);
+    let no_pair_finding = report.validation.as_ref().is_none_or(|v| {
+        !v.blocking_reasons
+            .iter()
+            .any(|reason| reason.contains("E-SYNTH-DRC-014"))
+    });
+    assert!(
+        no_pair_finding,
+        "no declared pair, no skew finding: {:?}",
+        report
+            .validation
+            .as_ref()
+            .map(|v| v.blocking_reasons.clone())
     );
 }

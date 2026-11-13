@@ -41,7 +41,9 @@ pub use board::{
 pub use clusters::{
     ClusterKind, ClusterMember, FunctionalCluster, MemberBinding, MemberRole, recognize_clusters,
 };
-pub use diff_pairs::{PairConnection, ResolvedPair, pair_connections, resolve_pairs};
+pub use diff_pairs::{
+    pair_connections, resolve_pairs, resolve_pairs_with_budgets, PairConnection, ResolvedPair,
+};
 pub use imports::{
     FsImportLoader, ImportLoadError, ImportLoader, MAX_IMPORT_DEPTH, MAX_IMPORT_SIZE,
     MemoryImportLoader, ResolveResult as ImportResolveResult, resolve as resolve_imports,
