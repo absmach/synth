@@ -56,11 +56,11 @@ The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_
 
 ## Sourcing
 
-[`fab/ice40_hdmi_node_bom_orderable.csv`](fab/ice40_hdmi_node_bom_orderable.csv) has 77 lines: 68 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number from [`fab/sourcing/sourcing.csv`](fab/sourcing/sourcing.csv), and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
+[`fab/bom.csv`](fab/bom.csv) has 77 lines: 68 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 
-[`fab/`](fab/): the Gerbers and drill file (15 files, including the four inner layers), the placement file, the orderable BOM and the STEP model, with [`SHA256SUMS`](SHA256SUMS). The Gerber content hash is `92d05ff69b` ([`fab/GERBER_CONTENT_SHA256`](fab/GERBER_CONTENT_SHA256)); the hash masks the creation time KiCad writes into the headers. the STEP model is exported with KiCad; the STEP check reopens it in OpenCASCADE and compares it with the PCB: 75 components with a body, 2 mounting holes, identities and positions agree (worst difference 0.0000 mm and 0.000 degrees), the outline is 80.30 x 71.99 mm as in Edge.Cuts, and no body leaves its courtyard by more than 0.25 mm. The STEP geometry hash is `0ab9ee69cb`. Models the KiCad library lacks are written from datasheet dimensions: the test points (1 oz copper discs), the fuse `F1` (the Bourns datasheet's mid-range 4.55 x 3.24 x 0.70 mm) and the oscillator `X1` (the SiT8008's 5.0 x 3.2 x 0.75 mm package, SiT8008B datasheet, page 11 of 18).
+[`fab/`](fab/): `gerbers.zip` (the Gerbers and drill file, 15 files, including the four inner layers), `bom.csv` (the orderable BOM) and `cpl.csv` (the placement file); the STEP model is in [`models/`](models/); every file is listed in [`SHA256SUMS`](SHA256SUMS). The Gerber content hash is `92d05ff69b`; the hash masks the creation time KiCad writes into the headers. the STEP model is exported with KiCad; the STEP check reopens it in OpenCASCADE and compares it with the PCB: 75 components with a body, 2 mounting holes, identities and positions agree (worst difference 0.0000 mm and 0.000 degrees), the outline is 80.30 x 71.99 mm as in Edge.Cuts, and no body leaves its courtyard by more than 0.25 mm. The STEP geometry hash is `0ab9ee69cb`. Models the KiCad library lacks are written from datasheet dimensions: the test points (1 oz copper discs), the fuse `F1` (the Bourns datasheet's mid-range 4.55 x 3.24 x 0.70 mm) and the oscillator `X1` (the SiT8008's 5.0 x 3.2 x 0.75 mm package, SiT8008B datasheet, page 11 of 18).
 
 ## Reproducibility
 
@@ -91,7 +91,7 @@ kicad-cli sch erc kicad/ice40_hdmi_node.kicad_sch
 synth validate ice40_hdmi_node.synth
 ```
 
-The first command verifies every file below `SHA256SUMS`; the Gerber content hash is in `fab/GERBER_CONTENT_SHA256` and the STEP geometry hash is stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
+The first command verifies every file below `SHA256SUMS`; the Gerber content hash and the STEP geometry hash are stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
