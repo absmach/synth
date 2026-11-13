@@ -15,7 +15,7 @@ All figures come from the files of the first of the three exports below (KiCad 1
 | Trace width, as routed | `VIN_FUSED` 0.2 to 0.8 mm; `VALVE1_SW` and `VALVE2_SW` 0.8 mm; `+12V_VALVE` 0.2 to 0.8 mm; `+3V3` 0.2 to 0.4 mm; the other signals 0.2 mm |
 | Fine-pitch escape | `U1` (SOIC-8, exposed pad) and `U2` (LQFP-32) declare `escape { off }` in the source: their pads are routed from the surface, and no via sits in a pad |
 | BOM | 107 fitted lines, each with a manufacturer, MPN, distributor, order number and page, and 20 board features (mounting holes and test points) that are not parts ([`fab/bom.csv`](fab/bom.csv)) |
-| Schematic | a root sheet and 13 group sheets, one per named group, no `OTHER` region. KiCad's ERC , symbol and footprint library tables configured: 0 errors and 5 warnings, explained below. The `+12V_VALVE` rail carries a `PWR_FLAG` |
+| Schematic | `kicad/irrigation_controller.kicad_sch` is the root sheet of a hierarchy of 13 group sheets, one per named group, no `OTHER` region. KiCad's ERC , symbol and footprint library tables configured: 0 errors and 5 warnings, explained below. The `+12V_VALVE` rail carries a `PWR_FLAG` |
 | STEP | 123 components, positions and rotations equal to the PCB's, outline equal to Edge.Cuts; geometry hash `e1a6d41ea9` ([`models/irrigation_controller.step`](models/irrigation_controller.step)) |
 
 The 121 `lib_footprint_mismatch` warnings are footprints whose silkscreen the exporter cut back from a via or a pad (0.25 mm clearance, above JLCPCB's 0.15 mm minimum; [absmach/synth#425](https://github.com/absmach/synth/issues/425)), so they differ from the library copy; the pads, courtyard and fabrication outline of every one are identical to the library file (the footprint comparison lists `F.SilkS` as the only layer that differs). The five ERC library warnings: `Q_E1` and `Q_E2` are P-channel MOSFETs whose registry part names the symbol `Si2301CDS`, which KiCad 10.0.6's `Transistor_FET` library does not contain, so the exporter draws its own symbol ([absmach/synth#96](https://github.com/absmach/synth/issues/96)); `Q_V1` and `Q_V2` carry the `AO3400A` symbol, which the library defines as an extension of `Q_NMOS_GSD`, and the schematic embeds it with the parent's graphics included ([absmach/synth#428](https://github.com/absmach/synth/issues/428)); and the label `BUCK_FB` sits on a wire junction ([absmach/synth#426](https://github.com/absmach/synth/issues/426)).
@@ -148,7 +148,6 @@ From this directory, with the KiCad 10 footprint and symbol library tables confi
 ```bash
 sha256sum -c SHA256SUMS
 kicad-cli pcb drc --severity-error kicad/irrigation_controller.kicad_pcb
-kicad-cli sch erc kicad/irrigation_controller.kicad_sch
 synth validate irrigation_controller.synth
 ```
 
