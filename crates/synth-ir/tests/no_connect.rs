@@ -59,3 +59,63 @@ fn an_unknown_no_connect_pin_is_an_error() {
         lowered.diagnostics
     );
 }
+
+#[test]
+fn a_no_connect_on_a_wired_pin_is_an_error() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .canonicalize()
+        .unwrap();
+    let registry = synth_registry::load_dir(&root.join("registry").join("parts")).unwrap();
+    let parse = synth_parser::parse(
+        r#"board "b" {
+  layers 2
+  component U1: memory "24lc256_soic8"
+  component R1: resistor "r_generic_0805"
+  power "VCC" 5v
+  net "VCC" { R1.p1, U1.vcc }
+  no_connect U1.vcc
+}"#,
+        "nc.synth",
+    );
+    let lowered = synth_ir::lower(&parse.ast.unwrap(), &registry, "nc.synth");
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "E-SYNTH-COMP-007"),
+        "{:?}",
+        lowered.diagnostics
+    );
+}
+
+#[test]
+fn a_no_connect_on_an_unwired_pin_stays_clean() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .canonicalize()
+        .unwrap();
+    let registry = synth_registry::load_dir(&root.join("registry").join("parts")).unwrap();
+    let parse = synth_parser::parse(
+        r#"board "b" {
+  layers 2
+  component U1: memory "24lc256_soic8"
+  component R1: resistor "r_generic_0805"
+  power "VCC" 5v
+  net "VCC" { R1.p1, U1.vcc }
+  no_connect U1.a0
+}"#,
+        "nc.synth",
+    );
+    let lowered = synth_ir::lower(&parse.ast.unwrap(), &registry, "nc.synth");
+    assert!(
+        lowered
+            .diagnostics
+            .iter()
+            .all(|d| d.code != "E-SYNTH-COMP-007" && d.code != "E-SYNTH-COMP-006"),
+        "{:?}",
+        lowered.diagnostics
+    );
+}
