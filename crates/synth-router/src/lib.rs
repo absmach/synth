@@ -76,7 +76,8 @@ pub use contract::{
 pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
 pub use quality::RouteQuality;
 pub use result::{
-    PortfolioRank, RouteReport, RouteState, RouteStatistics, RouterProvenance, ValidationSummary,
+    PortfolioRank, RouteArtifacts, RouteReport, RouteState, RouteStatistics, RouterProvenance,
+    ValidationSummary,
 };
 pub use tools::ToolPaths;
 // The `.kicad_pcb` reader lives in `synth-drc`; this keeps the
