@@ -115,6 +115,13 @@ pub enum LoadError {
         pin: String,
         message: String,
     },
+
+    #[error("part {path}: invalid [pins.gate] on pin `{pin}` ({message})")]
+    InvalidPinGate {
+        path: PathBuf,
+        pin: String,
+        message: String,
+    },
 }
 
 /// Recursively load every `*.synth.toml` file under `root` into a
@@ -533,6 +540,9 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         if let Some(pwm) = &pin.pwm {
             validate_pin_pwm(path, &pin.name, pin.electrical_type, pwm)?;
         }
+        if let Some(gate) = &pin.gate {
+            validate_pin_gate(path, &pin.name, gate)?;
+        }
     }
 
     // Pin-number invariant: if the part references a KiCad stock
@@ -745,6 +755,27 @@ fn validate_pin_pwm(
         ));
     }
     if pwm.datasheet_ref.trim().is_empty() {
+        return Err(invalid(
+            "`datasheet_ref` is required; record the datasheet page or table".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Gate data is datasheet data: the capacitance must be usable and its
+/// source recorded.
+fn validate_pin_gate(path: &Path, pin: &str, gate: &crate::part::PinGate) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidPinGate {
+        path: path.to_path_buf(),
+        pin: pin.to_string(),
+        message,
+    };
+    if !gate.input_capacitance_pf.is_finite() || gate.input_capacitance_pf <= 0.0 {
+        return Err(invalid(
+            "`input_capacitance_pf` must be a positive finite number".to_string(),
+        ));
+    }
+    if gate.datasheet_ref.trim().is_empty() {
         return Err(invalid(
             "`datasheet_ref` is required; record the datasheet page or table".to_string(),
         ));
@@ -1597,7 +1628,7 @@ label_side = "inside"
             .pwm
             .as_ref()
             .expect("pwm block");
-        assert_eq!(pwm.pwm_max_hz, 100000.0);
+        assert_eq!(pwm.pwm_max_hz, 100_000.0);
         assert_eq!(pwm.datasheet_ref, "Table 5-2");
     }
 

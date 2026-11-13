@@ -36,6 +36,8 @@ fn two_pin_part() -> Part {
                 voltage_min_v: None,
                 voltage_nominal_v: None,
                 drive: None,
+                gate: None,
+                pwm: None,
             },
             Pin {
                 name: "p2".to_string(),
@@ -49,6 +51,8 @@ fn two_pin_part() -> Part {
                 voltage_min_v: None,
                 voltage_nominal_v: None,
                 drive: None,
+                gate: None,
+                pwm: None,
             },
         ],
         required_decoupling: Vec::new(),

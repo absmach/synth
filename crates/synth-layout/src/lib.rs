@@ -6819,6 +6819,8 @@ mod semantic_weights_tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -7160,6 +7162,8 @@ mod soft_pin_swap_tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -7415,6 +7419,8 @@ mod patterns_tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -8333,6 +8339,8 @@ mod text_width_tests {
                     voltage_min_v: None,
                     voltage_nominal_v: None,
                     drive: None,
+                    gate: None,
+                    pwm: None,
                 },
                 RegPin {
                     name: "p2".to_string(),
@@ -8346,6 +8354,8 @@ mod text_width_tests {
                     voltage_min_v: None,
                     voltage_nominal_v: None,
                     drive: None,
+                    gate: None,
+                    pwm: None,
                 },
             ],
             required_decoupling: Vec::new(),
@@ -8923,6 +8933,8 @@ mod naming_tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -9233,6 +9245,8 @@ mod documentation_tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 

@@ -364,6 +364,23 @@ pub struct Pin {
     /// source in `synth sim`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pwm: Option<PinPwm>,
+
+    /// Datasheet gate data for a transistor's control pin: the input
+    /// capacitance that sets the gate edge the simulation measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<PinGate>,
+}
+
+/// Datasheet gate data for a transistor control pin. Every field is required
+/// whenever the block is present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinGate {
+    /// Small-signal input capacitance at the datasheet conditions
+    /// (`Ciss` for a MOSFET), in picofarads.
+    pub input_capacitance_pf: f64,
+    /// Datasheet page or table the value came from.
+    pub datasheet_ref: String,
 }
 
 /// Datasheet output-drive data for an IC pin. Every numeric field is required;

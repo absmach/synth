@@ -998,6 +998,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 

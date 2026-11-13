@@ -415,6 +415,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -527,6 +529,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         };
         let mut components = Vec::new();
         for id in 0..40 {

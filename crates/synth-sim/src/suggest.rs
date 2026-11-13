@@ -63,6 +63,7 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
     draft.detect_leds();
     draft.detect_dividers();
     draft.detect_rcs();
+    draft.detect_gate_drives();
     draft.report_unused();
     // A retained modelled regulator needs its input rail driven; add that
     // source before the dead-rail sweep so its decoupling caps stay live.
@@ -96,6 +97,112 @@ pub fn suggest_testbench(design: &Board) -> TestbenchSuggestion {
 enum AnalysisKind {
     Op,
     Ac,
+    Tran,
+}
+
+/// The transient timing every tran measure in one draft shares. Two shapes
+/// with different timings cannot share one file.
+#[derive(Debug, Clone, PartialEq)]
+struct TranTiming {
+    period: f64,
+    duty: f64,
+    rise: f64,
+    fall: f64,
+    step: f64,
+    stop: f64,
+}
+
+impl TranTiming {
+    /// A whole-cycle timing from a PWM pin's `pwm_max_hz`: the period is the
+    /// fastest PWM the design may generate, the edges are a thousandth of
+    /// it, and the run covers the window plus two start-up cycles.
+    fn whole_cycle(max_hz: f64) -> Option<Self> {
+        let period = round_sig(1.0 / max_hz, 3);
+        let rise = round_sig(period / 1000.0, 3);
+        let duty = 0.5;
+        let step = round_sig(period / 5000.0, 3);
+        let stop_time = round_sig(8.0 * period, 3);
+        Self::build(period, duty, rise, step, stop_time)
+    }
+
+    /// A whole-cycle timing with a known RC time constant: the window starts
+    /// after five time constants (steady ripple) and the step is the coarser
+    /// of edge and ripple resolution.
+    fn rc_cycle(max_hz: f64, tau: f64) -> Option<Self> {
+        let period = round_sig(1.0 / max_hz, 3);
+        let rise = round_sig(period / 1000.0, 3);
+        let duty = 0.5;
+        let step = round_sig(f64::min(tau / 50.0, period / 200.0), 3);
+        let window_start = f64::max(2.0 * period, round_sig(5.0 * tau, 3));
+        let stop_time = round_sig(window_start + 6.0 * period, 3);
+        Self::build(period, duty, rise, step, stop_time)
+    }
+
+    /// An edge timing for a gate drive: the first rising edge, resolved by
+    /// the gate time constant. The source edge must be faster than the gate
+    /// RC, or the measured rise is the source's own edge.
+    fn gate_edge(max_hz: f64, tau_gate: f64) -> Option<Self> {
+        let period = round_sig(1.0 / max_hz, 3);
+        let rise = round_sig(f64::min(period / 1000.0, tau_gate / 10.0), 3);
+        let duty = 0.5;
+        let step = round_sig(tau_gate / 50.0, 3);
+        let stop_time = round_sig(25.0 * tau_gate, 3);
+        Self::build(period, duty, rise, step, stop_time)
+    }
+
+    fn build(period: f64, duty: f64, rise: f64, step: f64, stop_time: f64) -> Option<Self> {
+        if !period.is_finite()
+            || period <= 0.0
+            || !rise.is_finite()
+            || !step.is_finite()
+            || step <= 0.0
+            || !stop_time.is_finite()
+            || step >= stop_time
+        {
+            return None;
+        }
+        if stop_time / step > crate::MAX_TRAN_POINTS {
+            return None;
+        }
+        Some(Self {
+            period,
+            duty,
+            rise,
+            fall: rise,
+            step,
+            stop: stop_time,
+        })
+    }
+
+    /// The window a whole-cycle measure averages over: whole periods after
+    /// start-up.
+    fn window(&self, start_cycles: f64, cycles: f64) -> (f64, f64) {
+        let start = round_sig(start_cycles * self.period, 3);
+        let end = round_sig(start + cycles * self.period, 3);
+        (start, end)
+    }
+
+    /// The window an edge measure reads: one edge plus twenty time
+    /// constants, from time zero. A gate starts at the drive's low level, so
+    /// the first rising edge is the measurement; a later edge would cost a
+    /// whole PWM period of fine sampling.
+    fn edge_window(tau: f64) -> (f64, f64) {
+        let end = round_sig(20.0 * tau, 3);
+        (0.0, end)
+    }
+
+    /// Where the timing came from, for the comment block.
+    fn note(&self) -> String {
+        format!(
+            "# timing: period = 1/pwm_max_hz = {}; duty = {} (test duty; the firmware \
+             sets the real one); rise = fall = period/1000 = {}; step = {}; stop = {}.",
+            duration_string(self.period),
+            number(self.duty),
+            duration_string(self.rise),
+            duration_string(self.step),
+            duration_string(self.stop)
+        )
+    }
 }
 
 /// The declared or pin-derived voltage that drives a net.
@@ -117,6 +224,8 @@ struct PinSupply {
     pin: String,
     drive: PinDrive,
     datasheet_ref: String,
+    /// The pin's `[pins.pwm]` data, when the datasheet declares PWM.
+    pwm: Option<synth_registry::PinPwm>,
 }
 
 #[derive(Debug)]
@@ -131,11 +240,19 @@ struct DraftMeasure {
     min: Option<f64>,
     max: Option<f64>,
     at_frequency: Option<f64>,
+    /// Window bounds for a tran measure, in seconds.
+    window_start: Option<f64>,
+    window_end: Option<f64>,
+    /// Thresholds for a `rise_time` tran measure.
+    low_threshold: Option<f64>,
+    high_threshold: Option<f64>,
     comment: String,
     supply_net: NetId,
     supply: Supply,
     /// `fc/100 .. fc*100` for an RC measure.
     sweep: Option<(f64, f64)>,
+    /// The shared transient timing for a tran measure.
+    timing: Option<TranTiming>,
 }
 
 #[derive(Debug)]
@@ -148,6 +265,9 @@ struct Draft<'a> {
     todo_nets: BTreeSet<NetId>,
     names: HashSet<String>,
     measures: Vec<DraftMeasure>,
+    /// The transient timing a tran measure claimed; a second shape with a
+    /// different timing cannot share the file.
+    tran_timing: Option<TranTiming>,
     /// Rails that must be driven for a retained model but are not a measure's
     /// own supply, such as the input of an unignored regulator.
     extra_sources: Vec<(NetId, Supply)>,
@@ -165,9 +285,50 @@ impl<'a> Draft<'a> {
             todo_nets: BTreeSet::new(),
             names: HashSet::new(),
             measures: Vec::new(),
+            tran_timing: None,
             extra_sources: Vec::new(),
             ignored: BTreeMap::new(),
         }
+    }
+
+    /// Claim the file for one analysis and, for a tran measure, one timing.
+    /// `None` means the claim holds; `Some` is the reason it does not.
+    fn claim_analysis(
+        &mut self,
+        analysis: AnalysisKind,
+        timing: Option<&TranTiming>,
+        shape: &str,
+    ) -> bool {
+        if let Some(existing) = self.measures.first().map(|measure| measure.analysis) {
+            if existing != analysis {
+                let other = match existing {
+                    AnalysisKind::Op => "an `op`",
+                    AnalysisKind::Ac => "an `ac`",
+                    AnalysisKind::Tran => "a `tran`",
+                };
+                self.not_covered.push(format!(
+                    "{shape} needs a different analysis and cannot share a file with \
+                     {other} measure"
+                ));
+                return false;
+            }
+        }
+        if analysis == AnalysisKind::Tran {
+            let Some(timing) = timing else {
+                return false;
+            };
+            match &self.tran_timing {
+                None => self.tran_timing = Some(timing.clone()),
+                Some(existing) if existing == timing => {}
+                Some(_) => {
+                    self.not_covered.push(format!(
+                        "{shape} needs a different transient timing and cannot share the file"
+                    ));
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     fn detect_leds(&mut self) {
@@ -289,6 +450,16 @@ impl<'a> Draft<'a> {
             }
             return;
         };
+        // A PWM pin dims the LED by switching it; the check is the average
+        // current over whole cycles, not one DC operating point.
+        if supply
+            .pin_drive
+            .as_ref()
+            .is_some_and(|pin| pin.pwm.is_some())
+        {
+            self.detect_pwm_led(id, resistor, supply_net, reversed, supply);
+            return;
+        }
         let Some(conditions) = part.operating_conditions.as_ref() else {
             self.not_covered.push(format!(
                 "{} ({part_id}), no operating_conditions.forward_current_ma",
@@ -485,6 +656,11 @@ impl<'a> Draft<'a> {
             supply_net,
             supply,
             sweep: None,
+            window_start: None,
+            window_end: None,
+            low_threshold: None,
+            high_threshold: None,
+            timing: None,
         });
 
         if let Some(pin_supply) = pin_supply {
@@ -542,8 +718,210 @@ impl<'a> Draft<'a> {
                 supply_net,
                 supply: pin_measure_supply.clone(),
                 sweep: None,
+                window_start: None,
+                window_end: None,
+                low_threshold: None,
+                high_threshold: None,
+                timing: None,
             });
         }
+    }
+
+    /// LED PWM dimming: the drive pin is a PWM output, so the check is the
+    /// LED's average current over whole cycles. The band is the DC diode
+    /// equation scaled by the test duty.
+    #[allow(clippy::too_many_lines)]
+    fn detect_pwm_led(
+        &mut self,
+        id: ComponentId,
+        resistor: ComponentId,
+        supply_net: NetId,
+        reversed: bool,
+        supply: Supply,
+    ) {
+        let design = self.design;
+        let component = design
+            .component(id)
+            .expect("a detected LED is a placed component");
+        let part = component.part.as_ref().expect("an LED shape has a part");
+        let part_id = part.id.as_str();
+        let Some(datasheet) = datasheet_url(part) else {
+            self.not_covered.push(format!(
+                "{} ({part_id}), no datasheet_url",
+                component.refdes
+            ));
+            return;
+        };
+        if reversed {
+            self.not_covered.push(format!(
+                "{} ({part_id}), the LED is reversed on the PWM pin; dimming needs the \
+                 anode toward the driver",
+                component.refdes
+            ));
+            return;
+        }
+        let Some(pin_supply) = &supply.pin_drive else {
+            return;
+        };
+        let Some(pwm) = &pin_supply.pwm else {
+            return;
+        };
+        let Some(timing) = TranTiming::whole_cycle(pwm.pwm_max_hz) else {
+            self.not_covered.push(format!(
+                "{} ({part_id}), pwm_max_hz {} gives no usable transient timing",
+                component.refdes,
+                number(pwm.pwm_max_hz)
+            ));
+            return;
+        };
+        let Some(conditions) = part.operating_conditions.as_ref() else {
+            self.not_covered.push(format!(
+                "{} ({part_id}), no operating_conditions.forward_current_ma",
+                component.refdes
+            ));
+            return;
+        };
+        let (Some(forward_current_ma), Some(forward_voltage_v)) =
+            (conditions.forward_current_ma, conditions.forward_voltage_v)
+        else {
+            self.not_covered.push(format!(
+                "{} ({part_id}), no operating_conditions.forward_current_ma",
+                component.refdes
+            ));
+            return;
+        };
+        let resistance = match self.resistance(resistor) {
+            Ok(value) => value,
+            Err(reason) => {
+                self.not_covered.push(format!(
+                    "{}, {reason} for the LED series resistor",
+                    self.describe(resistor)
+                ));
+                return;
+            }
+        };
+        let output_resistance = pin_supply.drive.output_resistance_ohm.unwrap_or(0.0);
+        let expected_on = if supply.volts <= forward_voltage_v {
+            None
+        } else {
+            crate::diode_forward_current(
+                supply.volts,
+                resistance + output_resistance,
+                forward_voltage_v,
+                forward_current_ma,
+            )
+        };
+        let Some(expected_on) = expected_on else {
+            self.not_covered.push(format!(
+                "{}, (Vs - Vf)/R gives no forward current: Vs {} V, Vf {} V, R {}",
+                self.describe(id),
+                number(supply.volts),
+                number(forward_voltage_v),
+                number(resistance + output_resistance)
+            ));
+            return;
+        };
+        let expected = timing.duty * expected_on;
+        let min = round_sig(expected * 0.95, 3);
+        let max = round_sig(expected * 1.05, 3);
+        if !min.is_finite() || !max.is_finite() || min <= 0.0 || min > max {
+            self.not_covered.push(format!(
+                "{} ({part_id}), the PWM band is unusable",
+                component.refdes
+            ));
+            return;
+        }
+        let (window_start, window_end) = timing.window(2.0, 4.0);
+        if !self.claim_analysis(
+            AnalysisKind::Tran,
+            Some(&timing),
+            &format!("the LED {}", self.describe(id)),
+        ) {
+            return;
+        }
+        // The driver IC is replaced by the pulse source, so it is not an
+        // unrecognised shape either.
+        self.use_components(&supply.drivers);
+        self.ignore_driver(supply_net, &supply);
+        let mut comment = String::new();
+        let _ = writeln!(
+            comment,
+            "# measure: {} ({part_id}) average current while the PWM pin dims it.",
+            component.refdes
+        );
+        let _ = writeln!(
+            comment,
+            "#   {} ({}) value {} (design series resistor)",
+            self.refdes(resistor),
+            self.part_id(resistor),
+            self.value(resistor)
+        );
+        let _ = writeln!(
+            comment,
+            "#   operating_conditions.forward_voltage_v = {} V, forward_current_ma = {} mA.",
+            number(forward_voltage_v),
+            number(forward_current_ma)
+        );
+        let _ = writeln!(
+            comment,
+            "#   supply: `{}` pulse between low_v = {} V and high_v = {} V{} (datasheet: {}).",
+            pin_supply.pin,
+            number(pin_supply.drive.low_v),
+            number(pin_supply.drive.high_v),
+            pin_supply
+                .drive
+                .output_resistance_ohm
+                .map_or_else(String::new, |r| format!(
+                    ", output_resistance_ohm = {}",
+                    number(r)
+                )),
+            pin_supply.datasheet_ref
+        );
+        let _ = writeln!(
+            comment,
+            "#   [pins.pwm] pwm_max_hz = {} Hz (datasheet: {}); the draft tests the fastest PWM.",
+            number(pwm.pwm_max_hz),
+            pwm.datasheet_ref
+        );
+        let _ = writeln!(comment, "{}", timing.note());
+        let _ = writeln!(
+            comment,
+            "#   window: {} to {}, four whole PWM cycles after one start-up cycle.",
+            duration_string(window_start),
+            duration_string(window_end)
+        );
+        let _ = writeln!(
+            comment,
+            "#   policy: I_on*R + Vf0 + N*Vt*ln(I_on/If0) = Vs gives I_on = {} A; \
+             the average is duty * I_on = {} A; ±5% rounded to 3 significant digits: \
+             {min} A..{max} A.",
+            number(expected_on),
+            number(expected)
+        );
+        self.unreviewed_notes(&[id, resistor], &mut comment);
+        let _ = writeln!(comment, "#   datasheet: {datasheet}");
+
+        let name = self.unique("iavg");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Tran,
+            name,
+            kind: "average",
+            node: None,
+            element: Some(self.refdes(resistor).to_string()),
+            pin: None,
+            min: Some(min),
+            max: Some(max),
+            at_frequency: None,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            low_threshold: None,
+            high_threshold: None,
+            comment,
+            supply_net,
+            supply,
+            sweep: None,
+            timing: Some(timing),
+        });
     }
 
     fn detect_dividers(&mut self) {
@@ -772,6 +1150,11 @@ impl<'a> Draft<'a> {
             supply_net,
             supply,
             sweep: None,
+            window_start: None,
+            window_end: None,
+            low_threshold: None,
+            high_threshold: None,
+            timing: None,
         });
     }
 
@@ -839,20 +1222,32 @@ impl<'a> Draft<'a> {
 
     fn detect_rcs(&mut self) {
         let net_ids: Vec<NetId> = self.design.nets.iter().map(|net| net.id).collect();
-        let op_selected = !self.measures.is_empty();
+        let first_analysis = self.measures.first().map(|measure| measure.analysis);
         for net_id in net_ids {
             let Some((resistor, capacitor)) = self.rc_pair(net_id) else {
                 continue;
             };
-            if op_selected {
-                self.use_components(&[resistor, capacitor]);
-                self.not_covered.push(format!(
-                    "{} + {}, RC corner needs an ac analysis and cannot share a file with an op measure",
-                    self.describe(resistor),
-                    self.describe(capacitor)
-                ));
-            } else {
-                self.detect_rc(net_id, resistor, capacitor);
+            match first_analysis {
+                Some(AnalysisKind::Tran) => {
+                    self.use_components(&[resistor, capacitor]);
+                    self.not_covered.push(format!(
+                        "{} + {}, the RC corner needs its own timing and cannot share a \
+                         file with a `tran` measure",
+                        self.describe(resistor),
+                        self.describe(capacitor)
+                    ));
+                }
+                Some(_) => {
+                    self.use_components(&[resistor, capacitor]);
+                    self.not_covered.push(format!(
+                        "{} + {}, RC corner needs an ac analysis and cannot share a file with an op measure",
+                        self.describe(resistor),
+                        self.describe(capacitor)
+                    ));
+                }
+                None => {
+                    self.detect_rc(net_id, resistor, capacitor);
+                }
             }
         }
     }
@@ -926,6 +1321,14 @@ impl<'a> Draft<'a> {
             return;
         };
         if supply.pin_drive.is_some() {
+            if supply
+                .pin_drive
+                .as_ref()
+                .is_some_and(|pin| pin.pwm.is_some())
+            {
+                self.detect_pwm_rc(net_id, resistor, capacitor, input_net, supply);
+                return;
+            }
             self.not_covered.push(format!(
                 "{}, an AC sweep from an IC pin source is not drafted",
                 self.describe(resistor)
@@ -1032,6 +1435,11 @@ impl<'a> Draft<'a> {
             supply_net: input_net,
             supply: supply.clone(),
             sweep: Some((start, stop)),
+            window_start: None,
+            window_end: None,
+            low_threshold: None,
+            high_threshold: None,
+            timing: None,
         });
 
         // The corner cannot tell a low-pass from a high-pass with the same
@@ -1067,6 +1475,11 @@ impl<'a> Draft<'a> {
             supply_net: input_net,
             supply: supply.clone(),
             sweep: None,
+            window_start: None,
+            window_end: None,
+            low_threshold: None,
+            high_threshold: None,
+            timing: None,
         });
 
         let stopband_frequency = round_sig(corner * 10.0, 3);
@@ -1100,7 +1513,556 @@ impl<'a> Draft<'a> {
             supply_net: input_net,
             supply,
             sweep: None,
+            window_start: None,
+            window_end: None,
+            low_threshold: None,
+            high_threshold: None,
+            timing: None,
         });
+    }
+
+    /// An RC filter on a PWM pin: the output settles into a ripple around
+    /// `duty * Vhigh`, so the draft checks the ripple's peak-to-peak and the
+    /// average over whole cycles after five time constants.
+    #[allow(clippy::too_many_lines)]
+    fn detect_pwm_rc(
+        &mut self,
+        net_id: NetId,
+        resistor: ComponentId,
+        capacitor: ComponentId,
+        input_net: NetId,
+        supply: Supply,
+    ) {
+        let design = self.design;
+        let Some(net) = design.net(net_id) else {
+            return;
+        };
+        let Some(pin_supply) = &supply.pin_drive else {
+            return;
+        };
+        let Some(pwm) = &pin_supply.pwm else {
+            return;
+        };
+        let Ok(resistance) = self.resistance(resistor) else {
+            self.not_covered.push(format!(
+                "{}, no parseable `value` for the RC filter",
+                self.describe(resistor)
+            ));
+            return;
+        };
+        let Ok(capacitance) = self.capacitance(capacitor) else {
+            self.not_covered.push(format!(
+                "{}, no parseable `value` for the RC filter",
+                self.describe(capacitor)
+            ));
+            return;
+        };
+        let tau = resistance * capacitance;
+        let Some(timing) = TranTiming::rc_cycle(pwm.pwm_max_hz, tau) else {
+            self.not_covered.push(format!(
+                "{}, the transient for pwm_max_hz {} Hz and tau {} s exceeds the \
+                 100000-point output cap; use a slower PWM or a smaller RC",
+                self.describe(resistor),
+                number(pwm.pwm_max_hz),
+                number(tau)
+            ));
+            return;
+        };
+        // Steady-state charge/discharge of the RC: `k = exp(-period/tau)`.
+        let k = (-timing.period / tau).exp();
+        let v_low =
+            supply.volts * k.powf(1.0 - timing.duty) * (1.0 - k.powf(timing.duty)) / (1.0 - k);
+        let v_high = supply.volts * (1.0 - k.powf(timing.duty)) + v_low * k.powf(timing.duty);
+        let ripple = v_high - v_low;
+        let average = timing.duty * supply.volts;
+        let ripple_min = round_sig(ripple * 0.75, 3);
+        let ripple_max = round_sig(ripple * 1.25, 3);
+        let average_min = round_sig(average * 0.95, 3);
+        let average_max = round_sig(average * 1.05, 3);
+        if ![
+            ripple,
+            average,
+            ripple_min,
+            ripple_max,
+            average_min,
+            average_max,
+        ]
+        .iter()
+        .all(|value| value.is_finite())
+            || ripple_min > ripple_max
+            || average_min > average_max
+        {
+            self.not_covered.push(format!(
+                "{}, the RC values give no usable ripple or average band",
+                self.describe(resistor)
+            ));
+            return;
+        }
+        let (window_start, window_end) = (
+            round_sig(f64::max(2.0 * timing.period, 5.0 * tau), 3),
+            round_sig(
+                f64::max(2.0 * timing.period, 5.0 * tau) + 4.0 * timing.period,
+                3,
+            ),
+        );
+        let shape = format!(
+            "the RC filter {} + {}",
+            self.describe(resistor),
+            self.describe(capacitor)
+        );
+        if !self.claim_analysis(AnalysisKind::Tran, Some(&timing), &shape) {
+            return;
+        }
+        // The PWM IC is replaced by the pulse source.
+        self.use_components(&supply.drivers);
+        self.ignore_driver(input_net, &supply);
+
+        let (resistance_value, capacitance_value) = (
+            self.value(resistor).to_string(),
+            self.value(capacitor).to_string(),
+        );
+        let mut shared = String::new();
+        let _ = writeln!(
+            shared,
+            "# measure: RC low-pass at net {} driven by the PWM pin `{}`.",
+            toml_string(&net.name),
+            pin_supply.pin
+        );
+        let _ = writeln!(
+            shared,
+            "#   {} ({}) value {}; {} ({}) value {}; datasheets: {} / {}.",
+            self.refdes(resistor),
+            self.part_id(resistor),
+            resistance_value,
+            self.refdes(capacitor),
+            self.part_id(capacitor),
+            capacitance_value,
+            self.datasheet_text(resistor),
+            self.datasheet_text(capacitor)
+        );
+        let _ = writeln!(
+            shared,
+            "#   supply: `{}` pulse between low_v = {} V and high_v = {} V{} (datasheet: {}).",
+            pin_supply.pin,
+            number(pin_supply.drive.low_v),
+            number(pin_supply.drive.high_v),
+            pin_supply
+                .drive
+                .output_resistance_ohm
+                .map_or_else(String::new, |r| format!(
+                    ", output_resistance_ohm = {}",
+                    number(r)
+                )),
+            pin_supply.datasheet_ref
+        );
+        let _ = writeln!(
+            shared,
+            "#   [pins.pwm] pwm_max_hz = {} Hz (datasheet: {}); the draft tests the fastest PWM.",
+            number(pwm.pwm_max_hz),
+            pwm.datasheet_ref
+        );
+        let _ = writeln!(shared, "{}", timing.note());
+        let _ = writeln!(
+            shared,
+            "#   window: {} to {}, four whole cycles after five RC time constants.",
+            duration_string(window_start),
+            duration_string(window_end)
+        );
+        self.unreviewed_notes(&[resistor, capacitor], &mut shared);
+
+        let mut comment = shared.clone();
+        let _ = writeln!(
+            comment,
+            "#   policy: the steady ripple is V*(1-k^d)*(1-k^(1-d))/(1-k)^... with \
+             k = exp(-period/tau), tau = R*C = {} s: {} V; ±25% rounded to 3 significant \
+             digits: {ripple_min} V..{ripple_max} V.",
+            number(tau),
+            number(ripple)
+        );
+        let name = self.unique("vripple");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Tran,
+            name,
+            kind: "peak_to_peak",
+            node: Some(net.name.clone()),
+            element: None,
+            pin: None,
+            min: Some(ripple_min),
+            max: Some(ripple_max),
+            at_frequency: None,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            low_threshold: None,
+            high_threshold: None,
+            comment,
+            supply_net: input_net,
+            supply: supply.clone(),
+            sweep: None,
+            timing: Some(timing.clone()),
+        });
+
+        let mut comment = shared;
+        let _ = writeln!(
+            comment,
+            "#   policy: the capacitor passes the DC term, so the average is duty * V = \
+             {} * {} = {} V; ±5% rounded to 3 significant digits: {average_min} V..{average_max} V.",
+            number(timing.duty),
+            number(supply.volts),
+            number(average)
+        );
+        let name = self.unique("vavg");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Tran,
+            name,
+            kind: "average",
+            node: Some(net.name.clone()),
+            element: None,
+            pin: None,
+            min: Some(average_min),
+            max: Some(average_max),
+            at_frequency: None,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            low_threshold: None,
+            high_threshold: None,
+            comment,
+            supply_net: input_net,
+            supply,
+            sweep: None,
+            timing: Some(timing),
+        });
+    }
+
+    /// A MOSFET gate driven by a PWM pin: the check is the gate edge. The
+    /// timing comes from the gate time constant, driver resistance plus any
+    /// gate resistor times the datasheet input capacitance.
+    fn detect_gate_drives(&mut self) {
+        let net_ids: Vec<NetId> = self.design.nets.iter().map(|net| net.id).collect();
+        for net_id in net_ids {
+            self.detect_gate_drive(net_id);
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
+    fn detect_gate_drive(&mut self, net_id: NetId) {
+        let design = self.design;
+        if net_id == self.ground {
+            return;
+        }
+        // The driver must be the one output pin with drive and PWM data.
+        let Some(supply) = self.supply(net_id) else {
+            return;
+        };
+        let Some(pin_supply) = &supply.pin_drive else {
+            return;
+        };
+        let Some(pwm) = &pin_supply.pwm else {
+            return;
+        };
+        let Some(net) = design.net(net_id) else {
+            return;
+        };
+        if has_line_break(&net.name) {
+            return;
+        }
+        // The gate is either on the driven net or behind one series gate
+        // resistor.
+        let mut gate = None;
+        let mut series = Vec::new();
+        for endpoint in &net.endpoints {
+            let Some(component) = design.component(endpoint.component) else {
+                continue;
+            };
+            if component.id == supply.drivers[0] {
+                continue;
+            }
+            if is_kind(component, "resistor")
+                && component
+                    .part
+                    .as_ref()
+                    .is_some_and(|part| part.pins.len() == 2)
+            {
+                series.push(component.id);
+                continue;
+            }
+            let Some(registry_pin) = design.pin(endpoint.component, endpoint.pin) else {
+                continue;
+            };
+            if registry_pin.gate.is_some() && gate.replace((component.id, endpoint.pin)).is_some() {
+                return;
+            }
+        }
+        let Some((transistor, gate_pin)) = gate else {
+            return;
+        };
+        if series.len() > 1 {
+            self.not_covered.push(format!(
+                "the gate of {} has {} series resistors on net {}; only one is drafted",
+                self.describe(transistor),
+                series.len(),
+                toml_string(&net.name)
+            ));
+            return;
+        }
+        // A gate resistor moves the gate to its own net.
+        let (gate_net, gate_resistance) = if let [resistor] = series.as_slice() {
+            match self.other_net_of(*resistor, net_id) {
+                Some(other) => {
+                    let holds_gate = design.net(other).is_some_and(|other_net| {
+                        other_net.endpoints.iter().any(|endpoint| {
+                            endpoint.component == transistor
+                                && design
+                                    .pin(endpoint.component, endpoint.pin)
+                                    .is_some_and(|registry_pin| registry_pin.gate.is_some())
+                        })
+                    });
+                    if !holds_gate {
+                        return;
+                    }
+                    let resistance = match self.resistance(*resistor) {
+                        Ok(value) => value,
+                        Err(reason) => {
+                            self.not_covered.push(format!(
+                                "{}, {reason} for the gate resistor",
+                                self.describe(*resistor)
+                            ));
+                            return;
+                        }
+                    };
+                    (other, Some((resistor, resistance)))
+                }
+                None => return,
+            }
+        } else {
+            (net_id, None)
+        };
+        let Some(gate_net) = design.net(gate_net) else {
+            return;
+        };
+        if has_line_break(&gate_net.name) {
+            self.not_covered.push(format!(
+                "the gate net of {} contains a newline",
+                self.describe(transistor)
+            ));
+            return;
+        }
+        let transistor_part = design
+            .component(transistor)
+            .and_then(|component| component.part.as_ref())
+            .expect("a gate pin comes from a registry part");
+        if transistor_part.spice.is_none() {
+            self.not_covered.push(format!(
+                "{} ({}), the MOSFET has no `[spice]` model; a gate-drive check simulates it",
+                self.describe(transistor),
+                gate_net.name
+            ));
+            return;
+        }
+        // The gate capacitance from the datasheet turns the drive resistance
+        // into the edge the measure reads.
+        let gate_capacitance_pf = design
+            .pin(transistor, gate_pin)
+            .and_then(|registry_pin| registry_pin.gate.as_ref())
+            .map(|gate| gate.input_capacitance_pf);
+        let Some(input_capacitance_pf) = gate_capacitance_pf else {
+            return;
+        };
+        let drive_resistance = pin_supply.drive.output_resistance_ohm.unwrap_or(0.0);
+        let series_ohms = gate_resistance.map_or(0.0, |(_, resistance)| resistance);
+        let tau_gate = (drive_resistance + series_ohms) * input_capacitance_pf * 1.0e-12;
+        if !(tau_gate.is_finite() && tau_gate > 0.0) {
+            self.not_covered.push(format!(
+                "the gate of {} has no series resistance between the driver and the gate; \
+                 an ideal source drives it with nothing to measure",
+                self.describe(transistor)
+            ));
+            return;
+        }
+        let Some(timing) = TranTiming::gate_edge(pwm.pwm_max_hz, tau_gate) else {
+            self.not_covered.push(format!(
+                "the gate of {} gives no usable transient timing",
+                self.describe(transistor)
+            ));
+            return;
+        };
+        let (window_start, window_end) = TranTiming::edge_window(tau_gate);
+        let drive = &pin_supply.drive;
+        let low_threshold = drive.low_v + 0.1 * (drive.high_v - drive.low_v);
+        let high_threshold = drive.low_v + 0.9 * (drive.high_v - drive.low_v);
+        let shape = format!("the gate drive of {}", self.describe(transistor));
+        if !self.claim_analysis(AnalysisKind::Tran, Some(&timing), &shape) {
+            return;
+        }
+        self.use_components(&supply.drivers);
+        self.use_components(&[transistor]);
+        self.ignore_driver(net_id, &supply);
+        if let Some((resistor, _)) = gate_resistance {
+            self.use_components(&[*resistor]);
+        }
+        // The transistor's other pins need their rails: a net the design
+        // declares a supply for is sourced, one without a supply is a TODO.
+        self.source_transistor_rails(transistor, gate_net.id);
+
+        let mut comment = String::new();
+        let _ = writeln!(
+            comment,
+            "# measure: the gate of {} ({}), driven by the PWM pin `{}`.",
+            self.describe(transistor),
+            transistor_part.id.as_str(),
+            pin_supply.pin
+        );
+        let _ = writeln!(
+            comment,
+            "#   supply: `{}` pulse between low_v = {} V and high_v = {} V, \
+             output_resistance_ohm = {} (datasheet: {}).",
+            pin_supply.pin,
+            number(drive.low_v),
+            number(drive.high_v),
+            number(drive_resistance),
+            pin_supply.datasheet_ref
+        );
+        if let Some((resistor, _resistance)) = gate_resistance {
+            let _ = writeln!(
+                comment,
+                "#   {} ({}) value {} (gate resistor); datasheet: {}.",
+                self.refdes(*resistor),
+                self.part_id(*resistor),
+                self.value(*resistor),
+                self.datasheet_text(*resistor)
+            );
+        }
+        let _ = writeln!(
+            comment,
+            "#   [pins.gate] input_capacitance_pf = {} pF, [pins.pwm] pwm_max_hz = {} Hz \
+             (datasheets: {} / {}); tau = R*Ciss = {} s.",
+            number(input_capacitance_pf),
+            number(pwm.pwm_max_hz),
+            gate_ref_text(design, transistor, gate_pin),
+            pwm.datasheet_ref,
+            number(tau_gate)
+        );
+        let _ = writeln!(comment, "{}", timing.note());
+        let _ = writeln!(
+            comment,
+            "#   window: {} to {}; the gate starts at the drive's low level, so the first \
+             rising edge is the measurement.",
+            duration_string(window_start),
+            duration_string(window_end)
+        );
+        let _ = writeln!(
+            comment,
+            "#   thresholds: 10%/90% of the drive swing = {} V and {} V; the measure reports \
+             the edge, so it carries no limits.",
+            number(low_threshold),
+            number(high_threshold)
+        );
+        if let Some((resistor, _)) = gate_resistance {
+            self.unreviewed_notes(&[*resistor], &mut comment);
+        }
+
+        let name = self.unique("gate_rise");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Tran,
+            name,
+            kind: "rise_time",
+            node: Some(gate_net.name.clone()),
+            element: None,
+            pin: None,
+            min: None,
+            max: None,
+            at_frequency: None,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            low_threshold: Some(low_threshold),
+            high_threshold: Some(high_threshold),
+            comment: comment.clone(),
+            supply_net: net_id,
+            supply: supply.clone(),
+            sweep: None,
+            timing: Some(timing.clone()),
+        });
+
+        let _ = writeln!(
+            comment,
+            "#   policy: the overshoot is a percentage of the settled high level; the measure \
+             reports it, so it carries no limits."
+        );
+        let name = self.unique("gate_overshoot");
+        self.measures.push(DraftMeasure {
+            analysis: AnalysisKind::Tran,
+            name,
+            kind: "overshoot",
+            node: Some(gate_net.name.clone()),
+            element: None,
+            pin: None,
+            min: None,
+            max: None,
+            at_frequency: None,
+            window_start: Some(window_start),
+            window_end: Some(window_end),
+            low_threshold: None,
+            high_threshold: None,
+            comment,
+            supply_net: net_id,
+            supply,
+            sweep: None,
+            timing: Some(timing),
+        });
+    }
+
+    /// Source the rails a retained transistor hangs off. A net reached one
+    /// resistor away from the transistor is a rail feeding a load: it gets a
+    /// testbench source when the design declares one, and a TODO otherwise.
+    /// The transistor's own nets rely on its model's DC path.
+    fn source_transistor_rails(&mut self, transistor: ComponentId, gate_net: NetId) {
+        let direct: Vec<NetId> = self
+            .component_nets(transistor)
+            .into_iter()
+            .filter(|net| *net != self.ground && *net != gate_net)
+            .collect();
+        let mut rails = Vec::new();
+        for net_id in &direct {
+            if let Some(supply) = self.supply(*net_id) {
+                rails.push((*net_id, supply));
+            }
+        }
+        // One resistor hop reaches the rail behind a series load.
+        for net_id in &direct {
+            let Some(net) = self.design.net(*net_id) else {
+                continue;
+            };
+            for endpoint in &net.endpoints {
+                let Some(component) = self.design.component(endpoint.component) else {
+                    continue;
+                };
+                if !is_kind(component, "resistor") {
+                    continue;
+                }
+                let Some(other) = self.other_net_of(component.id, *net_id) else {
+                    continue;
+                };
+                self.use_components(&[component.id]);
+                if let Some(supply) = self.supply(other) {
+                    rails.push((other, supply));
+                } else {
+                    self.todo_nets.insert(other);
+                    self.not_covered.push(format!(
+                        "the load behind {} hangs off net {}, which has no declared \
+                         supply",
+                        self.describe(component.id),
+                        toml_string(
+                            &self
+                                .design
+                                .net(other)
+                                .map_or(String::new(), |net| { net.name.clone() })
+                        )
+                    ));
+                }
+            }
+        }
+        for (net_id, supply) in rails {
+            self.extra_sources.push((net_id, supply));
+        }
     }
 
     /// A passive left on a net whose other parts are all ignored would be the
@@ -1312,6 +2274,12 @@ impl<'a> Draft<'a> {
     fn render(&self) -> Option<String> {
         let first = self.measures.first()?;
         let ac = first.analysis == AnalysisKind::Ac;
+        let tran = first.analysis == AnalysisKind::Tran;
+        let timing = if tran {
+            Some(first.timing.as_ref().expect("a tran measure has a timing"))
+        } else {
+            None
+        };
         let mut out = String::new();
         let _ = writeln!(
             out,
@@ -1376,12 +2344,33 @@ impl<'a> Draft<'a> {
             let _ = writeln!(out, "[[source]]");
             if let Some(pin_supply) = &supply.pin_drive {
                 let _ = writeln!(out, "pin = {}", toml_string(&pin_supply.pin));
-                let _ = writeln!(out, "level = \"high\"");
+                if tran && pin_supply.pwm.is_some() {
+                    // A PWM pin drives a pulse between its own drive levels.
+                    let timing = timing.expect("a tran draft has a timing");
+                    let _ = writeln!(out, "kind = \"pulse\"");
+                    let _ = writeln!(
+                        out,
+                        "#   period = 1/pwm_max_hz, duty 0.5, edges a thousandth of the period."
+                    );
+                    let _ = writeln!(
+                        out,
+                        "period = {}",
+                        toml_string(&duration_string(timing.period))
+                    );
+                    let _ = writeln!(out, "duty = {}", number(timing.duty));
+                    let _ = writeln!(out, "rise = {}", toml_string(&duration_string(timing.rise)));
+                    let _ = writeln!(out, "fall = {}", toml_string(&duration_string(timing.fall)));
+                } else {
+                    let _ = writeln!(out, "level = \"high\"");
+                }
                 continue;
             }
             let _ = writeln!(out, "net = {}", toml_string(name));
             let _ = writeln!(out, "kind = \"dc\"");
-            if ac {
+            if tran {
+                // A rail the deck needs but no PWM drives stays flat.
+                let _ = writeln!(out, "dc = {:?}", supply.volts);
+            } else if ac {
                 let _ = writeln!(out, "#   ac drive: 1 V, so vdb(node) is gain in dB.");
                 let _ = writeln!(out, "ac = 1.0");
             } else {
@@ -1392,7 +2381,15 @@ impl<'a> Draft<'a> {
         }
 
         let _ = writeln!(out);
-        if ac {
+        if let Some(timing) = timing {
+            let _ = writeln!(
+                out,
+                "# transient: one pwm period per cycle, capped at 100000 output points."
+            );
+            let _ = writeln!(out, "[analysis.tran]");
+            let _ = writeln!(out, "stop = {}", toml_string(&duration_string(timing.stop)));
+            let _ = writeln!(out, "step = {}", toml_string(&duration_string(timing.step)));
+        } else if ac {
             let starts = self
                 .measures
                 .iter()
@@ -1432,6 +2429,26 @@ impl<'a> Draft<'a> {
             }
             if let Some(at_frequency) = measure.at_frequency {
                 let _ = writeln!(out, "at_frequency = {}", float(at_frequency));
+            }
+            if let Some(low_threshold) = measure.low_threshold {
+                let _ = writeln!(out, "low_threshold = {}", float(low_threshold));
+            }
+            if let Some(high_threshold) = measure.high_threshold {
+                let _ = writeln!(out, "high_threshold = {}", float(high_threshold));
+            }
+            if let Some(window_start) = measure.window_start {
+                let _ = writeln!(
+                    out,
+                    "window_start = {}",
+                    toml_string(&duration_string(window_start))
+                );
+            }
+            if let Some(window_end) = measure.window_end {
+                let _ = writeln!(
+                    out,
+                    "window_end = {}",
+                    toml_string(&duration_string(window_end))
+                );
             }
             if let Some(min) = measure.min {
                 let _ = writeln!(out, "min = {}", float(min));
@@ -1600,6 +2617,7 @@ impl<'a> Draft<'a> {
                 component.id,
                 format!("{}.{}", component.refdes, pin.name),
                 drive.clone(),
+                pin.pwm.clone(),
             ));
         }
         // One driven pin plus another output-capable pin without drive data is
@@ -1608,8 +2626,8 @@ impl<'a> Draft<'a> {
             return None;
         }
         // Several driven pins on one net are ambiguous; never guess one.
-        let (component, pin, drive) = match driven.as_slice() {
-            [only] => (only.0, only.1.clone(), only.2.clone()),
+        let (component, pin, drive, pwm) = match driven.as_slice() {
+            [only] => (only.0, only.1.clone(), only.2.clone(), only.3.clone()),
             _ => return None,
         };
         let datasheet_ref = drive
@@ -1638,6 +2656,7 @@ impl<'a> Draft<'a> {
                 pin,
                 drive,
                 datasheet_ref,
+                pwm,
             }),
         })
     }
@@ -1817,6 +2836,15 @@ impl<'a> Draft<'a> {
     }
 }
 
+/// The gate block's datasheet reference, for a comment.
+fn gate_ref_text(design: &Board, transistor: ComponentId, pin: PinId) -> String {
+    design
+        .pin(transistor, pin)
+        .and_then(|registry_pin| registry_pin.gate.as_ref())
+        .map_or("none", |gate| gate.datasheet_ref.as_str())
+        .to_string()
+}
+
 fn is_passive(component: &Component) -> bool {
     matches!(
         component.kind.as_str(),
@@ -1900,6 +2928,27 @@ fn toml_string(value: &str) -> String {
 /// their own precision through [`float`].
 fn number(value: f64) -> String {
     round_sig(value, 4).to_string()
+}
+
+/// A duration for the sidecar: the largest suffix that keeps the value at or
+/// above 1, so a period reads `1ms` rather than `0.001`. Rust's `Display`
+/// prints the shortest round-trip form.
+fn duration_string(seconds: f64) -> String {
+    let (scale, suffix) = if seconds >= 1.0 {
+        (1.0, "s")
+    } else if seconds >= 1e-3 {
+        (1e-3, "ms")
+    } else if seconds >= 1e-6 {
+        (1e-6, "us")
+    } else if seconds >= 1e-9 {
+        (1e-9, "ns")
+    } else {
+        (1e-12, "ps")
+    };
+    // Nine significant digits swallow the binary noise of the division while
+    // keeping every derived value exact.
+    let scaled = round_sig(seconds / scale, 9);
+    format!("{scaled}{suffix}")
 }
 
 /// A TOML float, rounded to four significant digits so a three-digit limit

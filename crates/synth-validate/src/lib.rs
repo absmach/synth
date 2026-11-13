@@ -4928,6 +4928,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -4949,6 +4951,8 @@ mod tests {
                 voltage_min_v: None,
                 voltage_nominal_v: None,
                 drive: None,
+                gate: None,
+                pwm: None,
             })
             .collect();
         let mut p = part(part_id, "mcu", pins);
@@ -5602,6 +5606,8 @@ mod tests {
                 voltage_min_v: None,
                 voltage_nominal_v: None,
                 drive: None,
+                gate: None,
+                pwm: None,
             }],
             required_decoupling: vec![],
             kicad_symbol: None,
@@ -5684,6 +5690,8 @@ mod tests {
                 voltage_min_v: None,
                 voltage_nominal_v: None,
                 drive: None,
+                gate: None,
+                pwm: None,
             }],
         );
         let board = Board {

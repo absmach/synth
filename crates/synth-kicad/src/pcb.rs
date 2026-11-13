@@ -3915,6 +3915,8 @@ mod tests {
                     voltage_min_v: None,
                     voltage_nominal_v: None,
                     drive: None,
+                    gate: None,
+                    pwm: None,
                 },
                 Pin {
                     name: "gnd".into(),
@@ -3928,6 +3930,8 @@ mod tests {
                     voltage_min_v: None,
                     voltage_nominal_v: None,
                     drive: None,
+                    gate: None,
+                    pwm: None,
                 },
             ],
             required_decoupling: vec![],
