@@ -1630,13 +1630,13 @@ label_side = "inside"
     fn a_pin_pwm_requires_an_output_capable_electrical_type() {
         let input = pwm_part(COMPLETE_PWM)
             .replace("id = \"pwm_ic\"", "id = \"pwm_in\"")
-            .replace("electrical_type = \"bidirectional\"", "electrical_type = \"input\"");
+            .replace(
+                "electrical_type = \"bidirectional\"",
+                "electrical_type = \"input\"",
+            );
         let error =
             load_from_strs(&[("pwm_in.synth.toml", &input)]).expect_err("input pin cannot pwm");
-        assert!(
-            error.to_string().contains("output-capable"),
-            "{error}"
-        );
+        assert!(error.to_string().contains("output-capable"), "{error}");
     }
 
     /// Only pins that can drive a net may carry datasheet drive data: the

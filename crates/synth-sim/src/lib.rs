@@ -76,8 +76,8 @@ pub struct TestbenchOptions {
 }
 
 /// An independent source added by the testbench. It drives either a net
-/// (`dc`/`ac`) or an IC pin's output level (`level`, with the voltage coming
-/// from the pin's `[pins.drive]` data).
+/// (`dc`/`ac`/`pulse`) or an IC pin's output (a `level` step, or a `pulse`
+/// whose levels come from the pin's `[pins.drive]` data).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Source {
@@ -87,7 +87,8 @@ pub struct Source {
     /// `REF.PIN` whose output drive supplies the net, e.g. `U1.gpio5`.
     #[serde(default)]
     pub pin: Option<String>,
-    /// Output level for a pin source.
+    /// Output level for a pin source. A pulse pin source uses both levels
+    /// and rejects this.
     #[serde(default)]
     pub level: Option<SourceLevel>,
     #[serde(default)]
@@ -98,6 +99,26 @@ pub struct Source {
     /// AC magnitude in volts.
     #[serde(default)]
     pub ac: Option<f64>,
+    /// PULSE low level in volts. Required for a net pulse source; a pin
+    /// pulse source takes it from the pin's `[pins.drive]` `low_v`.
+    #[serde(default)]
+    pub low: Option<f64>,
+    /// PULSE high level in volts. Required for a net pulse source; a pin
+    /// pulse source takes it from the pin's `[pins.drive]` `high_v`.
+    #[serde(default)]
+    pub high: Option<f64>,
+    /// PULSE period.
+    #[serde(default, deserialize_with = "deserialize_duration_option")]
+    pub period: Option<f64>,
+    /// High fraction of the period, from 0 (exclusive) to 1 (inclusive).
+    #[serde(default)]
+    pub duty: Option<f64>,
+    /// PULSE rise time.
+    #[serde(default, deserialize_with = "deserialize_duration_option")]
+    pub rise: Option<f64>,
+    /// PULSE fall time.
+    #[serde(default, deserialize_with = "deserialize_duration_option")]
+    pub fall: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -105,6 +126,23 @@ pub struct Source {
 pub enum SourceKind {
     #[default]
     Dc,
+    /// A `PULSE(Vlow Vhigh 0 Trise Tfall Pwidth Pperiod)` source.
+    Pulse,
+}
+
+impl Source {
+    /// The pulse fields a source carries, for the "field present but this
+    /// kind does not use it" checks.
+    fn pulse_fields(&self) -> [(&'static str, Option<f64>); 6] {
+        [
+            ("low", self.low),
+            ("high", self.high),
+            ("period", self.period),
+            ("duty", self.duty),
+            ("rise", self.rise),
+            ("fall", self.fall),
+        ]
+    }
 }
 
 /// The output level a pin source drives.
@@ -124,6 +162,88 @@ impl SourceLevel {
     }
 }
 
+/// A sidecar duration: a plain number of seconds, or a number with an
+/// `ns`/`us`/`ms`/`ps`/`s` suffix. SPICE's `M` is milli, so a bare `m` is
+/// rejected rather than read as milliseconds.
+pub(crate) fn parse_duration(text: &str) -> Option<f64> {
+    let trimmed = text.trim();
+    let split = trimmed
+        .char_indices()
+        .find(|(_, character)| character.is_ascii_alphabetic() || *character == 'µ')
+        .map(|(index, _)| index);
+    let (number, suffix) = match split {
+        Some(index) => (&trimmed[..index], &trimmed[index..]),
+        None => (trimmed, ""),
+    };
+    // The number must parse on its own; the suffix only moves the exponent.
+    number.trim().parse::<f64>().ok()?;
+    // Attaching the scale as an exponent instead of multiplying snaps the
+    // result to the double the decimal notation names: `500e-9` is exactly
+    // `5e-7`, while `500 * 1e-9` is not.
+    let exponent = match suffix.to_ascii_lowercase().replace('µ', "u").as_str() {
+        "" => {
+            let seconds: f64 = number.trim().parse().ok()?;
+            return seconds.is_finite().then_some(seconds);
+        }
+        "s" => "",
+        "ms" => "e-3",
+        "us" => "e-6",
+        "ns" => "e-9",
+        "ps" => "e-12",
+        _ => return None,
+    };
+    let seconds: f64 = format!("{number}{exponent}").parse().ok()?;
+    seconds.is_finite().then_some(seconds)
+}
+
+/// The sidecar's duration error text; `M` is milli in SPICE, so `m` alone is
+/// a unit trap worth naming.
+fn duration_hint() -> &'static str {
+    "use a number of seconds or a suffix of ns, us, ms or s (a bare `m` is rejected \
+     because SPICE `M` is milli: write `ms`)"
+}
+
+/// Deserialize one duration field: a TOML number of seconds or a string like
+/// `"5ms"`.
+fn deserialize_duration<'de, D>(deserializer: D) -> Result<f64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct DurationVisitor;
+    impl serde::de::Visitor<'_> for DurationVisitor {
+        type Value = f64;
+        fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            formatter.write_str("a duration: a number of seconds or a string like `5ms`")
+        }
+        fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<f64, E> {
+            Ok(value)
+        }
+        #[allow(clippy::cast_precision_loss)]
+        fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<f64, E> {
+            Ok(value as f64)
+        }
+        fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<f64, E> {
+            #[allow(clippy::cast_precision_loss)]
+            Ok(value as f64)
+        }
+        fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<f64, E> {
+            parse_duration(text).ok_or_else(|| {
+                serde::de::Error::custom(format!("`{text}` is not a duration; {}", duration_hint()))
+            })
+        }
+    }
+    deserializer.deserialize_any(DurationVisitor)
+}
+
+/// Deserialize an optional duration field: a TOML number of seconds or a
+/// string like `"5ms"`.
+fn deserialize_duration_option<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_duration(deserializer).map(Some)
+}
+
 /// The analysis the deck runs.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -132,6 +252,20 @@ pub struct Analysis {
     pub op: bool,
     #[serde(default)]
     pub ac: Option<AcAnalysis>,
+    #[serde(default)]
+    pub tran: Option<TranAnalysis>,
+}
+
+/// A transient run: `tran <step> <stop>`.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TranAnalysis {
+    /// Simulation end time, in seconds.
+    #[serde(deserialize_with = "deserialize_duration")]
+    pub stop: f64,
+    /// Output interval, in seconds.
+    #[serde(deserialize_with = "deserialize_duration")]
+    pub step: f64,
 }
 
 /// A decade sweep for `ac dec <points> <start> <stop>`.
@@ -180,6 +314,22 @@ pub struct Measure {
     /// measure; requires the `ac` analysis.
     #[serde(default)]
     pub at_frequency: Option<f64>,
+    /// Window start for a transient measure. Defaults to 0.
+    #[serde(default, deserialize_with = "deserialize_duration_option")]
+    pub window_start: Option<f64>,
+    /// Window end for a transient measure. Defaults to the `tran` stop.
+    #[serde(default, deserialize_with = "deserialize_duration_option")]
+    pub window_end: Option<f64>,
+    /// Absolute tolerance band around the window's final value for
+    /// `settling_time`, in the waveform's unit.
+    #[serde(default)]
+    pub tolerance: Option<f64>,
+    /// Lower threshold for `rise_time`, in volts.
+    #[serde(default)]
+    pub low_threshold: Option<f64>,
+    /// Upper threshold for `rise_time`, in volts.
+    #[serde(default)]
+    pub high_threshold: Option<f64>,
     #[serde(default)]
     pub min: Option<f64>,
     #[serde(default)]
@@ -250,6 +400,41 @@ pub enum MeasureKind {
     /// The current out of an IC pin, against its `[pins.drive]` limit.
     #[serde(alias = "pin_current_limit")]
     PinCurrent,
+    /// Transient mean of the waveform over the window.
+    Average,
+    /// Transient root-mean-square of the waveform over the window.
+    Rms,
+    /// Transient maximum minus minimum over the window.
+    PeakToPeak,
+    /// Time from the window start until the waveform enters and stays inside
+    /// a tolerance band around its final value.
+    SettlingTime,
+    /// Time between the first upward crossings of the two thresholds.
+    RiseTime,
+    /// How far the waveform rises above its window's final value, as a
+    /// percentage of that final value.
+    Overshoot,
+}
+
+impl MeasureKind {
+    /// The measure kinds that read a transient waveform from `wrdata` data.
+    fn is_transient(self) -> bool {
+        matches!(
+            self,
+            Self::Average
+                | Self::Rms
+                | Self::PeakToPeak
+                | Self::SettlingTime
+                | Self::RiseTime
+                | Self::Overshoot
+        )
+    }
+
+    /// Transient kinds that may read an element current instead of a node
+    /// voltage.
+    fn allows_element(self) -> bool {
+        matches!(self, Self::Average | Self::Rms | Self::PeakToPeak)
+    }
 }
 
 impl Testbench {
@@ -310,9 +495,12 @@ impl Testbench {
                 "`[options] timeout` must be greater than 0 and at most {MAX_TIMEOUT_SECONDS} seconds"
             )));
         }
-        if self.analysis.op == self.analysis.ac.is_some() {
+        let selected_analyses = usize::from(self.analysis.op)
+            + usize::from(self.analysis.ac.is_some())
+            + usize::from(self.analysis.tran.is_some());
+        if selected_analyses != 1 {
             return Err(testbench_error(
-                "testbench must select exactly one analysis: `op` or `ac`",
+                "testbench must select exactly one analysis: `op`, `ac` or `tran`",
             ));
         }
         if let Some(ac) = &self.analysis.ac {
@@ -340,6 +528,32 @@ impl Testbench {
                      two points; ngspice hangs on it. Widen the sweep or raise \
                      `points_per_decade`.",
                     ac.start, ac.stop, ac.points_per_decade
+                )));
+            }
+        }
+        if let Some(tran) = &self.analysis.tran {
+            if !tran.stop.is_finite() || tran.stop <= 0.0 {
+                return Err(testbench_error(
+                    "`[analysis.tran] stop` must be a positive finite time",
+                ));
+            }
+            if !tran.step.is_finite() || tran.step <= 0.0 {
+                return Err(testbench_error(
+                    "`[analysis.tran] step` must be a positive finite time",
+                ));
+            }
+            if tran.step >= tran.stop {
+                return Err(testbench_error(format!(
+                    "`[analysis.tran] step` must be less than stop {}; use a smaller step or \
+                     a longer run",
+                    tran.stop
+                )));
+            }
+            let points = tran.stop / tran.step;
+            if points > MAX_TRAN_POINTS {
+                return Err(testbench_error(format!(
+                    "`[analysis.tran]` needs {points:.0} output points (stop/step); the cap is \
+                     {MAX_TRAN_POINTS} to keep runs bounded. Raise the step or shorten the run."
                 )));
             }
         }
@@ -398,28 +612,49 @@ impl Testbench {
                             "source net `{net}` is declared twice"
                         )));
                     }
-                    if source.dc.is_none() && source.ac.is_none() {
-                        return Err(testbench_error(format!(
-                            "source on net `{net}` has neither a `dc` nor an `ac` value"
-                        )));
-                    }
-                    if let Some(dc) = source.dc
-                        && !dc.is_finite()
-                    {
-                        return Err(testbench_error(format!(
-                            "source on net `{net}` has a non-finite `dc` value"
-                        )));
-                    }
-                    if let Some(ac) = source.ac {
-                        if !ac.is_finite() {
-                            return Err(testbench_error(format!(
-                                "source on net `{net}` has a non-finite `ac` value"
-                            )));
+                    match source.kind {
+                        SourceKind::Dc => {
+                            for (field, value) in source.pulse_fields() {
+                                if value.is_some() {
+                                    return Err(testbench_error(format!(
+                                        "source on net `{net}` has `{field}` but `kind` is \
+                                         `dc`; the pulse fields need `kind = \"pulse\"`"
+                                    )));
+                                }
+                            }
+                            if source.dc.is_none() && source.ac.is_none() {
+                                return Err(testbench_error(format!(
+                                    "source on net `{net}` has neither a `dc` nor an `ac` value"
+                                )));
+                            }
+                            if let Some(dc) = source.dc {
+                                if !dc.is_finite() {
+                                    return Err(testbench_error(format!(
+                                        "source on net `{net}` has a non-finite `dc` value"
+                                    )));
+                                }
+                            }
+                            if let Some(ac) = source.ac {
+                                if !ac.is_finite() {
+                                    return Err(testbench_error(format!(
+                                        "source on net `{net}` has a non-finite `ac` value"
+                                    )));
+                                }
+                                if ac < 0.0 {
+                                    return Err(testbench_error(format!(
+                                        "source on net `{net}` has a negative `ac` value"
+                                    )));
+                                }
+                            }
                         }
-                        if ac < 0.0 {
-                            return Err(testbench_error(format!(
-                                "source on net `{net}` has a negative `ac` value"
-                            )));
+                        SourceKind::Pulse => {
+                            if source.dc.is_some() || source.ac.is_some() {
+                                return Err(testbench_error(format!(
+                                    "source on net `{net}` must not have a `dc` or `ac` value; \
+                                     a pulse source is fully described by its pulse fields"
+                                )));
+                            }
+                            validate_net_pulse(net, source)?;
                         }
                     }
                 }
@@ -438,17 +673,50 @@ impl Testbench {
                             "source pin `{pin}` must be `REF.PIN` with both halves non-empty"
                         )));
                     }
-                    if source.level.is_none() {
-                        return Err(testbench_error(format!(
-                            "source pin `{pin}` has no `level`; use `level = \"high\"` or \
-                             `level = \"low\"`"
-                        )));
+                    match source.kind {
+                        SourceKind::Dc => {
+                            if source.level.is_none() {
+                                return Err(testbench_error(format!(
+                                    "source pin `{pin}` has no `level`; use `level = \"high\"` \
+                                     or `level = \"low\"`"
+                                )));
+                            }
+                            for (field, value) in source.pulse_fields() {
+                                if value.is_some() {
+                                    return Err(testbench_error(format!(
+                                        "source pin `{pin}` has `{field}` but the `dc` kind \
+                                         only steps between the pin's levels; the pulse fields \
+                                         need `kind = \"pulse\"`"
+                                    )));
+                                }
+                            }
+                        }
+                        SourceKind::Pulse => {
+                            if source.level.is_some() {
+                                return Err(testbench_error(format!(
+                                    "source pin `{pin}` has a `level`; a pulse pin source \
+                                     uses both of the pin's `[pins.drive]` levels, so omit it"
+                                )));
+                            }
+                            if source.low.is_some() || source.high.is_some() {
+                                return Err(testbench_error(format!(
+                                    "source pin `{pin}` must not have a `low` or `high`; the \
+                                     pulse levels come from the pin's `[pins.drive]` data"
+                                )));
+                            }
+                        }
                     }
                     if source.dc.is_some() || source.ac.is_some() {
                         return Err(testbench_error(format!(
                             "source pin `{pin}` must not have a `dc` or `ac` value; the \
                              voltage comes from the pin's `[pins.drive]` data"
                         )));
+                    }
+                    if source.kind == SourceKind::Pulse {
+                        validate_pulse_timing(
+                            pulse_timing(source),
+                            &format!("source pin `{pin}`"),
+                        )?;
                     }
                     if !source_pins.insert(pin) {
                         return Err(testbench_error(format!(
@@ -633,6 +901,132 @@ impl Testbench {
                         }
                     }
                 }
+                kind if kind.is_transient() => {
+                    let node = measure
+                        .node
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|node| !node.is_empty());
+                    let element = measure
+                        .element
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|element| !element.is_empty());
+                    match (node, element) {
+                        (Some(_), Some(_)) => {
+                            return Err(invalid_measure(
+                                measure,
+                                format!(
+                                    "measure `{}` has both a `node` and an `element`; a \
+                                     transient measure reads one waveform",
+                                    measure.name
+                                ),
+                            ));
+                        }
+                        (None, None) => {
+                            return Err(invalid_measure(
+                                measure,
+                                format!(
+                                    "measure `{}` has no waveform to read; give it a `node` \
+                                     or, for average, rms and peak_to_peak, an `element`",
+                                    measure.name
+                                ),
+                            ));
+                        }
+                        (None, Some(_)) if !kind.allows_element() => {
+                            return Err(invalid_measure(
+                                measure,
+                                format!(
+                                    "measure `{}` is a {} measure and reads a node; an \
+                                     `element` current is only for average, rms and \
+                                     peak_to_peak",
+                                    measure.name,
+                                    kind_toml_name(measure.kind)
+                                ),
+                            ));
+                        }
+                        (Some(node), None) => {
+                            if let Err(diagnostic) = reject_newline("node", node) {
+                                return Err(at_measure(diagnostic, measure));
+                            }
+                        }
+                        (None, Some(element)) => {
+                            if let Err(diagnostic) = reject_newline("element", element) {
+                                return Err(at_measure(diagnostic, measure));
+                            }
+                        }
+                    }
+                    for (field, present) in [
+                        ("pin", measure.pin.is_some()),
+                        ("drop_db", measure.drop_db.is_some()),
+                        ("at_frequency", measure.at_frequency.is_some()),
+                    ] {
+                        if present {
+                            return Err(invalid_measure(
+                                measure,
+                                format!(
+                                    "measure `{}` is a {} measure and must not have `{field}`",
+                                    measure.name,
+                                    kind_toml_name(measure.kind)
+                                ),
+                            ));
+                        }
+                    }
+                    match measure.kind {
+                        MeasureKind::SettlingTime => match measure.tolerance {
+                            Some(tolerance) if tolerance.is_finite() && tolerance > 0.0 => {}
+                            _ => {
+                                return Err(invalid_measure(
+                                    measure,
+                                    format!(
+                                        "measure `{}` is a settling_time measure and \
+                                             needs a positive finite `tolerance`; the band is \
+                                             the window's final value plus and minus it",
+                                        measure.name
+                                    ),
+                                ));
+                            }
+                        },
+                        MeasureKind::RiseTime => {
+                            let thresholds = (measure.low_threshold, measure.high_threshold);
+                            match thresholds {
+                                (Some(low), Some(high))
+                                    if low.is_finite() && high.is_finite() && low < high => {}
+                                _ => {
+                                    return Err(invalid_measure(
+                                        measure,
+                                        format!(
+                                            "measure `{}` is a rise_time measure and needs a \
+                                             `low_threshold` below a finite `high_threshold`",
+                                            measure.name
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                        _ => {
+                            for (field, present) in [
+                                ("tolerance", measure.tolerance.is_some()),
+                                ("low_threshold", measure.low_threshold.is_some()),
+                                ("high_threshold", measure.high_threshold.is_some()),
+                            ] {
+                                if present {
+                                    return Err(invalid_measure(
+                                        measure,
+                                        format!(
+                                            "measure `{}` is a {} measure and must not have \
+                                             `{field}`; only settling_time uses `tolerance` \
+                                             and rise_time uses the thresholds",
+                                            measure.name,
+                                            kind_toml_name(measure.kind)
+                                        ),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => unreachable!("handled by the arms above"),
             }
             if let Some(at_frequency) = measure.at_frequency {
                 if !at_frequency.is_finite() || at_frequency <= 0.0 {
@@ -707,7 +1101,58 @@ impl Testbench {
                     ),
                 ));
             }
-            if !requires_ac && !self.analysis.op {
+            if measure.kind.is_transient() {
+                let Some(tran) = &self.analysis.tran else {
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}` is a {} measure and requires the `tran` analysis",
+                            measure.name,
+                            kind_toml_name(measure.kind)
+                        ),
+                    ));
+                };
+                for (field, value) in [
+                    ("window_start", measure.window_start),
+                    ("window_end", measure.window_end),
+                ] {
+                    if let Some(value) = value {
+                        if !value.is_finite() {
+                            return Err(invalid_measure(
+                                measure,
+                                format!("measure `{}` has a non-finite `{field}`", measure.name),
+                            ));
+                        }
+                    }
+                }
+                let start = measure.window_start.unwrap_or(0.0);
+                let end = measure.window_end.unwrap_or(tran.stop);
+                if start < 0.0 {
+                    return Err(invalid_measure(
+                        measure,
+                        format!("measure `{}` has a negative `window_start`", measure.name),
+                    ));
+                }
+                if end > tran.stop {
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}` has a `window_end` ({end}) past the tran stop {}",
+                            measure.name, tran.stop
+                        ),
+                    ));
+                }
+                if end <= start {
+                    return Err(invalid_measure(
+                        measure,
+                        format!(
+                            "measure `{}` has a `window_end` ({end}) not greater than its \
+                             `window_start` ({start})",
+                            measure.name
+                        ),
+                    ));
+                }
+            } else if !requires_ac && !self.analysis.op {
                 return Err(invalid_measure(
                     measure,
                     format!("measure `{}` requires the `op` analysis", measure.name),
@@ -741,6 +1186,73 @@ impl Testbench {
 
 fn invalid_measure(measure: &Measure, message: impl Into<String>) -> Diagnostic {
     at_measure(testbench_error(message), measure)
+}
+
+/// The four pulse timing values, only when every one is present.
+fn pulse_timing(source: &Source) -> Option<(f64, f64, f64, f64)> {
+    Some((source.period?, source.duty?, source.rise?, source.fall?))
+}
+
+/// The pulse checks every pulse source shares: a complete, usable timing.
+fn validate_pulse_timing(
+    timing: Option<(f64, f64, f64, f64)>,
+    description: &str,
+) -> Result<(), Diagnostic> {
+    let Some((period, duty, rise, fall)) = timing else {
+        return Err(testbench_error(format!(
+            "{description} has no complete pulse timing; a pulse source needs `period`, \
+             `duty`, `rise` and `fall`"
+        )));
+    };
+    if !period.is_finite() || period <= 0.0 {
+        return Err(testbench_error(format!(
+            "{description} has a `period` that must be a positive finite time"
+        )));
+    }
+    if !(duty.is_finite() && duty > 0.0 && duty <= 1.0) {
+        return Err(testbench_error(format!(
+            "{description} has a `duty` that must be greater than 0 and at most 1"
+        )));
+    }
+    for (field, value) in [("rise", rise), ("fall", fall)] {
+        if !value.is_finite() || value < 0.0 {
+            return Err(testbench_error(format!(
+                "{description} has a `{field}` that must be a non-negative finite time"
+            )));
+        }
+    }
+    if rise + fall > period {
+        return Err(testbench_error(format!(
+            "{description} has `rise` + `fall` greater than `period`; the pulse never \
+             reaches its levels"
+        )));
+    }
+    Ok(())
+}
+
+/// The extra checks a net pulse source needs: its own low and high levels.
+fn validate_net_pulse(net: &str, source: &Source) -> Result<(), Diagnostic> {
+    let description = format!("source on net `{net}`");
+    for (field, value) in [("low", source.low), ("high", source.high)] {
+        let Some(value) = value else {
+            return Err(testbench_error(format!(
+                "{description} has no `{field}`; a net pulse source needs its own pulse levels"
+            )));
+        };
+        if !value.is_finite() {
+            return Err(testbench_error(format!(
+                "{description} has a non-finite `{field}` value"
+            )));
+        }
+    }
+    let low = source.low.unwrap_or_default();
+    let high = source.high.unwrap_or_default();
+    if low >= high {
+        return Err(testbench_error(format!(
+            "{description} has `low` ({low}) not less than `high` ({high})"
+        )));
+    }
+    validate_pulse_timing(pulse_timing(source), &description)
 }
 
 /// Mark a diagnostic as belonging to one `[[measure]]` block.
@@ -805,7 +1317,8 @@ impl MeasureResult {
 }
 
 /// The unit `simulate` reports for a measure. An `at_frequency` node voltage
-/// reads `vdb`, so it is dB rather than V.
+/// reads `vdb`, so it is dB rather than V. A transient element current is
+/// amps, a node transient is volts.
 fn measure_unit(measure: &Measure) -> &'static str {
     match measure.kind {
         MeasureKind::NodeVoltage if measure.at_frequency.is_some() => "dB",
@@ -813,6 +1326,31 @@ fn measure_unit(measure: &Measure) -> &'static str {
         MeasureKind::Current => "A",
         MeasureKind::RelativeDb => "Hz",
         MeasureKind::PinCurrent => "mA",
+        MeasureKind::Average | MeasureKind::Rms | MeasureKind::PeakToPeak => {
+            if measure.element.is_some() {
+                "A"
+            } else {
+                "V"
+            }
+        }
+        MeasureKind::SettlingTime | MeasureKind::RiseTime => "s",
+        MeasureKind::Overshoot => "%",
+    }
+}
+
+/// The measure kind's TOML spelling, for diagnostics that name the kind.
+fn kind_toml_name(kind: MeasureKind) -> &'static str {
+    match kind {
+        MeasureKind::NodeVoltage => "node_voltage",
+        MeasureKind::Current => "current",
+        MeasureKind::RelativeDb => "relative_db",
+        MeasureKind::PinCurrent => "pin_current",
+        MeasureKind::Average => "average",
+        MeasureKind::Rms => "rms",
+        MeasureKind::PeakToPeak => "peak_to_peak",
+        MeasureKind::SettlingTime => "settling_time",
+        MeasureKind::RiseTime => "rise_time",
+        MeasureKind::Overshoot => "overshoot",
     }
 }
 
@@ -883,6 +1421,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         dialect,
         plot,
         pin_limits,
+        tran_files,
     } = match emit_deck(
         design,
         testbench,
@@ -916,7 +1455,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         .options
         .timeout
         .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
-    let run = match run_ngspice(&deck, dialect, options, timeout) {
+    let (run, run_dir) = match run_ngspice(&deck, dialect, options, timeout) {
         Ok(run) => run,
         Err(diagnostic) => return failed(vec![diagnostic], options.testbench_path.as_deref()),
     };
@@ -968,15 +1507,85 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         return failed(vec![diagnostic], options.testbench_path.as_deref());
     }
 
-    let values = match parse_sentinels(&run.stdout, testbench) {
+    let values = match parse_sentinels(&run.stdout, &run.stderr, testbench) {
         Ok(values) => values,
         Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
     };
 
+    // Transient measures read their waveforms out of the `wrdata` files
+    // ngspice wrote into the run directory; every value still goes through
+    // the same limit pipeline.
+    let mut tran_diagnostics: Vec<Diagnostic> = Vec::new();
+    let mut tran_values: HashMap<String, f64> = HashMap::new();
+    if let Some(tran) = &testbench.analysis.tran {
+        let tran_stop = tran.stop;
+        for measure in &testbench.measure {
+            if !measure.kind.is_transient() {
+                continue;
+            }
+            let Some(file) = tran_files.get(&measure.name) else {
+                // Emission already checked every transient measure; keep a
+                // report instead of panicking if that changes.
+                tran_diagnostics.push(with_location_span(
+                    measure_error(format!(
+                        "measure `{}` has no transient data in the run",
+                        measure.name
+                    )),
+                    options.testbench_path.as_deref(),
+                    measure.span,
+                ));
+                continue;
+            };
+            let path = run_dir.path().join(file);
+            let waveform = match read_waveform(&path) {
+                Ok(waveform) => waveform,
+                Err(error) => {
+                    tran_diagnostics.push(with_location_span(
+                        measure_error(format!(
+                            "measure `{}` could not read its transient data `{}`: {error}",
+                            measure.name,
+                            file.as_str()
+                        )),
+                        options.testbench_path.as_deref(),
+                        measure.span,
+                    ));
+                    continue;
+                }
+            };
+            match transient_value(
+                measure,
+                measure.window_start.unwrap_or(0.0),
+                measure.window_end.unwrap_or(tran_stop),
+                &waveform,
+            ) {
+                Ok(value) => {
+                    tran_values.insert(measure.name.clone(), value);
+                }
+                Err(error) => tran_diagnostics.push(with_location_span(
+                    measure_error(format!("measure `{}` failed: {error}", measure.name)),
+                    options.testbench_path.as_deref(),
+                    measure.span,
+                )),
+            }
+        }
+    }
+    if !tran_diagnostics.is_empty() {
+        let mut diagnostics = tran_diagnostics;
+        locate(&mut diagnostics, options.testbench_path.as_deref());
+        return SimReport {
+            measures: Vec::new(),
+            diagnostics,
+        };
+    }
+
     let mut measures = Vec::new();
     let mut diagnostics = Vec::new();
     for measure in &testbench.measure {
-        let value = values[measure.name.as_str()];
+        let value = if measure.kind.is_transient() {
+            tran_values[measure.name.as_str()]
+        } else {
+            values[measure.name.as_str()]
+        };
         if measure.kind == MeasureKind::PinCurrent {
             let pin = measure.pin.as_deref().unwrap_or_default();
             let Some(limit) = pin_limits.get(pin) else {
@@ -1095,17 +1704,24 @@ fn locate(diagnostics: &mut [Diagnostic], path: Option<&Path>) {
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Upper bound on `[options] timeout`; `Instant + Duration` must not overflow.
 const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
+/// Upper bound on `[analysis.tran]` output points (stop/step). A transient
+/// is the run most likely to hang or fill the disk, so the cap keeps a
+/// sidecar typo from turning into hours of wall clock and gigabytes of
+/// `wrdata` output.
+const MAX_TRAN_POINTS: f64 = 100_000.0;
 /// ngspice logs are small; this only bounds a runaway `.print` or `.plot`.
 const MAX_OUTPUT_BYTES: usize = 1 << 20;
 
 /// Run ngspice in a fresh temp directory with its own `.spiceinit`, so a
-/// user's `~/.spiceinit` and concurrent runs cannot interfere.
+/// user's `~/.spiceinit` and concurrent runs cannot interfere. The directory
+/// is returned so the caller can read `wrdata` output (transient measures)
+/// before it is removed.
 fn run_ngspice(
     deck: &str,
     dialect: Option<SpiceDialect>,
     options: &SimOptions,
     timeout: Duration,
-) -> Result<Invocation, Diagnostic> {
+) -> Result<(Invocation, TempDir), Diagnostic> {
     let dir = TempDir::create()
         .map_err(|e| ngspice_error(format!("could not create a temporary directory: {e}")))?;
     let mut spiceinit = String::from("set strict_errorhandling\n");
@@ -1145,7 +1761,7 @@ fn run_ngspice(
     if run.timed_out {
         return Err(timeout_error(timeout.as_secs_f64()));
     }
-    Ok(run)
+    Ok((run, dir))
 }
 
 fn install_hint() -> &'static str {
@@ -1167,8 +1783,22 @@ fn install_hint() -> &'static str {
     }
 }
 
+/// Stderr lines that say why an analysis stopped early. A transient
+/// convergence failure aborts the control block, so `SYNTH_DONE` is never
+/// printed; the reason goes into the `-003` diagnostic with the sentinel.
+fn stderr_analysis_failure(stderr: &str) -> Option<String> {
+    let offenders = stderr_offenders(stderr, |line| {
+        line.contains("timestep too small")
+            || line.contains("failed to converge")
+            || line.contains("no convergence")
+            || line.contains("doanalyses")
+    });
+    (!offenders.is_empty()).then(|| excerpt(&offenders.join("\n")))
+}
+
 fn parse_sentinels(
     stdout: &str,
+    stderr: &str,
     testbench: &Testbench,
 ) -> Result<HashMap<String, f64>, Vec<Diagnostic>> {
     let expected: HashSet<&str> = testbench
@@ -1239,9 +1869,19 @@ fn parse_sentinels(
     }
 
     if !done {
-        diagnostics.push(measure_error("ngspice did not print SYNTH_DONE"));
+        let reason = stderr_analysis_failure(stderr)
+            .map(|reason| format!("; ngspice reported: {reason}"))
+            .unwrap_or_default();
+        diagnostics.push(measure_error(format!(
+            "ngspice did not print SYNTH_DONE{reason}"
+        )));
     }
     for measure in &testbench.measure {
+        // A transient measure is computed from its `wrdata` file, not from a
+        // sentinel.
+        if measure.kind.is_transient() {
+            continue;
+        }
         if !values.contains_key(&measure.name) && !reported.contains(&measure.name) {
             diagnostics.push(at_measure(
                 measure_error(format!("measurement `{}` was not printed", measure.name)),
@@ -1254,6 +1894,163 @@ fn parse_sentinels(
         Ok(values)
     } else {
         Err(diagnostics)
+    }
+}
+
+/// A transient waveform read back from a `wrdata` file: one time and value
+/// pair per output point.
+struct Waveform {
+    times: Vec<f64>,
+    values: Vec<f64>,
+}
+
+fn read_waveform(path: &Path) -> Result<Waveform, String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    let mut times = Vec::new();
+    let mut values = Vec::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut columns = line.split_whitespace();
+        let (Some(time), Some(value), None) = (columns.next(), columns.next(), columns.next())
+        else {
+            return Err(format!(
+                "unexpected row `{line}`; `wrdata` writes time and value columns"
+            ));
+        };
+        let time: f64 = time
+            .parse()
+            .map_err(|error| format!("row `{line}`: {error}"))?;
+        let value: f64 = value
+            .parse()
+            .map_err(|error| format!("row `{line}`: {error}"))?;
+        times.push(time);
+        values.push(value);
+    }
+    if times.is_empty() {
+        return Err("the analysis produced no output points".to_string());
+    }
+    Ok(Waveform { times, values })
+}
+
+/// The rows of a waveform inside `[start, end]`.
+fn window_slice(wave: &Waveform, start: f64, end: f64) -> (Vec<f64>, Vec<f64>) {
+    let times: Vec<f64> = wave
+        .times
+        .iter()
+        .copied()
+        .filter(|time| *time >= start && *time <= end)
+        .collect();
+    let values: Vec<f64> = wave
+        .times
+        .iter()
+        .zip(&wave.values)
+        .filter(|(time, _)| **time >= start && **time <= end)
+        .map(|(_, value)| *value)
+        .collect();
+    (times, values)
+}
+
+/// The time of the first upward crossing of `threshold` at or after `after`,
+/// interpolated between the two samples that straddle it.
+fn upward_crossing(
+    times: &[f64],
+    values: &[f64],
+    threshold: f64,
+    after: f64,
+) -> Result<f64, String> {
+    if times.len() < 2 {
+        return Err(format!("no rising crossing of {threshold} in the window"));
+    }
+    for index in 0..times.len() - 1 {
+        if times[index] < after {
+            continue;
+        }
+        if values[index] < threshold && values[index + 1] >= threshold {
+            let rise = values[index + 1] - values[index];
+            let fraction = if rise > 0.0 {
+                (threshold - values[index]) / rise
+            } else {
+                0.0
+            };
+            return Ok(times[index] + fraction * (times[index + 1] - times[index]));
+        }
+    }
+    Err(format!("no rising crossing of {threshold} in the window"))
+}
+
+/// The transient value of one measure over its window.
+fn transient_value(
+    measure: &Measure,
+    start: f64,
+    end: f64,
+    wave: &Waveform,
+) -> Result<f64, String> {
+    let (times, values) = window_slice(wave, start, end);
+    if values.is_empty() {
+        return Err(format!("no samples inside the window {start}..{end} s"));
+    }
+    match measure.kind {
+        MeasureKind::Average => {
+            let count = values.len();
+            Ok(values.iter().sum::<f64>() / f64::from(u32::try_from(count).unwrap_or(u32::MAX)))
+        }
+        MeasureKind::Rms => {
+            let count = values.len();
+            let squares = values.iter().map(|value| value * value).sum::<f64>();
+            Ok((squares / f64::from(u32::try_from(count).unwrap_or(u32::MAX))).sqrt())
+        }
+        MeasureKind::PeakToPeak => {
+            let min = values.iter().copied().fold(f64::INFINITY, f64::min);
+            let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            Ok(max - min)
+        }
+        MeasureKind::SettlingTime => {
+            let tolerance = measure
+                .tolerance
+                .expect("a validated settling_time measure has a tolerance");
+            let final_value = values[values.len() - 1];
+            let band_low = final_value - tolerance;
+            let band_high = final_value + tolerance;
+            let last_outside = values
+                .iter()
+                .rposition(|value| *value < band_low || *value > band_high);
+            match last_outside {
+                None => Ok(0.0),
+                Some(index) if index + 1 == values.len() => Err(format!(
+                    "the waveform never enters the ±{tolerance} band around \
+                     {final_value} within the window"
+                )),
+                Some(index) => Ok(times[index + 1] - start),
+            }
+        }
+        MeasureKind::RiseTime => {
+            let low = measure
+                .low_threshold
+                .expect("a validated rise_time measure has a low threshold");
+            let high = measure
+                .high_threshold
+                .expect("a validated rise_time measure has a high threshold");
+            let t_low = upward_crossing(&times, &values, low, f64::NEG_INFINITY)?;
+            let t_high = upward_crossing(&times, &values, high, t_low)?;
+            Ok(t_high - t_low)
+        }
+        MeasureKind::Overshoot => {
+            let final_value = values[values.len() - 1];
+            if final_value == 0.0 {
+                return Err(
+                    "the waveform ends at 0; overshoot is a percentage of the window's \
+                     final value"
+                        .to_string(),
+                );
+            }
+            let peak = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            Ok((peak - final_value) / final_value * 100.0)
+        }
+        _ => unreachable!("transient_value is only called for transient measures"),
     }
 }
 
@@ -1554,6 +2351,9 @@ struct EmittedDeck {
     plot: Option<PathBuf>,
     /// Pin-source current limits, keyed by the source's `REF.PIN` string.
     pin_limits: HashMap<String, PinDriveLimit>,
+    /// `wrdata` files for transient measures, keyed by measure name. The
+    /// files sit in the ngspice run directory and are read after the run.
+    tran_files: HashMap<String, String>,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -1644,20 +2444,45 @@ fn emit_deck(
                     )));
                     continue;
                 }
-                if source.dc.is_none() && source.ac.is_none() {
+                if source.kind == SourceKind::Dc && source.dc.is_none() && source.ac.is_none() {
                     diagnostics.push(tb_error(format!(
                         "source on net `{net_name}` has neither a `dc` nor an `ac` value"
                     )));
                     continue;
                 }
-                let mut line = format!("{element} {} 0", node_by_net[&net.id]);
-                if let Some(dc) = source.dc {
-                    let _ = write!(line, " DC {}", exponent(dc));
-                }
-                if let Some(ac) = source.ac {
-                    let _ = write!(line, " AC {}", exponent(ac));
-                }
-                pending_lines.push(line);
+                let waveform = match source.kind {
+                    SourceKind::Dc => {
+                        let mut line = format!("{element} {} 0", node_by_net[&net.id]);
+                        if let Some(dc) = source.dc {
+                            let _ = write!(line, " DC {}", exponent(dc));
+                        }
+                        if let Some(ac) = source.ac {
+                            let _ = write!(line, " AC {}", exponent(ac));
+                        }
+                        line
+                    }
+                    SourceKind::Pulse => {
+                        let low = source
+                            .low
+                            .expect("a validated net pulse source has a low level");
+                        let high = source
+                            .high
+                            .expect("a validated net pulse source has a high level");
+                        format!(
+                            "{element} {} 0 {}",
+                            node_by_net[&net.id],
+                            pulse_spec(
+                                low,
+                                high,
+                                source.rise.unwrap_or_default(),
+                                source.fall.unwrap_or_default(),
+                                source.duty.unwrap_or_default(),
+                                source.period.unwrap_or_default(),
+                            )
+                        )
+                    }
+                };
+                pending_lines.push(waveform);
                 (net.id, format!("net `{net_name}`"))
             }
             (None, Some(pin_ref)) => {
@@ -1719,14 +2544,32 @@ fn emit_deck(
                     ));
                     continue;
                 };
-                let level = source.level.expect("a validated pin source has a level");
-                let voltage = match level {
-                    SourceLevel::High => drive.high_v,
-                    SourceLevel::Low => drive.low_v,
-                };
-                let (limit_ma, field) = match level {
-                    SourceLevel::High => (drive.max_source_ma, "max_source_ma"),
-                    SourceLevel::Low => (drive.max_sink_ma, "max_sink_ma"),
+                let level = source.level;
+                // A pulse pin source steps between both drive levels and
+                // needs no `pin_current` limit at its level; that measure
+                // requires the `op` analysis, which a pulse source cannot
+                // share.
+                let (waveform, limit) = if source.kind == SourceKind::Pulse {
+                    let waveform = pulse_spec(
+                        drive.low_v,
+                        drive.high_v,
+                        source.rise.unwrap_or_default(),
+                        source.fall.unwrap_or_default(),
+                        source.duty.unwrap_or_default(),
+                        source.period.unwrap_or_default(),
+                    );
+                    (waveform, None)
+                } else {
+                    let level = level.expect("a validated dc pin source has a level");
+                    let voltage = match level {
+                        SourceLevel::High => drive.high_v,
+                        SourceLevel::Low => drive.low_v,
+                    };
+                    let (limit_ma, field) = match level {
+                        SourceLevel::High => (drive.max_source_ma, "max_source_ma"),
+                        SourceLevel::Low => (drive.max_sink_ma, "max_sink_ma"),
+                    };
+                    (format!("DC {}", exponent(voltage)), Some((limit_ma, field)))
                 };
                 let net_node = &node_by_net[&net_id];
                 if let Some(resistance) = drive.output_resistance_ohm {
@@ -1741,28 +2584,27 @@ fn emit_deck(
                         continue;
                     }
                     pending_resistor = Some((key, format!("pin source {pin_ref}")));
-                    pending_lines.push(format!(
-                        "{element} {internal_node} 0 DC {}",
-                        exponent(voltage)
-                    ));
+                    pending_lines.push(format!("{element} {internal_node} 0 {waveform}"));
                     pending_lines.push(format!(
                         "{resistor} {net_node} {internal_node} {}",
                         exponent(resistance)
                     ));
                 } else {
-                    pending_lines.push(format!("{element} {net_node} 0 DC {}", exponent(voltage)));
+                    pending_lines.push(format!("{element} {net_node} 0 {waveform}"));
                 }
-                pending_limit = Some((
-                    pin_ref.to_string(),
-                    PinDriveLimit {
-                        pin: pin_ref.to_string(),
-                        level,
-                        limit_ma,
-                        field,
-                        datasheet_ref: datasheet_ref.to_string(),
-                        element,
-                    },
-                ));
+                pending_limit = limit.map(|(limit_ma, field)| {
+                    (
+                        pin_ref.to_string(),
+                        PinDriveLimit {
+                            pin: pin_ref.to_string(),
+                            level: level.expect("a limited pin source has a level"),
+                            limit_ma,
+                            field,
+                            datasheet_ref: datasheet_ref.to_string(),
+                            element,
+                        },
+                    )
+                });
                 (net_id, format!("pin `{pin_ref}`"))
             }
             (Some(net), Some(pin)) => {
@@ -1984,56 +2826,28 @@ fn emit_deck(
     }
 
     let mut measure_lines = Vec::new();
+    let mut tran_data: Vec<(String, String)> = Vec::new();
+    let mut tran_files: HashMap<String, String> = HashMap::new();
     let mut current_saves = BTreeSet::new();
     for (index, measure) in testbench.measure.iter().enumerate() {
         match measure.kind {
             MeasureKind::NodeVoltage | MeasureKind::RelativeDb => {
-                let node_name = measure
-                    .node
-                    .as_deref()
-                    .expect("a validated node measure has a node");
-                let Some(net) = net_by_name.get(node_name) else {
-                    diagnostics.push(tb_error_measure(
-                        testbench_path,
-                        measure,
-                        format!(
-                            "measure `{}` node `{node_name}` not found in design",
-                            measure.name
-                        ),
-                    ));
-                    continue;
+                let node = match measure_net(
+                    design,
+                    &net_by_name,
+                    ground.id,
+                    &ignored_ids,
+                    &sourced_nets,
+                    measure,
+                    testbench_path,
+                    design_path,
+                ) {
+                    Ok(node) => node,
+                    Err(diagnostic) => {
+                        diagnostics.push(diagnostic);
+                        continue;
+                    }
                 };
-                if net.id == ground.id {
-                    diagnostics.push(tb_error_measure(
-                        testbench_path,
-                        measure,
-                        format!(
-                            "measure `{}` reads ground net `{}`; ground is 0 V by definition \
-                             and ngspice has no vector for it",
-                            measure.name, net.name
-                        ),
-                    ));
-                    continue;
-                }
-                let simulated = net
-                    .endpoints
-                    .iter()
-                    .any(|endpoint| !ignored_ids.contains(&endpoint.component));
-                if !simulated && !sourced_nets.contains(&net.id) {
-                    diagnostics.push(with_location_span(
-                        topology_error(
-                            &net.name,
-                            format!(
-                                "measure `{}` reads net `{}`, which has no simulated parts",
-                                measure.name, net.name
-                            ),
-                        ),
-                        design_path,
-                        net_span(design, net),
-                    ));
-                    continue;
-                }
-                let node = &node_by_net[&net.id];
                 if measure.kind == MeasureKind::RelativeDb {
                     let drop_db = measure.drop_db.unwrap_or(3.0);
                     let mut lines = String::new();
@@ -2062,71 +2876,16 @@ fn emit_deck(
                 }
             }
             MeasureKind::Current => {
-                let refdes = measure
-                    .element
-                    .as_deref()
-                    .expect("a validated current measure has an element");
-                let Some(component) = design
-                    .components
-                    .iter()
-                    .find(|component| component.refdes == refdes)
-                else {
-                    diagnostics.push(tb_error_measure(
-                        testbench_path,
-                        measure,
-                        format!(
-                            "measure `{}` element `{refdes}` is not a placed part",
+                match element_current_vector(design, &ignored_ids, measure, testbench_path) {
+                    Ok(vector) => {
+                        current_saves.insert(vector.clone());
+                        measure_lines.push(format!(
+                            "let m{index} = {vector}\necho SYNTH_MEAS {} $&m{index}",
                             measure.name
-                        ),
-                    ));
-                    continue;
-                };
-                if ignored_ids.contains(&component.id) {
-                    diagnostics.push(tb_error_measure(
-                        testbench_path,
-                        measure,
-                        format!(
-                            "measure `{}` element `{refdes}` is ignored by the testbench \
-                             and cannot be measured",
-                            measure.name
-                        ),
-                    ));
-                    continue;
-                }
-                let Ok(model) = model_for(component) else {
-                    diagnostics.push(tb_error_measure(
-                        testbench_path,
-                        measure,
-                        format!(
-                            "measure `{}` element `{refdes}` has no built-in model; \
-                             a current measure is not supported there",
-                            measure.name
-                        ),
-                    ));
-                    continue;
-                };
-                let (letter, parameter) = match &model {
-                    Model::Value { letter, .. } => (*letter, "i"),
-                    Model::Diode { .. } => ("D", "id"),
-                    Model::Subckt => {
-                        diagnostics.push(tb_error_measure(
-                            testbench_path,
-                            measure,
-                            format!(
-                                "measure `{}` element `{refdes}` is a registry subcircuit; \
-                                 a current measure is not supported there",
-                                measure.name
-                            ),
                         ));
-                        continue;
                     }
-                };
-                let vector = format!("@{}{}[{parameter}]", letter, sanitize(refdes));
-                current_saves.insert(vector.clone());
-                measure_lines.push(format!(
-                    "let m{index} = {vector}\necho SYNTH_MEAS {} $&m{index}",
-                    measure.name
-                ));
+                    Err(diagnostic) => diagnostics.push(diagnostic),
+                }
             }
             MeasureKind::PinCurrent => {
                 let pin_ref = measure
@@ -2158,6 +2917,47 @@ fn emit_deck(
                     measure.name
                 ));
             }
+            kind if kind.is_transient() => {
+                // The waveform goes out through `wrdata` and is measured in
+                // Rust, so settling and edge behaviour do not depend on what
+                // ngspice's `.meas` happens to support.
+                let file = format!("meas_{index}.dat");
+                if measure.node.is_some() {
+                    match measure_net(
+                        design,
+                        &net_by_name,
+                        ground.id,
+                        &ignored_ids,
+                        &sourced_nets,
+                        measure,
+                        testbench_path,
+                        design_path,
+                    ) {
+                        Ok(node) => tran_data.push((file.clone(), format!("v({node})"))),
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
+                            continue;
+                        }
+                    }
+                } else {
+                    match element_current_vector(design, &ignored_ids, measure, testbench_path) {
+                        Ok(vector) => {
+                            current_saves.insert(vector.clone());
+                            // `@R1[i]` is not a `wrdata` operand on its own;
+                            // a control variable holding it is.
+                            let name = format!("icur{index}");
+                            measure_lines.push(format!("let {name} = {vector}"));
+                            tran_data.push((file.clone(), name));
+                        }
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
+                            continue;
+                        }
+                    }
+                }
+                tran_files.insert(measure.name.clone(), file);
+            }
+            _ => unreachable!("handled by the arms above"),
         }
     }
 
@@ -2190,6 +2990,8 @@ fn emit_deck(
     }
     if testbench.analysis.op {
         deck.push_str("op\n");
+    } else if let Some(tran) = &testbench.analysis.tran {
+        let _ = writeln!(deck, "tran {} {}", exponent(tran.step), exponent(tran.stop));
     } else {
         let ac = testbench
             .analysis
@@ -2207,6 +3009,10 @@ fn emit_deck(
     for line in measure_lines {
         let _ = writeln!(deck, "{line}");
     }
+    for (file, vector) in &tran_data {
+        // ngspice 42 rejects double quotes here; single quotes work.
+        let _ = writeln!(deck, "wrdata '{file}' {vector}");
+    }
     if let Some(plot) = &plot_path {
         // ngspice 42 rejects double quotes here; single quotes work.
         let _ = writeln!(deck, "wrdata '{}' allv", plot.display());
@@ -2218,6 +3024,7 @@ fn emit_deck(
         dialect,
         plot: plot_path,
         pin_limits,
+        tran_files,
     })
 }
 
@@ -2268,6 +3075,148 @@ fn resolve_plot_path(plot: &str, testbench_path: Option<&Path>) -> Result<PathBu
         }
     }
     Ok(target)
+}
+
+/// The ngspice `PULSE(V1 V2 TD TR TF PW PER)` parameters: low, high, zero
+/// delay, rise, fall, pulse width and period. Every number goes out through
+/// [`exponent`], so SPICE's milli-`M` trap cannot bite.
+fn pulse_spec(low: f64, high: f64, rise: f64, fall: f64, duty: f64, period: f64) -> String {
+    let pulse_width = duty * period;
+    format!(
+        "PULSE({} {} 0 {} {} {} {})",
+        exponent(low),
+        exponent(high),
+        exponent(rise),
+        exponent(fall),
+        exponent(pulse_width),
+        exponent(period)
+    )
+}
+
+/// Resolve the net a voltage measure reads, with the not-found, ground and
+/// no-simulated-parts checks shared by `node_voltage` and the transient
+/// node measures.
+#[allow(clippy::too_many_arguments)]
+fn measure_net(
+    design: &Board,
+    net_by_name: &HashMap<&str, &Net>,
+    ground: NetId,
+    ignored_ids: &HashSet<ComponentId>,
+    sourced_nets: &HashSet<NetId>,
+    measure: &Measure,
+    testbench_path: Option<&Path>,
+    design_path: Option<&Path>,
+) -> Result<String, Diagnostic> {
+    let node_name = measure
+        .node
+        .as_deref()
+        .expect("a validated node measure has a node");
+    let Some(net) = net_by_name.get(node_name) else {
+        return Err(tb_error_measure(
+            testbench_path,
+            measure,
+            format!(
+                "measure `{}` node `{node_name}` not found in design",
+                measure.name
+            ),
+        ));
+    };
+    if net.id == ground {
+        return Err(tb_error_measure(
+            testbench_path,
+            measure,
+            format!(
+                "measure `{}` reads ground net `{}`; ground is 0 V by definition and \
+                 ngspice has no vector for it",
+                measure.name, net.name
+            ),
+        ));
+    }
+    let simulated = net
+        .endpoints
+        .iter()
+        .any(|endpoint| !ignored_ids.contains(&endpoint.component));
+    if !simulated && !sourced_nets.contains(&net.id) {
+        return Err(with_location_span(
+            topology_error(
+                &net.name,
+                format!(
+                    "measure `{}` reads net `{}`, which has no simulated parts",
+                    measure.name, net.name
+                ),
+            ),
+            design_path,
+            net_span(design, net),
+        ));
+    }
+    Ok(format!("n_{}", sanitize(&net.name)))
+}
+
+/// Resolve the ngspice device-current vector for a `current` measure or a
+/// transient element measure. An ignored, unknown or unmodelled part has no
+/// device current to read.
+fn element_current_vector(
+    design: &Board,
+    ignored_ids: &HashSet<ComponentId>,
+    measure: &Measure,
+    testbench_path: Option<&Path>,
+) -> Result<String, Diagnostic> {
+    let refdes = measure
+        .element
+        .as_deref()
+        .expect("a validated element measure has an element");
+    let Some(component) = design
+        .components
+        .iter()
+        .find(|component| component.refdes == refdes)
+    else {
+        return Err(tb_error_measure(
+            testbench_path,
+            measure,
+            format!(
+                "measure `{}` element `{refdes}` is not a placed part",
+                measure.name
+            ),
+        ));
+    };
+    if ignored_ids.contains(&component.id) {
+        return Err(tb_error_measure(
+            testbench_path,
+            measure,
+            format!(
+                "measure `{}` element `{refdes}` is ignored by the testbench and cannot \
+                 be measured",
+                measure.name
+            ),
+        ));
+    }
+    let model = model_for(component).map_err(|_| {
+        tb_error_measure(
+            testbench_path,
+            measure,
+            format!(
+                "measure `{}` element `{refdes}` has no built-in model; a current measure \
+                 is not supported there",
+                measure.name
+            ),
+        )
+    })?;
+    let (letter, parameter) = match &model {
+        Model::Value { letter, .. } => (*letter, "i"),
+        Model::Diode { .. } => ("D", "id"),
+        Model::Subckt => {
+            return Err(tb_error_measure(
+                testbench_path,
+                measure,
+                format!(
+                    "measure `{}` element `{refdes}` is a registry subcircuit; a current \
+                     measure is not supported there",
+                    measure.name
+                ),
+            ));
+        }
+    };
+    Ok(format!("@{}{}[{parameter}]", letter, sanitize(refdes)))
 }
 
 /// The dialect's TOML spelling; a part without one is its own (native) mode.
