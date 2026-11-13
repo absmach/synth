@@ -31,6 +31,7 @@ use synth_router::{
     ToolPaths,
     contract::{FabricationPolicy, RouteRequest, RouterEngine, RouterLimits},
     result::RouteState,
+    RouterFailureReason,
 };
 
 struct Scratch {
@@ -355,6 +356,138 @@ fn stub_engine_files(scratch: &Scratch) -> (PathBuf, PathBuf) {
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
+
+/// A board with no components and no nets: the `hello` fixture's shape.
+///
+/// There is nothing for any engine to route, so the run must not depend on
+/// one being installed.
+const EMPTY_BOARD: &str = r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#;
+
+/// A board whose every net ends on one pad: nothing to connect, so nothing
+/// to route either.
+const SINGLE_PAD_NET_BOARD: &str = r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "ONLY")
+  (footprint "Connector:Test"
+    (layer "F.Cu") (at 15 15)
+    (property "Reference" "J1" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 1 1)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "ONLY")))
+  (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#;
+
+fn empty_board_request(board: &str, scratch: &Scratch) -> RouteRequest {
+    let path = scratch.write("empty.kicad_pcb", board);
+    let mut request = RouteRequest::new(&path, &scratch.path, RouterEngine::KiCadRoutingTools);
+    request.stem = "empty".to_string();
+    request.limits = RouterLimits::default().with_wall_clock(120);
+    request.policy = FabricationPolicy::default();
+    request.input_hash = "test-input-hash".to_string();
+    request.profile_name = "jlc-standard".to_string();
+    request.preserve_baseline().expect("baseline preserved");
+    request
+}
+
+#[test]
+fn a_board_with_nothing_to_route_routes_trivially_without_an_engine() {
+    // #98: the empty `hello` board reported `router_unavailable` because no
+    // engine had anything to do and the pipeline read "no engine ran" as
+    // "the engine is missing". A board with no ratsnest is a completed
+    // empty route, whatever engines are installed — and with no `kicad-cli`
+    // on this machine the verdict is review, still never "unavailable".
+    let _restorer = without_router_environment();
+    let scratch = Scratch::new("trivial_empty");
+    let request = empty_board_request(EMPTY_BOARD, &scratch);
+    let report = synth_router::route(&request);
+
+    assert_ne!(
+        report.state,
+        RouteState::RouterUnavailable,
+        "nothing to route is not a missing engine: {report:?}"
+    );
+    assert!(
+        report.failure.is_none(),
+        "a trivial route carries no failure: {report:?}"
+    );
+    assert_eq!(report.statistics.segments, 0);
+    assert_eq!(report.statistics.open_nets, 0);
+    let validation = report.validation.as_ref().expect("validation present");
+    assert_eq!(validation.connectivity.open.len(), 0);
+    assert_eq!(validation.connectivity.unconnected_pads.len(), 0);
+    // The delivered board is the board itself, unchanged: an empty route
+    // installs nothing new.
+    assert_board(&scratch.file("empty.kicad_pcb"), EMPTY_BOARD);
+    if kicad_cli_available() {
+        // With KiCad present the trivial route is a real verdict with real
+        // counts, so the gate sees a DRC result and not an unknown.
+        assert_eq!(report.state, RouteState::Routed, "{report:?}");
+        assert!(
+            validation.kicad_drc.is_some(),
+            "a run DRC could perform reports its counts: {report:?}"
+        );
+    } else {
+        assert_eq!(
+            report.state,
+            RouteState::ReviewRequired,
+            "DRC that could not run is review, not a pass: {report:?}"
+        );
+    }
+}
+
+#[test]
+fn a_board_whose_nets_are_all_single_pad_needs_no_router() {
+    let _restorer = without_router_environment();
+    let scratch = Scratch::new("trivial_single_pad");
+    let request = empty_board_request(SINGLE_PAD_NET_BOARD, &scratch);
+    let report = synth_router::route(&request);
+    assert_ne!(
+        report.state,
+        RouteState::RouterUnavailable,
+        "a one-pad net has nothing to reach: {report:?}"
+    );
+}
+
+#[test]
+fn a_routed_request_for_the_internal_engine_is_refused_without_running_anything() {
+    // The internal router is not driven through the request-only contract;
+    // asking `route()` for it must refuse with the remediation naming the
+    // surface that carries the compiled board, and never start an engine.
+    let _restorer = without_router_environment();
+    let scratch = Scratch::new("internal_refused");
+    let request = empty_board_request(PARTIAL_BOARD, &scratch);
+    let mut request = request;
+    request.engine = RouterEngine::Internal;
+    let report = synth_router::route(&request);
+    assert_eq!(report.state, RouteState::ValidationFailed, "{report:?}");
+    let failure = report.failure.expect("a refusal is recorded");
+    assert_eq!(failure.reason, RouterFailureReason::Unsupported);
+    assert!(
+        failure.remediation.contains("synth drc"),
+        "{}",
+        failure.remediation
+    );
+    assert!(
+        !scratch.file("empty.internal.kicad_pcb").exists(),
+        "the refusal must not stage a candidate"
+    );
+}
 
 #[test]
 fn a_clean_route_that_validates_reports_routed() {

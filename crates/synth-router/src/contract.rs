@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::failure::RouterFailure;
 
-/// Which external engine generates the copper.
+/// Which engine generates the copper.
 ///
 /// FreeRouting is the managed JAR path, FastRoute the managed Java-free
 /// binary with the same DSN→SES contract, and KiCadRoutingTools an external
@@ -22,6 +22,10 @@ use crate::failure::RouterFailure;
 /// default because it is the one the setup script installs. There is no
 /// built-in fallback: if the selected engine cannot run, the run fails
 /// (see [`crate::RouterFailure`]).
+/// [`Self::Internal`] is the workspace's own deterministic router: it is
+/// never the default and never enters a best-of portfolio, so "which router
+/// produced this copper" is always an explicit name or a deliberate internal
+/// run the record states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RouterEngine {
@@ -36,6 +40,13 @@ pub enum RouterEngine {
     /// Specctra DSN→SES contract. Driven as an optional external binary.
     #[serde(rename = "fastroute", alias = "fast-route")]
     Fastroute,
+    /// The workspace's own deterministic router (`synth-route`).
+    ///
+    /// Not driven through the request-only contract — it needs the compiled
+    /// board, which only the compiling surface has — so a caller that asks
+    /// `route()` for it gets a structured refusal rather than copper from a
+    /// surprise engine.
+    Internal,
 }
 
 impl RouterEngine {
@@ -46,6 +57,7 @@ impl RouterEngine {
             Self::Freerouting => "freerouting",
             Self::KiCadRoutingTools => "kicad-routing-tools",
             Self::Fastroute => "fastroute",
+            Self::Internal => "internal",
         }
     }
 
@@ -60,6 +72,7 @@ impl RouterEngine {
             "freerouting" | "free-routing" => Some(Self::Freerouting),
             "kicad-routing-tools" | "kicadroutingtools" | "krt" => Some(Self::KiCadRoutingTools),
             "fastroute" | "fast-route" | "fast_route" => Some(Self::Fastroute),
+            "internal" | "synth-route" => Some(Self::Internal),
             _ => None,
         }
     }
@@ -75,13 +88,17 @@ impl RouterEngine {
             Self::Freerouting => "freerouting",
             Self::KiCadRoutingTools => "kicadroutingtools",
             Self::Fastroute => "fastroute",
+            Self::Internal => "internal",
         }
     }
 
-    /// All engines, in the order capability discovery should report them.
+    /// All external engines, in the order capability discovery reports them.
     ///
     /// The default engine leads, so a caller reading the first entry gets the
-    /// engine an unconfigured run would use.
+    /// engine an unconfigured run would use. [`Self::Internal`] is excluded:
+    /// a best-of portfolio compares engines against each other, and the
+    /// internal router is a fallback for "no engine is installed", not a
+    /// competitor.
     #[must_use]
     pub fn all() -> [Self; 3] {
         [Self::KiCadRoutingTools, Self::Freerouting, Self::Fastroute]
@@ -586,6 +603,16 @@ pub struct RouteRequest {
     /// environment.
     #[serde(skip_serializing, default = "crate::tools::ToolPaths::from_env")]
     pub tools: crate::tools::ToolPaths,
+
+    /// The copper layer count the compiled board declares, when the caller
+    /// knows it.
+    ///
+    /// The exported board file *should* say the same thing, and the escape
+    /// analysis normally reads it from there. Recording the declaration
+    /// anyway gives the advice a source of truth that cannot disagree with
+    /// the file it was written into.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_layers: Option<u32>,
 }
 
 /// One net's layer pin: the copper layers it may be routed on.
@@ -790,7 +817,19 @@ impl RouteRequest {
             fine_pitch_return_via_advisory: false,
             net_layers: Vec::new(),
             tools: crate::tools::ToolPaths::from_env(),
+
+            declared_layers: None,
         }
+    }
+
+    /// Record the copper layer count the compiled board declares.
+    ///
+    /// The escape analysis reads the exported board's own layer list; this
+    /// gives it the board's declaration to prefer when the two could
+    /// disagree.
+    pub fn use_board_layers(&mut self, layers: u32) -> &mut Self {
+        self.declared_layers = Some(layers);
+        self
     }
 }
 

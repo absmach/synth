@@ -108,6 +108,14 @@ pub fn discover(request: &RouteRequest) -> RouterCapability {
         RouterEngine::Freerouting => freerouting_capability(request),
         RouterEngine::KiCadRoutingTools => krt_capability(request),
         RouterEngine::Fastroute => fastroute_capability(request),
+        // The internal router is compiled in, so there is nothing to
+        // discover: it is always runnable, and the version it routes with is
+        // this crate's own.
+        RouterEngine::Internal => RouterCapability::available(
+            RouterEngine::Internal,
+            Some(env!("CARGO_PKG_VERSION").to_string()),
+            None,
+        ),
     }
 }
 

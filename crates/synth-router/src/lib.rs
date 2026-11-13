@@ -34,10 +34,13 @@
 //! Collapsing any two of them — most dangerously treating an unavailable
 //! router as a pass — is the failure mode this crate exists to prevent.
 //!
-//! Selection is explicit. If the chosen engine is missing, the run fails
-//! with [`RouterFailureReason`] naming what to install; it never silently
-//! falls back to another engine, and there is no built-in router to fall
-//! back to.
+//! Selection is explicit. If the chosen external engine is missing, the run
+//! fails with [`RouterFailureReason`] naming what to install; it never
+//! silently falls back to another external engine. The workspace's own
+//! deterministic router ([`RouterEngine::Internal`]) is the one fallback a
+//! run may take, and only when the compiling surface decides no external
+//! engine is configured or available: the fallback routes, it never promotes
+//! itself into an engine's name.
 //!
 //! [`RouteRequest::baseline`]: RouteRequest::baseline_path
 
@@ -150,6 +153,31 @@ fn ordering_retries() -> usize {
 }
 
 fn route_once(request: &RouteRequest) -> RouteReport {
+    // The internal router is not driven through the request-only contract:
+    // it needs the compiled board, which only the compiling surface has. A
+    // caller that asks for it here would otherwise be told the engine ran
+    // and failed, so refuse before anything starts.
+    if request.engine == RouterEngine::Internal {
+        let mut report = RouteReport::failed(
+            request,
+            &None,
+            failure::RouterFailure::for_stage(
+                request.engine,
+                RouterStage::Route,
+                RouterFailureReason::Unsupported,
+                "the internal router routes the compiled board, which a \
+                 RouteRequest does not carry",
+            )
+            .with_remediation(
+                "route with the workspace's router through `synth drc` or `synth route`, \
+                 which compile the board first; an external engine is selected with \
+                 --router",
+            ),
+        );
+        write_report(&mut report, request);
+        return report;
+    }
+
     // The duplicate-run guard is taken first. Reporting "router
     // unavailable" while a run is already writing this candidate would name
     // the wrong problem, and the operator would go looking for a missing
@@ -182,6 +210,18 @@ fn route_once(request: &RouteRequest) -> RouteReport {
         return report;
     }
 
+    // A board with nothing to route — no nets, or no net on more than one
+    // pad — routes trivially. There is no copper to produce and no engine to
+    // run, so the result is an empty-but-validated route, not an unavailable
+    // router: "the board needed no router" and "the router is missing" are
+    // different answers and only one of them is a gate failure.
+    if nothing_to_route(request) {
+        let mut report = route_trivially(request);
+        report.escape = escape::analyse_baseline(request);
+        write_report(&mut report, request);
+        return report;
+    }
+
     let capability = capability::discover(request);
     if let Some(failure) = capability.failure() {
         let mut report = RouteReport::unavailable(request, &Some(capability.clone()), failure);
@@ -194,10 +234,11 @@ fn route_once(request: &RouteRequest) -> RouteReport {
         RouterEngine::Freerouting => freerouting::route(request),
         RouterEngine::KiCadRoutingTools => kicad_routing_tools::route(request),
         RouterEngine::Fastroute => freerouting::route_engine(request, RouterEngine::Fastroute),
+        RouterEngine::Internal => unreachable!("handled above, before the guard"),
     };
 
     let mut report = match run {
-        Ok(candidate) => finalize(request, Some(&capability), candidate),
+        Ok(candidate) => finalize_candidate(request, Some(&capability), candidate),
         Err(failure) => RouteReport::failed(request, &Some(capability), failure),
     };
     // A property of the design and the process, not of the attempt, so it is
@@ -205,6 +246,72 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     report.escape = escape::analyse_baseline(request);
     write_report(&mut report, request);
     report
+}
+
+/// Whether the board carries nothing a router could route.
+///
+/// A net needs routing when it puts two or more bound pads on the board;
+/// one pad has nothing to reach. A board whose every net is single-pad —
+/// including one with no pads at all, like the empty `hello` fixture — has
+/// no ratsnest, so no engine is needed and none may be reported missing.
+fn nothing_to_route(request: &RouteRequest) -> bool {
+    let Ok(text) = std::fs::read_to_string(request.baseline_path()) else {
+        return false;
+    };
+    let Ok(board) = pcb_read::PcbBoard::parse(&text) else {
+        return false;
+    };
+    let mut pads_per_net: std::collections::BTreeMap<u32, usize> =
+        std::collections::BTreeMap::new();
+    for pad in board.pads() {
+        if let Some(net) = pad.net.filter(|net| *net != 0) {
+            *pads_per_net.entry(net).or_default() += 1;
+        }
+    }
+    pads_per_net.into_values().all(|count| count < 2)
+}
+
+/// Route a board that needs no copper: validate the empty route honestly.
+///
+/// The baseline is copied to the candidate path and run through the same
+/// mandatory repair and validation pipeline an engine's candidate gets, so
+/// the verdict — and the `kicad-cli pcb drc` counts it reports — are the
+/// real ones for the delivered board. A DRC that could not run leaves the
+/// run in review, never in `Routed`.
+fn route_trivially(request: &RouteRequest) -> RouteReport {
+    if let Err(detail) = std::fs::copy(request.baseline_path(), request.candidate_path()) {
+        return RouteReport::failed(
+            request,
+            &None,
+            failure::RouterFailure::io(
+                request.engine,
+                format!(
+                    "could not stage the empty route at {}: {detail}",
+                    request.candidate_path().display()
+                ),
+            ),
+        );
+    }
+    let candidate = freerouting::Candidate {
+        candidate_path: request.candidate_path(),
+        artifacts: crate::result::RouteArtifacts {
+            baseline: request.baseline_path(),
+            candidate: Some(request.candidate_path()),
+            delivered: Some(request.board_path.clone()),
+            ..crate::result::RouteArtifacts::default()
+        }
+        .resolved(),
+        provenance: crate::result::RouterProvenance {
+            engine: request.engine.as_str().to_string(),
+            engine_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            profile: request.profile_name.clone(),
+            input_hash: request.input_hash.clone(),
+            source_revision: request.source_revision.clone(),
+            ..crate::result::RouterProvenance::default()
+        },
+        statistics: crate::result::RouteStatistics::empty(),
+    };
+    finalize_candidate(request, None, candidate)
 }
 
 /// Run every engine over the board and keep the best attempt.
@@ -436,7 +543,7 @@ fn repair_dropped_stubs(candidate: &Path) -> (Vec<String>, Vec<String>) {
 /// fails validation is still retained on disk as review material — it is
 /// just never installed over the baseline.
 #[allow(clippy::too_many_lines)]
-fn finalize(
+pub fn finalize_candidate(
     request: &RouteRequest,
     capability: Option<&RouterCapability>,
     candidate: freerouting::Candidate,
