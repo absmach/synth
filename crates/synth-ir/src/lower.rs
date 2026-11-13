@@ -254,7 +254,20 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             }
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Stackup(st) => stackup = Some(ctx.lower_stackup(st)),
-            StatementAst::Outline(st) => outline = ctx.lower_outline(st),
+            StatementAst::Outline(st) => {
+                // A board can declare one exact outline. A second `outline`
+                // is an error, not a silent replacement, and a first outline
+                // survives a later one that fails its unit check: a bad
+                // literal must not undo the size the board already declared.
+                let lowered = ctx.lower_outline(st);
+                if let Some(new) = lowered {
+                    if let Some(first) = &outline {
+                        ctx.emit_duplicate_outline(first.source_span, st.span);
+                    } else {
+                        outline = Some(new);
+                    }
+                }
+            }
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
                 if !groups.iter().any(|existing| existing.name == g.name) {
@@ -1684,6 +1697,31 @@ impl<'a> LowerCtx<'a> {
             pin: pid,
             source_span: ep.span,
         })
+    }
+
+    /// A second `outline` statement on the board. The first one stands; the
+    /// duplicate is reported so the design fixes its size instead of the
+    /// later statement silently winning (E-SYNTH-BOARD-003).
+    fn emit_duplicate_outline(
+        &mut self,
+        first: synth_diagnostics::Span,
+        again: synth_diagnostics::Span,
+    ) {
+        self.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-BOARD-003",
+                Severity::Error,
+                "duplicate outline statement",
+            )
+            .location(Location::from_span(self.file.to_string(), first))
+            .expected("a board declares one `outline` statement at most")
+            .found(format!(
+                "a second `outline` at bytes {}..{}; the first one stands",
+                again.byte_start, again.byte_end
+            ))
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-BOARD-003")
+            .build(),
+        );
     }
 
     fn emit_duplicate_refdes(

@@ -38,3 +38,29 @@ fn an_outline_with_a_wrong_unit_is_rejected() {
     );
     assert!(board.unwrap().outline.is_none());
 }
+
+#[test]
+fn a_second_outline_is_an_error_and_the_first_stands() {
+    let (board, codes) =
+        lower("board \"b\" {\n layers 2\n outline 60mm x 30mm\n outline 80mm x 40mm\n}");
+    assert!(
+        codes.iter().any(|code| code == "E-SYNTH-BOARD-003"),
+        "{codes:?}"
+    );
+    let outline = board.unwrap().outline.expect("the first outline stands");
+    assert_eq!(outline.width, synth_ir::Length(60_000_000));
+    assert_eq!(outline.height, synth_ir::Length(30_000_000));
+}
+
+#[test]
+fn a_failing_second_outline_does_not_undo_the_first() {
+    let (board, codes) =
+        lower("board \"b\" {\n layers 2\n outline 60mm x 30mm\n outline 80ohm x 40mm\n}");
+    assert!(
+        codes.iter().any(|code| code == "E-SYNTH-UNIT-001"),
+        "{codes:?}"
+    );
+    let outline = board.unwrap().outline.expect("the first outline stands");
+    assert_eq!(outline.width, synth_ir::Length(60_000_000));
+    assert_eq!(outline.height, synth_ir::Length(30_000_000));
+}

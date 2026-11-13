@@ -74,6 +74,38 @@ pub struct PlaneFanoutError {
     pub detail: String,
 }
 
+/// A declared keepout the export cannot honour. The keepout is named, so a
+/// board with several can tell them apart.
+#[derive(Debug)]
+pub struct KeepoutExportError {
+    /// The declared keepout name.
+    pub name: String,
+    /// A human-readable explanation: which anchor or layer failed, and what
+    /// the valid choices are.
+    pub detail: String,
+}
+
+/// Why `build_pcb` refused to produce a board.
+#[derive(Debug)]
+pub enum PcbBuildError {
+    /// A power-plane pad could not be fanned out.
+    PlaneFanout(PlaneFanoutError),
+    /// A declared keepout anchors to nothing, or names an unknown layer.
+    Keepout(KeepoutExportError),
+}
+
+impl From<PlaneFanoutError> for PcbBuildError {
+    fn from(error: PlaneFanoutError) -> Self {
+        Self::PlaneFanout(error)
+    }
+}
+
+impl From<KeepoutExportError> for PcbBuildError {
+    fn from(error: KeepoutExportError) -> Self {
+        Self::Keepout(error)
+    }
+}
+
 /// `label_overrides` is the design's say over reference labels, by designator,
 /// from the placement sidecar.
 #[allow(clippy::implicit_hasher)]
@@ -85,7 +117,7 @@ pub fn build_pcb(
     label_overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
     fixed_vias: &[synth_layout::sidecar::SidecarVia],
     outline: &[synth_layout::sidecar::SidecarPoint],
-) -> Result<Sexp, PlaneFanoutError> {
+) -> Result<Sexp, PcbBuildError> {
     let placements_by_id: HashMap<ComponentId, &ComponentPlacement> =
         placement.components.iter().map(|p| (p.id, p)).collect();
 
@@ -198,7 +230,8 @@ pub fn build_pcb(
                     "the placement sidecar fixes a via at ({}, {}) mm on a net the board does not have",
                     via.x, via.y
                 ),
-            });
+            }
+            .into());
         };
         children.push(build_ground_stitch_via(
             mm_to_nm(via.x),
@@ -395,17 +428,43 @@ pub fn build_pcb(
     }
 
     // A declared keepout becomes a real rule area. `anchor` names a part,
-    // `at` gives an explicit coordinate, and `layers` limits the copper; with
-    // none of them the name is matched to a part and then the board centre is
-    // used, as before.
+    // `at` gives an explicit coordinate, and `layers` limits the copper. An
+    // `anchor` that names no part is an error: the keepout would otherwise
+    // land at the board centre while the design says it rings a component,
+    // and a rule area in the wrong place is worse than none. A layer name
+    // the board does not have is an error too: dropping it silently widens
+    // the keepout onto layers the design excluded.
     for (index, keepout) in board.keepouts.iter().enumerate() {
         let Some(radius) = keepout.radius else {
             continue;
         };
         let anchor = if let Some((x, y)) = keepout.at {
             Point::new(mm_to_nm(x.to_mm()), mm_to_nm(y.to_mm()))
+        } else if let Some(wanted) = keepout.anchor.as_deref() {
+            let found = board
+                .components
+                .iter()
+                .find(|component| {
+                    component.refdes.eq_ignore_ascii_case(wanted)
+                        || component.kind.eq_ignore_ascii_case(wanted)
+                })
+                .and_then(|component| placements_by_id.get(&component.id));
+            let Some(found) = found else {
+                return Err(KeepoutExportError {
+                    name: keepout.name.clone(),
+                    detail: format!(
+                        "the keepout's anchor `{wanted}` names no component; \
+                         name the refdes or kind of the part it must ring, or \
+                         give it an `at x y` coordinate"
+                    ),
+                }
+                .into());
+            };
+            found.center
         } else {
-            let wanted = keepout.anchor.as_deref().unwrap_or(&keepout.name);
+            // No anchor attribute: the name is matched to a part and then the
+            // board centre is used, as before.
+            let wanted = &keepout.name;
             board
                 .components
                 .iter()
@@ -427,15 +486,21 @@ pub fn build_pcb(
                 )
         };
         let all_layers = ground_plane_layers(board.layers);
-        let mut layers: Vec<&str> = if keepout.layers.is_empty() {
-            all_layers.clone()
-        } else {
-            keepout
-                .layers
-                .iter()
-                .filter_map(|name| all_layers.iter().find(|layer| *layer == name).copied())
-                .collect()
-        };
+        let mut layers: Vec<&str> = Vec::with_capacity(keepout.layers.len());
+        for name in &keepout.layers {
+            let Some(layer) = all_layers.iter().find(|layer| *layer == name).copied() else {
+                return Err(KeepoutExportError {
+                    name: keepout.name.clone(),
+                    detail: format!(
+                        "the keepout names layer `{name}`, which the board does \
+                         not have; its copper layers are {}",
+                        all_layers.join(", ")
+                    ),
+                }
+                .into());
+            };
+            layers.push(layer);
+        }
         if layers.is_empty() {
             layers = all_layers;
         }
@@ -600,7 +665,8 @@ pub fn build_pcb(
                                     offered: pad_via.filter(|_| !target.underpad),
                                 },
                             ),
-                        });
+                        }
+                        .into());
                     }
                 };
                 let used = land;
@@ -4438,7 +4504,10 @@ mod tests {
             &[],
         )
         .expect_err("an unknown net is refused");
-        assert_eq!(error.net, "NOPE");
+        assert!(
+            matches!(error, PcbBuildError::PlaneFanout(ref e) if e.net == "NOPE"),
+            "{error:?}"
+        );
     }
 
     #[test]

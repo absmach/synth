@@ -45,6 +45,8 @@ pub enum ExportError {
     },
     #[error("power-plane fanout failed: net `{net}`: {detail}")]
     PlaneFanout { net: String, detail: String },
+    #[error("keepout export failed: keepout `{name}`: {detail}")]
+    Keepout { name: String, detail: String },
 }
 
 #[derive(Debug, Clone)]
@@ -486,9 +488,15 @@ fn export_inner(
         &fixed_vias,
         outline,
     )
-    .map_err(|error| ExportError::PlaneFanout {
-        net: error.net,
-        detail: error.detail,
+    .map_err(|error| match error {
+        pcb::PcbBuildError::PlaneFanout(e) => ExportError::PlaneFanout {
+            net: e.net,
+            detail: e.detail,
+        },
+        pcb::PcbBuildError::Keepout(e) => ExportError::Keepout {
+            name: e.name,
+            detail: e.detail,
+        },
     })?
     .to_string_pretty();
     write_file(&pcb_path, &pcb_text)?;
