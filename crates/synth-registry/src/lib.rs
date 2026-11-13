@@ -39,7 +39,7 @@ pub use loader::{
 };
 pub use part::{
     FootprintDimensions, LabelSide, Lifecycle, MatingFace, OperatingConditions, Part, PartId, Pin,
-    PinDrive, PinNumber, Provenance, ProvenanceSource, RequiredDecoupling, SpiceDialect,
+    PinDrive, PinNumber, PinPwm, Provenance, ProvenanceSource, RequiredDecoupling, SpiceDialect,
     SpiceModel,
 };
 

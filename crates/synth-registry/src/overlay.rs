@@ -291,6 +291,7 @@ mod tests {
                 voltage_min_v: Some(1.8),
                 voltage_nominal_v: Some(3.3),
                 drive: None,
+                pwm: None,
             }],
             required_decoupling: vec![crate::RequiredDecoupling {
                 net: "vdd".into(),
