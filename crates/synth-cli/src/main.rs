@@ -1304,12 +1304,6 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
          halves of a differential pair coupled or check that they are; that is left to the router.",
     ),
     (
-        "length_skew_enforcement",
-        Some("diff_pair.max_skew"),
-        "`max_skew` can be declared and is recorded in the IR, but nothing enforces it and no \
-         stage fails on residual skew; any tuning is left to the router.",
-    ),
-    (
         "library_silkscreen_limits",
         None,
         "Silkscreen owned by a library footprint is exported byte-for-byte so \
@@ -1496,7 +1490,7 @@ fn capability_descriptor() -> serde_json::Value {
             "routing_constraints": {
                 "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
-                "keepout": ["radius", "anchor", "at", "layers"],
+                "keepout": ["radius", "anchor", "at", "layers", "allow"],
                 "component": ["placement_hint", "escape"],
                 "requires": ["via_in_pad"]
             },
@@ -1573,6 +1567,26 @@ fn run_mcp(stdio: bool, sse: bool, port: u16, registry: Option<PathBuf>) -> anyh
 /// delegates each stage to the same CLI implementation used by agents and
 /// humans, but captures their machine-readable results into one deterministic
 /// report. No model, network, or project mutation is involved.
+/// Design claims Synth cannot verify, read from the same board the gates see.
+fn unverified_claims(source: &[u8], input: &Path, registry: Option<&Path>) -> Vec<String> {
+    let Ok(text) = std::str::from_utf8(source) else {
+        return Vec::new();
+    };
+    let file = input.display().to_string();
+    let parse = synth_parser::parse(text, file.clone());
+    let Some(ast) = parse.ast.as_ref() else {
+        return Vec::new();
+    };
+    let Some(registry) = load_registry(registry) else {
+        return Vec::new();
+    };
+    let lowered = synth_ir::lower(ast, &registry, &file);
+    lowered
+        .board
+        .as_ref()
+        .map_or_else(Vec::new, release::unverified_claims)
+}
+
 fn check(
     input: &Path,
     registry: Option<&Path>,
@@ -1767,6 +1781,7 @@ fn check(
     }
 
     let pass = validate_pass && drc_pass && (!fab || fab_pass);
+    let unverified = unverified_claims(&source, input, registry);
     let report = serde_json::json!({
         "schema_version": "synth.check.v1",
         "status": if pass { "pass" } else { "fail" },
@@ -1774,6 +1789,9 @@ fn check(
         "source_sha256": source_hash,
         "network": "not_used",
         "model": "not_used",
+        "claims": {
+            "unverified": unverified,
+        },
         "stages": stages,
     });
     let _ = std::fs::remove_dir_all(&work);
@@ -1802,6 +1820,13 @@ fn check(
             "  source_sha256: {}",
             report["source_sha256"].as_str().unwrap_or("")
         );
+        for claim in report["claims"]["unverified"]
+            .as_array()
+            .into_iter()
+            .flatten()
+        {
+            println!("  not verified: {}", claim.as_str().unwrap_or(""));
+        }
         if let Some(release) = manufacturing["release"].as_object() {
             println!(
                 "  release_ready: {}",
@@ -4469,6 +4494,9 @@ fn export_kicad(
         None => synth_kicad::export_with_sidecars(board, out_dir, &sidecars),
     }
     .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+    for warning in &result.warnings {
+        write_diagnostics_to_stderr(std::slice::from_ref(warning))?;
+    }
 
     // The final export counts against the budget too, so the limit is worked out
     // after it: the router gets what the export left, never less than it needs to
@@ -6517,6 +6545,7 @@ mod tests {
             library_path: dir.join("returns.kicad_sym"),
             pcb_path: pcb,
             bom_path: dir.join("bom.csv"),
+            warnings: Vec::new(),
         };
         let options = RouterOptions {
             freerouting_jar: None,

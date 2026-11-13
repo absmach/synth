@@ -22,6 +22,39 @@
 //! `None` and the verifier skips silently. The schematic export
 //! falls back to a synthesized rectangle in that case too, so the
 //! pipeline stays usable.
+//!
+//! # Declared names against symbol names
+//!
+//! Pad numbers prove a pad exists, not that it is the right one, so
+//! `qualify` also compares each declared pin *name* against the names the
+//! symbol prints. Three spellings can describe one pad, and only the
+//! first two count as agreement:
+//!
+//! 1. equality after normalization (case, punctuation and KiCad's
+//!    overbar markers stripped — `~{RESET}` and `reset` are the same);
+//! 2. membership in one synonym group, for the names KiCad's own
+//!    libraries spell differently from a datasheet. The groups are
+//!    deliberately small and closed:
+//!    - positive supply: `vdd` / `vcc` / `v` (for `V+`)
+//!    - ground: `vss` / `gnd` / `ground`
+//!    - I²C data: `sda` / `sdi`; I²C clock: `scl` / `sck`
+//!    - regulator input: `vin` / `in`; output: `vout` / `out`
+//!    - op-amp rails: `vcc_pos` / `v`, `vcc_neg` / `v`
+//!    - diode terminals: `anode` / `a`, `cathode` / `k`
+//!    - transistor terminals: `gate` / `g`, `drain` / `d`,
+//!      `source` / `s`, `base` / `b`, `collector` / `c`,
+//!      `emitter` / `e`
+//!    - repeated pins: a `base<index>` (KiCad stacks `GND_1`, `GND_2`…
+//!      or the part writes `gnd_2` for its second ground) matches the
+//!      bare base name;
+//!    - connector pads: `p3` and `pin3` are the same pad.
+//!
+//!    Extending a group is how a newly reviewed part's spelling is
+//!    accommodated; anything outside the table is *not* silently
+//!    accepted — it is reported (`E-SYNTH-QUAL-017`) so a name nobody
+//!    can verify stays visible instead of passing.
+//! 3. nothing else. A declared name matching no pad of the symbol, by
+//!    spelling or by synonym, cannot be verified and is reported.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -281,6 +314,121 @@ fn collect_pin_names(
     true
 }
 
+/// Lowercase a pin name to its letters and digits only: case, punctuation
+/// and KiCad's overbar markers (`~{...}`) all go away, so `~{RESET}` and
+/// `reset` compare equal and KiCad's unnamed marker `~` normalizes to the
+/// empty string.
+#[must_use]
+pub fn normalize_pin_name(name: &str) -> String {
+    name.chars()
+        .filter(char::is_ascii_alphanumeric)
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// Names KiCad's libraries spell differently from a datasheet, treated as
+/// the same pad when comparing a declared name against a symbol's. The
+/// groups are closed on purpose: a name outside the table is reported as
+/// unverifiable rather than silently accepted. The module comment lists
+/// every group with its reason.
+const NAME_SYNONYMS: &[&[&str]] = &[
+    &["vdd", "vcc", "v"],
+    &["gnd", "vss", "ground"],
+    &["sda", "sdi"],
+    &["scl", "sck"],
+    &["vin", "in"],
+    &["vout", "out"],
+    &["vcc_pos", "v"],
+    &["vcc_neg", "v"],
+    // A TVS array's rail pins: the symbol prints VP/VN, the datasheet calls
+    // them VCC/GND, and the array's channels are IO1..IO4.
+    &["vp", "vcc", "v"],
+    &["vn", "gnd", "vss", "ground"],
+    &["io1", "ch1"],
+    &["io2", "ch2"],
+    &["io3", "ch3"],
+    &["io4", "ch4"],
+    &["anode", "a"],
+    &["cathode", "k"],
+    &["gate", "g"],
+    &["drain", "d"],
+    &["source", "s"],
+    &["base", "b"],
+    &["collector", "c"],
+    &["emitter", "e"],
+];
+
+/// `base<index>` on one side, bare `base` on the other: the second ground
+/// of a part written `gnd_2` against a symbol that calls every ground
+/// `GND`, and KiCad's stacked `GND_1` against a part's plain `gnd`.
+fn numbered_repeat_matches(declared: &str, symbol: &str) -> bool {
+    fn split(name: &str) -> Option<(&str, &str)> {
+        let digits_start = name
+            .find(|c: char| c.is_ascii_digit())
+            .unwrap_or(name.len());
+        let (base, digits) = name.split_at(digits_start);
+        if base.is_empty() || digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        Some((base, digits))
+    }
+    if let Some((base, _)) = split(declared) {
+        if base == symbol {
+            return true;
+        }
+    }
+    if let Some((base, _)) = split(symbol) {
+        if base == declared {
+            return true;
+        }
+    }
+    false
+}
+
+/// Connector pads: the part writes `p3`, the symbol prints `Pin_3`.
+fn p_pin_alias_matches(declared: &str, symbol: &str) -> bool {
+    let alias = |short: &str, long: &str| -> Option<(String, String)> {
+        let digits_of = |name: &str, prefix: &str| -> Option<String> {
+            name.strip_prefix(prefix)
+                .filter(|rest| !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()))
+                .map(str::to_string)
+        };
+        let d = digits_of(short, "p")?;
+        let e = digits_of(long, "pin")?;
+        Some((d, e))
+    };
+    alias(declared, symbol).is_some_and(|(a, b)| a == b)
+        || alias(symbol, declared).is_some_and(|(a, b)| a == b)
+}
+
+/// Whether a declared pin name and a symbol pin name describe the same
+/// pad: equality after normalization, or membership in one synonym
+/// group, or one of the two structural aliases above. Used **only** to
+/// reduce false positives; it never invents a match for a name outside
+/// the table, which is what keeps the unverified report meaningful.
+#[must_use]
+pub fn pin_names_match(declared: &str, symbol: &str) -> bool {
+    let declared = normalize_pin_name(declared);
+    let symbol = normalize_pin_name(symbol);
+    if declared.is_empty() || symbol.is_empty() {
+        // KiCad's unnamed marker means "no name to compare".
+        return false;
+    }
+    if declared == symbol {
+        return true;
+    }
+    if NAME_SYNONYMS
+        .iter()
+        .any(|group| group.contains(&declared.as_str()) && group.contains(&symbol.as_str()))
+    {
+        return true;
+    }
+    if numbered_repeat_matches(&declared, &symbol) {
+        return true;
+    }
+    p_pin_alias_matches(&declared, &symbol)
+}
+
 /// Split a symbol block into its `(pin ...)` sub-blocks by paren balance.
 fn pin_blocks(block: &str) -> Vec<String> {
     let mut out = Vec::new();
@@ -392,6 +540,38 @@ mod tests {
                 "do_not_connect should agree with {kind}"
             );
         }
+    }
+
+    #[test]
+    fn synonyms_reduce_false_positives_without_inventing_matches() {
+        // The supply and ground spellings the issue calls for.
+        assert!(pin_names_match("vdd", "VCC"));
+        assert!(pin_names_match("GND", "VSS"));
+        // The diode and transistor short forms KiCad's symbols print.
+        assert!(pin_names_match("anode", "A"));
+        assert!(pin_names_match("K", "cathode"));
+        assert!(pin_names_match("gate", "G"));
+        // I²C aliases and regulator in/out.
+        assert!(pin_names_match("sda", "SDI"));
+        assert!(pin_names_match("scl", "SCK"));
+        assert!(pin_names_match("vin", "IN"));
+        // Repeated rails: a part's `gnd_2` against the symbol's `GND`,
+        // and KiCad's stacked `GND_1` against a plain `gnd`.
+        assert!(pin_names_match("gnd_2", "GND"));
+        assert!(pin_names_match("GND", "gnd_1"));
+        // Connector pads: `p3` is the symbol's `Pin_3`.
+        assert!(pin_names_match("p1", "Pin_1"));
+        assert!(pin_names_match("Pin_2", "p2"));
+        // Overbar markers normalize away.
+        assert!(pin_names_match("reset", "~{RESET}"));
+        // And nothing outside the table invents a match.
+        assert!(!pin_names_match("vdd", "VSS"));
+        assert!(!pin_names_match("anode", "cathode"));
+        assert!(!pin_names_match("p1", "Pin_2"));
+        assert!(!pin_names_match("clamp", "K"));
+        // The unnamed marker is no name at all.
+        assert!(!pin_names_match("vdd", "~"));
+        assert!(!pin_names_match("~", "~"));
     }
 
     #[test]

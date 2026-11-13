@@ -25,6 +25,7 @@
 //! - `E-SYNTH-COMP-002` undefined pin
 //! - `E-SYNTH-COMP-003` duplicate refdes
 //! - `E-SYNTH-COMP-004` undefined component refdes
+//! - `E-SYNTH-COMP-005` obsolete registry part
 //! - `E-SYNTH-UNIT-001` value/unit conversion failure
 //!
 //! Net construction uses union-find on endpoints: every `connect`
@@ -42,7 +43,7 @@ use synth_ast::{
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span, SuggestedAction,
 };
-use synth_registry::{Part, PinCapability, Registry};
+use synth_registry::{Lifecycle, Part, PinCapability, Registry};
 
 use crate::board::{
     Board, BoardOutline, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net,
@@ -540,6 +541,7 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn lower_component(
         &mut self,
         decl: &ComponentDeclAst,
@@ -558,6 +560,44 @@ impl<'a> LowerCtx<'a> {
             if let Some(v) = decl.properties.get("mpn") {
                 part.mpn = Some(v.clone());
             }
+        }
+
+        if let Some(obsolete) = part.as_ref().filter(|p| p.lifecycle == Lifecycle::Obsolete) {
+            // Selecting an obsolete entry must not silently use a stale pin
+            // model. Name the live replacement; the issue asks for an explicit
+            // migration rather than a quiet fallback.
+            let replacement = if obsolete.substitutes.is_empty() {
+                "a supported replacement".to_string()
+            } else {
+                format!(
+                    "`{}`",
+                    obsolete
+                        .substitutes
+                        .iter()
+                        .map(synth_registry::PartId::as_str)
+                        .collect::<Vec<_>>()
+                        .join("`, `")
+                )
+            };
+            self.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-COMP-005",
+                    Severity::Error,
+                    "obsolete registry part",
+                )
+                .location(Location::from_span(self.file.to_string(), decl.span))
+                .expected(format!(
+                    "a live part; migrate {} to {replacement}",
+                    decl.refdes
+                ))
+                .found(format!("`{part_id}` is marked obsolete in the registry"))
+                .message(format!(
+                    "`{part_id}` is obsolete and must not be used for a new design. \
+                     Replace it with {replacement} and re-check the pin map."
+                ))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-005")
+                .build(),
+            );
         }
 
         if part.is_none() {
@@ -1090,13 +1130,14 @@ impl<'a> LowerCtx<'a> {
         let mut anchor: Option<String> = None;
         let mut at: Option<(Length, Length)> = None;
         let mut layers: Vec<String> = Vec::new();
+        let mut allowed_nets: Vec<String> = Vec::new();
         for attr in &k.attrs {
             match attr {
                 KeepoutAttr::Radius(v) => match Length::try_from(v) {
                     Ok(l) => radius = Some(l),
                     Err(e) => self.emit_unit_error(&e, "keepout radius"),
                 },
-                KeepoutAttr::Anchor(name) => anchor = Some(name.clone()),
+                KeepoutAttr::Anchor { component, .. } => anchor = Some(component.clone()),
                 KeepoutAttr::At { x, y } => {
                     let x = Length::try_from(x);
                     let y = Length::try_from(y);
@@ -1106,6 +1147,7 @@ impl<'a> LowerCtx<'a> {
                     }
                 }
                 KeepoutAttr::Layers(names) => layers.extend(names.iter().cloned()),
+                KeepoutAttr::Allow { nets, .. } => allowed_nets.extend(nets.iter().cloned()),
                 // Non-exhaustive: a future keepout attribute is ignored here
                 // until lowering learns what it means.
                 _ => {}
@@ -1117,6 +1159,7 @@ impl<'a> LowerCtx<'a> {
             anchor,
             at,
             layers,
+            allowed_nets,
             source_span: k.span,
         }
     }

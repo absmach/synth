@@ -24,7 +24,7 @@
 
 mod capability;
 mod kicad_pin_check;
-pub use kicad_pin_check::kicad_pin_numbers;
+pub use kicad_pin_check::{kicad_pin_names, kicad_pin_numbers};
 mod loader;
 mod part;
 pub mod qualify;

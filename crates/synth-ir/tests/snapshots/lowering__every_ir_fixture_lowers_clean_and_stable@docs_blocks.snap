@@ -71,9 +71,9 @@ expression: board
           "label_hidden": null
         },
         "operating_conditions": {
-          "min_voltage_v": 1.8,
-          "max_voltage_v": 5.0,
-          "max_current_ma": 100.0
+          "min_voltage_v": 0.0,
+          "max_voltage_v": 250.0,
+          "max_current_ma": 3000.0
         },
         "provenance": {
           "source": "seed",

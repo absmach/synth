@@ -4,6 +4,11 @@ description = "1x20 through-hole pin header, 2.54mm pitch"
 kicad_symbol = "Connector_Generic:Conn_01x20"
 kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x20_P2.54mm_Vertical"
 
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 250.0
+max_current_ma = 3000.0
+
 [footprint_dimensions]
 width_mm = 3.54
 height_mm = 49.26

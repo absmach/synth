@@ -57,6 +57,11 @@ pub struct ExportResult {
     pub library_path: PathBuf,
     pub pcb_path: PathBuf,
     pub bom_path: PathBuf,
+    /// Warnings the schematic builder raised while writing the files,
+    /// e.g. `W-SYNTH-LABEL-001` for a name label with no clear segment
+    /// anywhere on its net. Non-fatal; the CLI surfaces them so a bad
+    /// label placement is not silent.
+    pub warnings: Vec<synth_diagnostics::Diagnostic>,
 }
 
 /// Write all four artifacts and return their paths. The output
@@ -442,16 +447,28 @@ fn export_inner(
     // agree on positions and power-flag label sets. One `.kicad_sch`
     // for small boards (§P26 splits large splittable boards only, so
     // this path stays byte-identical); one file per sheet otherwise.
+    let mut warnings: Vec<synth_diagnostics::Diagnostic> = Vec::new();
     let library_text =
         symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     if sheets.len() == 1 {
-        let schematic_text =
-            schematic::build_schematic_from_layout(board, &project_namespace, &sheets[0].layout)
-                .to_string_pretty();
+        let (schematic, sheet_warnings) = schematic::build_schematic_from_layout_with_warnings(
+            board,
+            &project_namespace,
+            &sheets[0].layout,
+        );
+        warnings.extend(sheet_warnings);
+        let schematic_text = schematic.to_string_pretty();
         write_file(&schematic_path, &schematic_text)?;
     } else {
-        crate::multisheet::export_sheets(board, out_dir, &stem, &project_namespace, sheets)?;
+        crate::multisheet::export_sheets(
+            board,
+            out_dir,
+            &stem,
+            &project_namespace,
+            sheets,
+            &mut warnings,
+        )?;
     }
 
     // PCB file (.kicad_pcb). Export must serialize the same deterministic
@@ -524,6 +541,7 @@ fn export_inner(
         library_path,
         pcb_path,
         bom_path,
+        warnings,
     })
 }
 
@@ -537,6 +555,8 @@ pub struct SchematicExportResult {
     /// Number of schematic sheets written: 1 unless a large splittable board
     /// took the §P26 multi-sheet path.
     pub sheet_count: usize,
+    /// Warnings the schematic builder raised while writing the files.
+    pub warnings: Vec<synth_diagnostics::Diagnostic>,
 }
 
 /// Write only the schematic-side artifacts — project, symbol library,
@@ -628,14 +648,26 @@ pub fn export_schematic_only(
     let library_text =
         symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
+    let mut warnings: Vec<synth_diagnostics::Diagnostic> = Vec::new();
     let sheet_count = sheets.len();
     if sheet_count == 1 {
-        let schematic_text =
-            schematic::build_schematic_from_layout(board, &project_namespace, &sheets[0].layout)
-                .to_string_pretty();
+        let (schematic, sheet_warnings) = schematic::build_schematic_from_layout_with_warnings(
+            board,
+            &project_namespace,
+            &sheets[0].layout,
+        );
+        warnings.extend(sheet_warnings);
+        let schematic_text = schematic.to_string_pretty();
         write_file(&schematic_path, &schematic_text)?;
     } else {
-        crate::multisheet::export_sheets(board, out_dir, &stem, &project_namespace, sheets)?;
+        crate::multisheet::export_sheets(
+            board,
+            out_dir,
+            &stem,
+            &project_namespace,
+            sheets,
+            &mut warnings,
+        )?;
     }
 
     Ok(SchematicExportResult {
@@ -644,6 +676,7 @@ pub fn export_schematic_only(
         schematic_path,
         library_path,
         sheet_count,
+        warnings,
     })
 }
 
@@ -1130,6 +1163,7 @@ pub(crate) fn manufacturer_profile(board: &Board) -> synth_drc::ManufacturerProf
 /// edge to KiCad, so it gets its own rule at the hole-to-copper figure; KiCad
 /// applies the last matching rule, so it comes after the general one.
 fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> String {
+    use std::fmt::Write as _;
     let edge = synth_geometry::nm_to_mm(profile.min_copper_to_edge_nm);
     let hole = synth_geometry::nm_to_mm(profile.min_drill_to_copper_nm);
     let mut rules = format!(
@@ -1150,7 +1184,6 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
         .required_processes
         .contains(&synth_ir::ProcessRequirement::ViaInPad);
     if let Some(land_nm) = profile.via_in_pad_land_nm().filter(|_| via_in_pad_required) {
-        use std::fmt::Write as _;
         let land = synth_geometry::nm_to_mm(land_nm);
         let ring = synth_geometry::nm_to_mm(profile.via_in_pad_land_extra_nm / 2);
         for component in board.components.iter().filter(|c| {
@@ -1164,6 +1197,65 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
                 "(rule \"filled and capped via in pad {refdes}\"\n  (constraint annular_width (min {ring}mm))\n  (constraint via_diameter (min {land}mm))\n  (condition \"A.Type == 'Via' && A.Diameter <= {land}mm && A.insideCourtyard('{refdes}')\"))"
             );
         }
+    }
+    // Length and skew budgets have no KiCad net-class field, so they become
+    // custom rules. Without these a board handed to a person carries no trace
+    // of the budget the source declared.
+    for class in &board.netclasses {
+        let name = class.name.replace('\'', "");
+        if let Some(max) = class.max_length {
+            let _ = writeln!(
+                rules,
+                "(rule \"netclass {name} length\"\n  (constraint length (min 0mm) (max {}mm))\n  (condition \"A.NetClass == '{name}'\"))",
+                max.to_mm()
+            );
+        }
+        if let Some(max) = class.max_skew {
+            let _ = writeln!(
+                rules,
+                "(rule \"netclass {name} skew\"\n  (constraint skew (max {}mm))\n  (condition \"A.NetClass == '{name}'\"))",
+                max.to_mm()
+            );
+        }
+    }
+    for pair in &board.diff_pairs {
+        if let Some(max) = pair.max_skew {
+            let positive = pair.positive.replace('\'', "");
+            let negative = pair.negative.replace('\'', "");
+            let _ = writeln!(
+                rules,
+                "(rule \"diff pair {positive}/{negative} skew\"\n  (constraint skew (max {}mm))\n  (condition \"A.NetName == '{positive}' || A.NetName == '{negative}'\"))",
+                max.to_mm()
+            );
+        }
+    }
+    // A corridor keepout declares nets whose copper must pass through it
+    // (`keepout NAME { … allow "NET", … }`). KiCad keepout restrictions are
+    // net-blind — `(tracks not_allowed)` would forbid the corridor's own
+    // lanes — so the exporter emits the corridor as a pure named rule area
+    // (`build_named_rule_area` in `pcb.rs`) and carries the exclusion here,
+    // one disallow rule for tracks and one for vias of every net the
+    // keepout does not allow. The rule names contain the area name the
+    // zone was written with, so the two files must stay in step.
+    for keepout in &board.keepouts {
+        if keepout.allowed_nets.is_empty() || keepout.radius.is_none() {
+            continue;
+        }
+        let area = format!("{} keepout", keepout.name).replace('\'', "");
+        let not_allowed = keepout
+            .allowed_nets
+            .iter()
+            .map(|net| format!("A.NetName != '{}'", net.replace('\'', "")))
+            .collect::<Vec<_>>()
+            .join(" && ");
+        let _ = writeln!(
+            rules,
+            "(rule \"keepout {area} other nets' tracks\"\n  (constraint disallow track)\n  (condition \"A.insideArea('{area}') && {not_allowed}\"))"
+        );
+        let _ = writeln!(
+            rules,
+            "(rule \"keepout {area} other nets' vias\"\n  (constraint disallow via)\n  (condition \"A.insideArea('{area}') && {not_allowed}\"))"
+        );
     }
     rules.push_str(&layer_pin_rules(board));
     rules
@@ -1472,6 +1564,206 @@ mod tests {
         assert!(
             uses_seeded_tight_margins(gate),
             "a board with {gate} parts is the first that may run the sweep"
+        );
+    }
+
+    #[test]
+    fn a_declared_keepout_reaches_the_exported_pcb() {
+        // The keepout is centred on the component its name matches (here
+        // the refdes); with no component to anchor on it is not exported
+        // at all (see `E-SYNTH-KEEPOUT-003`).
+        let board = board_from(
+            r#"board "b" {
+                layers 2
+                component A1: connector "header_1x3"
+                keepout A1 { radius 5mm }
+            }"#,
+        );
+        let placement = synth_place::Placement {
+            board_outline: synth_geometry::Rect::from_center_half_extents(
+                synth_geometry::Point::new(0, 0),
+                synth_geometry::mm_to_nm(25.0),
+                synth_geometry::mm_to_nm(25.0),
+            ),
+            components: board
+                .components
+                .iter()
+                .map(|component| synth_place::ComponentPlacement {
+                    id: component.id,
+                    center: synth_geometry::Point::new(
+                        synth_geometry::mm_to_nm(10.0),
+                        synth_geometry::mm_to_nm(10.0),
+                    ),
+                    rotation: synth_geometry::Rotation::Zero,
+                    layer: synth_geometry::Layer::Top,
+                })
+                .collect(),
+        };
+        let text = pcb::build_pcb(
+            &board,
+            &placement,
+            &synth_pcb::Routing::default(),
+            &uuid::Uuid::nil(),
+            &std::collections::HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout")
+        .to_string_pretty();
+        assert!(text.contains("(name \"A1 keepout\")"), "{text}");
+        assert!(text.contains("(keepout"), "{text}");
+        assert!(text.contains("(tracks not_allowed)"), "{text}");
+        // The zone is where the anchored component is placed, not at the
+        // board centre. The 24-gon's first vertex is centre + reach on +x.
+        let vertex = "(xy 15 10)";
+        assert!(
+            text.contains(vertex),
+            "the keepout must sit on the anchor at 10,10, not the board centre: {text}"
+        );
+    }
+
+    #[test]
+    fn an_unanchored_keepout_is_not_exported_at_the_board_centre() {
+        let board = board_from(r#"board "b" { layers 2 keepout antenna { radius 5mm } }"#);
+        let placement = synth_place::Placement {
+            board_outline: synth_geometry::Rect::from_center_half_extents(
+                synth_geometry::Point::new(0, 0),
+                synth_geometry::mm_to_nm(25.0),
+                synth_geometry::mm_to_nm(25.0),
+            ),
+            components: vec![],
+        };
+        let text = pcb::build_pcb(
+            &board,
+            &placement,
+            &synth_pcb::Routing::default(),
+            &uuid::Uuid::nil(),
+            &std::collections::HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout")
+        .to_string_pretty();
+        assert!(
+            !text.contains("(keepout"),
+            "a keepout with nothing to centre on has no geometry: {text}"
+        );
+        assert!(!text.contains("antenna keepout"), "{text}");
+    }
+
+    #[test]
+    fn an_explicit_anchor_places_the_keepout_on_that_component() {
+        // The keepout's own name matches nothing; `anchor "U1"` decides
+        // where it lands.
+        let board = board_from(
+            r#"board "b" {
+                layers 2
+                component U1: connector "header_1x3"
+                keepout antenna { radius 5mm anchor "U1" }
+            }"#,
+        );
+        let placement = synth_place::Placement {
+            board_outline: synth_geometry::Rect::from_center_half_extents(
+                synth_geometry::Point::new(0, 0),
+                synth_geometry::mm_to_nm(25.0),
+                synth_geometry::mm_to_nm(25.0),
+            ),
+            components: board
+                .components
+                .iter()
+                .map(|component| synth_place::ComponentPlacement {
+                    id: component.id,
+                    center: synth_geometry::Point::new(
+                        synth_geometry::mm_to_nm(12.0),
+                        synth_geometry::mm_to_nm(14.0),
+                    ),
+                    rotation: synth_geometry::Rotation::Zero,
+                    layer: synth_geometry::Layer::Top,
+                })
+                .collect(),
+        };
+        let text = pcb::build_pcb(
+            &board,
+            &placement,
+            &synth_pcb::Routing::default(),
+            &uuid::Uuid::nil(),
+            &std::collections::HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout")
+        .to_string_pretty();
+        let vertex = "(xy 17 14)";
+        assert!(
+            text.contains(vertex),
+            "the keepout must sit on U1 at 12,14: {text}"
+        );
+    }
+
+    #[test]
+    fn a_corridor_keepout_exports_a_named_rule_area_not_a_blanket_keepout() {
+        // `(tracks not_allowed)` would forbid the corridor's own lanes, so
+        // a keepout that declares `allow` nets is emitted with every
+        // keepout restriction left allowed and the exclusion carried by
+        // the export's custom rules instead.
+        let board = board_from(
+            r#"board "b" {
+                layers 2
+                component U1: connector "header_1x3"
+                keepout tmds_corridor {
+                    radius 6mm
+                    anchor "U1"
+                    allow "TMDS_D2+", "TMDS_D2-"
+                }
+            }"#,
+        );
+        let placement = synth_place::Placement {
+            board_outline: synth_geometry::Rect::from_center_half_extents(
+                synth_geometry::Point::new(0, 0),
+                synth_geometry::mm_to_nm(25.0),
+                synth_geometry::mm_to_nm(25.0),
+            ),
+            components: board
+                .components
+                .iter()
+                .map(|component| synth_place::ComponentPlacement {
+                    id: component.id,
+                    center: synth_geometry::Point::new(
+                        synth_geometry::mm_to_nm(10.0),
+                        synth_geometry::mm_to_nm(10.0),
+                    ),
+                    rotation: synth_geometry::Rotation::Zero,
+                    layer: synth_geometry::Layer::Top,
+                })
+                .collect(),
+        };
+        let text = pcb::build_pcb(
+            &board,
+            &placement,
+            &synth_pcb::Routing::default(),
+            &uuid::Uuid::nil(),
+            &std::collections::HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout")
+        .to_string_pretty();
+        assert!(text.contains("(name \"tmds_corridor keepout\")"), "{text}");
+        // The rule area excludes nothing by itself.
+        assert!(
+            text.contains("(tracks allowed)"),
+            "the corridor must not forbid its own lanes: {text}"
+        );
+        // The custom rules carry the exclusion for the nets not allowed.
+        let rules = design_rules(&manufacturer_profile(&board), &board);
+        assert!(
+            rules.contains("A.insideArea('tmds_corridor keepout')"),
+            "the corridor rules key on the area name: {rules}"
+        );
+        assert!(rules.contains("A.NetName != 'TMDS_D2+'"), "{rules}");
+        assert!(
+            rules.contains("disallow track") && rules.contains("disallow via"),
+            "{rules}"
         );
     }
 
@@ -1870,6 +2162,38 @@ mod tests {
             &board_from(r#"board "b" { layers 4 netclass "X" { } }"#),
         );
         assert!(!free.contains("netclass"), "{free}");
+    }
+
+    /// A netclass length/skew budget and a diff pair's skew budget have no
+    /// net-class field, so they are written as KiCad custom rules.
+    #[test]
+    fn length_and_skew_budgets_are_written_as_custom_rules() {
+        let rules = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_standard(),
+            &board_from(
+                r#"board "b" { layers 4
+                   netclass "USB" { max_length 50mm max_skew 0.15mm }
+                   diff_pair USB_DP USB_DN { max_skew 0.15mm } }"#,
+            ),
+        );
+        assert!(
+            rules.contains(
+                "(rule \"netclass USB length\"\n  (constraint length (min 0mm) (max 50mm))\n  (condition \"A.NetClass == 'USB'\"))"
+            ),
+            "{rules}"
+        );
+        assert!(
+            rules.contains(
+                "(rule \"netclass USB skew\"\n  (constraint skew (max 0.15mm))\n  (condition \"A.NetClass == 'USB'\"))"
+            ),
+            "{rules}"
+        );
+        assert!(
+            rules.contains(
+                "(rule \"diff pair USB_DP/USB_DN skew\"\n  (constraint skew (max 0.15mm))\n  (condition \"A.NetName == 'USB_DP' || A.NetName == 'USB_DN'\"))"
+            ),
+            "{rules}"
+        );
     }
 
     /// A via-in-pad tier states the guide's land for a filled and capped via

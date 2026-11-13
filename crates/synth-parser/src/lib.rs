@@ -30,7 +30,8 @@
 //! notes       = "notes" string "{" [string*] "}" ;
 //! diff_pair   = "diff_pair" net_ref net_ref "{" impedance? "}" ;
 //! net_ref     = ident | string ;
-//! keepout     = "keepout" ident "{" radius? "}" ;
+//! keepout     = "keepout" ident "{" attr* "}" ;
+//! keepout_attr = "radius" value | "anchor" string | "allow" string ("," string)* ;
 //! ```
 //!
 //! Abstract components, modules, variants, zones, and netclasses are

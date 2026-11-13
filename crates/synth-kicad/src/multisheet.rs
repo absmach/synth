@@ -31,6 +31,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use synth_diagnostics::Diagnostic;
 use synth_ir::{Board, ComponentId};
 use synth_layout::route::snap_grid_127;
 use synth_layout::sheets::SheetLayout;
@@ -104,6 +105,7 @@ pub(crate) fn export_sheets(
     stem: &str,
     project: &Uuid,
     mut sheets: Vec<SheetLayout>,
+    warnings: &mut Vec<Diagnostic>,
 ) -> Result<(), ExportError> {
     let root_bounds = content_bounds(board, &sheets[0].layout);
     let plan = plan_multisheet(board, project, stem, &sheets, root_bounds);
@@ -159,6 +161,7 @@ pub(crate) fn export_sheets(
             root_furniture: Some(&plan.furniture),
         },
         &mut power_refs,
+        warnings,
     )
     .to_string_pretty();
     write_file(&out_dir.join(format!("{stem}.kicad_sch")), &root_text)?;
@@ -192,6 +195,7 @@ pub(crate) fn export_sheets(
                 root_furniture: None,
             },
             &mut power_refs,
+            warnings,
         )
         .to_string_pretty();
         write_file(&out_dir.join(&file.file), &text)?;
@@ -706,7 +710,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("synth-ms-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let project = crate::uuid_v5::project_namespace(&board.name);
-        export_sheets(&board, &dir, &board.name, &project, sheets).unwrap();
+        export_sheets(&board, &dir, &board.name, &project, sheets, &mut Vec::new()).unwrap();
         // A minimal `.kicad_pro` is required for KiCad to treat the
         // directory as a project and load `sym-lib-table` /
         // `${KIPRJMOD}` — without it every `synth:` power-flag symbol
@@ -788,6 +792,7 @@ mod tests {
                 root_furniture: None,
             },
             &mut crate::schematic::PowerRefAllocator::default(),
+            &mut Vec::new(),
         )
         .to_string_pretty();
         assert_eq!(
@@ -859,6 +864,7 @@ mod tests {
                 root_furniture: None,
             },
             &mut crate::schematic::PowerRefAllocator::default(),
+            &mut Vec::new(),
         )
         .to_string_pretty();
         assert!(
@@ -927,6 +933,7 @@ mod tests {
                 root_furniture: None,
             },
             &mut crate::schematic::PowerRefAllocator::default(),
+            &mut Vec::new(),
         )
         .to_string_pretty();
         assert!(

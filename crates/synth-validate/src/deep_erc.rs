@@ -548,6 +548,161 @@ impl ErcRule for PullupRailMismatchRule {
 }
 
 // -----------------------------------------------------------------------------
+// E-SYNTH-POWER-012 — connector/discrete outside its operating envelope
+// -----------------------------------------------------------------------------
+
+/// A connector, diode or transistor sitting on a declared power rail the
+/// board runs outside the envelope its registry entry declares. The part
+/// kinds in scope are the ones a Class-A review carries ratings for: they
+/// pass current and stand off voltage rather than regulating it, and none
+/// of the other power rules asks about them — `E-SYNTH-POWER-008` looks at
+/// pull-ups, `009` at regulator inputs, `010` at regulator budgets. A part
+/// without `operating_conditions` has nothing declared to violate, so it
+/// stays out of the rule rather than being guessed at.
+pub(crate) struct OperatingEnvelopeRule;
+
+impl OperatingEnvelopeRule {
+    /// Whether this part is one the rule judges. The declared envelope is
+    /// load-bearing documentation (a 12 V input through a 5 V-rated
+    /// connector is the failure that started the check), so only the kinds
+    /// a review actually rates are compared.
+    fn in_scope(part: &Part) -> bool {
+        matches!(
+            part.kind.to_ascii_lowercase().as_str(),
+            "connector" | "diode" | "transistor"
+        )
+    }
+
+    /// The rail a pin of `component` sits on, as the rule sees it: a net
+    /// with a declared (or inferred) rail voltage. Ground is not a rail.
+    fn overstressed(
+        board: &Board,
+        domains: &Domains,
+        component: &synth_ir::Component,
+        part: &Part,
+    ) -> Option<String> {
+        for (idx, _pin) in part.pins.iter().enumerate() {
+            let net_id = pin_net(board, component.id, PinId(idx as u32))?;
+            let Some(net) = board.net(net_id) else {
+                continue;
+            };
+            if !is_rail_net(domains, net_id) {
+                continue;
+            }
+            // Voltage: the rail's nominal voltage above the part's declared
+            // maximum is the overstress the review asks about.
+            if let Some(rail_v) = net_voltage(domains, net_id) {
+                if let Some(max_v) = part
+                    .operating_conditions
+                    .as_ref()
+                    .and_then(|oc| oc.max_voltage_v)
+                {
+                    if rail_v > max_v + 1e-6 {
+                        return Some(format!("a {rail_v:.1}V rail"));
+                    }
+                }
+            }
+            // Current: a rail whose declared budget exceeds the part's
+            // declared maximum. The budget is the netclass `current` the
+            // board declares for the rail's nets; a rail without one has no
+            // budget to exceed.
+            if let Some(budget_ma) = current_budget_ma(board, net) {
+                if exceeds_current(part, budget_ma) {
+                    return Some(format!("a rail with a {budget_ma:.0}mA budget"));
+                }
+            }
+        }
+        None
+    }
+}
+
+/// The declared current budget, in mA, of the netclass a rail's net joins.
+fn current_budget_ma(board: &Board, net: &synth_ir::Net) -> Option<f64> {
+    let class = net.netclass.as_deref()?;
+    board
+        .netclasses
+        .iter()
+        .find(|c| c.name == class)
+        .and_then(|c| c.current)
+        .map(synth_ir::Current::to_amps)
+        .map(|amps| amps * 1000.0)
+}
+
+/// Whether a declared budget is above the part's own `max_current_ma`.
+fn exceeds_current(part: &Part, budget_ma: f64) -> bool {
+    part.operating_conditions
+        .as_ref()
+        .and_then(|oc| oc.max_current_ma)
+        .is_some_and(|max_ma| budget_ma > max_ma + 1e-6)
+}
+
+impl ErcRule for OperatingEnvelopeRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-POWER-012"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Power
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let domains = domains(board);
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            if !Self::in_scope(part) || part.operating_conditions.is_none() {
+                continue;
+            }
+            let Some(what) = Self::overstressed(board, &domains, component, part) else {
+                continue;
+            };
+            let Some(conditions) = part.operating_conditions.as_ref() else {
+                continue;
+            };
+            let declared = format!(
+                "{}–{}V, {}mA",
+                conditions
+                    .min_voltage_v
+                    .map_or("?".to_string(), |v| format!("{v:.1}")),
+                conditions
+                    .max_voltage_v
+                    .map_or("?".to_string(), |v| format!("{v:.1}")),
+                conditions
+                    .max_current_ma
+                    .map_or("?".to_string(), |ma| format!("{ma:.0}"))
+            );
+            let mut b = DiagnosticBuilder::new(
+                self.code(),
+                Severity::Error,
+                "part operated outside its declared operating envelope",
+            )
+            .location(Location::from_span(file.to_string(), component.source_span))
+            .expected(format!(
+                "every declared power rail reaching {} to sit inside its envelope {declared}",
+                component.describe()
+            ))
+            .found(format!(
+                "{} is placed where {what} reaches it",
+                component.describe()
+            ))
+            .message(format!(
+                "the envelope {} declares is {declared}, but {what} runs through it; \
+                 move the part to a rail inside its envelope or pick a part rated for it",
+                component.describe()
+            ))
+            .explanation_url(format!("synth.docs/diagnostics/{}", self.code()));
+            b = b.entity(synth_diagnostics::EntityRef::Component {
+                id: component.refdes.clone(),
+            });
+            out.push(b.build());
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
 // E-SYNTH-POWER-009 — regulator input outside its operating range
 // -----------------------------------------------------------------------------
 
@@ -708,6 +863,7 @@ impl ErcRule for PowerBudgetRule {
         ErcCategory::Power
     }
 
+    #[allow(clippy::too_many_lines)]
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for regulator in &board.components {
@@ -757,6 +913,15 @@ impl ErcRule for PowerBudgetRule {
                 // regulator a full amp for a part that draws nothing, and the
                 // "fix" for a failing budget would be to drop the protection.
                 if is_protection_part(load_part) {
+                    continue;
+                }
+                // A connector's `max_current_ma` is the contact rating, not a
+                // draw the rail must supply. Counting it charged a 3 A header
+                // as a 3 A load on a 250 mA regulator.
+                if matches!(
+                    load_part.kind.as_str(),
+                    "connector" | "jack" | "test_point" | "mounting_hole" | "fiducial"
+                ) {
                     continue;
                 }
                 let Some(draw) = load_part

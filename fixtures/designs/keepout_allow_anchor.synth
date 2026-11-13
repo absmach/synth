@@ -1,0 +1,10 @@
+board "keepout_allow_anchor" {
+  layers 4
+  component U1: mcu "atmega328p"
+  keepout tmds_corridor {
+    radius 6mm
+    anchor "U1"
+    allow "TMDS_D2+", "TMDS_D2-"
+  }
+  keepout antenna_zone { radius 20mm }
+}

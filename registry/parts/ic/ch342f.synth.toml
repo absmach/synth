@@ -96,7 +96,7 @@ electrical_type = "output"
 capabilities = ["uart_tx"]
 
 [[pins]]
-name = "dsr1_tnow1"
+name = "dsr1"
 number = "14"
 electrical_type = "input"
 
@@ -177,4 +177,4 @@ source = "generated"
 generator = "synth-part-import-lcsc 0.1"
 datasheet_url = "https://www.wch-ic.com/downloads/CH342DS1_PDF.html"
 upstream_lcsc_pn = "C2841530"
-reviewed_by = "synth-seed-review"
+reviewed_by = "rodneyosodo"

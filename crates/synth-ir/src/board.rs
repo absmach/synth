@@ -486,6 +486,9 @@ pub struct Keepout {
     /// Copper layers the rule area covers; empty means every copper layer.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<String>,
+    /// Nets whose copper the keepout lets through (`allow "TMDS_D2+"`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_nets: Vec<String>,
     pub source_span: Span,
 }
 

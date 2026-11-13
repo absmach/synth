@@ -110,9 +110,9 @@ board "usb_uart" {
     component D3: led "ltst_c190kgkt" value "VIO"
     component R3: resistor "r_generic_0603" value "470"
     component D4: led "ltst_c190krkt" value "TX0"
-    component R4: resistor "r_generic_0603" value "470"
+    component R4: resistor "r_generic_0603" value "1k"
     component D7: led "ltst_c190krkt" value "TX1"
-    component R7: resistor "r_generic_0603" value "470"
+    component R7: resistor "r_generic_0603" value "1k"
     notes "" {
       "D3 green LED from VIO (VIO present)."
       "D4/D7 red LEDs from VIO, sunk into TXD0/TXD1: dark while the line idles, lit on the low bits."
@@ -169,7 +169,7 @@ board "usb_uart" {
   connect U1.dcd0 -> R8.p2 as "MODEM_IDLE"
   connect U1.dcd1 -> R8.p2 as "MODEM_IDLE"
   connect U1.dsr0 -> R8.p2 as "MODEM_IDLE"
-  connect U1.dsr1_tnow1 -> R8.p2 as "MODEM_IDLE"
+  connect U1.dsr1 -> R8.p2 as "MODEM_IDLE"
   connect U1.cts0 -> R9.p1 as "CTS0_LOW"
 
   connect U1.txd1 -> J2.p2 as "TXD1"

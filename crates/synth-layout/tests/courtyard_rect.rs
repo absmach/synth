@@ -46,6 +46,33 @@ fn a_line_and_an_arc_are_measured_together_and_off_centre() {
 }
 
 #[test]
+fn a_footprint_without_a_resolvable_library_keeps_its_declared_margin() {
+    // The fallback used the body size alone, so a part whose footprint could
+    // not be resolved lost the courtyard rim it declared.
+    let source = r#"
+id = "margin_part"
+kind = "resistor"
+kicad_symbol = "Device:R"
+kicad_footprint = "Not_A_Library:Not_A_Footprint"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 1.0
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+"#;
+    let registry =
+        synth_registry::load_from_strs(&[("margin_part.synth.toml", source)]).expect("a part");
+    let part = registry.lookup("margin_part").expect("the part");
+    let (_, (w, h)) = synth_layout::pcb_courtyard_geometry_for_part(part);
+    assert!(close(w, 2.5) && close(h, 1.5), "{w} x {h}");
+}
+
+#[test]
 fn a_rectangle_of_lines_is_unchanged_and_no_courtyard_is_none() {
     let (_, _, w, h) = courtyard_rect_from_text(SOT23).expect("a courtyard");
     assert!(close(w, 3.86) && close(h, 3.4), "{w} x {h}");
