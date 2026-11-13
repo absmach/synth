@@ -1,0 +1,892 @@
+id = "ice40hx4k_tq144"
+kind = "fpga"
+description = "Lattice iCE40 HX4K FPGA, 144-pin TQFP (20 x 20 mm, 0.5 mm pitch). Pin names and numbers from KiCad's FPGA_Lattice:ICE40HX4K-TQ144; its 107 I/O match the HX4K TQ144 count in Lattice DS1040. vpp_fast is a passive pin that is not required, so it can be left unconnected."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "ICE40HX4K-TQ144"
+required_decoupling = []
+kicad_symbol = "FPGA_Lattice:ICE40HX4K-TQ144"
+kicad_footprint = "Package_QFP:TQFP-144_20x20mm_P0.5mm"
+reviewed_at = "2026-11-11"
+reviewed_by = "JeffMboya"
+lcsc_pn = "C1521989"
+datasheet_url = "https://www.latticesemi.com/~/media/latticesemi/documents/datasheets/ice/ice40lphxfamilydatasheet.pdf"
+
+[footprint_dimensions]
+width_mm = 23.3
+height_mm = 23.3
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "iol_2a"
+number = "1"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_2b"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_3a"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_3b"
+number = "4"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gnd"
+number = "5"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vccio_3"
+number = "6"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iol_4a"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_4b"
+number = "8"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_5a"
+number = "9"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_5b"
+number = "10"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_8a"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_8b"
+number = "12"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gnd_2"
+number = "13"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd_3"
+number = "14"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iol_10a"
+number = "15"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_10b"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_12a"
+number = "17"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_12b"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_13a"
+number = "19"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_13b_gbin7"
+number = "20"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_14a_gbin6"
+number = "21"
+electrical_type = "clock"
+capabilities = ["clock_output"]
+
+[[pins]]
+name = "iol_14b"
+number = "22"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_17a"
+number = "23"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_17b"
+number = "24"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_18a"
+number = "25"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_18b"
+number = "26"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vcc"
+number = "27"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iol_23a"
+number = "28"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_23b"
+number = "29"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_3_2"
+number = "30"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iol_24a"
+number = "31"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_24b"
+number = "32"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_25a"
+number = "33"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iol_25b"
+number = "34"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "nc"
+number = "35"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "nc_2"
+number = "36"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "iob_56"
+number = "37"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_57"
+number = "38"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_61"
+number = "39"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vcc_2"
+number = "40"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iob_63"
+number = "41"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_64"
+number = "42"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_71"
+number = "43"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_72"
+number = "44"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_73"
+number = "45"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_2"
+number = "46"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iob_79"
+number = "47"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_80"
+number = "48"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_81_gbin5"
+number = "49"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "nc_3"
+number = "50"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "nc_4"
+number = "51"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "iob_82_gbin4"
+number = "52"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gndpll0"
+number = "53"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vccpll0"
+number = "54"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iob_91"
+number = "55"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_94"
+number = "56"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_2_2"
+number = "57"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "nc_5"
+number = "58"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "gnd_4"
+number = "59"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iob_95"
+number = "60"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_96"
+number = "61"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_102"
+number = "62"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_103_cbsel0"
+number = "63"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iob_104_cbsel1"
+number = "64"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "cdone"
+number = "65"
+electrical_type = "open_drain_low"
+required = true
+
+[[pins]]
+name = "creset"
+number = "66"
+electrical_type = "input"
+required = true
+
+[[pins]]
+name = "iob_105_sdo"
+number = "67"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_mosi"]
+
+[[pins]]
+name = "iob_106_sdi"
+number = "68"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_miso"]
+
+[[pins]]
+name = "gnd_5"
+number = "69"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iob_107_sck"
+number = "70"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck"]
+
+[[pins]]
+name = "iob_108_ss"
+number = "71"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs"]
+
+[[pins]]
+name = "vcc_spi"
+number = "72"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "ior_109"
+number = "73"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_110"
+number = "74"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_111"
+number = "75"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_112"
+number = "76"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "nc_6"
+number = "77"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "ior_114"
+number = "78"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_115"
+number = "79"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_116"
+number = "80"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_117"
+number = "81"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_118"
+number = "82"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_119"
+number = "83"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_120"
+number = "84"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_128"
+number = "85"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gnd_6"
+number = "86"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "ior_136"
+number = "87"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_137"
+number = "88"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_1"
+number = "89"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "ior_138"
+number = "90"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_139"
+number = "91"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vcc_3"
+number = "92"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "ior_140_gbin3"
+number = "93"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_141_gbin2"
+number = "94"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_144"
+number = "95"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_146"
+number = "96"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_147"
+number = "97"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_148"
+number = "98"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_152"
+number = "99"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_1_2"
+number = "100"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "ior_160"
+number = "101"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_161"
+number = "102"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gnd_7"
+number = "103"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "ior_164"
+number = "104"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_165"
+number = "105"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_166"
+number = "106"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "ior_167"
+number = "107"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vpp_2v5"
+number = "108"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vpp_fast"
+number = "109"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "iot_168"
+number = "110"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vcc_4"
+number = "111"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iot_169"
+number = "112"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_170"
+number = "113"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_171"
+number = "114"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_172"
+number = "115"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_173"
+number = "116"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_174"
+number = "117"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_177"
+number = "118"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_178"
+number = "119"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_179"
+number = "120"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_181"
+number = "121"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_190"
+number = "122"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_0"
+number = "123"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iot_191"
+number = "124"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_192"
+number = "125"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccpll1"
+number = "126"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gndpll1"
+number = "127"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iot_197_gbin1"
+number = "128"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_198_gbin0"
+number = "129"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_206"
+number = "130"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "vccio_0_2"
+number = "131"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd_8"
+number = "132"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "nc_7"
+number = "133"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "iot_212"
+number = "134"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_213"
+number = "135"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_214"
+number = "136"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_215"
+number = "137"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_216"
+number = "138"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_217"
+number = "139"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "gnd_9"
+number = "140"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "iot_219"
+number = "141"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_220"
+number = "142"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_221"
+number = "143"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[[pins]]
+name = "iot_222"
+number = "144"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_scl", "i2c_sda"]
