@@ -1634,6 +1634,7 @@ fn route_design_externally_with(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
     request.use_board_diff_pairs(&board);
@@ -3115,6 +3116,7 @@ fn evaluate_candidate_mcp(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     // Each candidate is scored by routing it, so it has to be routed the way
     // the board asked: without the escape intent a declared `escape { off }`
     // or a chosen method would change the winner.
@@ -3356,6 +3358,7 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
     request.use_board_diff_pairs(&board);
