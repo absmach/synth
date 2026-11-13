@@ -56,6 +56,14 @@ expression: board
           "min_voltage_v": 1.8,
           "max_voltage_v": 5.0,
           "max_current_ma": 100.0
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": null,
+          "reviewed_by": "synth-seed-review",
+          "reviewed_at": "2026-11-13",
+          "upstream_lcsc_pn": null
         }
       },
       "source_span": {

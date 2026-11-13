@@ -1310,6 +1310,14 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
          stage fails on residual skew; any tuning is left to the router.",
     ),
     (
+        "library_silkscreen_limits",
+        None,
+        "Silkscreen owned by a library footprint is exported byte-for-byte so \
+         `lib_footprint_mismatch` stays clean. A library stroke thinner than a \
+         fabricator's legend minimum is reported by the DFM check but is not \
+         rewritten; move the via or choose a footprint that meets the limit.",
+    ),
+    (
         "return_path_and_layer_transition_analysis",
         None,
         "Return paths, reference-plane continuity and signal layer transitions are not analysed.",
@@ -1488,7 +1496,7 @@ fn capability_descriptor() -> serde_json::Value {
             "routing_constraints": {
                 "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
-                "keepout": ["radius"],
+                "keepout": ["radius", "anchor", "at", "layers"],
                 "component": ["placement_hint", "escape"],
                 "requires": ["via_in_pad"]
             },

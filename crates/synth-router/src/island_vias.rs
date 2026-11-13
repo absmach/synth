@@ -2608,7 +2608,7 @@ fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
 /// # Errors
 /// Returns why the board could not be read or written.
 #[allow(clippy::cast_precision_loss)]
-pub fn drop_dangling_stubs(candidate: &Path) -> Result<usize, String> {
+pub fn drop_dangling_stubs(candidate: &Path) -> Result<DanglingOutcome, String> {
     let text = std::fs::read_to_string(candidate)
         .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
     let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
@@ -2657,7 +2657,51 @@ pub fn drop_dangling_stubs(candidate: &Path) -> Result<usize, String> {
         std::fs::write(candidate, out)
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
     }
-    Ok(count)
+    // A long track with one end in nothing is not a sliver: it carries a
+    // dangling branch. Report it with enough detail to find it, and let the
+    // caller block promotion rather than deliver copper that ends in space.
+    let remaining = board
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(i, segment)| {
+            alive[*i]
+                && (segment.end.x_mm() - segment.start.x_mm())
+                    .hypot(segment.end.y_mm() - segment.start.y_mm())
+                    >= nm_to_mm(segment.width_nm)
+        })
+        .filter(|(i, segment)| {
+            let (a, b) = (
+                (segment.start.x_mm(), segment.start.y_mm()),
+                (segment.end.x_mm(), segment.end.y_mm()),
+            );
+            end_touches_copper(&board, &alive, *i, a) != end_touches_copper(&board, &alive, *i, b)
+        })
+        .map(|(_, segment)| {
+            format!(
+                "net {:?} on {:?} from ({:.3}, {:.3}) to ({:.3}, {:.3}) ends in nothing",
+                segment.net,
+                segment.layer,
+                segment.start.x_mm(),
+                segment.start.y_mm(),
+                segment.end.x_mm(),
+                segment.end.y_mm()
+            )
+        })
+        .collect();
+    Ok(DanglingOutcome {
+        dropped: count,
+        remaining,
+    })
+}
+
+/// What [`drop_dangling_stubs`] did and what it could not fix.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DanglingOutcome {
+    /// Slivers shorter than their own width that were removed.
+    pub dropped: usize,
+    /// Track segments that still end in nothing after the prune.
+    pub remaining: Vec<String>,
 }
 
 /// A track of a ground net whose copper comes closer to the board outline than the
@@ -4597,13 +4641,28 @@ mod tests {
         )
     }
 
+    #[test]
+    fn a_long_track_that_ends_in_nothing_is_reported_not_dropped() {
+        let text =
+            stub_text(r#"(segment (start 5 5) (end 9 5) (width 0.4) (layer "F.Cu") (net 1))"#);
+        let dir =
+            std::env::temp_dir().join(format!("stub-remaining-{}-{}", std::process::id(), "long"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        let outcome = drop_dangling_stubs(&path).unwrap();
+        assert_eq!(outcome.remaining.len(), 1, "{outcome:?}");
+        assert!(outcome.remaining[0].contains("ends in nothing"));
+        assert_eq!(outcome.dropped, 0);
+    }
+
     /// The segments left in `text` after the prune, and how many it dropped.
     fn pruned(text: &str, name: &str) -> (usize, usize) {
         let dir = std::env::temp_dir().join(format!("stub-prune-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("board.kicad_pcb");
         std::fs::write(&path, text).unwrap();
-        let dropped = drop_dangling_stubs(&path).unwrap();
+        let dropped = drop_dangling_stubs(&path).unwrap().dropped;
         let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
         (dropped, after.segments.len())
     }

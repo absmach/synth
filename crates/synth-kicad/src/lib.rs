@@ -54,6 +54,7 @@ pub mod import;
 pub mod manufacturing;
 pub mod multisheet;
 mod pcb;
+pub use pcb::{build_pcb, PcbBuildError};
 pub mod pin_reconcile;
 mod pnp;
 mod sch_svg;

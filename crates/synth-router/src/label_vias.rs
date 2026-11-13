@@ -150,10 +150,28 @@ impl Label {
 /// # Errors
 /// Returns a description when the board cannot be read or written back.
 pub fn keep_labels_off_copper(candidate: &Path) -> Result<LabelMoves, String> {
+    keep_labels(candidate, false)
+}
+
+/// The production pass: move labels, but leave the silkscreen owned by a
+/// library footprint byte-identical. Trimming or widening it makes
+/// `kicad-cli pcb drc` report `lib_footprint_mismatch` against the library
+/// copy, which is a gate failure for a board that is otherwise correct.
+///
+/// # Errors
+/// Returns a description when the board cannot be read or written back.
+pub fn keep_labels_off_copper_preserving_footprints(
+    candidate: &Path,
+) -> Result<LabelMoves, String> {
+    keep_labels(candidate, true)
+}
+
+fn keep_labels(candidate: &Path, preserve_footprint_silk: bool) -> Result<LabelMoves, String> {
     let text = std::fs::read_to_string(candidate)
         .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
     let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
-    let (out, moves) = keep_labels_off_copper_in(&text, &board);
+    let (out, moves) =
+        keep_labels_off_copper_with(text.as_str(), &board, MAX_SHIFT_MM, preserve_footprint_silk);
     if out != text {
         std::fs::write(candidate, out)
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
@@ -161,14 +179,16 @@ pub fn keep_labels_off_copper(candidate: &Path) -> Result<LabelMoves, String> {
     Ok(moves)
 }
 
+#[cfg(test)]
 fn keep_labels_off_copper_in(text: &str, board: &PcbBoard) -> (String, LabelMoves) {
-    keep_labels_off_copper_with(text, board, MAX_SHIFT_MM)
+    keep_labels_off_copper_with(text, board, MAX_SHIFT_MM, false)
 }
 
 fn keep_labels_off_copper_with(
     text: &str,
     board: &PcbBoard,
     reach_mm: f64,
+    preserve_footprint_silk: bool,
 ) -> (String, LabelMoves) {
     let mut out = text.to_string();
     let mut moves = LabelMoves::default();
@@ -227,6 +247,12 @@ fn keep_labels_off_copper_with(
             continue;
         }
         let Some((dx, dy, angle)) = scene.find_spot(label, &others, reach_mm) else {
+            // The export pass leaves an unmovable label where it is: hiding it
+            // would lose the designator, and the DFM check can still see the
+            // overlap. The repair pass (tests, non-export callers) hides it.
+            if preserve_footprint_silk {
+                continue;
+            }
             // A label on a hole, or over silkscreen with nowhere clear to go, is worse than none.
             if hide_label(&mut out, &label.reference) {
                 moves.hidden += 1;
@@ -240,6 +266,11 @@ fn keep_labels_off_copper_with(
             placed[index] = label.bounds_at((centre.0 + dx, centre.1 + dy), angle);
             moves.moved += 1;
         }
+    }
+    if preserve_footprint_silk {
+        // Library parity: only the labels move; the footprint's own silk is
+        // the library's bytes.
+        return (out, moves);
     }
     let (out, widened) = widen_silkscreen(&out);
     moves.widened = widened;
@@ -1566,6 +1597,23 @@ mod tests {
                 .count(),
             1,
             "the second piece has its own uuid"
+        );
+    }
+
+    /// Export parity: the production pass moves labels but leaves the
+    /// library footprint's own silkscreen bytes alone.
+    #[test]
+    fn the_export_pass_does_not_rewrite_library_footprint_silk() {
+        let text =
+            outlined(r#"  (via (at 20 22) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#);
+        let board = PcbBoard::parse(&text).unwrap();
+        let (out, moves) = keep_labels_off_copper_with(&text, &board, MAX_SHIFT_MM, true);
+        assert_eq!(moves.trimmed, 0);
+        assert_eq!(moves.widened, 0);
+        assert_eq!(
+            outline_lines(&out),
+            outline_lines(&text),
+            "the library outline is untouched"
         );
     }
 

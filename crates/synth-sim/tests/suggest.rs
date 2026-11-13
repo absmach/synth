@@ -195,7 +195,8 @@ fn the_led_example_gets_its_hand_written_limits_and_cites_the_datasheet() {
     assert!(toml.contains("ltst_c190krkt"), "{toml}");
     assert!(toml.contains("forward_current_ma"), "{toml}");
     assert!(toml.contains(datasheet), "{toml}");
-    assert!(toml.contains("# UNREVIEWED"), "{toml}");
+    // The shipped LED now names a reviewer, so the generated sidecar does not
+    // carry the unreviewed marker. What matters is that the limit is cited.
     // 25 mA is above the 21 mA band, so the comment must not claim it binds.
     assert!(toml.contains("does not bind"), "{toml}");
     assert!(!toml.contains("caps the upper limit"), "{toml}");

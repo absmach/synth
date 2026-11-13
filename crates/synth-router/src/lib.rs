@@ -325,8 +325,11 @@ fn with_repair_findings(
     verdict
 }
 
-/// Say what the post-routing silkscreen pass did, when it did anything.
-fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
+/// Say what the post-routing silkscreen pass did, and return the findings that
+/// must reach the verdict. A hidden designator is a blocking finding: a board
+/// with an unreadable reference is not fabrication-ready. A pass that could not
+/// run is an unavailable check, which yields `ReviewRequired`, not a pass.
+fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) -> Vec<String> {
     match result {
         Ok(label_vias::LabelMoves {
             moved: 0,
@@ -335,7 +338,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             widened: 0,
             dropped: 0,
             relocated: 0,
-        }) => {}
+        }) => Vec::new(),
         Ok(label_vias::LabelMoves {
             moved,
             hidden,
@@ -343,26 +346,48 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             widened,
             dropped,
             relocated,
-        }) => info!(
-            "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
-        ),
-        Err(detail) => warn!("reference labels were not checked: {detail}"),
+        }) => {
+            info!(
+                "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+            );
+            if hidden == 0 {
+                Vec::new()
+            } else {
+                vec![format!(
+                    "{hidden} reference designator(s) could not be kept clear of copper and were hidden"
+                )]
+            }
+        }
+        Err(detail) => {
+            warn!("reference labels were not checked: {detail}");
+            Vec::new()
+        }
     }
 }
 
 /// A sliver of track that ends in nothing carries nothing and only trips KiCad's
 /// unconnected-end check; it goes before the candidate is judged. A prune that
 /// did not run leaves such a sliver in the board, so it is an unavailable check.
-fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
+fn repair_dropped_stubs(candidate: &Path) -> (Vec<String>, Vec<String>) {
     match island_vias::drop_dangling_stubs(candidate) {
-        Ok(0) => Vec::new(),
-        Ok(dropped) => {
-            debug!("dropped {dropped} track stub(s) that ended in nothing");
-            Vec::new()
+        Ok(outcome) if outcome.dropped == 0 && outcome.remaining.is_empty() => {
+            (Vec::new(), Vec::new())
+        }
+        Ok(outcome) => {
+            if outcome.dropped > 0 {
+                debug!(
+                    "dropped {} track stub(s) that ended in nothing",
+                    outcome.dropped
+                );
+            }
+            (outcome.remaining, Vec::new())
         }
         Err(detail) => {
             warn!("track stubs were not pruned: {detail}");
-            vec![format!("track stub prune did not run: {detail}")]
+            (
+                Vec::new(),
+                vec![format!("track stub prune did not run: {detail}")],
+            )
         }
     }
 }
@@ -409,7 +434,9 @@ fn finalize(
             repair_unavailable.push(format!("edge track prune did not run: {detail}"));
         }
     }
-    repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
+    let (stub_blocking, stub_unavailable) = repair_dropped_stubs(&candidate.candidate_path);
+    repair_blocking.extend(stub_blocking);
+    repair_unavailable.extend(stub_unavailable);
     let mut repair_advisory: Vec<String> = Vec::new();
     let mut ground = island_vias::Ground::new(&request.ground_nets)
         .with_fine_pitch_advisory(request.fine_pitch_return_via_advisory);
@@ -441,8 +468,9 @@ fn finalize(
     // The labels were placed before the router put its vias down; move any that
     // now sit on a via or a pad. Silkscreen only, and before the candidate is
     // judged, so the board that is delivered is the one that was validated.
-    let silkscreen = label_vias::keep_labels_off_copper(&candidate.candidate_path);
-    report_silkscreen_pass(silkscreen.clone());
+    let silkscreen =
+        label_vias::keep_labels_off_copper_preserving_footprints(&candidate.candidate_path);
+    repair_blocking.extend(report_silkscreen_pass(silkscreen.clone()));
     if let Err(detail) = &silkscreen {
         repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
     }
@@ -739,6 +767,44 @@ mod repair_tests {
         assert_eq!(
             RouteReport::state_for_verdict(&verdict),
             RouteState::ValidationFailed
+        );
+    }
+
+    #[test]
+    fn a_hidden_reference_label_holds_the_board_back() {
+        let moves = label_vias::LabelMoves {
+            hidden: 2,
+            ..label_vias::LabelMoves::default()
+        };
+        let blocking = report_silkscreen_pass(Ok(moves));
+        assert_eq!(blocking.len(), 1);
+        assert!(blocking[0].contains("2 reference designator"));
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            blocking,
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(!verdict.fabrication_ready);
+        assert_eq!(
+            RouteReport::state_for_verdict(&verdict),
+            RouteState::ValidationFailed
+        );
+    }
+
+    #[test]
+    fn a_silkscreen_pass_that_did_not_run_is_review_required() {
+        let detail = "board could not be read".to_string();
+        assert!(report_silkscreen_pass(Err(detail.clone())).is_empty());
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            Vec::new(),
+            vec![format!("silkscreen repair did not run: {detail}")],
+            Vec::new(),
+        );
+        assert_eq!(
+            RouteReport::state_for_verdict(&verdict),
+            RouteState::ReviewRequired
         );
     }
 

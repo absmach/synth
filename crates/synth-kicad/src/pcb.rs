@@ -74,8 +74,41 @@ pub struct PlaneFanoutError {
     pub detail: String,
 }
 
+/// A declared keepout the export cannot honour. The keepout is named, so a
+/// board with several can tell them apart.
+#[derive(Debug)]
+pub struct KeepoutExportError {
+    /// The declared keepout name.
+    pub name: String,
+    /// A human-readable explanation: which anchor or layer failed, and what
+    /// the valid choices are.
+    pub detail: String,
+}
+
+/// Why `build_pcb` refused to produce a board.
+#[derive(Debug)]
+pub enum PcbBuildError {
+    /// A power-plane pad could not be fanned out.
+    PlaneFanout(PlaneFanoutError),
+    /// A declared keepout anchors to nothing, or names an unknown layer.
+    Keepout(KeepoutExportError),
+}
+
+impl From<PlaneFanoutError> for PcbBuildError {
+    fn from(error: PlaneFanoutError) -> Self {
+        Self::PlaneFanout(error)
+    }
+}
+
+impl From<KeepoutExportError> for PcbBuildError {
+    fn from(error: KeepoutExportError) -> Self {
+        Self::Keepout(error)
+    }
+}
+
 /// `label_overrides` is the design's say over reference labels, by designator,
 /// from the placement sidecar.
+#[allow(clippy::implicit_hasher)]
 pub fn build_pcb(
     board: &Board,
     placement: &Placement,
@@ -84,7 +117,7 @@ pub fn build_pcb(
     label_overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
     fixed_vias: &[synth_layout::sidecar::SidecarVia],
     outline: &[synth_layout::sidecar::SidecarPoint],
-) -> Result<Sexp, PlaneFanoutError> {
+) -> Result<Sexp, PcbBuildError> {
     let placements_by_id: HashMap<ComponentId, &ComponentPlacement> =
         placement.components.iter().map(|p| (p.id, p)).collect();
 
@@ -197,7 +230,8 @@ pub fn build_pcb(
                     "the placement sidecar fixes a via at ({}, {}) mm on a net the board does not have",
                     via.x, via.y
                 ),
-            });
+            }
+            .into());
         };
         children.push(build_ground_stitch_via(
             mm_to_nm(via.x),
@@ -264,7 +298,7 @@ pub fn build_pcb(
     let has_power_plane = board.netclasses.iter().any(|class| class.plane);
     let (gnd_layers, power_layers): (Vec<&'static str>, Vec<&'static str>) =
         if has_power_plane && board.layers >= 4 {
-            (vec!["F.Cu", "B.Cu"], inner_plane_layers(board.layers))
+            (vec!["F.Cu", "B.Cu"], power_plane_layers(board))
         } else {
             (ground_plane_layers(board.layers), Vec::new())
         };
@@ -333,30 +367,22 @@ pub fn build_pcb(
                     Some((centre, mm_to_nm(width_mm / 2.0)))
                 })
                 .collect();
-            // Left corners slide right and right corners slide left.
-            let points = [
-                (outline.min.x_nm + inset, outline.min.y_nm + inset, 1),
-                (outline.max.x_nm - inset, outline.min.y_nm + inset, -1),
-                (outline.max.x_nm - inset, outline.max.y_nm - inset, -1),
-                (outline.min.x_nm + inset, outline.max.y_nm - inset, 1),
-            ];
-            for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
-                let Point { x_nm, y_nm } =
-                    clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
+            for (stitch_index, point) in ground_fence_points(outline, inset, &holes)
+                .into_iter()
+                .enumerate()
+            {
                 if region
                     .as_deref()
-                    .is_some_and(|polygon| !convex_contains(polygon, Point::new(x_nm, y_nm)))
+                    .is_some_and(|polygon| !convex_contains(polygon, point))
                 {
                     continue;
                 }
-                if !outline_points.is_empty()
-                    && !custom_outline_contains(outline_points, Point::new(x_nm, y_nm))
-                {
+                if !outline_points.is_empty() && !custom_outline_contains(outline_points, point) {
                     continue;
                 }
                 children.push(build_ground_stitch_via(
-                    x_nm,
-                    y_nm,
+                    point.x_nm,
+                    point.y_nm,
                     *pcb_net,
                     project,
                     plane_index * 4 + stitch_index,
@@ -391,12 +417,100 @@ pub fn build_pcb(
         else {
             continue;
         };
-        children.push(build_mounting_hole_keepout(
+        children.push(build_round_keepout(
             placed.center,
-            mm_to_nm(width_mm / 2.0),
+            mm_to_nm(width_mm / 2.0) + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
             &ground_plane_layers(board.layers),
             project,
-            &component.refdes,
+            &format!("{} screw head", component.refdes),
+            &format!("mounting-hole-keepout {}", component.refdes),
+        ));
+    }
+
+    // A declared keepout becomes a real rule area. `anchor` names a part,
+    // `at` gives an explicit coordinate, and `layers` limits the copper. An
+    // `anchor` that names no part is an error: the keepout would otherwise
+    // land at the board centre while the design says it rings a component,
+    // and a rule area in the wrong place is worse than none. A layer name
+    // the board does not have is an error too: dropping it silently widens
+    // the keepout onto layers the design excluded.
+    for (index, keepout) in board.keepouts.iter().enumerate() {
+        let Some(radius) = keepout.radius else {
+            continue;
+        };
+        let anchor = if let Some((x, y)) = keepout.at {
+            Point::new(mm_to_nm(x.to_mm()), mm_to_nm(y.to_mm()))
+        } else if let Some(wanted) = keepout.anchor.as_deref() {
+            let found = board
+                .components
+                .iter()
+                .find(|component| {
+                    component.refdes.eq_ignore_ascii_case(wanted)
+                        || component.kind.eq_ignore_ascii_case(wanted)
+                })
+                .and_then(|component| placements_by_id.get(&component.id));
+            let Some(found) = found else {
+                return Err(KeepoutExportError {
+                    name: keepout.name.clone(),
+                    detail: format!(
+                        "the keepout's anchor `{wanted}` names no component; \
+                         name the refdes or kind of the part it must ring, or \
+                         give it an `at x y` coordinate"
+                    ),
+                }
+                .into());
+            };
+            found.center
+        } else {
+            // No anchor attribute: the name is matched to a part and then the
+            // board centre is used, as before.
+            let wanted = &keepout.name;
+            board
+                .components
+                .iter()
+                .find(|component| {
+                    component.refdes.eq_ignore_ascii_case(wanted)
+                        || component.kind.eq_ignore_ascii_case(wanted)
+                })
+                .and_then(|component| placements_by_id.get(&component.id))
+                .map_or_else(
+                    || {
+                        Point::new(
+                            (placement.board_outline.min.x_nm + placement.board_outline.max.x_nm)
+                                / 2,
+                            (placement.board_outline.min.y_nm + placement.board_outline.max.y_nm)
+                                / 2,
+                        )
+                    },
+                    |placed| placed.center,
+                )
+        };
+        let all_layers = ground_plane_layers(board.layers);
+        let mut layers: Vec<&str> = Vec::with_capacity(keepout.layers.len());
+        for name in &keepout.layers {
+            let Some(layer) = all_layers.iter().find(|layer| *layer == name).copied() else {
+                return Err(KeepoutExportError {
+                    name: keepout.name.clone(),
+                    detail: format!(
+                        "the keepout names layer `{name}`, which the board does \
+                         not have; its copper layers are {}",
+                        all_layers.join(", ")
+                    ),
+                }
+                .into());
+            };
+            layers.push(layer);
+        }
+        if layers.is_empty() {
+            layers = all_layers;
+        }
+        children.push(build_round_keepout(
+            anchor,
+            radius.0,
+            &layers,
+            project,
+            &format!("{} keepout", keepout.name),
+            &format!("keepout {index} {}", keepout.name),
         ));
     }
 
@@ -551,7 +665,8 @@ pub fn build_pcb(
                                     offered: pad_via.filter(|_| !target.underpad),
                                 },
                             ),
-                        });
+                        }
+                        .into());
                     }
                 };
                 let used = land;
@@ -607,6 +722,38 @@ fn inner_plane_layers(layer_count: u32) -> Vec<&'static str> {
         4 => vec!["In1.Cu", "In2.Cu"],
         _ => Vec::new(),
     }
+}
+
+/// Inner layers a declared rail may flood. A package that declares its escape
+/// layers keeps them for signals, and if the declared rails would consume every
+/// remaining inner layer, one is left for BGA escape rather than making a board
+/// that cannot be routed.
+fn power_plane_layers(board: &Board) -> Vec<&'static str> {
+    let reserved: std::collections::BTreeSet<&str> = board
+        .components
+        .iter()
+        .filter_map(|component| component.escape.as_ref())
+        .filter(|escape| !escape.off)
+        .flat_map(|escape| escape.layers.iter().map(String::as_str))
+        .collect();
+    let mut free: Vec<&'static str> = inner_plane_layers(board.layers)
+        .into_iter()
+        .filter(|layer| !reserved.contains(layer))
+        .collect();
+    let rails = board
+        .netclasses
+        .iter()
+        .filter(|class| class.plane)
+        .count()
+        .max(1);
+    // A package that declared no escape layers does not need a spare signal
+    // layer, and the old allocation is preserved exactly. When one did, leave
+    // a layer for it only if every rail still gets one of its own.
+    let escape_declared = !reserved.is_empty();
+    if escape_declared && free.len() > rails && free.len() > 1 {
+        free.pop();
+    }
+    free
 }
 
 /// Emit a single `(via ...)` block.
@@ -1164,15 +1311,16 @@ const GROUND_VIA_RADIUS_MM: f64 = 0.3;
 /// every copper layer that refuses tracks, vias and pour, as wide as the hole
 /// plus `MOUNTING_HOLE_KEEPOUT_MM`. Pads stay allowed, so the hole's own part
 /// is not flagged. `layers` are the board's copper layers.
-fn build_mounting_hole_keepout(
+fn build_round_keepout(
     centre: Point,
-    radius_nm: i64,
+    reach_nm: i64,
     layers: &[&str],
     project: &Uuid,
-    refdes: &str,
+    name: &str,
+    uuid_key: &str,
 ) -> Sexp {
     const SIDES: u32 = 24;
-    let reach = nm_to_mm(radius_nm) + MOUNTING_HOLE_KEEPOUT_MM;
+    let reach = nm_to_mm(reach_nm);
     let points = (0..SIDES)
         .map(|k| {
             let angle = std::f64::consts::TAU * f64::from(k) / f64::from(SIDES);
@@ -1185,7 +1333,7 @@ fn build_mounting_hole_keepout(
             )
         })
         .collect();
-    let zone_uuid = derive_entity_uuid(project, "mounting-hole-keepout", refdes);
+    let zone_uuid = derive_entity_uuid(project, "keepout-zone", uuid_key);
     Sexp::list(
         "zone",
         vec![
@@ -1196,7 +1344,7 @@ fn build_mounting_hole_keepout(
                 layers.iter().map(|layer| Sexp::str(*layer)).collect(),
             ),
             str_pair("uuid", zone_uuid.to_string()),
-            str_pair("name", format!("{refdes} screw head")),
+            str_pair("name", name.to_string()),
             Sexp::list("hatch", vec![Sexp::atom("edge"), num(0.5)]),
             Sexp::list(
                 "keepout",
@@ -1213,8 +1361,47 @@ fn build_mounting_hole_keepout(
     )
 }
 
-/// Slide a corner fence via along the board edge, toward the inside (`inward`
-/// is +1 for a left-hand corner and -1 for a right-hand one), until it is out of
+/// The through vias that stitch the ground planes into one network: one at
+/// the midpoint of the top edge and one at the midpoint of the bottom edge,
+/// inset 1.5 mm.
+///
+/// They used to sit at the four corners, where a via lands beside a corner
+/// mounting hole and reads as a second hole in the 3D view. A midpoint is far
+/// from every corner, and one through via already ties every ground copper
+/// layer, so two points keep the planes connected. A midpoint that still
+/// lands in a mounting hole's keepout slides along its edge, away from the
+/// nearest hole, and never leaves the board.
+fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> [Point; 2] {
+    let mid_x = outline.min.x_nm + (outline.max.x_nm - outline.min.x_nm) / 2;
+    // Slide away from the hole nearest the midpoint, not always to the right.
+    let inward = holes
+        .iter()
+        .min_by_key(|(centre, _)| (centre.x_nm - mid_x).abs())
+        .map_or(1, |(centre, _)| if centre.x_nm < mid_x { 1 } else { -1 });
+    let clamp_x = |point: Point| {
+        Point::new(
+            point
+                .x_nm
+                .clamp(outline.min.x_nm + inset_nm, outline.max.x_nm - inset_nm),
+            point.y_nm,
+        )
+    };
+    [
+        clamp_x(clear_of_mounting_holes(
+            Point::new(mid_x, outline.min.y_nm + inset_nm),
+            inward,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(mid_x, outline.max.y_nm - inset_nm),
+            inward,
+            holes,
+        )),
+    ]
+}
+
+/// Slide a fence via along a horizontal board edge, toward the inside (`inward`
+/// is +1 toward increasing x and -1 toward decreasing x), until it is out of
 /// every mounting hole's zone: the hole's radius plus the keepout. A via that is
 /// already clear is returned as it is. `holes` are `(centre, radius)`.
 fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> Point {
@@ -1429,7 +1616,7 @@ fn custom_outline_contains(points: &[synth_layout::sidecar::SidecarPoint], point
     let x = nm_to_mm(point.x_nm);
     let y = nm_to_mm(point.y_nm);
     let mut inside = false;
-    let mut j = points.len() - 1;
+    let mut j = points.len().saturating_sub(1);
     for i in 0..points.len() {
         let (xi, yi) = (points[i].x, points[i].y);
         let (xj, yj) = (points[j].x, points[j].y);
@@ -1792,8 +1979,26 @@ fn build_setup(profile: &synth_drc::ManufacturerProfile) -> Sexp {
         vec![
             Sexp::list("last_trace_width", vec![num(0.127)]),
             Sexp::list("trace_clearance", vec![num(0.127)]),
-            Sexp::list("pad_to_mask_clearance", vec![num(0.0)]),
-            Sexp::list("solder_mask_min_width", vec![num(0.0)]),
+            // JLCPCB's standard process prints a 0.10 mm minimum mask
+            // opening and asks for 0.05 mm expansion, so a zero here made
+            // every exported board warn in its DFM pass. Other tiers keep
+            // their conservative zero until their own figures are sourced.
+            Sexp::list(
+                "pad_to_mask_clearance",
+                vec![num(if profile.name.contains("jlc") {
+                    0.05
+                } else {
+                    0.0
+                })],
+            ),
+            Sexp::list(
+                "solder_mask_min_width",
+                vec![num(if profile.name.contains("jlc") {
+                    0.1
+                } else {
+                    0.0
+                })],
+            ),
             Sexp::list(
                 "allow_soldermask_bridges_in_footprints",
                 vec![Sexp::atom("yes")],
@@ -2603,7 +2808,15 @@ fn build_footprint_instance(
         let body = strip_footprint_head(body);
         let body = add_footprint_angle_to_pads(&body, pad_angle);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
-        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id, &component.refdes);
+        // `lib_id` alone is shared by every instance of the same footprint,
+        // so two mounting holes would mint the same pad UUIDs and confuse
+        // KiCad's DRC item identity. Scope the derivation to the instance.
+        let body_with_nets = ensure_body_uuids(
+            &body_with_nets,
+            project,
+            &format!("{lib_id}@{}", component.refdes),
+            &component.refdes,
+        );
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
         has_model
@@ -3278,7 +3491,14 @@ mod tests {
         let (centre, radius) = hole(3.5, 3.45, 1.6);
         let layers = ground_plane_layers(4);
 
-        let zone = build_mounting_hole_keepout(centre, radius, &layers, &project, "H1");
+        let zone = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H1 screw head",
+            "mounting-hole-keepout H1",
+        );
         let text = zone.to_string_pretty();
 
         for expected in [
@@ -3314,8 +3534,22 @@ mod tests {
         let project = Uuid::nil();
         let (centre, radius) = hole(47.0, 3.45, 1.6);
         let layers = ground_plane_layers(4);
-        let a = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
-        let b = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
+        let a = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H2 screw head",
+            "mounting-hole-keepout H2",
+        );
+        let b = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H2 screw head",
+            "mounting-hole-keepout H2",
+        );
         assert_eq!(a.to_string_pretty(), b.to_string_pretty());
     }
 
@@ -3352,6 +3586,31 @@ mod tests {
         assert!(
             gap_mm(moved, hole.0) >= 1.6 + MOUNTING_HOLE_KEEPOUT_MM + GROUND_VIA_RADIUS_MM - 0.001
         );
+    }
+
+    #[test]
+    fn the_ground_fence_sits_at_edge_midpoints_not_corners() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[]);
+        assert_eq!(points[0], Point::new(mm_to_nm(30.0), mm_to_nm(1.5)));
+        assert_eq!(points[1], Point::new(mm_to_nm(30.0), mm_to_nm(28.5)));
+    }
+
+    #[test]
+    fn a_midpoint_fence_via_slides_off_a_mounting_hole() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let hole = hole(30.0, 0.0, 1.25);
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[hole]);
+        assert_ne!(points[0].x_nm, mm_to_nm(30.0), "{:?}", points[0]);
+        assert!(
+            points[0].x_nm >= outline.min.x_nm + mm_to_nm(1.5)
+                && points[0].x_nm <= outline.max.x_nm - mm_to_nm(1.5),
+            "the slide stays on the board: {:?}",
+            points[0]
+        );
+        assert_eq!(points[0].y_nm, mm_to_nm(1.5));
     }
 
     #[test]
@@ -3848,6 +4107,15 @@ mod tests {
         assert!(pcbway.contains("(via_min_size 0.6)"), "{pcbway}");
     }
 
+    /// A zero mask expansion/minimum makes every exported board warn in its
+    /// JLCPCB DFM pass; the standard process prints 0.10 mm and expands 0.05 mm.
+    #[test]
+    fn the_solder_mask_settings_clear_the_process_minimum() {
+        let setup = build_setup(&synth_drc::ManufacturerProfile::jlc_standard()).to_string_pretty();
+        assert!(setup.contains("(pad_to_mask_clearance 0.05)"), "{setup}");
+        assert!(setup.contains("(solder_mask_min_width 0.1)"), "{setup}");
+    }
+
     #[test]
     fn without_a_stackup_setup_and_thickness_are_the_legacy_ones() {
         let profile = synth_drc::ManufacturerProfile::jlc_standard();
@@ -3880,6 +4148,7 @@ mod tests {
         // Build a minimal Board whose nets have semantic names so the power-domain
         // engine classifies them correctly (GND → Ground, VCC → Rail via name heuristic).
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4012,6 +4281,7 @@ mod tests {
     fn declared_netclass_emitted_with_joined_nets() {
         use synth_ir::Length;
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4096,6 +4366,7 @@ mod tests {
     /// on what the classes declare.
     fn plain_test_board() -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -4233,12 +4504,16 @@ mod tests {
             &[],
         )
         .expect_err("an unknown net is refused");
-        assert_eq!(error.net, "NOPE");
+        assert!(
+            matches!(error, PcbBuildError::PlaneFanout(ref e) if e.net == "NOPE"),
+            "{error:?}"
+        );
     }
 
     #[test]
     fn test_kicad_cli_roundtrip_valid_board() {
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

@@ -193,6 +193,7 @@ mod tests {
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -243,6 +244,7 @@ mod tests {
             legends: false,
             name: "b".to_string(),
             layers: 2,
+            outline: None,
             manufacturer: None,
             revision: None,
             company: None,

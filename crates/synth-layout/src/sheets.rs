@@ -651,6 +651,7 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
             .collect(),
         keepouts: board.keepouts.clone(),
         stackup: board.stackup.clone(),
+        outline: board.outline,
         netclasses: board.netclasses.clone(),
         buses: vec![],
         modules: vec![],
@@ -794,6 +795,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

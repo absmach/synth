@@ -1080,6 +1080,7 @@ fn multi_unit_rails_split_is_an_error() {
         spice: None,
     };
     let board = Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),

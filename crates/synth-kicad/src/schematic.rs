@@ -583,6 +583,14 @@ pub(crate) fn build_sheet_schematic(
     // and the PCB use the same name instead of `Net-(...)`.
     let flagged = layout.labeled_net_ids();
     let power = layout.power_net_ids();
+    let all_stubs: Vec<(synth_ir::NetId, Vec<(f64, f64)>)> = layout
+        .net_labels
+        .iter()
+        .filter_map(|l| {
+            synth_layout::route::net_label_plan(board, l.component, l.pin, &placements, l.spot)
+                .map(|plan| (l.net, plan.wire))
+        })
+        .collect();
     for net in board
         .nets
         .iter()
@@ -595,31 +603,21 @@ pub(crate) fn build_sheet_schematic(
             .flat_map(|w| w.points.windows(2))
             .max_by(|a, b| segment_len(a).total_cmp(&segment_len(b)));
         if let Some(seg) = longest {
-            // Another net's flag stub is a wire too, and the label may not touch it.
-            let stubs: Vec<Vec<(f64, f64)>> = layout
-                .net_labels
+            let stubs: Vec<&[(f64, f64)]> = all_stubs
                 .iter()
-                .filter(|l| l.net != net.id)
-                .filter_map(|l| {
-                    synth_layout::route::net_label_plan(
-                        board,
-                        l.component,
-                        l.pin,
-                        &placements,
-                        l.spot,
-                    )
-                })
-                .map(|plan| plan.wire)
+                .filter(|(label_net, _)| *label_net != net.id)
+                .flat_map(|(_, wire)| wire.windows(2))
                 .collect();
-            let others: Vec<&[(f64, f64)]> = layout
+            let mut others: Vec<&[(f64, f64)]> = layout
                 .wires
                 .iter()
                 .filter(|w| w.net != net.id)
-                .map(|w| &w.points)
-                .chain(&stubs)
-                .flat_map(|points| points.windows(2))
+                .flat_map(|w| w.points.windows(2))
                 .collect();
-            let at = wire_name_label_at(seg, &others);
+            others.extend(stubs);
+            let mut points: Vec<(f64, f64)> = layout.junctions.clone();
+            points.extend(layout.wires.iter().flat_map(|w| w.points.iter().copied()));
+            let at = wire_name_label_at(seg, &others, &points);
             let uuid = derive_entity_uuid(project, "wire_name_label", &net.name);
             children.push(build_local_label(&net.name, at, uuid));
         }
@@ -1319,7 +1317,11 @@ fn segment_len(seg: &[(f64, f64)]) -> f64 {
 /// the nearest point to it that is clear of every wire in `others`. KiCad joins
 /// a label to every wire under it, so a midpoint where another net crosses
 /// would merge the two nets.
-fn wire_name_label_at(seg: &[(f64, f64)], others: &[&[(f64, f64)]]) -> (f64, f64) {
+fn wire_name_label_at(
+    seg: &[(f64, f64)],
+    others: &[&[(f64, f64)]],
+    points: &[(f64, f64)],
+) -> (f64, f64) {
     const STEP_MM: f64 = 1.27;
     const CLEAR_MM: f64 = 0.5;
     let at = |t: f64| {
@@ -1332,6 +1334,9 @@ fn wire_name_label_at(seg: &[(f64, f64)], others: &[&[(f64, f64)]]) -> (f64, f64
         others
             .iter()
             .all(|other| point_to_segment_mm(p, other[0], other[1]) > CLEAR_MM)
+            && points
+                .iter()
+                .all(|q| (p.0 - q.0).hypot(p.1 - q.1) > CLEAR_MM)
     };
     let len = segment_len(seg);
     let steps = if len > 0.0 {
@@ -2973,12 +2978,26 @@ mod tests {
         let bus = [(242.57, 31.75), (242.57, 67.31)];
         let crossing = [(245.11, 49.53), (240.03, 49.53)];
         let others: [&[(f64, f64)]; 1] = [&crossing];
-        let (x, y) = wire_name_label_at(&bus, &others);
+        let (x, y) = wire_name_label_at(&bus, &others, &[]);
         assert!((x - 242.57).abs() < 1e-9, "the label stays on the wire");
         assert!((31.75..=67.31).contains(&y), "the label stays on the wire");
         assert!(
             (y - 49.53).abs() > 0.5,
             "the label at y {y} touches the crossing wire"
+        );
+    }
+
+    /// A branch of the *same* net meets the wire at a junction. KiCad joins a
+    /// label to every wire under it, so the name must move off the junction.
+    #[test]
+    fn a_wire_name_label_keeps_off_a_junction_of_the_same_net() {
+        let wire = [(0.0, 0.0), (25.4, 0.0)];
+        let junction = [(12.7, 0.0)];
+        let (x, y) = wire_name_label_at(&wire, &[], &junction);
+        assert!((y - 0.0).abs() < 1e-9, "the label stays on the wire");
+        assert!(
+            (x - 12.7).abs() > 0.5,
+            "the label at x {x} sits on the junction"
         );
     }
 

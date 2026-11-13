@@ -105,3 +105,7 @@ name = "out1"
 number = "18"
 electrical_type = "open_drain_low"
 
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

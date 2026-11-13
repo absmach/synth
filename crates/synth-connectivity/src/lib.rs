@@ -151,6 +151,7 @@ mod tests {
         };
 
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),

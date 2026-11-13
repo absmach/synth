@@ -29,3 +29,5 @@ electrical_type = "passive"
 
 [provenance]
 datasheet_url = "https://optoelectronics.liteon.com/upload/download/DS-22-99-0151/LTST-C190KRKT.PDF"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

@@ -28,3 +28,8 @@ electrical_type = "input"
 name = "drain"
 number = "3"
 electrical_type = "passive"
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

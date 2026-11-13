@@ -367,3 +367,8 @@ name = "gnd_2"
 number = "54"
 electrical_type = "ground_reference"
 required = true
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

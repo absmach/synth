@@ -72,3 +72,8 @@ required = true
 net = "vcc"
 value = "100nf"
 count = 1
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

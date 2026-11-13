@@ -200,13 +200,13 @@ impl SpiceDialect {
 }
 
 impl Part {
-    /// A part is unverified when it carries provenance (i.e. it is a
-    /// Tier-2 user/generated entry) but has no `reviewed_by` reviewer.
-    /// Legacy seed parts without a `[provenance]` section are trusted.
+    /// A part is unverified unless its provenance names a reviewer. An
+    /// absent `[provenance]` section is the most unverified state of all:
+    /// nothing records who checked the part against its datasheet.
     pub fn is_unverified(&self) -> bool {
         match &self.provenance {
-            None => false,
-            Some(p) => p.reviewed_by.as_deref().unwrap_or("").is_empty(),
+            None => true,
+            Some(p) => p.reviewed_by.as_deref().unwrap_or("").trim().is_empty(),
         }
     }
 }
