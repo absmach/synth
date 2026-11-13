@@ -12297,6 +12297,134 @@ board "near" {
         assert_eq!(pair.couple, Some(synth_ir::Couple::Tight));
     }
 
+    /// A per-pin decoupling capacitor is placed within the declared distance
+    /// of the pin it decouples (absmach/synth#377), not at the centroid of
+    /// the rail it draws from.
+    #[test]
+    fn a_per_pin_decoupling_capacitor_lands_beside_its_pin() {
+        let board = board_from_source(
+            r#"
+        board "mcu_decoupling" {
+          layers 2
+          component U1: mcu "stm32g030"
+          component C1: capacitor "c_generic_0603" value "100nF"
+          connect U1.vdd -> C1.p1
+          connect U1.vss -> C1.p2
+        }
+        "#,
+            "mcu_decoupling.synth",
+        );
+        let placement = place(&board).expect("place");
+        let cap = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "C1")
+            .expect("cap");
+        let placed_cap = placement
+            .components
+            .iter()
+            .find(|p| p.id == cap.id)
+            .expect("cap placed");
+
+        // The same pad position the placement targets and the review measures.
+        let pad_offsets = build_pad_offset_lookup(&board);
+        let u1 = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "U1")
+            .expect("mcu");
+        let vdd_pin = u1
+            .part
+            .as_ref()
+            .expect("part")
+            .pins
+            .iter()
+            .position(|p| p.name == "vdd")
+            .expect("vdd pin");
+        let placed_u1 = placement
+            .components
+            .iter()
+            .find(|p| p.id == u1.id)
+            .expect("mcu placed");
+        let offset = pad_offsets.lookup(u1.id, vdd_pin).expect("vdd pad offset");
+        let pad = apply_rotation(*placed_u1, offset);
+
+        // The rule the packer applies: the cap's courtyard reaches within the
+        // declared distance of the pad.
+        let (w, h) = match cap.part.as_ref() {
+            Some(part) => synth_layout::pcb_courtyard_geometry_for_part(part).1,
+            None => fallback_courtyard(&cap.kind),
+        };
+        let court = courtyard_rect_for_placement(placed_cap, w, h, None, 0);
+        let dx = (court.min.x_nm - pad.x_nm)
+            .max(pad.x_nm - court.max.x_nm)
+            .max(0);
+        let dy = (court.min.y_nm - pad.y_nm)
+            .max(pad.y_nm - court.max.y_nm)
+            .max(0);
+        let dist_mm = synth_geometry::nm_to_mm(dx).hypot(synth_geometry::nm_to_mm(dy));
+        let limit = outline_packer::PER_PIN_DECOUPLING_DISTANCE_MM;
+        assert!(
+            dist_mm <= limit,
+            "cap courtyard sits {dist_mm:.2} mm from the vdd pad; the per-pin distance is {limit} mm"
+        );
+
+        // And no advisory asks for what the placer just did.
+        let review = describe_placement(&board, &placement);
+        assert!(
+            !review
+                .visual_review
+                .recommended_actions
+                .iter()
+                .any(|action| action.refdes == "C1"),
+            "a cap beside its pin is not advised to move: {:?}",
+            review.visual_review.recommended_actions
+        );
+    }
+
+    /// When nothing within the declared distance of the pin is legal, the
+    /// placement still releases and the existing advisory names the
+    /// capacitor, its pin and the distance it achieved (absmach/synth#377).
+    #[test]
+    fn a_per_pin_decoupling_capacitor_that_cannot_get_close_releases_with_the_advisory() {
+        let board = board_from_source(
+            r#"
+        board "decoupling_blocked" {
+          layers 2
+          component U1: mcu "stm32g030"
+          component C1: capacitor "c_generic_0603" value "100nF"
+          keepout U1 { radius 14mm }
+          connect U1.vdd -> C1.p1
+          connect U1.vss -> C1.p2
+        }
+        "#,
+            "decoupling_blocked.synth",
+        );
+        let placement = place(&board).expect("a blocked cap still releases");
+        let review = describe_placement(&board, &placement);
+        let advisory = review
+            .visual_review
+            .recommended_actions
+            .iter()
+            .find(|action| action.refdes == "C1")
+            .expect("the far cap is advised");
+        assert_eq!(advisory.action, "place_support_part_near");
+        assert!(
+            advisory.rationale.contains("U1.vdd"),
+            "the advisory names the pin it serves: {}",
+            advisory.rationale
+        );
+        let warning = review
+            .functional_warnings
+            .iter()
+            .find(|warning| warning.contains("C1") && warning.contains("vdd"))
+            .expect("the warning names the capacitor and its pin");
+        assert!(
+            warning.contains("mm from U1 pin vdd"),
+            "the warning states the achieved distance: {warning}"
+        );
+    }
+
     #[test]
     fn a_pin_qualified_near_hint_steers_placement_to_that_pin() {
         // `near: U1.dvdd` must parse as a component *and* a pin, and the
