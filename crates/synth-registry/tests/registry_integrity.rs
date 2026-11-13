@@ -72,6 +72,12 @@ fn diodes_number_pins_like_kicad() {
 
     let mut checked = 0;
     for (_, part) in registry.iter() {
+        // KiCad's numbering is for diode symbols. A controller that names two of
+        // its pins after the diode it drives (the LM74700-Q1's ANODE and CATHODE
+        // sense pins) is numbered by its own datasheet.
+        if part.kind.eq_ignore_ascii_case("regulator") {
+            continue;
+        }
         let number_of = |name: &str| {
             part.pins
                 .iter()
