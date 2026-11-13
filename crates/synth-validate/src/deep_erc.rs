@@ -759,6 +759,13 @@ impl ErcRule for PowerBudgetRule {
                 if is_protection_part(load_part) {
                     continue;
                 }
+                // A connector's `max_current_ma` is the contact rating (3 A per
+                // pin on a Harwin header), not what the connector consumes: the
+                // current on its pins is whatever the board behind it draws,
+                // counted on that part.
+                if load_part.kind.eq_ignore_ascii_case("connector") {
+                    continue;
+                }
                 let Some(draw) = load_part
                     .operating_conditions
                     .as_ref()

@@ -1,0 +1,232 @@
+// Multi-rail compute node: STM32F103 + SPI flash + USB-C, 5-12 V in, buck + three LDOs + load switch.
+board "multirail_compute_node" {
+  layers 4
+  manufacturer "jlc-filled-via"
+  requires via_in_pad
+
+  stackup {
+    copper 0.035mm
+    insulator 0.21mm er 4.4 material "FR4"
+    copper 0.0175mm
+    insulator 1.065mm er 4.6 material "FR4"
+    copper 0.0175mm
+    insulator 0.21mm er 4.4 material "FR4"
+    copper 0.035mm
+  }
+
+  // ---- Net classes -------------------------------------------------------
+  netclass "PWR"      { trace_width 0.6mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#d55e00" }
+  netclass "BUCK_SW"  { trace_width 0.6mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast layers "F.Cu" color "#cc0000" }
+  netclass "PWR_LOW"  { trace_width 0.3mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#e69f00" }
+  netclass "GNDC"     { trace_width 0.4mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#000000" }
+  netclass "SIG_SLOW" { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#0072b2" }
+  netclass "XTAL"     { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow layers "F.Cu" color "#999999" }
+  netclass "SPI"      { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm layers "F.Cu" color "#009e73" }
+  // USB full speed (12 Mbit/s) only: transceiver datasheets give the full-speed rise and fall times as 4 to 20 ns
+  // (10-90 %; onsemi USB1T20, TI TUSB1210), far above 0.3 ns, so no edge on the pair is faster than `medium`.
+  netclass "USB"      { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium color "#cc79a7" }
+
+  // ---- Power entry -------------------------------------------------------
+  group "POWER ENTRY" color "#c2410c" {
+    component J2: connector "header_1x2"
+    component F1: fuse "polyfuse_1r1a" { placement_hint { near: "J2" priority: hard } }
+    component D1: diode "smaj15a_tvs" { placement_hint { near: "F1" priority: hard } }
+    component D2: diode "ss36" { placement_hint { near: "D1" priority: hard } }
+    component J1: connector "usb_c_receptacle" { escape { off } placement_hint { edge: left priority: hard } }
+    component F2: fuse "polyfuse_1r1a" { placement_hint { near: "J1" priority: hard } }
+    component D3: diode "ptvs6v0s1ur" { placement_hint { near: "F2" priority: hard } }
+    component D4: diode "d_schottky" { placement_hint { near: "D3" priority: hard } }
+    component R11: resistor "r_generic_0603" value "5.1k" { placement_hint { near: "J1" priority: hard } }
+    component R12: resistor "r_generic_0603" value "5.1k" { placement_hint { near: "J1" priority: hard } }
+    component D5: diode "esd_usb" { placement_hint { near: "J1" priority: hard } }
+    component D6: diode "esd_usb" { placement_hint { near: "J1" priority: hard } }
+    component D11: diode "d_tvs_5v" { placement_hint { near: "R11" priority: hard } }
+    component D12: diode "d_tvs_5v" { placement_hint { near: "R12" priority: hard } }
+    component C30: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "F2" priority: hard } }
+    notes "" {
+      "DC input 5-12 V: PTC F1, TVS D1 (15 V standoff, 24.4 V clamp), SS36 D2 reverse block."
+      "USB VBUS: PTC F2, TVS D3, 1N5819 D4 ORs VBUS into VIN."
+    }
+  }
+
+  // ---- Buck: VIN -> 3.6 V ------------------------------------------------
+  group "BUCK 3V6" color "#cc0000" {
+    component U1: regulator "lmr33640" { escape { off } }
+    component L1: inductor "l_bourns_srn6045ta_6r8m" { placement_hint { near: "U1" priority: hard } }
+    component C1: capacitor "c_generic_1206" value "10uF" { placement_hint { near: "U1" priority: hard } }
+    component C2: capacitor "c_generic_1206" value "10uF" { placement_hint { near: "U1" priority: hard } }
+    component C3: capacitor "c_generic_0603" value "220nF" { placement_hint { near: "U1" priority: hard } }
+    component C4: capacitor "c_generic_0805" value "22uF" { placement_hint { near: "L1" priority: hard } }
+    component C5: capacitor "c_generic_0805" value "22uF" { placement_hint { near: "L1" priority: hard } }
+    component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1.boot" priority: hard } }
+    component C7: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U1.vcc" priority: hard } }
+    component R1: resistor "r_generic_0603" value "10k" { placement_hint { near: "U1" priority: hard } }
+    component R2: resistor "r_generic_0603" value "10k" { placement_hint { near: "U1.fb" priority: hard } }
+    component R3: resistor "r_generic_0603" value "3.83k" { placement_hint { near: "R2" priority: hard } }
+    notes "" {
+      "LMR33640 VFB 1.0 V: Vout = 1.0 x (1 + 10k / 3.83k) = 3.611 V."
+      "Internal compensation: no external network. L1 6.8 uH, ripple 0.93 A at 12 V in."
+    }
+  }
+
+  // ---- Linear rails and sequencing --------------------------------------
+  group "LDO RAILS" color "#0a7d4a" {
+    component U2: regulator "lp5907_3v3"
+    component C8: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2" priority: hard } }
+    component C9: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2" priority: hard } }
+    component U3: regulator "ams1117_1v8"
+    component C10: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3" priority: hard } }
+    component C11: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3" priority: hard } }
+    component R4: resistor "r_generic_0603" value "330" { placement_hint { near: "U3" priority: hard } }
+    component U5: regulator "tps22918_sot23_6"
+    component C12: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U5" priority: hard } }
+    component C13: capacitor "c_generic_0603" value "1nF" { placement_hint { near: "U5" priority: hard } }
+    component R16: resistor "r_generic_0603" value "100k" { placement_hint { near: "U5" priority: hard } }
+    component C17: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U5" priority: hard } }
+    component C14: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U5" priority: hard } }
+    component U4: regulator "tlv70012_ddc"
+    component C15: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U4" priority: hard } }
+    component C16: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U4" priority: hard } }
+    notes "" {
+      "3V3 LP5907 from 3V6; 1V8 AMS1117 (R4 is its minimum load); 1V2 TLV70012."
+      "Sequence: 3V3 up, R16/C17 delay ~10 ms, TPS22918 passes 3V6 to the 1V8 LDO, 1V8 enables the 1V2 LDO."
+    }
+  }
+
+  // ---- Processor, memory, clock, debug ----------------------------------
+  group "COMPUTE CORE" color "#0072b2" {
+    component U6: mcu "stm32f103c8" { escape { off } }
+    component C20: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
+    component C21: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
+    component C22: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
+    component C23: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
+    component C24: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
+    component C25: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U6" priority: hard } }
+    component Y1: crystal "xtal_8mhz_3225_jyje_4p" { placement_hint { near: "U6" priority: hard } }
+    component C26: capacitor "c_generic_0603" value "10pF" { placement_hint { near: "Y1" priority: hard } }
+    component C27: capacitor "c_generic_0603" value "10pF" { placement_hint { near: "Y1" priority: hard } }
+    component R9: resistor "r_generic_0603" value "10k" { placement_hint { near: "U6" priority: hard } }
+    component R10: resistor "r_generic_0603" value "10k" { placement_hint { near: "U6" priority: hard } }
+    component R13: resistor "r_generic_0603" value "1.5k" { placement_hint { near: "U6" priority: hard } }
+    component C28: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U6" priority: hard } }
+    component SW1: switch "spst_tactile" { placement_hint { near: "U6" priority: hard } }
+    component J3: connector "header_1x5" { placement_hint { near: "U6" priority: soft } }
+    component U7: memory "w25q128jvsiq_208mil" { escape { off } placement_hint { near: "U6" priority: hard } }
+    component C29: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U7" priority: hard } }
+    component R14: resistor "r_generic_0603" value "10k" { placement_hint { near: "U7" priority: hard } }
+    component R15: resistor "r_generic_0603" value "10k" { placement_hint { near: "U7" priority: hard } }
+    notes "" {
+      "STM32F103C8 needs 3.3 V only; 8 MHz crystal for USB; SWD on J3."
+    }
+  }
+
+  // ---- Indicators, headers, test points, hardware ------------------------
+  group "IO AND TEST" color "#7a3e9d" {
+    component D7: diode "led_red_0603"
+    component R5: resistor "r_generic_0603" value "680" { placement_hint { near: "D7" priority: hard } }
+    component D8: diode "led_green_0603"
+    component R6: resistor "r_generic_0603" value "470" { placement_hint { near: "D8" priority: hard } }
+    component D9: diode "led_amber_0603"
+    component R7: resistor "r_generic_0603" value "470" { placement_hint { near: "D9" priority: hard } }
+    component D10: diode "led_amber_0603"
+    component R8: resistor "r_generic_0603" value "470" { placement_hint { near: "D10" priority: hard } }
+    component J4: connector "header_1x8"
+    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "C1" priority: hard } }
+    component TP2: testpoint "testpoint_pad_1_5" { placement_hint { near: "C4" priority: hard } }
+    component TP3: testpoint "testpoint_pad_1_5" { placement_hint { near: "C9" priority: hard } }
+    component TP4: testpoint "testpoint_pad_1_5" { placement_hint { near: "C11" priority: hard } }
+    component TP5: testpoint "testpoint_pad_1_5" { placement_hint { near: "C15" priority: hard } }
+    component TP6: testpoint "testpoint_pad_1_5" { placement_hint { near: "C30" priority: hard } }
+    component TP7: testpoint "testpoint_pad_1_5" { placement_hint { near: "C3" priority: hard } }
+    component TP8: testpoint "testpoint_pad_1_5" { placement_hint { near: "J3" priority: hard } }
+    component TP9: testpoint "testpoint_pad_1_5" { placement_hint { near: "C14" priority: hard } }
+    component H1: mounting_hole "mounting_hole_m2_5"
+    component H2: mounting_hole "mounting_hole_m2_5"
+    component FID1: fiducial "fiducial_1mm"
+    component FID2: fiducial "fiducial_1mm"
+    component FID3: fiducial "fiducial_1mm"
+    notes "" {
+      "J4 carries 3V6_SW, 3V3, 1V8, 1V2 and two GPIO. TP1 VIN, TP2 3V6, TP3 3V3, TP4 1V8, TP5 1V2, TP6 VBUS, TP7-8 GND, TP9 3V6_SW."
+    }
+  }
+
+  // ---- Nets: input -------------------------------------------------------
+  net "DC_IN"    class "PWR" { J2.p1 F1.p1 }
+  net "VIN_RAW"  class "PWR" { F1.p2 D1.cathode D2.anode }
+  net "VBUS"     class "PWR" { J1.vbus J1.vbus_b4 J1.vbus_a9 J1.vbus_b9 F2.p1 TP6.p1 C30.p1 }
+  net "VBUS_F"   class "PWR" { F2.p2 D3.cathode D4.anode }
+  net "VIN"      class "PWR" { D2.cathode D4.cathode U1.vin U1.en C1.p1 C2.p1 C3.p1 TP1.p1 }
+  net "GND"      class "GNDC" {
+    J2.p2 D1.anode D3.anode
+    J1.gnd J1.gnd_b12 J1.gnd_a12 J1.gnd_b1 J1.shld
+    R11.p2 R12.p2 D5.gnd D6.gnd D11.anode D12.anode C30.p2 C17.p2
+    U1.gnd U1.pad C1.p2 C2.p2 C3.p2 C4.p2 C5.p2 C7.p2 R3.p2
+    U2.gnd C8.p2 C9.p2 U3.gnd C10.p2 C11.p2 R4.p2
+    U5.gnd C12.p2 C13.p2 C14.p2 U4.gnd C15.p2 C16.p2
+    U6.vss U6.vss_2 U6.vss_3 U6.vssa
+    C20.p2 C21.p2 C22.p2 C23.p2 C24.p2 C25.p2 C28.p2 C29.p2
+    Y1.gnd_2 Y1.gnd_4 C26.p2 C27.p2 R10.p2 SW1.p2 J3.p5 U7.gnd
+    D7.cathode D8.cathode D9.cathode D10.cathode
+    J4.p5 J4.p8 TP7.p1 TP8.p1
+  }
+
+  // ---- Nets: buck --------------------------------------------------------
+  net "SW"       class "BUCK_SW" { U1.sw C6.p2 L1.p1 }
+  net "BOOT"     class "BUCK_SW" { U1.boot C6.p1 }
+  net "VCC_BUCK" class "PWR_LOW" { U1.vcc C7.p1 }
+  net "FB"       class "SIG_SLOW" { U1.fb R2.p2 R3.p1 }
+  net "PG_3V6"   class "SIG_SLOW" { U1.pg R1.p1 U6.pa0 }
+  net "V3V6"     class "PWR" {
+    L1.p2 C4.p1 C5.p1 R2.p1
+    U2.vin U2.en C8.p1 U5.vin C12.p1
+    R5.p1 TP2.p1
+  }
+  net "V3V6_SW"  class "PWR" { U5.vout C14.p1 U3.vin C10.p1 U4.vin C16.p1 TP9.p1 J4.p1 }
+
+  // ---- Nets: LDO rails ---------------------------------------------------
+  net "V3V3"     class "PWR_LOW" {
+    U2.vout C9.p1 R16.p1 R1.p2
+    U6.vdd U6.vdd_2 U6.vdd_3 U6.vdda U6.vbat
+    C20.p1 C21.p1 C22.p1 C23.p1 C24.p1 C25.p1
+    R9.p1 R13.p1 R14.p2 R15.p2 U7.vcc C29.p1
+    J3.p1 R6.p1 TP3.p1 J4.p2
+  }
+  net "V1V8"     class "PWR_LOW" { U3.vout C11.p1 R4.p1 U4.en TP4.p1 J4.p3 }
+  net "SEQ_ON"   class "SIG_SLOW" { U5.on R16.p2 C17.p1 }
+  net "CT"       class "SIG_SLOW" { U5.ct C13.p1 }
+  net "V1V2"     class "PWR_LOW" { U4.vout C15.p1 TP5.p1 J4.p4 }
+
+  // ---- Nets: MCU ---------------------------------------------------------
+  net "NRST"     class "SIG_SLOW" { U6.nrst R9.p2 SW1.p1 C28.p1 J3.p4 }
+  net "BOOT0"    class "SIG_SLOW" { U6.boot0 R10.p1 }
+  net "SWDIO"    class "SIG_SLOW" { U6.pa13 J3.p2 }
+  net "SWCLK"    class "SIG_SLOW" { U6.pa14 J3.p3 }
+  net "XIN"      class "XTAL" { U6.pd0 Y1.xtal_a C26.p1 }
+  net "XOUT"     class "XTAL" { U6.pd1 Y1.xtal_b C27.p1 }
+
+  // ---- Nets: USB ---------------------------------------------------------
+  net "USB_DP"   class "USB" { J1.dp J1.dp_b6 U6.pa12 R13.p2 D5.io }
+  net "USB_DN"   class "USB" { J1.dn J1.dn_b7 U6.pa11 D6.io }
+  net "CC1"      class "SIG_SLOW" { J1.cc1 R11.p1 D11.cathode }
+  net "CC2"      class "SIG_SLOW" { J1.cc2 R12.p1 D12.cathode }
+
+  // ---- Nets: SPI flash ---------------------------------------------------
+  net "SPI_CS"   class "SPI" { U6.pa4 U7.cs }
+  net "SPI_CLK"  class "SPI" { U6.pa5 U7.clk }
+  net "SPI_MISO" class "SPI" { U6.pa6 U7.io1 }
+  net "SPI_MOSI" class "SPI" { U6.pa7 U7.io0 }
+  net "FL_WP"    class "SIG_SLOW" { U7.io2 R14.p1 }
+  net "FL_HOLD"  class "SIG_SLOW" { U7.io3 R15.p1 }
+
+  // ---- Nets: indicators and expansion -----------------------------------
+  net "LED_3V6"  class "SIG_SLOW" { R5.p2 D7.anode }
+  net "LED_3V3"  class "SIG_SLOW" { R6.p2 D8.anode }
+  net "LED_A"    class "SIG_SLOW" { U6.pb0 R7.p1 }
+  net "LED_A_K"  class "SIG_SLOW" { R7.p2 D9.anode }
+  net "LED_B"    class "SIG_SLOW" { U6.pb1 R8.p1 }
+  net "LED_B_K"  class "SIG_SLOW" { R8.p2 D10.anode }
+  net "GPIO_A"   class "SIG_SLOW" { U6.pb10 J4.p6 }
+  net "GPIO_B"   class "SIG_SLOW" { U6.pb11 J4.p7 }
+
+  keepout hot_buck { radius 5mm }
+}

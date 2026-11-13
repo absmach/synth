@@ -1,0 +1,68 @@
+id = "tlv70012_ddc"
+kind = "regulator"
+description = "TI TLV70012 1.2 V fixed LDO, 200 mA, 2.0 to 5.5 V input, SOT-23-THIN (DDC, TSOT-23-5). Pinout 1 IN, 2 GND, 3 EN, 4 NC, 5 OUT per TI TLV700xx datasheet SLVSA00; 1 uF input and output capacitors."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "TLV70012DDCR"
+kicad_symbol = "Regulator_Linear:TLV70012_SOT23-5"
+kicad_footprint = "Package_TO_SOT_SMD:TSOT-23-5"
+reviewed_at = "2026-11-10"
+reviewed_by = "JeffMboya"
+datasheet_url = "https://lcsc.com/datasheet/lcsc_datasheet_2304140030_Texas-Instruments-TLV70012DDCR_C69446.pdf"
+lcsc_pn = "C69446"
+
+[[pins]]
+name = "vin"
+number = "1"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "en"
+number = "3"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "nc"
+number = "4"
+electrical_type = "do_not_connect"
+capabilities = []
+required = false
+
+[[pins]]
+name = "vout"
+number = "5"
+electrical_type = "power_output"
+capabilities = []
+required = true
+
+[[required_decoupling]]
+net = "vin"
+value = "1uf"
+count = 1
+
+[[required_decoupling]]
+net = "vout"
+value = "1uf"
+count = 1
+
+[footprint_dimensions]
+width_mm = 3.6
+height_mm = 2.9
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"

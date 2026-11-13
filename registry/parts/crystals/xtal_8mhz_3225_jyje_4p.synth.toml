@@ -1,0 +1,51 @@
+id = "xtal_8mhz_3225_jyje_4p"
+kind = "crystal"
+description = "JYJE 3TJ480000FYLBC 8 MHz crystal, 3.2x2.5 mm SMD, load capacitance 8 pF, ESR 150 ohm max, C0 5 pF max, +/-10 ppm, -40 to +85 C; pads 1 and 3 are the crystal, 2 and 4 are ground"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "3TJ480000FYLBC"
+required_decoupling = []
+kicad_symbol = "Device:Crystal_GND24"
+kicad_footprint = "Crystal:Crystal_SMD_3225-4Pin_3.2x2.5mm"
+lcsc_pn = "C2924620"
+
+[[pins]]
+name = "xtal_a"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "gnd_2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "xtal_b"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "gnd_4"
+number = "4"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 4.2
+height_mm = 3.5
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.lcsc.com/datasheet/lcsc_datasheet_2111301930_JYJE-3TJ480000FYLBC_C2924620.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"

@@ -1,0 +1,808 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+[components.J2]
+x = 4.5
+y = 17.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.F1]
+x = 11.5
+y = 17.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D1]
+x = 19.5
+y = 12.8
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D2]
+x = 21.5
+y = 18.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J1]
+x = 3.2
+y = 44.0
+rotation = 270
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.F2]
+x = 13.5
+y = 35.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D3]
+x = 13.5
+y = 31.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D4]
+x = 20.5
+y = 35.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R11]
+x = 11.5
+y = 41.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R12]
+x = 11.5
+y = 43.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D11]
+x = 15.5
+y = 41.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D12]
+x = 15.5
+y = 43.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D5]
+x = 11.5
+y = 46.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D6]
+x = 11.5
+y = 48.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C30]
+x = 15.5
+y = 46.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP6]
+x = 19.5
+y = 47.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U1]
+x = 36.0
+y = 10.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C1]
+x = 29.5
+y = 6.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C2]
+x = 29.5
+y = 9.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C3]
+x = 29.5
+y = 12.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP1]
+x = 25.5
+y = 6.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP7]
+x = 33.5
+y = 4.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.L1]
+x = 44.5
+y = 9.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C4]
+x = 52.0
+y = 7.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C5]
+x = 52.0
+y = 10.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP2]
+x = 55.5
+y = 9.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C6]
+x = 38.5
+y = 15.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C7]
+x = 41.0
+y = 13.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R1]
+x = 31.5
+y = 16.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R2]
+x = 42.0
+y = 15.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R3]
+x = 46.5
+y = 15.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U2]
+x = 33.0
+y = 28.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C8]
+x = 28.5
+y = 28.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C9]
+x = 37.5
+y = 28.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP3]
+x = 40.5
+y = 28.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U5]
+x = 33.0
+y = 35.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C12]
+x = 28.5
+y = 35.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C14]
+x = 37.5
+y = 35.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C13]
+x = 33.0
+y = 39.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R16]
+x = 41.5
+y = 35.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C17]
+x = 45.0
+y = 35.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP9]
+x = 36.2
+y = 32.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U3]
+x = 34.0
+y = 47.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C10]
+x = 27.5
+y = 45.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C11]
+x = 41.5
+y = 45.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R4]
+x = 41.5
+y = 48.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP4]
+x = 44.5
+y = 48.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U4]
+x = 50.0
+y = 44.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C16]
+x = 45.8
+y = 41.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C15]
+x = 54.3
+y = 44.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP5]
+x = 57.0
+y = 44.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U6]
+x = 62.0
+y = 30.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C24]
+x = 54.0
+y = 25.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C20]
+x = 58.5
+y = 21.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C23]
+x = 54.0
+y = 34.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C21]
+x = 66.5
+y = 37.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C22]
+x = 70.0
+y = 26.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C25]
+x = 58.0
+y = 38.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.Y1]
+x = 49.5
+y = 30.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C26]
+x = 49.5
+y = 26.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C27]
+x = 49.5
+y = 33.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.SW1]
+x = 51.0
+y = 20.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C28]
+x = 55.5
+y = 15.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R9]
+x = 59.0
+y = 15.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R10]
+x = 62.5
+y = 21.8
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R13]
+x = 70.5
+y = 29.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J3]
+x = 70.0
+y = 6.0
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP8]
+x = 80.0
+y = 6.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U7]
+x = 64.0
+y = 48.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C29]
+x = 70.5
+y = 47.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R14]
+x = 60.5
+y = 52.3
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R15]
+x = 67.5
+y = 52.3
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D7]
+x = 14.0
+y = 57.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D8]
+x = 20.0
+y = 57.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D9]
+x = 26.0
+y = 57.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D10]
+x = 32.0
+y = 57.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R5]
+x = 14.0
+y = 54.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R6]
+x = 20.0
+y = 54.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R7]
+x = 26.0
+y = 54.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R8]
+x = 32.0
+y = 54.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J4]
+x = 80.5
+y = 18.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.H1]
+x = 4.0
+y = 4.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.H2]
+x = 79.5
+y = 57.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.FID1]
+x = 14.0
+y = 4.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.FID2]
+x = 45.0
+y = 3.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.FID3]
+x = 66.0
+y = 58.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[[vias]]
+x = 35.4
+y = 8.8
+net = "GND"
+
+[[vias]]
+x = 35.4
+y = 10.0
+net = "GND"
+
+[[vias]]
+x = 35.4
+y = 11.2
+net = "GND"
+
+[[vias]]
+x = 36.6
+y = 8.8
+net = "GND"
+
+[[vias]]
+x = 36.6
+y = 10.0
+net = "GND"
+
+[[vias]]
+x = 36.6
+y = 11.2
+net = "GND"
+
