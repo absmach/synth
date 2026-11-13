@@ -8,41 +8,127 @@ A board is only release evidence when the same command sequence runs from one
 commit and produces the same verdict:
 
 ```sh
-synth check <board>.synth --fab --json
+synth check <board>.synth --json
 synth drc <board>.synth --pretty
 synth export-kicad <board>.synth --out <dir> --gerbers --drill --step --pnp
 ```
 
-`synth check --fab` is fail-closed on routing. A machine without an external
-router reports `router_unavailable`, which is an **unavailable** check, not a
-clean DRC. This is deliberate and is why the old matrix reported `drc=unknown`:
-the router was never installed, not because the boards were dirty.
+`synth drc` now routes with a real engine on every machine, so its DRC column
+is a verdict, not an availability report:
+
+- when an external engine is configured and available, its copper is routed,
+  validated independently and DRC-checked as before;
+- when no external engine is installed, the stage falls back to the
+  workspace's own deterministic router (`synth-route`), which routes the board
+  against the export's own placement and goes through the same independent
+  validation and `kicad-cli pcb drc`, so the run record carries real
+  per-board counts. A board the fallback cannot route still fails with counts
+  — a real verdict, not an unknown — and only a fallback that cannot run at
+  all leaves `unknown` (issue #95);
+- a board with nothing to route (no nets, or every net on one pad) is a
+  validated empty route: zero copper, real DRC counts, `pass` when KiCad
+  agrees (#98).
+
+The pin: `SYNTH_QUALIFY_ROUTER=kicad-routing-tools` names the engine a
+qualification run records. A pin outranks both the `--router` flag and the
+fallback, so a pinned run gets the pinned engine or an honest
+`router_unavailable` — never copper from an engine its record does not name.
+
+Manufacturing is still fail-closed on routing: `synth check --fab` and
+`synth export-kicad` never fall back, because a fabricable package carries
+copper from a validated external route. Without an engine installed the
+manufacturing stage reports `unknown`/`router_unavailable`, which is an
+**unavailable** check, not a clean one.
 
 ## Matrix status
 
 | Board | Source | DRC | Fabrication | Evidence |
 |---|---|---|---|---|
-| `hello` | pass | needs router for any net, none for an empty board | unavailable without a router | `fixtures/designs/hello.synth` |
+| `hello` | pass | pass (empty route, no engine needed) | unavailable without a router | `fixtures/designs/hello.synth` |
 | Class A i2c sensor node | pass | routed by KiCadRoutingTools | pass with router | `qualification/class-a/i2c-sensor-node` |
 | Class A protected power entry | pass | routed by KiCadRoutingTools | pass with router | `qualification/class-a/protected-power-entry` |
 | Class B buck | pass | routed, return-via advisories recorded | review-required | `qualification/class-b/buck` |
 | Class B USB-UART | pass | routed by KiCadRoutingTools | pass with router | `qualification/class-b/usb-uart` |
 
-## What CI must do
+## What CI does
 
-- Install `kicad-cli` **and** a router before running the matrix. A run without
-  one is labelled unavailable, not a pass.
-- Run the matrix for pull requests touching `synth-ir`, `synth-place`,
-  `synth-router`, `synth-kicad`, `synth-drc` or `synth-cli`.
-- Keep unsupported boards as negative cases so a new feature cannot silently
-  widen a claim.
-- Upload the `release.json`, routing report and Gerber hash on failure.
+The `Qualification Matrix (release)` job in `.github/workflows/ci.yml` runs
+`scripts/run_qualification_matrix.py` — one deterministic `synth check`
+per row of `qualification/matrix.toml`, with each row's recorded engine set
+in `SYNTH_QUALIFY_ROUTER` and the check gate's per-stage budget raised via
+`SYNTH_CHECK_STAGE_BUDGET_SECS` (a corpus route takes minutes, so a
+parse-and-print budget would report `unknown` for a board that is fine):
 
-## Known gaps
+- `kicad-cli` and the routing engines are installed first, KiCadRoutingTools
+  pinned to the revision the corpus was routed with, so each verdict names
+  the engine that produced it; a row can record a different engine for its
+  fab command (`fab_router`) when the corpus evidence does;
+- rows that declare `expect_fab` also run the fab command, and their
+  manufacturing stage must come out exactly as declared; rows that declare
+  `user_registry` run with it loaded, the way the board's own reproduce
+  script does;
+- every row records the KiCad version, the design's SHA-256, the artifact
+  hashes the package reports and which native reports were present;
+- a row whose directory holds a `SHA256SUMS` covering the design source has
+  that source verified, so an accidental fixture edit fails the matrix
+  instead of quietly changing what a pass means;
+- a row the corpus cannot run on this code declares `skip_reason`: it is
+  recorded in the results and named in the job log, never silently dropped;
+- results land in `qualification-matrix-results/` as one JSON document per
+  row plus `results.json`, uploaded as reviewable artifacts on failure;
+- the job runs on pull requests that touch the compiler, registry, layout,
+  routing, KiCad-export or release paths (a job-level path check, so the
+  other CI jobs keep running on every pull request).
 
-- The empty `hello` board is not routed by the engine because it has no pads.
-  It should report `routed` with zero copper rather than `router_unavailable`;
-  that needs a first-class "nothing to route" path in `synth-router`.
-- Two positive boards were failing the routed matrix at the time of #98
-  (`hello` as above, and `b3_usb_peripheral`'s QFN escape). The QFN escape needs
-  the coarser-pitch or via-in-pad route it names in its own diagnostic.
+## What only a human can check (review handoff)
+
+The matrix proves the pipeline: source → schematic → PCB → native ERC/DRC →
+manufacturing package, with hashes and machine-readable records. It cannot
+prove the things a board review exists for. Every qualification record
+(`qualification/*/QUALIFICATION.md`) carries these as open gates, and a board
+is not "qualified" until a named person has signed each one:
+
+- **Visual review.** Schematic readability (no wire-through-text, no
+  ambiguous crossings, readable silkscreen labels), footprint land patterns
+  against the datasheet drawings, and the routed copper's sanity — the
+  renderer and the schematic visual loop help, but the judgement is human.
+- **Assembly review.** BOM orderability and alternates, pick-and-place
+  orientation and fiducials, panelization and depaneling, solder-joint risk
+  (thermal reliefs, paste coverage on large pads), and parts with no source
+  at the chosen fab.
+- **SI/PI review.** Signal integrity the geometry gates cannot see: edge
+  rates against trace topology, return-path continuity for fast edges
+  (the advisories the router records are advice, not proof), decoupling
+  adequacy, and supply sequencing. The buck board's return-via advisories and
+  the sensor node's accepted `edge_rate slow` advisories are examples that
+  need this sign-off.
+- **Thermal review.** Regulator and converter dissipation against the
+  copper's real ability to spread it, the thermal via arrays (the buck
+  board's 2×3 array against the manufacturer's 4×3 example), and ambient
+  assumptions for the intended enclosure.
+- **Fabrication review.** The process claims: layer stack, controlled
+  impedance, filled/capped vias, surface finish, soldermask and silkscreen
+  choices — and, when the board declares a process requirement, that the
+  ordered panel actually carries it.
+
+The gate verdict in `release.json` covers only Synth's own routing and export
+gates; its `gate_scope` field says so. Nobody may widen that scope without a
+human record.
+
+## Corpus coverage
+
+`qualification/` holds the versioned corpus the matrix runs:
+
+| Row | Class | Status | Runs |
+|---|---|---|---|
+| `class-a/negative-broken-mcu-board` | A | unsupported (negative) | as a negative test: the source gate must fail with the planted diagnostics |
+| `class-a/i2c-sensor-node` | A | qualified | release command |
+| `class-a/protected-power-entry` | A | qualified | release command |
+| `class-b/buck` | B | experimental | release command, plus the fab command expecting `validation_failed` |
+| `class-b/usb-uart` | B | experimental | release command |
+| `class-b/rtd-afe` | B | experimental | release command |
+
+The Class C and Class D rows the capability classes define have no boards in
+the corpus yet; when a board lands, it gets a row here and the matrix runs
+it — no new harness is needed. `hello` is a fixtures board, not a corpus row;
+its trivial empty route is covered by the CLI integration tests.

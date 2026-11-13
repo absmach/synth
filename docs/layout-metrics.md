@@ -23,7 +23,11 @@ not by its screw-head courtyard, so it no longer holds a bottom connector
 `compact_gaps` enforces a 2.1 mm SMD-pad-to-through-hole-pad gap during the
 compaction pass. The gap is not applied during the first placement, because a
 hard connector or a mounting hole can leave no legal alternative; the review
-reports the remaining pair rather than moving it blindly.
+reports the remaining pair rather than moving it blindly. `describe_placement`
+names the pair, the measured gap and the move that clears it when a layout
+sits closer than 2.1 mm anyway — a hard hint pinning the parts is the usual
+reason — so the DFM danger the fab would report is visible before the panel
+is ordered.
 
 ## Per-pin decoupling (#377)
 
