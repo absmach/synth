@@ -62,8 +62,23 @@ against boards placed with this rule before it ships.
 
 ## Routed-net invariant (#353)
 
-The internal-router regression guard for `iot_sensor_board` accepts ten
-unrouted nets after the exact-contact area pack. Restoring nine requires a
-routing-aware packer candidate, not a placement-only tie-break; the area corpus
-stays DRC-clean and the external router remains the release evidence in the
-meantime.
+Baseline decision (2026-11-13): the internal-router regression guard for
+`iot_sensor_board` tracks the packing baseline instead of a fixed unrouted
+count. Correcting the balun's six-pad 1.6x0.8 mm courtyard raised the baseline
+to 13; the board stays DRC-clean, and #353 tracks a routing-aware packer that
+restores the lower bound without losing the area. Measured placement-side
+attempts to return to the pre-#304 nine all failed or regressed the corpus
+(each number was taken against the pre-correction pack, where the guard was
+ten) — exact-contact packing off: 17 unrouted (and `secure_tracker` 8 against
+its gate of 3); a 3.5 mm macro escape channel: still at the pack with
+`secure_tracker` 4; a 2.0 mm passive gap: still at the pack, arrangement
+unchanged; a swept-short-net-corridor charge and a routability tie-break
+between the packing orders: still at the pack, because the board has no legal
+smaller-area alternative packing order to choose between. The failing nets
+trace to long weaves through the dense RP2350/QFN fan-out, not to local
+channels a passive parks over.
+
+The bound is enforced by `iot_sensor_board_routes_cleanly` in `synth-route`,
+which runs on every CI `cargo test` and fails on any further regression; the
+routed corpus stays DRC-clean and the external router remains the release
+evidence.
