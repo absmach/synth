@@ -1,0 +1,95 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "keepout_allow_anchor",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 33,
+          "byte_end": 41
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "atmega328p",
+        "span": {
+          "byte_start": 44,
+          "byte_end": 74
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "tmds_corridor",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "6",
+            "unit": "mm",
+            "span": {
+              "byte_start": 112,
+              "byte_end": 115
+            }
+          },
+          {
+            "kind": "anchor",
+            "component": "U1",
+            "span": {
+              "byte_start": 120,
+              "byte_end": 126
+            }
+          },
+          {
+            "kind": "allow",
+            "nets": [
+              "TMDS_D2+",
+              "TMDS_D2-"
+            ],
+            "span": {
+              "byte_start": 136,
+              "byte_end": 141
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 77,
+          "byte_end": 168
+        }
+      },
+      {
+        "stmt": "keepout",
+        "name": "antenna_zone",
+        "attrs": [
+          {
+            "kind": "radius",
+            "literal": "20",
+            "unit": "mm",
+            "span": {
+              "byte_start": 201,
+              "byte_end": 205
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 171,
+          "byte_end": 207
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 0,
+      "byte_end": 209
+    }
+  },
+  "span": {
+    "byte_start": 0,
+    "byte_end": 209
+  }
+}

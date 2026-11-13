@@ -753,7 +753,10 @@ pub struct KeepoutStmt {
 pub enum KeepoutAttr {
     Radius(ValueWithUnit),
     /// A component whose placed centre anchors the keepout.
-    Anchor(String),
+    Anchor {
+        component: String,
+        span: Span,
+    },
     /// An explicit board coordinate.
     At {
         x: ValueWithUnit,
@@ -761,6 +764,11 @@ pub enum KeepoutAttr {
     },
     /// Copper layers the rule area covers; empty means every copper layer.
     Layers(Vec<String>),
+    /// Nets whose copper the keepout must let through (`allow "A", "B"`).
+    Allow {
+        nets: Vec<String>,
+        span: Span,
+    },
 }
 
 /// A numeric literal paired with an engineering unit, e.g. `90ohm`, `20mm`.

@@ -1,0 +1,39 @@
+id = "d_zener_12v"
+kind = "diode"
+description = "12V Zener diode, SOD-123"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SOD-123"
+# JSCJ BZT52C12: 12 V nominal zener, 11.4-12.7 V at I_ZT = 5 mA, 500 mW,
+# SOD-123 — the same package and symbol as the 5V1 and 3V3 zeners.
+# https://www.lcsc.com/product-detail/C43491.html
+mpn = "BZT52C12"
+lcsc_pn = "C43491"
+
+[footprint_dimensions]
+width_mm = 4.2
+height_mm = 1.2
+courtyard_margin_mm = 0.25
+
+# The device's datasheet figures: the zener voltage band above, and the
+# continuous current the 500 mW package survives at 12 V.
+[operating_conditions]
+min_voltage_v = 11.4
+max_voltage_v = 12.7
+max_current_ma = 41.0
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
+
+[provenance]
+source = "seed"
+datasheet_url = "https://www.lcsc.com/product-detail/C43491.html"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

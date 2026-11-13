@@ -13,9 +13,9 @@ height_mm = 2.5
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+min_voltage_v = -20.0
+max_voltage_v = 20.0
+max_current_ma = 3100.0
 
 [[pins]]
 name = "g"

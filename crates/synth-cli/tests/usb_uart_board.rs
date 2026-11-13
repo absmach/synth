@@ -14,8 +14,8 @@ use std::process::Command;
 
 /// `mounting_hole_m2_5` is a 2.5 mm NPTH, so its edge is 1.25 mm from its centre.
 const HOLE_RADIUS_MM: f64 = 1.25;
-/// Least hole-edge-to-Edge.Cuts room a hole may keep. The tight fit leaves 1.5 mm.
-const MIN_RIM_MM: f64 = 1.5;
+/// Least hole-edge-to-Edge.Cuts room a hole may keep. The tight fit leaves 2.1 mm.
+const MIN_RIM_MM: f64 = 2.1;
 
 fn pairs_after(text: &str, key: &str) -> Vec<(f64, f64)> {
     text.match_indices(key)
