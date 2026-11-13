@@ -844,6 +844,7 @@ mod tests {
             notes: Vec::new(),
             legends: false,
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: Vec::new(),
             buses: Vec::new(),

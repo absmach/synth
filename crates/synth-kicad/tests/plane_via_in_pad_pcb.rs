@@ -137,6 +137,32 @@ fn interior_supply_balls_take_the_via_in_pad_land_on_the_filled_via_tier() {
 /// A ball grid that does not declare the under-pad escape is not given the small
 /// via: the DRC would judge it against the plain ring, so the exporter refuses the
 /// supply ball its plane via in a 0.35 mm pad instead of writing one that fails.
+/// A microvia reaches one dielectric, so a rail poured on In2 must get a via
+/// spanning F.Cu-In2.Cu, not the hard-coded F.Cu-In1.Cu that leaves it open.
+#[test]
+fn each_rail_microvia_spans_to_the_layer_that_rail_is_poured_on() {
+    if !kicad_ready(BGA_FOOTPRINT, false) {
+        return;
+    }
+    let source = source(true, true).replace("jlc-filled-via", "jlc-advanced");
+    let board = lower(&source);
+    let out = std::env::temp_dir().join(format!("synth-bga-plane-spans-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let result = synth_kicad::export(&board, &out).expect("the under-pad balls are stitched");
+    let pcb = fs::read_to_string(&result.pcb_path).expect("pcb");
+    let _ = fs::remove_dir_all(&out);
+    assert!(
+        pcb.contains("(layers \"F.Cu\" \"In1.Cu\")")
+            || pcb.contains("(layers \"In1.Cu\" \"F.Cu\")"),
+        "the In1 rail needs a microvia that stops on In1"
+    );
+    assert!(
+        pcb.contains("(layers \"F.Cu\" \"In2.Cu\")")
+            || pcb.contains("(layers \"In2.Cu\" \"F.Cu\")"),
+        "the In2 rail needs a via that reaches In2, not one that stops on In1"
+    );
+}
+
 #[test]
 fn a_ball_pad_takes_no_small_via_without_the_under_pad_escape() {
     if !kicad_ready(BGA_FOOTPRINT, false) {
@@ -342,6 +368,50 @@ fn vias_in(pcb: &str) -> Vec<(f64, f64)> {
         rest = &block[4..];
     }
     out
+}
+
+/// On the microvia tier the in-pad via is a micro via: it spans one
+/// dielectric (F.Cu to In1.Cu), not the whole stackup a through via drills.
+/// A filled and capped 0.25 mm via written F.Cu–B.Cu would be drilled through
+/// four layers for one layer hop.
+#[test]
+fn a_micro_via_in_a_ball_pad_spans_one_dielectric() {
+    if !kicad_ready(BGA_FOOTPRINT, false) {
+        return;
+    }
+    let board = lower(
+        r#"board "bga_plane" {
+  layers 4
+  manufacturer "jlc-advanced"
+  requires via_in_pad
+  netclass "RAIL" { plane }
+  component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
+  connect U1.vccio_0 -> U1.vccio_1 as "VCCIO" class "RAIL"
+  connect U1.vccio_1 -> U1.vccio_2
+  connect U1.vccio_2 -> U1.vccio_3
+  connect U1.vcc -> U1.vcc_2 as "VCC_CORE" class "RAIL"
+}"#,
+    );
+    let out = std::env::temp_dir().join(format!("synth-bga-plane-micro-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&out);
+    let result = synth_kicad::export(&board, &out)
+        .expect("the 0.25 mm microvia land fits the 0.35 mm ball pad");
+    let pcb = fs::read_to_string(&result.pcb_path).expect("pcb");
+    let _ = fs::remove_dir_all(&out);
+    let micro = pcb
+        .split("(via")
+        .skip(1)
+        .find(|block| block.contains("(size 0.25)"))
+        .expect("the in-pad vias are written at the microvia land");
+    assert!(
+        micro.contains("(layers \"F.Cu\" \"In1.Cu\")")
+            || micro.contains("(layers \"F.Cu\" \"In2.Cu\")"),
+        "the microvia spans one dielectric, to the rail's own layer: ...{micro}"
+    );
+    assert!(
+        !micro.contains("(layers \"F.Cu\" \"B.Cu\")"),
+        "the microvia is not a through via: ...{micro}"
+    );
 }
 
 #[test]

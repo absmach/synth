@@ -93,6 +93,14 @@ pub struct ManufacturerProfile {
     /// and is not checked.
     #[serde(default = "default_ir_drop_budget_mv")]
     pub ir_drop_budget_mv: i64,
+    /// A laser-drilled microvia's drill and finished diameter, in
+    /// nanometers. `0` means the process offers no microvia. A microvia lands
+    /// on an outer layer and spans one dielectric, so it is the only via that
+    /// fits a 0.35 mm ball at 0.8 mm pitch.
+    #[serde(default)]
+    pub microvia_drill_nm: i64,
+    #[serde(default)]
+    pub microvia_diameter_nm: i64,
     /// Whether the process fills and caps a via drilled inside an
     /// SMD pad.
     ///
@@ -235,6 +243,8 @@ impl ManufacturerProfile {
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.2),
             min_annular_ring_nm: mm_to_nm(0.13),
+            microvia_drill_nm: 0,
+            microvia_diameter_nm: 0,
             min_drill_to_copper_nm: mm_to_nm(0.2),
             min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
             min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
@@ -267,6 +277,8 @@ impl ManufacturerProfile {
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.3),
             min_annular_ring_nm: mm_to_nm(0.15),
+            microvia_drill_nm: 0,
+            microvia_diameter_nm: 0,
             min_drill_to_copper_nm: drill_to_copper_nm,
             // The silk and pad-spacing figures are JLCPCB's and JLCDFM's. This
             // fab's are not known here, so the DFM rules are not run (0) rather
@@ -303,6 +315,8 @@ impl ManufacturerProfile {
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.25),
             min_annular_ring_nm: mm_to_nm(0.125),
+            microvia_drill_nm: 0,
+            microvia_diameter_nm: 0,
             min_drill_to_copper_nm: drill_to_copper_nm,
             // DFM floors unknown for this fab: not run, as in pcbway_standard.
             min_silk_to_pad_nm: 0,
@@ -366,6 +380,10 @@ impl ManufacturerProfile {
     pub fn jlc_advanced() -> Self {
         Self {
             name: "jlc-advanced".to_string(),
+            // JLCPCB's via-in-pad guide: a 0.10 mm laser drill with a
+            // 0.25 mm land fits the 0.35 mm ball of a 0.8 mm BGA.
+            microvia_drill_nm: mm_to_nm(0.1),
+            microvia_diameter_nm: mm_to_nm(0.25),
             min_drill_diameter_nm: mm_to_nm(0.2),
             // Quoted on the 4- and 6-layer builds only, which is what the
             // capability descriptor has always advertised.
@@ -490,6 +508,8 @@ impl ManufacturerProfile {
             ampacity_delta_t_milli_c: raw.ampacity_delta_t_milli_c,
             ir_drop_budget_mv: raw.ir_drop_budget_mv,
             via_in_pad: raw.via_in_pad,
+            microvia_drill_nm: mm_to_nm(raw.microvia_drill_mm),
+            microvia_diameter_nm: mm_to_nm(raw.microvia_diameter_mm),
             via_in_pad_land_extra_nm: mm_to_nm(raw.via_in_pad_land_extra_mm),
         })
     }
@@ -498,6 +518,10 @@ impl ManufacturerProfile {
 #[derive(Debug, Deserialize)]
 struct TomlProfile {
     name: String,
+    #[serde(default)]
+    microvia_drill_mm: f64,
+    #[serde(default)]
+    microvia_diameter_mm: f64,
     min_trace_width_mm: f64,
     min_copper_clearance_mm: f64,
     min_copper_to_edge_mm: f64,
@@ -552,6 +576,25 @@ pub enum ProfileError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The tier is quoted against a stackup, so the profile has to say which
+    /// ones and every stock tier has to stay unconstrained.
+    #[test]
+    fn only_the_advanced_tier_offers_a_microvia() {
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert_eq!(advanced.microvia_drill_nm, 100_000);
+        assert_eq!(advanced.microvia_diameter_nm, 250_000);
+        // 0.25 mm land fits a 0.35 mm ball at 0.8 mm pitch; the plain 0.6 mm
+        // plane via does not.
+        assert!(advanced.microvia_diameter_nm < mm_to_nm(0.35));
+        for profile in [
+            ManufacturerProfile::jlc_standard(),
+            ManufacturerProfile::jlc_filled_via(),
+            ManufacturerProfile::pcbway_standard(),
+        ] {
+            assert_eq!(profile.microvia_diameter_nm, 0, "{}", profile.name);
+        }
+    }
 
     /// The tier is quoted against a stackup, so the profile has to say which
     /// ones and every stock tier has to stay unconstrained.

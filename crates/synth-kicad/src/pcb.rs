@@ -589,7 +589,7 @@ pub fn build_pcb(
     let mut plane_stub_index = 0usize;
     if !power_layers.is_empty() {
         for (rail_index, (pcb_net, net)) in rails.iter().copied().enumerate() {
-            let layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
+            let rail_layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
                 vec![power_layers[rail_index % power_layers.len()]]
             } else {
                 power_layers
@@ -599,7 +599,10 @@ pub fn build_pcb(
                     .copied()
                     .collect()
             };
-            for layer in layers {
+            // A microvia can reach one plane layer. A rail that owns more than
+            // one layer keeps the through via so every layer it pours is tied.
+            let rail_microvia_layer = (rail_layers.len() == 1).then_some(rail_layers[0]);
+            for &layer in &rail_layers {
                 let zone_key = format!("plane/{}/{layer}", net.name);
                 children.push(build_zone(
                     placement,
@@ -613,7 +616,7 @@ pub fn build_pcb(
                 ));
             }
             for target in plane_pad_targets(board, placement, net) {
-                let (pad, layer) = (target.centre, target.layer);
+                let (pad, pad_layer) = (target.centre, target.layer);
                 let beside = plane_via_offset(
                     pad,
                     target.origin,
@@ -658,7 +661,7 @@ pub fn build_pcb(
                             detail: plane_via_refusal(
                                 &refusal,
                                 pad,
-                                layer,
+                                pad_layer,
                                 &ViaAttempt {
                                     via: land,
                                     filled_and_capped: target.underpad && pad_via == Some(land),
@@ -671,10 +674,32 @@ pub fn build_pcb(
                 };
                 let used = land;
                 placed_vias.push((via, used.pad_radius_nm));
+                // A microvia must land on the rail's own layer. Hard-coding
+                // F.Cu-In1.Cu left a rail on In2 unconnected: the via stopped
+                // one dielectric short. Span from the ball's outer layer to the
+                // layer this zone is poured on.
+                let outer = match pad_layer {
+                    Layer::Bottom => "B.Cu",
+                    _ => "F.Cu",
+                };
+                let span: &[&str] = match rail_microvia_layer {
+                    Some(plane_layer)
+                        if Some(&used) == pad_via.as_ref()
+                            && process.microvia_drill_nm > 0
+                            && process.microvia_diameter_nm > 0
+                            && board.layers >= 4
+                            && plane_layer != outer =>
+                    {
+                        // Borrow a local pair for the call below.
+                        &[outer, plane_layer]
+                    }
+                    _ => &THROUGH_VIA_LAYERS,
+                };
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
                     &used,
+                    span,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -687,7 +712,7 @@ pub fn build_pcb(
                     children.push(build_segment(
                         &Segment {
                             net: net.id,
-                            layer,
+                            layer: pad_layer,
                             start: pad,
                             end: via,
                             width_nm: PLANE_STUB_WIDTH_NM,
@@ -917,6 +942,12 @@ impl PlaneVia {
     /// it by. `None` where the process offers no such land, so the plane via is
     /// the only via there is.
     fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        if profile.microvia_diameter_nm > 0 && profile.microvia_drill_nm > 0 {
+            return Some(Self {
+                pad_radius_nm: (profile.microvia_diameter_nm + 1) / 2,
+                drill_nm: profile.microvia_drill_nm,
+            });
+        }
         profile.via_in_pad_land_nm().map(|land_nm| Self {
             pad_radius_nm: (land_nm + 1) / 2,
             drill_nm: profile.min_drill_diameter_nm,
@@ -1280,6 +1311,7 @@ fn build_plane_via(
     x_nm: i64,
     y_nm: i64,
     via: &PlaneVia,
+    layers: &[&str],
     pcb_net: u32,
     project: &Uuid,
     idx: usize,
@@ -1291,12 +1323,18 @@ fn build_plane_via(
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
             Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
             Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
-            Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
+            Sexp::list(
+                "layers",
+                layers.iter().map(|layer| Sexp::str(*layer)).collect(),
+            ),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),
         ],
     )
 }
+
+/// The copper span of a through via: the two outer layers.
+const THROUGH_VIA_LAYERS: [&str; 2] = ["F.Cu", "B.Cu"];
 
 /// How far a via keeps from a mounting hole's edge, in mm. A screw head and its
 /// washer sit over the copper round the hole, so a via closer than this is
@@ -4196,6 +4234,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4313,6 +4352,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![synth_ir::NetClass {
                 name: "PWR".to_string(),
@@ -4381,6 +4421,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4528,6 +4569,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4704,8 +4746,8 @@ mod plane_via_in_pad_tests {
         let rects = ring(pad.centre, 350_000);
         let tier = synth_drc::ManufacturerProfile::jlc_advanced();
         let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
-        assert_eq!(in_pad.drill_nm, 200_000);
-        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(in_pad.drill_nm, 100_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 250_000);
         assert_eq!(
             plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
             Ok(pad.centre)
@@ -4739,6 +4781,8 @@ mod plane_via_in_pad_tests {
     fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
         let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
         tier.via_in_pad_land_extra_nm = 0;
+        tier.microvia_drill_nm = 0;
+        tier.microvia_diameter_nm = 0;
         assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
     }
 

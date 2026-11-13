@@ -4646,6 +4646,14 @@ pub enum HintStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlacementDescription {
     pub board_size_mm: [f64; 2],
+    /// Sum of placed courtyard areas as a percentage of the board area. Sparse
+    /// boards leave large open interior areas; 30 % is the review floor.
+    ///
+    /// `#[serde(default)]`: the field was added after the first placements
+    /// were serialized, so an older saved `PlacementDescription` JSON must
+    /// still deserialize instead of failing on the missing key.
+    #[serde(default)]
+    pub courtyard_fill_pct: f64,
     pub component_regions: Vec<ComponentRegionEntry>,
     pub cluster_summary: String,
     /// `Some(true)`/`Some(false)` only when a DRC run has actually been
@@ -7118,8 +7126,25 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         recommended_actions,
     };
 
+    let courtyard_area_mm2: f64 = placement
+        .components
+        .iter()
+        .filter_map(|placed| {
+            let component = board.component(placed.id)?;
+            let part = component.part.as_ref()?;
+            let (w, h) = synth_layout::pcb_courtyard_for_part(part);
+            Some(w * h)
+        })
+        .sum();
+    let board_area_mm2 = board_w_mm * board_h_mm;
+    let courtyard_fill_pct = if board_area_mm2 > 0.0 {
+        courtyard_area_mm2 / board_area_mm2 * 100.0
+    } else {
+        0.0
+    };
     PlacementDescription {
         board_size_mm: [board_w_mm, board_h_mm],
+        courtyard_fill_pct,
         component_regions,
         cluster_summary,
         // Placement review runs neither the router nor DRC, so reporting
@@ -10480,6 +10505,49 @@ board "features_only" {
             bottom_gap(&by_geometry) >= fitted_edge_margin_nm(&board),
             "setup: geometry picks another side"
         );
+    }
+
+    /// The placement review reports how much of the board the courtyards fill,
+    /// so a sparse floorplan can be seen without a PCB export.
+    #[test]
+    fn the_review_reports_courtyard_fill() {
+        let components = r#"component R1: resistor "r_generic_0603" value "10k"
+               component R2: resistor "r_generic_0603" value "10k""#;
+        let (board, mut placement) = row_board(components, &[0.0; 2]);
+        move_part(&mut placement, &board, "R1", 20.0, 20.0);
+        move_part(&mut placement, &board, "R2", 30.0, 20.0);
+        tighten_outline_after_sidecar(&board, &mut placement);
+        let desc = describe_placement(&board, &placement);
+        assert!(
+            desc.courtyard_fill_pct > 0.0 && desc.courtyard_fill_pct < 100.0,
+            "fill {}% on {:?}",
+            desc.courtyard_fill_pct,
+            desc.board_size_mm
+        );
+    }
+
+    /// A `PlacementDescription` saved before `courtyard_fill_pct` existed has
+    /// no such key; the `#[serde(default)]` on the field lets the older JSON
+    /// deserialize instead of failing on the missing key.
+    #[test]
+    fn an_older_placement_json_without_a_fill_field_still_deserializes() {
+        let json = r#"{
+            "board_size_mm": [80.0, 50.0],
+            "component_regions": [],
+            "cluster_summary": "single cluster",
+            "drc_clean": null,
+            "unrouted_nets": null,
+            "dense_regions": [],
+            "functional_warnings": [],
+            "visual_review": {
+                "score": 80,
+                "requires_revision": false,
+                "findings": []
+            }
+        }"#;
+        let desc: PlacementDescription = serde_json::from_str(json).expect("older JSON parses");
+        assert_eq!(desc.courtyard_fill_pct, 0.0);
+        assert_eq!(desc.board_size_mm, [80.0, 50.0]);
     }
 
     /// An external connector inside the board edge is advised to go flush; a

@@ -46,8 +46,9 @@ use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
     Board, BoardOutline, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net,
-    NetClass, NetEndpoint, NetId, Note, PinId, PlacementEdge, PlacementRegion, PlacementSide,
-    ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
+    NetClass, NetEndpoint, NetId, NoConnect, Note, PinId, PlacementEdge, PlacementRegion,
+    PlacementSide, ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer,
+    Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -160,6 +161,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut diff_pair_stmts: Vec<DiffPairStmt> = Vec::new();
     let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
+    let mut no_connects: Vec<NoConnect> = Vec::new();
     let mut stackup: Option<Stackup> = None;
     let mut outline: Option<BoardOutline> = None;
     let mut netclasses: Vec<NetClass> = Vec::new();
@@ -253,6 +255,15 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                 );
             }
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
+            StatementAst::NoConnect(n) => {
+                for pin in &n.pins {
+                    no_connects.push(NoConnect {
+                        refdes: pin.component.clone(),
+                        pin: pin.pin.clone(),
+                        source_span: pin.span,
+                    });
+                }
+            }
             StatementAst::Stackup(st) => stackup = Some(ctx.lower_stackup(st)),
             StatementAst::Outline(st) => {
                 // A board can declare one exact outline. A second `outline`
@@ -383,6 +394,82 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         }
     }
 
+    // A `no_connect` that names no component pin is a typo, not permission to
+    // ignore a floating input. It is an error so the mistake cannot silently
+    // suppress nothing.
+    //
+    // A `no_connect` on a pin that is also wired is a contradiction: the
+    // design says the pin is intentionally unused *and* connects it. The
+    // wiring wins, so the suppression would hide a live finding; lowering
+    // refuses the statement instead.
+    for declared in &no_connects {
+        let component = components
+            .iter()
+            .find(|component| component.refdes.eq_ignore_ascii_case(&declared.refdes));
+        let pin_index = component.as_ref().and_then(|component| {
+            component.part.as_ref().and_then(|part| {
+                part.pins.iter().position(|pin| {
+                    pin.name.eq_ignore_ascii_case(&declared.pin)
+                        || pin.number.0.eq_ignore_ascii_case(&declared.pin)
+                })
+            })
+        });
+        if let (Some(component), Some(pin_index)) = (component.as_ref(), pin_index) {
+            let pin = PinId(pin_index as u32);
+            if nets.iter().any(|net| {
+                net.endpoints
+                    .iter()
+                    .any(|e| e.component == component.id && e.pin == pin)
+            }) {
+                ctx.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-COMP-007",
+                        Severity::Error,
+                        "no_connect on a wired pin",
+                    )
+                    .location(Location::from_span(
+                        ctx.file.to_string(),
+                        declared.source_span,
+                    ))
+                    .expected("a `no_connect` pin that no net or connect reaches")
+                    .found(format!(
+                        "`{}.{}` is also an endpoint of a net",
+                        declared.refdes, declared.pin
+                    ))
+                    .message(
+                        "A pin cannot be both intentionally unused and wired. Remove the \
+                         `no_connect` and let ERC judge the wired pin, or remove the wire.",
+                    )
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-007")
+                    .build(),
+                );
+            }
+            continue;
+        }
+        ctx.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-COMP-006",
+                Severity::Error,
+                "no_connect names an unknown pin",
+            )
+            .location(Location::from_span(
+                ctx.file.to_string(),
+                declared.source_span,
+            ))
+            .expected("a declared component and a pin the registry part has")
+            .found(format!(
+                "`{}.{}` does not resolve",
+                declared.refdes, declared.pin
+            ))
+            .message(
+                "A `no_connect` must name a component and pin that exist; otherwise it \
+                 suppresses nothing and hides the typo.",
+            )
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-006")
+            .build(),
+        );
+    }
+
     let board = Board {
         legends,
         schematic_paper,
@@ -397,6 +484,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         diff_pairs,
         notes,
         keepouts,
+        no_connects,
         stackup,
         outline,
         netclasses,

@@ -377,6 +377,7 @@ mod tests {
             notes: vec![],
             legends: false,
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             required_processes: std::collections::BTreeSet::new(),

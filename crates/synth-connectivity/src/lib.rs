@@ -166,6 +166,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
