@@ -54,7 +54,6 @@ The source and sidecar in this directory were exported three times through the S
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `ice40_sdram_node.kicad_sch` | f8ef51b042 | f8ef51b042 | f8ef51b042 | byte-identical |
 | `ice40_sdram_node.kicad_pro` | 2793337457 | 2793337457 | 2793337457 | byte-identical |
 | `ice40_sdram_node.kicad_sym` | dd8c3573b5 | dd8c3573b5 | dd8c3573b5 | byte-identical |
 | `bom.csv` | d9f2b24a64 | d9f2b24a64 | d9f2b24a64 | byte-identical |
