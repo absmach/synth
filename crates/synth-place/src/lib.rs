@@ -1147,6 +1147,58 @@ fn connector_reach(real: Rect, copper: Rect) -> Rect {
     )
 }
 
+/// The sides a flush connector's reach bounds, and the reach value on each.
+///
+/// A connector sits where the solver or a sidecar put it, which need not be
+/// the edge its hint names. Trust the hint unless the connector is clearly
+/// nowhere near that edge; then use the side it sticks out of most. Taking
+/// the hinted side blindly let a connector hinted "bottom" but sitting on
+/// the left keep its margin on the left and push the whole left edge out,
+/// undoing its neighbours' flush edge.
+fn flush_sides_and_reach(
+    board: &Board,
+    component: &synth_ir::Component,
+    placed: &ComponentPlacement,
+    body: Option<Rect>,
+    margin_nm: i64,
+    side_from_hint: bool,
+) -> Option<(Vec<usize>, [i64; 4])> {
+    if !is_edge_flush_connector(component) {
+        return None;
+    }
+    let real = sidecar_courtyard_rect(board, component, placed);
+    let copper = exported_pad_bounds(component, placed).unwrap_or(real);
+    let flush = connector_reach(real, copper);
+    let flush = [
+        flush.min.x_nm,
+        flush.min.y_nm,
+        flush.max.x_nm,
+        flush.max.y_nm,
+    ];
+    let hinted = component
+        .placement_hint
+        .as_ref()
+        .and_then(|hint| hint.edge.as_ref())
+        .map(edge_index);
+    let sides: Vec<usize> = match body {
+        Some(body) => {
+            let reaches = [
+                body.min.x_nm - real.min.x_nm,
+                body.min.y_nm - real.min.y_nm,
+                real.max.x_nm - body.max.x_nm,
+                real.max.y_nm - body.max.y_nm,
+            ];
+            let geometric = (0..4).max_by_key(|&side| reaches[side]);
+            match hinted {
+                Some(side) if side_from_hint && reaches[side] >= -margin_nm => vec![side],
+                _ => geometric.into_iter().collect(),
+            }
+        }
+        None => hinted.into_iter().collect(),
+    };
+    Some((sides, flush))
+}
+
 fn outline_with_flush_connectors(
     board: &Board,
     placements: &[ComponentPlacement],
@@ -1177,6 +1229,27 @@ fn outline_with_flush_connectors(
                 Point::new(a.max.x_nm.max(b.max.x_nm), a.max.y_nm.max(b.max.y_nm)),
             )
         });
+    // The flush line each hard-hinted connector fixes on its edge, merged
+    // across the connectors that share one: edges 0/1 keep the smallest
+    // (furthest out) minimum, edges 2/3 the largest maximum. Every other
+    // part's rim is capped at this line, so a mounting hole's 2.2 mm
+    // board-feature rim — or any passive rim — cannot push Edge.Cuts past
+    // the connector a hard hint docked there.
+    let mut flush_bounds: [Option<i64>; 4] = [None; 4];
+    for (component, placed, _, _) in &parts {
+        if let Some((sides, flush)) =
+            flush_sides_and_reach(board, component, placed, body, margin_nm, side_from_hint)
+        {
+            for side in sides {
+                let value = flush[side];
+                flush_bounds[side] = Some(match flush_bounds[side] {
+                    Some(current) if side < 2 => current.min(value),
+                    Some(current) => current.max(value),
+                    None => value,
+                });
+            }
+        }
+    }
     let mut outline = [i64::MAX, i64::MAX, i64::MIN, i64::MIN];
     for (component, placed, rect, copper) in &parts {
         // A board feature placed in a corner needs a wider rim than the tight
@@ -1199,57 +1272,66 @@ fn outline_with_flush_connectors(
             rect.max.x_nm + margin_nm,
             rect.max.y_nm + margin_nm,
         ];
-        if is_edge_flush_connector(component) {
-            let real = sidecar_courtyard_rect(board, component, placed);
-            let copper = exported_pad_bounds(component, placed).unwrap_or(real);
-            let flush = connector_reach(real, copper);
-            let flush = [
-                flush.min.x_nm,
-                flush.min.y_nm,
-                flush.max.x_nm,
-                flush.max.y_nm,
-            ];
-            // A connector sits where the solver or a sidecar put it, which need
-            // not be the edge its hint names. Trust the hint unless the
-            // connector is clearly nowhere near that edge; then use the side
-            // it sticks out of most. Taking the hinted side blindly let a
-            // connector hinted "bottom" but sitting on the left keep its
-            // margin on the left and push the whole left edge out, undoing
-            // its neighbours' flush edge.
-            let hinted = component
-                .placement_hint
-                .as_ref()
-                .and_then(|hint| hint.edge.as_ref())
-                .map(edge_index);
-            let sides: Vec<usize> = match body {
-                Some(body) => {
-                    let reaches = [
-                        body.min.x_nm - real.min.x_nm,
-                        body.min.y_nm - real.min.y_nm,
-                        real.max.x_nm - body.max.x_nm,
-                        real.max.y_nm - body.max.y_nm,
-                    ];
-                    let geometric = (0..4).max_by_key(|&side| reaches[side]);
-                    match hinted {
-                        Some(side) if side_from_hint && reaches[side] >= -margin_nm => {
-                            vec![side]
-                        }
-                        _ => geometric.into_iter().collect(),
-                    }
-                }
-                None => hinted.into_iter().collect(),
-            };
+        if let Some((sides, flush)) =
+            flush_sides_and_reach(board, component, placed, body, margin_nm, side_from_hint)
+        {
             for side in sides {
                 reach[side] = flush[side];
             }
-        } else if let Some(copper) = copper {
-            // A courtyard normally contains its pads, but some stock
-            // footprints anchor far from the body. Union the exported copper
-            // so the outline can never clip a pad below the edge clearance.
-            reach[0] = reach[0].min(copper.min.x_nm - margin_nm);
-            reach[1] = reach[1].min(copper.min.y_nm - margin_nm);
-            reach[2] = reach[2].max(copper.max.x_nm + margin_nm);
-            reach[3] = reach[3].max(copper.max.y_nm + margin_nm);
+        } else {
+            for side in 0..4 {
+                let Some(bound) = flush_bounds[side] else {
+                    continue;
+                };
+                // Cap the rim at the flush line. A board feature's courtyard
+                // may overhang the line (the outline fit below still holds its
+                // drill); any other part keeps at least its own courtyard
+                // inside Edge.Cuts, so the cap gives up the rim before it
+                // clips the part.
+                if side < 2 {
+                    reach[side] = if synth_layout::is_board_feature_kind(&component.kind) {
+                        reach[side].max(bound)
+                    } else {
+                        let court_edge = if side == 0 {
+                            rect.min.x_nm
+                        } else {
+                            rect.min.y_nm
+                        };
+                        reach[side].max(bound.min(court_edge))
+                    };
+                } else {
+                    reach[side] = if synth_layout::is_board_feature_kind(&component.kind) {
+                        reach[side].min(bound)
+                    } else {
+                        let court_edge = if side == 2 {
+                            rect.max.x_nm
+                        } else {
+                            rect.max.y_nm
+                        };
+                        reach[side].min(bound.max(court_edge))
+                    };
+                }
+            }
+            if let Some(copper) = copper {
+                // A courtyard normally contains its pads, but some stock
+                // footprints anchor far from the body. Union the exported copper
+                // so the outline can never clip a pad below the edge clearance.
+                // On a flush edge the rim is capped at the connector's
+                // courtyard, so there the copper keeps only the fab edge
+                // clearance: a mounting hole whose rim was capped may let its
+                // courtyard overhang, but its drill must stay inside Edge.Cuts.
+                let copper_margin = |side: usize| -> i64 {
+                    if flush_bounds[side].is_some() {
+                        mm_to_nm(COPPER_EDGE_CLEARANCE_MM)
+                    } else {
+                        margin_nm
+                    }
+                };
+                reach[0] = reach[0].min(copper.min.x_nm - copper_margin(0));
+                reach[1] = reach[1].min(copper.min.y_nm - copper_margin(1));
+                reach[2] = reach[2].max(copper.max.x_nm + copper_margin(2));
+                reach[3] = reach[3].max(copper.max.y_nm + copper_margin(3));
+            }
         }
         outline = [
             outline[0].min(reach[0]),
@@ -2372,6 +2454,14 @@ fn place_board_features(
 
     let mut claimed: Vec<FeatureSlot> = Vec::with_capacity(features.len());
 
+    // The flush line each hard-hinted connector fixes on its edge. A feature
+    // sharing that edge keeps its 2.2 mm rim nowhere: the fitted outline sits
+    // at the connector's courtyard, the feature's courtyard may overhang it,
+    // and the one thing that may not is its drill — so a candidate slot whose
+    // drill would cross the line is rejected below and the feature takes the
+    // nearest slot that keeps the drill inside Edge.Cuts.
+    let flush_bounds = flush_bounds_of_placements(board, placements);
+
     for id in ordered {
         let (w_mm, h_mm) = courtyard_lookup[&id];
         let half_w = mm_to_nm(w_mm) / 2;
@@ -2402,6 +2492,14 @@ fn place_board_features(
                     .find(|placement| placement.id == pid)
                     .map(rect_of)
             }) {
+                return None;
+            }
+            // The feature is exported with rotation zero, so its pad bounds
+            // come from the anchor directly. A mounting hole's pads are its
+            // NPTH drill: Edge.Cuts may never cross one, and on a flush edge
+            // the fit caps the rim at the connector's courtyard, so the drill
+            // has to clear that line here rather than after the fit.
+            if !pads_clear_flush_bounds(board, id, centre, &flush_bounds) {
                 return None;
             }
             Some(candidate)
@@ -2501,6 +2599,82 @@ fn place_board_features(
             });
         }
     }
+}
+
+/// The flush line each placed hard-hinted connector fixes on its edge.
+///
+/// Edges 0/1 keep the smallest minimum (the line furthest out), edges 2/3 the
+/// largest maximum — the same merge the outline fit does, so a feature slot
+/// judged against these lines is judged against the edge Edge.Cuts will
+/// actually take.
+fn flush_bounds_of_placements(
+    board: &Board,
+    placements: &[ComponentPlacement],
+) -> [Option<i64>; 4] {
+    let mut bounds: [Option<i64>; 4] = [None; 4];
+    for placed in placements {
+        let Some(component) = board.component(placed.id) else {
+            continue;
+        };
+        if !is_edge_flush_connector(component) {
+            continue;
+        }
+        let rect = sidecar_courtyard_rect(board, component, placed);
+        let copper = exported_pad_bounds(component, placed).unwrap_or(rect);
+        let flush = connector_reach(rect, copper);
+        let Some(side) = component
+            .placement_hint
+            .as_ref()
+            .and_then(|hint| hint.edge.as_ref())
+            .map(edge_index)
+        else {
+            continue;
+        };
+        let value = match side {
+            0 => flush.min.x_nm,
+            1 => flush.min.y_nm,
+            2 => flush.max.x_nm,
+            _ => flush.max.y_nm,
+        };
+        bounds[side] = Some(match bounds[side] {
+            Some(current) if side < 2 => current.min(value),
+            Some(current) => current.max(value),
+            None => value,
+        });
+    }
+    bounds
+}
+
+/// Whether a feature exported at `centre` keeps every pad inside the flush
+/// lines, with the fab edge clearance. The feature's NPTH drill counts as a
+/// pad, so a mounting hole whose drill would cross a flush edge is rejected
+/// and the slot search moves to the next candidate.
+fn pads_clear_flush_bounds(
+    board: &Board,
+    id: ComponentId,
+    centre: Point,
+    flush_bounds: &[Option<i64>; 4],
+) -> bool {
+    if flush_bounds.iter().all(Option::is_none) {
+        return true;
+    }
+    let Some(component) = board.component(id) else {
+        return true;
+    };
+    let placement = ComponentPlacement {
+        id,
+        center: centre,
+        rotation: Rotation::Zero,
+        layer: Layer::Top,
+    };
+    let Some(pads) = exported_pad_bounds(component, &placement) else {
+        return true;
+    };
+    let clearance = mm_to_nm(COPPER_EDGE_CLEARANCE_MM);
+    pads.min.x_nm - clearance >= flush_bounds[0].unwrap_or(pads.min.x_nm - clearance)
+        && pads.min.y_nm - clearance >= flush_bounds[1].unwrap_or(pads.min.y_nm - clearance)
+        && pads.max.x_nm + clearance <= flush_bounds[2].unwrap_or(pads.max.x_nm + clearance)
+        && pads.max.y_nm + clearance <= flush_bounds[3].unwrap_or(pads.max.y_nm + clearance)
 }
 
 /// Half-extents of a component's courtyard after applying its rotation.
@@ -12537,13 +12711,31 @@ board "near" {
     ) {
         assert_connector_flush(board, placement, refdes, edge);
         let side = EDGES.iter().position(|e| *e == edge).expect("edge");
+        // Every edge a hard hint docks a connector to is a flush edge: the fit
+        // caps every other part's rim at the connector's courtyard, so a
+        // neighbour may sit closer than its usual margin there — it only has
+        // to stay inside Edge.Cuts. Non-flush edges keep the full rim.
+        let mut flush_edges = [false; 4];
+        for component in &board.components {
+            if crate::is_edge_flush_connector(component) {
+                if let Some(hint) = component.placement_hint.as_ref() {
+                    if let Some(edge) = hint.edge.as_ref() {
+                        flush_edges[crate::edge_index(edge)] = true;
+                    }
+                }
+            }
+        }
         for component in &board.components {
             let gaps = courtyard_gaps(board, placement, &component.refdes);
             for (index, gap) in gaps.iter().enumerate() {
+                let minimum = if flush_edges[index] {
+                    0
+                } else {
+                    mm_to_nm(SPARSE_EDGE_MARGIN_MM)
+                };
                 assert!(
-                    (component.refdes == refdes && index == side)
-                        || *gap >= mm_to_nm(SPARSE_EDGE_MARGIN_MM),
-                    "{} must keep its normal margin on {}, gap {gap} nm",
+                    (component.refdes == refdes && index == side) || *gap >= minimum - 1_000,
+                    "{} must keep its margin on {}, gap {gap} nm",
                     component.refdes,
                     EDGES[index]
                 );

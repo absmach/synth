@@ -595,11 +595,26 @@ pub(crate) struct HoldingOutline {
     pub move_in_mm: f64,
 }
 
+/// The copper edge clearance the fit keeps between a part's pads and Edge.Cuts
+/// on a flush edge (the same value the outline fit uses).
+const FLUSH_COPPER_CLEARANCE_MM: f64 = 0.5;
+
+/// A part whose pads sit this much closer to a flush edge's line than the
+/// copper clearance allows is what pushes the edge past the connector.
+const FLUSH_COPPER_SLACK_MM: f64 = 0.05;
+
 /// A connector that is flush with an edge has to sit on it, but the outline is
 /// fitted a rim away from every other part, so a passive standing within that
 /// rim of the connectors' edge pushes the outline out and leaves the
 /// connectors short of it. Lists those parts, with the inward move that lets
 /// the edge return to the connectors.
+///
+/// The fit itself caps every rim at a flush edge's connector, so two cases
+/// remain: a part whose courtyard pokes past the connector's face still holds
+/// the edge out with its own rim, and a part whose *copper* sits closer to the
+/// face than the copper clearance holds it out by that clearance — the fit
+/// expands the edge to keep the copper inside Edge.Cuts. Both get the same
+/// advice: move the part inward.
 pub(crate) fn parts_holding_outline(board: &Board, placement: &Placement) -> Vec<HoldingOutline> {
     let mut fitted = placement.clone();
     let rim_mm = tight_edge_margin_mm(board);
@@ -617,7 +632,9 @@ pub(crate) fn parts_holding_outline(board: &Board, placement: &Placement) -> Vec
         .iter()
         .map(|p| flush_edge_index(board, p.id))
         .collect();
-    let mut found = Vec::new();
+    let mut found: Vec<HoldingOutline> = Vec::new();
+    let mut reported: std::collections::HashSet<(crate::ComponentId, usize)> =
+        std::collections::HashSet::new();
     for edge in 0..4 {
         let Some(connector_gap) = (0..rects.len())
             .filter(|&i| flush[i] == Some(edge))
@@ -626,10 +643,33 @@ pub(crate) fn parts_holding_outline(board: &Board, placement: &Placement) -> Vec
         else {
             continue;
         };
+        // Case one: a part inside the rim holds the edge away, leaving the
+        // connector short of it.
         let held_mm = nm_to_mm(connector_gap) - SNAP_GAP_MM;
-        if held_mm < MIN_HELD_MM {
+        if held_mm >= MIN_HELD_MM {
+            for (j, part) in fitted.components.iter().enumerate() {
+                let is_hole = board
+                    .component(part.id)
+                    .is_some_and(|c| c.kind.as_str() == "mounting_hole");
+                if flush[j].is_some() || is_hole {
+                    continue;
+                }
+                let reach = nm_to_mm(edge_gap_nm(&rects[j], outline, edge));
+                if reach <= rim_mm + RIM_SLACK_MM && reported.insert((part.id, edge)) {
+                    found.push(HoldingOutline {
+                        id: part.id,
+                        edge,
+                        connector_gap_mm: nm_to_mm(connector_gap),
+                        move_in_mm: (held_mm * 10.0).ceil() / 10.0,
+                    });
+                }
+            }
             continue;
         }
+        // Case two: the connector reaches its edge (or pokes past it), but a
+        // part's copper sits closer to that face than the copper clearance, so
+        // the fit had to push the edge past the connector to keep the copper
+        // inside Edge.Cuts.
         for (j, part) in fitted.components.iter().enumerate() {
             let is_hole = board
                 .component(part.id)
@@ -637,14 +677,28 @@ pub(crate) fn parts_holding_outline(board: &Board, placement: &Placement) -> Vec
             if flush[j].is_some() || is_hole {
                 continue;
             }
-            let reach = nm_to_mm(edge_gap_nm(&rects[j], outline, edge));
-            if reach <= rim_mm + RIM_SLACK_MM {
-                found.push(HoldingOutline {
-                    id: part.id,
-                    edge,
-                    connector_gap_mm: nm_to_mm(connector_gap),
-                    move_in_mm: (held_mm * 10.0).ceil() / 10.0,
-                });
+            let Some(component) = board.component(part.id) else {
+                continue;
+            };
+            let Some(copper) = crate::exported_pad_bounds(component, part) else {
+                continue;
+            };
+            let copper_gap = match edge {
+                0 => nm_to_mm(copper.min.x_nm - outline.min.x_nm),
+                1 => nm_to_mm(copper.min.y_nm - outline.min.y_nm),
+                2 => nm_to_mm(outline.max.x_nm - copper.max.x_nm),
+                _ => nm_to_mm(outline.max.y_nm - copper.max.y_nm),
+            };
+            if copper_gap < FLUSH_COPPER_CLEARANCE_MM + FLUSH_COPPER_SLACK_MM {
+                let move_in = FLUSH_COPPER_CLEARANCE_MM - copper_gap + FLUSH_COPPER_SLACK_MM;
+                if move_in > 0.0 && reported.insert((part.id, edge)) {
+                    found.push(HoldingOutline {
+                        id: part.id,
+                        edge,
+                        connector_gap_mm: nm_to_mm(connector_gap),
+                        move_in_mm: (move_in * 10.0).ceil() / 10.0,
+                    });
+                }
             }
         }
     }
@@ -1031,7 +1085,12 @@ mod tests {
         let id = placement.components[c1].id;
         let hit = held.iter().find(|h| h.id == id).expect("C1 reported");
         assert_eq!(hit.edge, 3);
-        assert!(hit.move_in_mm > 0.5, "{}", hit.move_in_mm);
+        // The fit caps the rim at J3's face, so C1 no longer holds the edge
+        // away with its courtyard; what holds it now is C1's copper, which
+        // sits ~0.36 mm from the face — inside the 0.5 mm copper clearance —
+        // so the fit pushes the edge past J3 to keep the copper inside
+        // Edge.Cuts. The move named here is what returns that clearance.
+        assert!(hit.move_in_mm >= 0.1, "{}", hit.move_in_mm);
 
         placement.components[c1].center.y_nm -= mm_to_nm(4.0);
         assert!(
