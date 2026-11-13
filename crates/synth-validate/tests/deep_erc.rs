@@ -552,6 +552,36 @@ fn a_tvs_clamped_to_a_rail_is_not_counted_as_a_load() {
 }
 
 #[test]
+fn a_connector_on_a_rail_is_not_counted_as_a_load() {
+    // header_1x5 records 3000 mA, the contact rating of the Harwin header, not a
+    // draw. Hung on the 800 mA regulator's rail (a debug header's supply pin) it
+    // made a board that draws 200 mA look 3.2 A over budget.
+    let src = r#"board "t" {
+      layers 2
+      component U1: regulator "ams1117_3v3"
+      component U2: mcu "atmega328p"
+      component J2: connector "header_1x5"
+      component C1: capacitor "c_generic_0805" value "10u"
+      component C2: capacitor "c_generic_0805" value "10u"
+      component J1: connector "header_1x4"
+      power "+3V3" 3.3v
+      connect J1.p1 -> U1.vin
+      connect J1.p2 -> U1.gnd
+      connect U1.vin -> C1.p1
+      connect U1.gnd -> C1.p2
+      connect U1.vout -> C2.p1 as "+3V3"
+      connect U1.gnd -> C2.p2
+      connect U1.vout -> U2.vcc
+      connect U1.vout -> J2.p1 as "+3V3"
+      connect U1.gnd -> J2.p2
+    }"#;
+    assert!(
+        codes(&validate(src), "E-SYNTH-POWER-010").is_empty(),
+        "a connector's contact rating is not a steady load"
+    );
+}
+
+#[test]
 fn power_budget_headroom_is_configurable() {
     // 3 MCUs = 600mA against an 800mA regulator: fine at 0% headroom,
     // over budget at 50% (600 > 800 × 0.5).

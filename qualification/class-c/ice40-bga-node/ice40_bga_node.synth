@@ -1,0 +1,289 @@
+// iCE40HX4K BGA node with a USB-C input and a companion MCU (Class C case 1, issue #328 under #40)
+//   USB-C VBUS -> polyfuse -> TVS -> P-FET reverse stage -> +5V
+//   +5V -> AMS1117-3.3 -> +3V3 (I/O banks, SPI flash, header, MCU)
+//   +3V3 -> TLV70012 -> +1V2 (FPGA core) -> ferrite -> VCCPLL
+//   The FPGA boots in master SPI mode from a W25Q128 flash that the STM32F103C8 MCU programs over USB.
+board "ice40_bga_node" {
+  layers 6
+  manufacturer "jlc-advanced"
+  requires via_in_pad
+
+  // F.Cu signal, In1 ground, In2 signal, In3 signal, In4 ground, B.Cu signal
+  stackup {
+    copper 0.035mm
+    insulator 0.1mm er 4.4 material "FR4"
+    copper 0.0175mm
+    insulator 0.4mm er 4.6 material "FR4"
+    copper 0.0175mm
+    insulator 0.3mm er 4.6 material "FR4"
+    copper 0.0175mm
+    insulator 0.4mm er 4.6 material "FR4"
+    copper 0.0175mm
+    insulator 0.1mm er 4.4 material "FR4"
+    copper 0.035mm
+  }
+
+  // ---- Net classes ---------------------------------------------------------
+  netclass "PWR_5V"   { trace_width 0.4mm  clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "PWR_3V3"  { trace_width 0.2mm  clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow plane }
+  netclass "PWR_CORE" { trace_width 0.25mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "PWR_PLL"  { trace_width 0.25mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "GND"      { trace_width 0.2mm  clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "FPGA_IO"  { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "STATIC"   { trace_width 0.2mm  clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "CONFIG"   { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "PWR_MCU"  { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "MCU_IO"  { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
+  netclass "USB"      { trace_width 0.12mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast layers "F.Cu", "B.Cu" }
+
+  // ---- Power entry ---------------------------------------------------------
+  group "POWER ENTRY" color "#b91c1c" {
+    component J1: connector "usb_c_receptacle" { escape { off } placement_hint { edge: left priority: hard } }
+    component R_CC1: resistor "r_generic_0402" value "5.1k" { placement_hint { near: "J1" priority: hard } }
+    component R_CC2: resistor "r_generic_0402" value "5.1k" { placement_hint { near: "J1" priority: hard } }
+    component F1: fuse "polyfuse_500ma" { placement_hint { near: "J1" priority: hard } }
+    component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1" priority: hard } }
+    component Q1: transistor "p_mosfet_si2301" { placement_hint { near: "D1" priority: hard } }
+    component R3: resistor "r_generic_0603" value "100k" { placement_hint { near: "Q1.g" priority: hard } }
+    component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "Q1.s" priority: hard } }
+    notes "" {
+      "USB-C VBUS 5 V max 5.25 V. Order: fuse (0.5 A hold) -> TVS (6.0 V standoff) -> P-FET reverse stage."
+      "CC1 and CC2 each 5.1k to ground: sink, 5 V only."
+    }
+  }
+
+  // ---- USB data ------------------------------------------------------------
+  group "USB INPUT" color "#c2410c" {
+    component R25: resistor "r_generic_0402" value "22" { placement_hint { near: "U5.pa12" priority: hard } }
+    component R26: resistor "r_generic_0402" value "22" { placement_hint { near: "U5.pa11" priority: hard } }
+    notes "" {
+      "D+ and D- from the receptacle through 22 ohm series resistors to PA12 and PA11."
+    }
+  }
+
+  // ---- Companion MCU ---------------------------------------------------------
+  group "MCU" color "#0072b2" {
+    component U5: mcu "stm32f103c8" { escape { off } placement_hint { near: "J1" priority: soft } }
+    component C27: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd" priority: hard } }
+    component C28: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd_2" priority: hard } }
+    component C29: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd_3" priority: hard } }
+    component C30: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdda" priority: hard } }
+    component C31: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vbat" priority: hard } }
+    component C32: capacitor "c_generic_0603" value "4.7uF" { placement_hint { near: "U5.vdd" priority: hard } }
+    component R21: resistor "r_generic_0402" value "10k" { placement_hint { near: "U5.nrst" priority: hard } }
+    component C33: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.nrst" priority: hard } }
+    component SW1: switch "spst_tactile" { placement_hint { near: "U5.nrst" priority: hard } }
+    component R22: resistor "r_generic_0402" value "10k" { placement_hint { near: "U5.boot0" priority: hard } }
+    component Y1: crystal "xtal_8mhz_3225_jyje_4p" { placement_hint { near: "U5.pd0" priority: hard } }
+    component C34: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
+    component C35: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
+    component J4: connector "header_1x5"
+    component FB2: inductor "ferrite_bead_0603" { placement_hint { near: "U5.vdd" priority: hard } }
+    notes "" {
+      "STM32F103C8T6 on 3V3. Streams the bitstream to flash U2 over SPI1 (135,183 byte bitstream > 64 KB MCU flash)."
+      "8 MHz JYJE 3TJ480000FYLBC, CL 8 pF, ESR 150 ohm max, C0 5 pF max; assumed stray 3 pF: C = 2 x (8 - 3) = 10 pF each."
+      "SWD header: 3V3, SWDIO, SWCLK, NRST, GND."
+    }
+  }
+
+  // ---- Rails ---------------------------------------------------------------
+  group "3V3 LDO" color "#15803d" {
+    component U3: regulator "ams1117_3v3" value "AMS1117-3.3"
+    component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3.vin" priority: hard } }
+    component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3.vin" priority: hard } }
+    component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3.vout" priority: hard } }
+    component C5: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3.vout" priority: hard } }
+    notes "" {
+      "AMS1117-3.3 from the 5 V rail; two 10 uF in and two 10 uF out per registry."
+    }
+  }
+
+  group "1V2 LDO" color "#0e7490" {
+    component U4: regulator "tlv70012_ddc" value "TLV70012-1.2"
+    component C6: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U4.vin" priority: hard } }
+    component C7: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U4.vout" priority: hard } }
+    component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U4.vout" priority: hard } }
+    notes "" {
+      "TLV70012 1.2 V core rail from 3V3, EN tied to VIN."
+    }
+  }
+
+  // ---- FPGA ----------------------------------------------------------------
+  group "FPGA" color "#6d28d9" {
+    component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
+    notes "" {
+      "VPP_FAST (B10) left unconnected. Core 1.2 V, I/O banks and VPP_2V5 on 3.3 V."
+    }
+  }
+
+  group "FPGA DECOUPLING" color "#7c3aed" {
+    component C9: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc" priority: hard } }
+    component C10: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc_2" priority: hard } }
+    component C11: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc_3" priority: hard } }
+    component C12: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc_4" priority: hard } }
+    component C13: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccio_0" priority: hard } }
+    component C14: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccio_1" priority: hard } }
+    component C15: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccio_2" priority: hard } }
+    component C16: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccio_3" priority: hard } }
+    component C17: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccio_3_2" priority: hard } }
+    component C18: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc_spi" priority: hard } }
+    component C19: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vpp_2v5" priority: hard } }
+    notes "" {
+      "One 100 nF per supply ball: C9-C12 core, C13-C17 bank VCCIO, C18 VCC_SPI, C19 VPP_2V5."
+    }
+  }
+
+  group "PLL FILTER" color "#a21caf" {
+    component FB1: inductor "ferrite_bead_0603" { placement_hint { near: "C21" priority: hard } }
+    component C20: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccpll0" priority: hard } }
+    component C21: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vccpll1" priority: hard } }
+    component C22: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "FB1" priority: hard } }
+    notes "" {
+      "PLL supply: 1.2 V through a ferrite bead, 100 nF at each PLL ball, 1 uF bulk."
+    }
+  }
+
+  // ---- Configuration -------------------------------------------------------
+  group "CONFIG" color "#be185d" {
+    component R4: resistor "r_generic_0402" value "10k" { placement_hint { near: "U1.cdone" priority: hard } }
+    component R5: resistor "r_generic_0402" value "10k" { placement_hint { near: "U1.creset" priority: hard } }
+    notes "" {
+      "CDONE and CRESET_B 10k pull-ups to 3V3."
+    }
+  }
+
+  group "SPI FLASH" color "#0072b2" {
+    component U2: memory "w25q128jvsiq_208mil"
+    component C26: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U2.vcc" priority: hard } }
+    component R19: resistor "r_generic_0402" value "10k" { placement_hint { near: "U2.io2" priority: hard } }
+    component R20: resistor "r_generic_0402" value "10k" { placement_hint { near: "U2.cs" priority: hard } }
+    notes "" {
+      "Master SPI boot flash. SS_B pull-up keeps it deselected during reset; WP and HOLD pulled high."
+    }
+  }
+
+  group "LEDS" color "#ca8a04" {
+    component R7: resistor "r_generic_0603" value "1k"
+    component D2: led "led_green_0603"
+    component R8: resistor "r_generic_0603" value "1k"
+    component D3: led "led_amber_0603"
+    component R9: resistor "r_generic_0603" value "1k"
+    component D4: led "led_red_0603"
+    component R10: resistor "r_generic_0603" value "1k"
+    component D6: led "led_red_0603"
+    notes "" {
+      "Power, CDONE and two user LEDs, 1k each: about 1.3 mA at 3.3 V."
+    }
+  }
+
+  // ---- Header --------------------------------------------------------------
+  group "FPGA HEADER" color "#4338ca" {
+    component J3: connector "header_1x12"
+    component R11: resistor "r_generic_0402" value "100"
+    component R14: resistor "r_generic_0402" value "100"
+    component R15: resistor "r_generic_0402" value "100"
+    component R16: resistor "r_generic_0402" value "100"
+    notes "" {
+      "4 slow user I/O (north ball row), 3V3 and GND."
+    }
+  }
+
+  group "TEST POINTS" color "#525252" {
+    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "Q1.s" priority: hard } }
+    component TP2: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.vout" priority: hard } }
+    component TP3: testpoint "testpoint_pad_1_5" { placement_hint { near: "U4.vout" priority: hard } }
+    component TP4: testpoint "testpoint_pad_1_5"
+    component TP5: testpoint "testpoint_pad_1_5"
+    notes "" {
+      "Rails: 5V, 3V3, 1V2. Configuration: CRESET_B, CDONE."
+    }
+  }
+
+  group "MOUNTING" color "#737373" {
+    component H1: mounting_hole "mounting_hole_m2_5"
+    component H2: mounting_hole "mounting_hole_m2_5"
+    notes "" {
+      "Two M2.5 holes at opposite corners."
+    }
+  }
+
+  // ---- Power nets ----------------------------------------------------------
+  power "+5V" 5v class "PWR_5V" { Q1.s C1.p1 U3.vin C2.p1 C3.p1 TP1.p1 }
+  // MCU supply additions are appended to +3V3 below
+  power "+3V3" 3.3v class "PWR_3V3" {
+    U3.vout C4.p1 C5.p1 U4.vin U4.en C6.p1
+    U1.vccio_0 U1.vccio_1 U1.vccio_2 U1.vccio_3 U1.vccio_3_2 U1.vcc_spi U1.vpp_2v5
+    C13.p1 C14.p1 C15.p1 C16.p1 C17.p1 C18.p1 C19.p1
+    U2.vcc C26.p1 R19.p1 R20.p1 R4.p1 R5.p2
+    R7.p1 J3.p1 TP2.p1
+    FB2.p1 R21.p1 J4.p1
+  }
+  net "+3V3_MCU" class "PWR_MCU" { FB2.p2 U5.vdd U5.vdd_2 U5.vdd_3 U5.vdda U5.vbat C27.p1 C28.p1 C29.p1 C30.p1 C31.p1 C32.p1 }
+  power "+1V2" 1.2v class "PWR_CORE" {
+    U4.vout C7.p1 C8.p1 U1.vcc U1.vcc_2 U1.vcc_3 U1.vcc_4
+    C9.p1 C10.p1 C11.p1 C12.p1 FB1.p1 TP3.p1
+  }
+  net "VCCPLL" class "PWR_PLL" { FB1.p2 U1.vccpll0 U1.vccpll1 C20.p1 C21.p1 C22.p1 }
+
+  net "GND" class "GND" {
+    J1.gnd J1.gnd_a12 J1.gnd_b12 J1.gnd_b1 J1.shld R_CC1.p2 R_CC2.p2 D1.anode R3.p2 C1.p2
+    U5.vss U5.vss_2 U5.vss_3 U5.vssa C27.p2 C28.p2 C29.p2 C30.p2 C31.p2 C32.p2 C33.p2 C34.p2 C35.p2
+    SW1.p2 R22.p2 Y1.gnd_2 Y1.gnd_4 J4.p5
+    U3.gnd C2.p2 C3.p2 C4.p2 C5.p2 U4.gnd C6.p2 C7.p2 C8.p2
+    U1.gnd U1.gnd_2 U1.gnd_3 U1.gnd_4 U1.gnd_5 U1.gnd_6 U1.gnd_7 U1.gnd_8 U1.gnd_9 U1.gnd_10
+    U1.gndpll0 U1.gndpll1
+    C9.p2 C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C21.p2 C22.p2
+    U2.gnd C26.p2
+    D2.cathode D3.cathode D4.cathode D6.cathode
+    J3.p2
+  }
+
+  // ---- Input chain nets ----------------------------------------------------
+  net "VBUS" class "PWR_5V" { J1.vbus J1.vbus_a9 J1.vbus_b4 J1.vbus_b9 F1.p1 }
+  net "USB_CC1" class "STATIC" { J1.cc1 R_CC1.p1 }
+  net "USB_CC2" class "STATIC" { J1.cc2 R_CC2.p1 }
+
+  // ---- USB data and MCU ------------------------------------------------------
+  net "USB_DP_C" class "USB" { J1.dp J1.dp_b6 R25.p1 }
+  net "USB_DM_C" class "USB" { J1.dn J1.dn_b7 R26.p1 }
+  net "USB_DP" class "USB" { R25.p2 U5.pa12 }
+  net "USB_DM" class "USB" { R26.p2 U5.pa11 }
+  diff_pair USB_DP USB_DM { impedance 90ohm }
+  diff_pair USB_DP_C USB_DM_C { impedance 90ohm }
+
+  net "NRST" class "MCU_IO" { U5.nrst R21.p2 C33.p1 SW1.p1 J4.p4 }
+  net "BOOT0" class "MCU_IO" { U5.boot0 R22.p1 }
+  net "SWDIO" class "MCU_IO" { U5.pa13 J4.p2 }
+  net "SWCLK" class "MCU_IO" { U5.pa14 J4.p3 }
+  net "HSE_IN" class "MCU_IO" { U5.pd0 Y1.xtal_a C34.p1 }
+  net "HSE_OUT" class "MCU_IO" { U5.pd1 Y1.xtal_b C35.p1 }
+  net "VBUS_F" class "PWR_5V" { F1.p2 D1.cathode Q1.d }
+  net "Q1_GATE" class "STATIC" { Q1.g R3.p1 }
+
+  // ---- Configuration -------------------------------------------------------
+  net "CRESET_B" class "CONFIG" { U1.creset R5.p1 TP4.p1 U5.pb0 }
+  net "CDONE" class "CONFIG" { U1.cdone R4.p2 TP5.p1 R8.p1 U5.pb1 }
+  net "CFG_SS_B" class "CONFIG" { U1.iob_108_ss U2.cs R20.p2 U5.pa4 }
+  net "CFG_SCK" class "CONFIG" { U1.iob_107_sck U2.clk U5.pa5 }
+  net "CFG_SDO" class "CONFIG" { U1.iob_105_sdo U2.io0 U5.pa7 }
+  net "CFG_SDI" class "CONFIG" { U1.iob_106_sdi U2.io1 U5.pa6 }
+  net "FLASH_WPHOLD" class "STATIC" { U2.io2 U2.io3 R19.p2 }
+
+  // ---- LEDs ----------------------------------------------------------------
+  net "LED_PWR" class "STATIC" { R7.p2 D2.anode }
+  net "LED_CDONE" class "STATIC" { R8.p2 D3.anode }
+  net "LED_U1_R" class "FPGA_IO" { U1.iob_72 R9.p1 }
+  net "LED_U1" class "STATIC" { R9.p2 D4.anode }
+  net "LED_U2_R" class "FPGA_IO" { U1.iob_71 R10.p1 }
+  net "LED_U2" class "STATIC" { R10.p2 D6.anode }
+
+  // ---- FPGA header (north ball row A1..A8, left to right) --------------------
+  net "FA1" class "FPGA_IO" { U1.iot_225 R11.p1 }
+  net "FA4" class "FPGA_IO" { U1.iot_211 R14.p1 }
+  net "FA5" class "FPGA_IO" { U1.iot_207 R15.p1 }
+  net "FA6" class "FPGA_IO" { U1.iot_206 R16.p1 }
+  net "HA1" class "FPGA_IO" { R11.p2 J3.p5 }
+  net "HA4" class "FPGA_IO" { R14.p2 J3.p8 }
+  net "HA5" class "FPGA_IO" { R15.p2 J3.p9 }
+  net "HA6" class "FPGA_IO" { R16.p2 J3.p10 }
+}
