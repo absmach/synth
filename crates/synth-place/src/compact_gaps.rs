@@ -45,29 +45,37 @@ struct Geom {
 
 /// JLCPCB's DFM check reports a through-hole pad within 2.1 mm of an SMD pad as
 /// a Danger. Compaction keeps a through-hole part at least this far, courtyard to
-/// courtyard, from an SMD part, so a closer layout is never made by it.
-const THT_SMD_GAP_MM: f64 = 2.1;
+/// courtyard, from an SMD part, so a closer layout is never made by it; the
+/// placement review reports the pair when the layout is closer anyway.
+pub(crate) const THT_SMD_GAP_MM: f64 = 2.1;
 
 /// What a part's pads are: through-hole, SMD, or both.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-struct PadKinds {
-    through_hole: bool,
-    smd: bool,
+pub(crate) struct PadKinds {
+    pub(crate) through_hole: bool,
+    pub(crate) smd: bool,
 }
 
 impl PadKinds {
     /// The gap two parts need between their courtyards: `base`, raised to the
     /// through-hole limit when one has through-hole pads and the other SMD pads.
     fn gap_mm(self, other: Self, base: f64) -> f64 {
-        if (self.through_hole && other.smd) || (self.smd && other.through_hole) {
+        if self.tht_smd_pair(other) {
             base.max(THT_SMD_GAP_MM)
         } else {
             base
         }
     }
+
+    /// Whether this pair is the through-hole-to-SMD one the DFM check grades a
+    /// Danger, in either order.
+    pub(crate) fn tht_smd_pair(self, other: Self) -> bool {
+        (self.through_hole && other.smd) || (self.smd && other.through_hole)
+    }
 }
 
-fn pad_kinds(board: &Board, placement: &Placement) -> Vec<PadKinds> {
+/// Read what pads each placed part has: through-hole, SMD, or both.
+pub(crate) fn pad_kinds(board: &Board, placement: &Placement) -> Vec<PadKinds> {
     placement
         .components
         .iter()

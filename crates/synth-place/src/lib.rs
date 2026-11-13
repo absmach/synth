@@ -5369,6 +5369,50 @@ struct DistantSupportPart {
     action: &'static str,
 }
 
+/// Through-hole and SMD parts sitting closer than the DFM distance, courtyard
+/// to courtyard.
+///
+/// Compaction keeps this pair [`compact_gaps::THT_SMD_GAP_MM`] apart, but a
+/// hard `near` hint the author pinned can hold them closer, and the exporter
+/// will not move a pinned part. The finding is what the fab's own DFM check
+/// reports, so the review says it here — with the pair and the distance —
+/// before the panel gets to say it for real.
+fn tht_smd_clearance_warnings(board: &Board, placement: &Placement) -> Vec<String> {
+    let kinds = compact_gaps::pad_kinds(board, placement);
+    let courtyard = |index: usize| -> Option<Rect> {
+        let placed = placement.components.get(index)?;
+        let component = board.component(placed.id)?;
+        Some(sidecar_courtyard_rect(board, component, placed))
+    };
+    let mut warnings = Vec::new();
+    for a in 0..placement.components.len() {
+        let Some(rect_a) = courtyard(a) else { continue };
+        for b in a + 1..placement.components.len() {
+            if !kinds[a].tht_smd_pair(kinds[b]) {
+                continue;
+            }
+            let Some(rect_b) = courtyard(b) else { continue };
+            let gap = courtyard_gap_mm(rect_a, rect_b);
+            if gap >= compact_gaps::THT_SMD_GAP_MM {
+                continue;
+            }
+            let refdes = |index: usize| {
+                board
+                    .component(placement.components[index].id)
+                    .map_or_else(|| "?".to_string(), |c| c.refdes.clone())
+            };
+            warnings.push(format!(
+                "{} (through-hole) and {} (SMD) sit {:.2} mm apart, under the {:.1} mm through-hole-to-SMD clearance the DFM check grades a Danger; move one of them, or move the hinted pair apart in the placement sidecar",
+                refdes(a),
+                refdes(b),
+                gap,
+                compact_gaps::THT_SMD_GAP_MM
+            ));
+        }
+    }
+    warnings
+}
+
 /// The gap between two courtyards, in millimetres: zero when they touch or
 /// overlap.
 fn courtyard_gap_mm(a: Rect, b: Rect) -> f64 {
@@ -7233,6 +7277,14 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
                 "add `placement_hint {{ near: \"{mcu}\" priority: hard }}` to the {what} in the source"
             ),
         });
+    }
+
+    // #380: compaction keeps a through-hole part 2.1 mm from an SMD part, but
+    // a pinned hint can hold them closer than that. The pair the DFM check
+    // grades a Danger is then a fact about the layout, so the review says so
+    // and names the move that clears it.
+    for warning in tht_smd_clearance_warnings(board, placement) {
+        functional_warnings.push(warning);
     }
 
     let visual_score = 100u8.saturating_sub((visual_findings.len() as u8).saturating_mul(20));
@@ -9462,6 +9514,61 @@ board "near" {
         let desc = describe_placement(&board, &placement);
         assert!(!desc.cluster_summary.is_empty());
         assert!(!desc.component_regions.is_empty());
+    }
+
+    /// The DFM distance between a through-hole and an SMD part, from #380:
+    /// compaction keeps it, and the review reports the pair when the layout
+    /// sits closer anyway (a pinned hint holds the part where the author
+    /// told it to).
+    #[test]
+    fn a_through_hole_smd_pair_inside_the_dfm_distance_is_reported_with_the_fix() {
+        let board = board_from_source(
+            r#"board "tht_smd" {
+          layers 2
+          component J1: connector "jst_ph_2pin"
+          component R1: resistor "r_generic_0603" value "10k"
+          connect J1.p1 -> R1.p1
+        }"#,
+            "tht_smd.synth",
+        );
+        let mut placement = place(&board).expect("place");
+
+        // A legal layout keeps the distance, so no warning.
+        let clean = describe_placement(&board, &placement);
+        assert!(
+            !clean
+                .functional_warnings
+                .iter()
+                .any(|w| w.contains("through-hole-to-SMD")),
+            "{:?}",
+            clean.functional_warnings
+        );
+
+        // Pin the resistor onto the connector's own centre: the layout is
+        // now inside the DFM distance and the review says so, naming the
+        // pair, the measured gap and the move that clears it.
+        let j1 = centre_of(&board, &placement, "J1");
+        move_part(
+            &mut placement,
+            &board,
+            "R1",
+            synth_geometry::nm_to_mm(j1.x_nm),
+            synth_geometry::nm_to_mm(j1.y_nm),
+        );
+        let warned = describe_placement(&board, &placement);
+        let warning = warned
+            .functional_warnings
+            .iter()
+            .find(|w| w.contains("through-hole-to-SMD"))
+            .expect("the inside-the-distance pair is reported");
+        assert!(
+            warning.contains("J1") && warning.contains("R1"),
+            "the warning names the pair: {warning}"
+        );
+        assert!(
+            warning.contains("move one of them"),
+            "the warning names the fix: {warning}"
+        );
     }
 
     // ----- structural visual review gate -------------------------------
