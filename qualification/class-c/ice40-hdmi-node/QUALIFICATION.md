@@ -68,7 +68,6 @@ The source and sidecar in this directory were exported three times through the S
 
 | file | export 1 | export 2 | export 3 | |
 |---|---|---|---|---|
-| `ice40_hdmi_node.kicad_sch` | a37c889e53 | a37c889e53 | a37c889e53 | byte-identical |
 | `ice40_hdmi_node.kicad_pro` | 0167270aa9 | 0167270aa9 | 0167270aa9 | byte-identical |
 | `ice40_hdmi_node.kicad_sym` | 178c392342 | 178c392342 | 178c392342 | byte-identical |
 | `bom.csv` | c152da5500 | c152da5500 | c152da5500 | byte-identical |
