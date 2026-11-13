@@ -70,6 +70,12 @@ fn parts_that_named_missing_libraries_qualify_against_the_stock_ones() {
         "mpu6050_imu",
         // #87: a six-pad balun declared only pads 1-4.
         "balun_2g4",
+        // #157: these three once named libraries KiCad does not ship.
+        "tvs_array_5v",
+        "mp2307_buck",
+        "osc_smd_25mhz",
+        // #152: the pin map is the RP2350A, not the RP2040's.
+        "rp2350",
     ] {
         let part = registry
             .lookup(id)

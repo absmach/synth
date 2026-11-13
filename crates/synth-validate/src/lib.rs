@@ -130,6 +130,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(AnalogDigitalMixingRule),
         Box::new(KeepoutMissingRadiusRule),
         Box::new(KeepoutZeroRadiusRule),
+        Box::new(KeepoutWithoutAnchorRule),
         Box::new(DuplicateRefdesRule),
         Box::new(EmptyRefdesRule),
         Box::new(RefdesFormatRule),
@@ -180,6 +181,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::PullupRailMismatchRule::new(config)),
         Box::new(deep_erc::RegulatorInputRangeRule),
         Box::new(deep_erc::PowerBudgetRule::new(config)),
+        Box::new(deep_erc::OperatingEnvelopeRule),
         Box::new(deep_erc::FloatingCmosInputRule),
         Box::new(deep_erc::OpenDrainPullupRule::new(config)),
         Box::new(deep_erc::ConnectorProtectionRule::new(config)),
@@ -580,6 +582,33 @@ fn series_far_net<'a>(
     })
 }
 
+/// The highest declared voltage on a non-ground `power_input` pin of
+/// `component`, if the design states it.
+fn supply_voltage_v(
+    board: &Board,
+    component: &Component,
+    part: &synth_registry::Part,
+) -> Option<f64> {
+    part.pins
+        .iter()
+        .enumerate()
+        .filter(|(_, pin)| pin.electrical_type == ElectricalType::PowerInput)
+        .filter(|(_, pin)| {
+            !matches!(
+                pin.name.to_lowercase().as_str(),
+                "gnd" | "vss" | "vssa" | "vee" | "agnd" | "dgnd" | "vneg"
+            )
+        })
+        .filter_map(|(index, _)| {
+            board
+                .nets_containing(component.id, PinId(index as u32))
+                .next()
+                .and_then(|(_, net)| net.voltage)
+                .map(synth_ir::Voltage::to_v)
+        })
+        .reduce(f64::max)
+}
+
 /// Locate what a `required_decoupling` rule asks for on `component`. `None`
 /// when the rule's pin (or its `to` pin) is floating: `E-SYNTH-CONNECT-001`
 /// owns that, so it is not flagged twice.
@@ -711,6 +740,13 @@ impl ErcRule for MissingDecouplingRule {
                 continue;
             };
             for decoupling in &part.required_decoupling {
+                // A conditional rule applies only above the stated supply.
+                // An unknown rail voltage fails closed (the rule still runs).
+                if let Some(threshold) = decoupling.when_supply_over_v {
+                    if supply_voltage_v(board, component, part).is_some_and(|v| v <= threshold) {
+                        continue;
+                    }
+                }
                 let Some(site) = decoupling_site(board, component, part, decoupling) else {
                     continue;
                 };
@@ -2167,6 +2203,67 @@ impl ErcRule for KeepoutZeroRadiusRule {
 }
 
 // -----------------------------------------------------------------------------
+// E-SYNTH-KEEPOUT-003 — keepout with nothing to centre on
+// -----------------------------------------------------------------------------
+
+/// A keepout is a radius around a place. When no component matches its
+/// explicit `anchor` — or, without an anchor, its own name — the exporter
+/// has no geometry to write: the old exporter silently placed it at the
+/// board centre, which is a corridor over whatever happens to sit in the
+/// middle of the board. The warning replaces that silence.
+struct KeepoutWithoutAnchorRule;
+
+impl ErcRule for KeepoutWithoutAnchorRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-KEEPOUT-003"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Geometry
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
+        for ko in &board.keepouts {
+            let anchor = ko.anchor.as_deref().unwrap_or(ko.name.as_str());
+            let anchored = board.components.iter().any(|component| {
+                component.refdes.eq_ignore_ascii_case(anchor)
+                    || component.kind.eq_ignore_ascii_case(anchor)
+            });
+            if anchored {
+                continue;
+            }
+            let expected = match ko.anchor.as_deref() {
+                Some(anchor) => format!(
+                    "`keepout {}` to name an existing component with `anchor \"{anchor}\"`",
+                    ko.name
+                ),
+                None => format!(
+                    "`keepout {}` to match a component's refdes or kind, or to carry \
+                     `anchor \"REFDES\"`",
+                    ko.name
+                ),
+            };
+            out.push(
+                DiagnosticBuilder::new(
+                    self.code(),
+                    Severity::Warning,
+                    "keepout has no component to centre on",
+                )
+                .location(Location::from_span(file.to_string(), ko.source_span))
+                .expected(expected)
+                .found(format!(
+                    "no declared component matches `{anchor}`, so the keepout is not exported"
+                ))
+                .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                .build(),
+            );
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
 // E-SYNTH-NAME-001 — duplicate refdes across components
 // -----------------------------------------------------------------------------
 
@@ -3320,20 +3417,35 @@ impl ErcRule for ResidualEnergyAnomalyRule {
                 continue;
             }
 
-            let pin_count = net.endpoints.len();
-            let decoupling_count = net
-                .endpoints
-                .iter()
-                .filter(|e| {
-                    board
-                        .component(e.component)
-                        .and_then(|c| c.part.as_ref())
-                        .is_some_and(|p| p.kind == "capacitor")
-                })
-                .count();
+            // Count distinct devices, not pin endpoints. One USB-C
+            // receptacle exposes VBUS on four paralleled contacts; counting
+            // each contact as a load made a single connector look like six.
+            // Capacitors are the decoupling, and connectors/protection parts
+            // do not consume the rail, so neither counts as a load.
+            let mut load_components = std::collections::BTreeSet::new();
+            let mut decoupling_components = std::collections::BTreeSet::new();
+            for endpoint in &net.endpoints {
+                let Some(component) = board.component(endpoint.component) else {
+                    continue;
+                };
+                let kind = component
+                    .part
+                    .as_ref()
+                    .map_or(component.kind.as_str(), |p| p.kind.as_str());
+                if kind == "capacitor" {
+                    decoupling_components.insert(endpoint.component);
+                } else if !matches!(
+                    kind,
+                    "connector" | "jack" | "test_point" | "mounting_hole" | "fiducial"
+                ) {
+                    load_components.insert(endpoint.component);
+                }
+            }
+            let pin_count = load_components.len();
+            let decoupling_count = decoupling_components.len();
 
             let residual_score = (pin_count as f64) / ((decoupling_count as f64) + 1.0);
-            if pin_count >= 4 && residual_score >= 3.0 {
+            if pin_count >= 3 && residual_score >= 3.0 {
                 let first = &net.endpoints[0];
                 out.push(
                     DiagnosticBuilder::new(
@@ -5053,6 +5165,7 @@ mod tests {
             max_distance_mm: None,
             to: None,
             through: None,
+            when_supply_over_v: None,
         }];
         let cap = part(
             "c",

@@ -149,6 +149,14 @@ fn the_eeprom_has_one_canonical_part_and_the_older_entry_points_at_it() {
         .substitutes
         .iter()
         .any(|s| s.as_str() == "24lc256_soic8"));
+    // C7611 is an NEC solid-state relay, not Microchip's 24LC256-I/SN.
+    for id in ["24lc256_soic8", "24lc256_eeprom"] {
+        assert_eq!(
+            part(id).lcsc_pn.as_deref(),
+            Some("C411625"),
+            "{id} names the wrong LCSC listing"
+        );
+    }
 }
 
 #[test]

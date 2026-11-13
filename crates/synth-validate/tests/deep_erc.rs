@@ -1552,3 +1552,181 @@ fn the_ch340g_auxiliary_output_is_not_a_regulator_rail() {
         codes(&diags, "E-SYNTH-POWER-010")
     );
 }
+
+// ---------------------------------------------------------------------------
+// E-SYNTH-POWER-012 — connector/discrete outside its operating envelope
+// ---------------------------------------------------------------------------
+
+/// A connector and a zener with envelopes the tests control, so the rule is
+/// judged against declared numbers, not whatever the seed registry carries.
+const ENVELOPE_DIODE_TOML: &str = r#"
+id = "dz_envelope"
+kind = "diode"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SOD-123"
+
+[operating_conditions]
+min_voltage_v = 4.8
+max_voltage_v = 5.4
+max_current_ma = 98.0
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+"#;
+
+const ENVELOPE_REGISTRY: &[(&str, &str)] = &[
+    (
+        "conn_envelope.synth.toml",
+        r#"
+id = "conn_envelope"
+kind = "connector"
+kicad_symbol = "Connector_Generic:Conn_01x02"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+
+[operating_conditions]
+min_voltage_v = 0.0
+max_voltage_v = 250.0
+max_current_ma = 1000.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+"#,
+    ),
+    ("dz_envelope.synth.toml", ENVELOPE_DIODE_TOML),
+];
+
+fn validate_envelope(src: &str) -> Vec<Diagnostic> {
+    let registry = synth_registry::load_from_strs(ENVELOPE_REGISTRY).expect("parts must load");
+    validate_in(src, &registry, &ErcConfig::default())
+}
+
+#[test]
+fn a_discrete_above_its_declared_voltage_is_an_error() {
+    let src = r#"board "t" {
+      layers 2
+      power "VIN12" 12v
+      component J1: connector "conn_envelope"
+      component D1: diode "dz_envelope"
+      connect J1.p1 -> D1.cathode as "VIN12"
+      connect D1.anode -> J1.p2
+    }"#;
+    let diags = validate_envelope(src);
+    let hits = codes(&diags, "E-SYNTH-POWER-012");
+    assert_eq!(hits.len(), 1, "the zener clamps a 12V rail: {hits:?}");
+    let found = hits[0].found.clone().unwrap_or_default();
+    assert!(found.contains("12"), "must quote the rail: {found}");
+    // The connector is rated for the rail and stays out of the report.
+    let found = hits[0].message.clone().unwrap_or_default();
+    assert!(
+        found.contains("D1"),
+        "the finding names the overstressed part: {found}"
+    );
+}
+
+#[test]
+fn a_part_within_its_envelope_is_clean() {
+    let src = r#"board "t" {
+      layers 2
+      power "V5" 5v
+      component J1: connector "conn_envelope"
+      component D1: diode "dz_envelope"
+      connect J1.p1 -> D1.cathode as "V5"
+      connect D1.anode -> J1.p2
+    }"#;
+    let diags = validate_envelope(src);
+    assert!(
+        codes(&diags, "E-SYNTH-POWER-012").is_empty(),
+        "5V is inside the zener's 4.8-5.4V envelope: {:?}",
+        codes(&diags, "E-SYNTH-POWER-012")
+    );
+}
+
+#[test]
+fn a_part_with_no_operating_conditions_is_skipped() {
+    let registry = synth_registry::load_from_strs(&[
+        (
+            "conn_bare.synth.toml",
+            r#"
+id = "conn_bare"
+kind = "connector"
+kicad_symbol = "Connector_Generic:Conn_01x02"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+"#,
+        ),
+        ("dz_envelope.synth.toml", ENVELOPE_DIODE_TOML),
+    ])
+    .expect("parts must load");
+    let src = r#"board "t" {
+      layers 2
+      power "VIN12" 12v
+      component J1: connector "conn_bare"
+      component D1: diode "dz_envelope"
+      connect J1.p1 -> D1.cathode as "VIN12"
+      connect J1.p2 -> D1.anode
+    }"#;
+    let diags = validate_in(src, &registry, &ErcConfig::default());
+    let hits = codes(&diags, "E-SYNTH-POWER-012");
+    assert_eq!(hits.len(), 1, "only the declared diode is judged: {hits:?}");
+    let message = hits[0].message.clone().unwrap_or_default();
+    assert!(
+        !message.contains("J1"),
+        "a part with no envelope has nothing declared to violate: {message}"
+    );
+}
+
+#[test]
+fn a_rail_budget_above_the_part_maximum_is_an_error() {
+    let src = r#"board "t" {
+      layers 2
+      netclass "PWR5" { current 1.5A }
+      power "V5" 5v class "PWR5"
+      component J1: connector "conn_envelope"
+      component D1: diode "dz_envelope"
+      connect J1.p1 -> D1.cathode as "V5"
+      connect D1.anode -> J1.p2
+    }"#;
+    let diags = validate_envelope(src);
+    let hits = codes(&diags, "E-SYNTH-POWER-012");
+    assert_eq!(
+        hits.len(),
+        2,
+        "the connector and the zener both sit on the over-budget rail: {hits:?}"
+    );
+    let on_connector = hits
+        .iter()
+        .find(|d| {
+            d.entities
+                .iter()
+                .any(|e| matches!(e, synth_diagnostics::EntityRef::Component { id } if id == "J1"))
+        })
+        .expect("the connector is judged");
+    let found = on_connector.found.clone().unwrap_or_default();
+    assert!(
+        found.contains("1500"),
+        "the finding quotes the budget the rail carries: {found}"
+    );
+}

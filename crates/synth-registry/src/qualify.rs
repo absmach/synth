@@ -66,6 +66,11 @@ pub trait FootprintFacts {
 
 pub trait SymbolFacts {
     fn pin_numbers(&self, lib_id: &str) -> Option<BTreeSet<String>>;
+
+    /// The symbol's pin names per pad number, when the source can read them.
+    fn pin_names(&self, _lib_id: &str) -> Option<BTreeMap<String, BTreeSet<String>>> {
+        None
+    }
 }
 
 #[derive(Debug, Default)]
@@ -167,11 +172,18 @@ pub const STRUCTURAL_CODES: [&str; 8] = [
 /// `008` and `015` are provenance: nobody has reviewed the part, or the review
 /// metadata is incomplete. That is a judgement call about trust, and it already
 /// has its own gate in `--allow-unverified-parts`.
-pub const NON_STRUCTURAL_BLOCKING: [&str; 4] = [
+///
+/// `017` is a declared pin name that appears on no pad of the named symbol. The
+/// name may be a legitimate alias the synonym table in `kicad_pin_check.rs`
+/// does not know yet, so refusing a fab submission on a spelling suspicion
+/// blames the wrong thing; the registry qualifier reports it per part, and
+/// extending the table or correcting the name clears it.
+pub const NON_STRUCTURAL_BLOCKING: [&str; 5] = [
     "E-SYNTH-QUAL-006",
     "E-SYNTH-QUAL-007",
     "E-SYNTH-QUAL-008",
     "E-SYNTH-QUAL-015",
+    "E-SYNTH-QUAL-017",
 ];
 
 impl Finding {
@@ -711,6 +723,85 @@ fn check_footprint_side(part: &Part, pads: Option<&[PadFacts]>) -> Check {
     )
 }
 
+/// Compare pin names through [`crate::kicad_pin_check::normalize_pin_name`]
+/// and [`crate::kicad_pin_check::pin_names_match`], which document the
+/// normalization and the synonym table they apply.
+/// The declared pin names the symbol contradicts, as `(swapped,
+/// unverifiable)` sample strings: a name the symbol prints on a *different*
+/// pad is swapped, and a name that appears on no pad of the symbol — under
+/// no spelling the synonym table knows — cannot be verified at all.
+///
+/// The comparison base is the symbol's own names. A symbol that prints no
+/// names (every pin is KiCad's unnamed marker) exposes nothing to disagree
+/// with, so both lists come back empty and the name check stays silent.
+/// A declared number the symbol does not have is skipped here: the
+/// unmatched-number finding already reports it, and names cannot add to
+/// that.
+fn name_disagreements(
+    part: &Part,
+    lib_id: &str,
+    symbol_pins: &std::collections::BTreeSet<String>,
+    symbols: &dyn SymbolFacts,
+) -> (Vec<String>, Vec<String>) {
+    let mut swapped = Vec::new();
+    let mut unverifiable = Vec::new();
+    let Some(names_by_number) = symbols.pin_names(lib_id) else {
+        return (swapped, unverifiable);
+    };
+    if !names_by_number
+        .values()
+        .flatten()
+        .any(|n| !crate::kicad_pin_check::normalize_pin_name(n).is_empty())
+    {
+        return (swapped, unverifiable);
+    }
+    for pin in part.pins.iter().filter(|p| !p.footprint_only) {
+        let number = pin.number.0.trim();
+        if number.is_empty() || !symbol_pins.contains(number) {
+            continue;
+        }
+        if crate::kicad_pin_check::normalize_pin_name(&pin.name).is_empty() {
+            continue;
+        }
+        let names_match = |n: &String| crate::kicad_pin_check::pin_names_match(&pin.name, n);
+        let here = names_by_number
+            .get(number)
+            .is_some_and(|names| names.iter().any(names_match));
+        if here {
+            continue;
+        }
+        // A pad the symbol itself calls reserved/no-connect carries no signal
+        // name to contradict. The MPU-6050 symbol prints `RESV` on pin 22
+        // while the datasheet calls it CLKOUT; that is a library annotation,
+        // not evidence that the registry pin is on the wrong pad.
+        let placeholder = names_by_number.get(number).is_some_and(|names| {
+            names.iter().all(|name| {
+                matches!(
+                    crate::kicad_pin_check::normalize_pin_name(name).as_str(),
+                    "resv" | "nc" | "noconnect" | "reserved" | "dnu" | "na"
+                )
+            })
+        });
+        if placeholder {
+            continue;
+        }
+        if let Some((other, _)) = names_by_number
+            .iter()
+            .find(|(other, names)| *other != number && names.iter().any(names_match))
+        {
+            swapped.push(format!("`{}` on pad {other} not {number}", pin.name));
+            continue;
+        }
+        // The name appears on no pad of the symbol — not here, not
+        // elsewhere, under any spelling the synonym table knows. Nothing
+        // the symbol says can verify it, so it is reported rather than
+        // silently skipped: the check cannot be defeated by an unusual
+        // pin name.
+        unverifiable.push(format!("`{}` on pad {number}", pin.name));
+    }
+    (swapped, unverifiable)
+}
+
 fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
     const NAME: &str = "symbol_pin_coverage";
     let Some(lib_id) = part.kicad_symbol.as_deref() else {
@@ -744,7 +835,42 @@ fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
         .filter(|n| !n.is_empty() && !symbol_pins.contains(*n))
         .collect();
 
+    // A pad-number check alone passes a pin map that puts the right numbers on
+    // the wrong signals. When the symbol names its pins, a registry pin whose
+    // name lives on a different symbol pad is a swapped pin, not a pass — and
+    // one whose name appears on no pad at all is unverifiable, not a pass.
+    let (swapped, unverifiable) = name_disagreements(part, lib_id, &symbol_pins, symbols);
+
     let mut findings = Vec::new();
+    if !swapped.is_empty() {
+        findings.push(Finding::blocking(
+            "E-SYNTH-QUAL-005",
+            "declared pin name sits on another KiCad symbol pad",
+            format!("each pin of `{}` to keep its signal name", part.id.0),
+            format!(
+                "{} swapped: {}",
+                swapped.len(),
+                sample(&swapped.iter().map(String::as_str).collect::<Vec<_>>())
+            ),
+        ));
+    }
+    if !unverifiable.is_empty() {
+        findings.push(Finding::review(
+            "E-SYNTH-QUAL-017",
+            "declared pin name exists on no KiCad symbol pad; cannot verify",
+            format!(
+                "every pin name of `{}` to appear on a pad of `{lib_id}` (spelled as the \
+                 symbol prints it, or as one of the synonym groups in \
+                 kicad_pin_check.rs)",
+                part.id.0
+            ),
+            format!(
+                "{} unverifiable: {}",
+                unverifiable.len(),
+                sample(&unverifiable.iter().map(String::as_str).collect::<Vec<_>>())
+            ),
+        ));
+    }
     if !mislabelled.is_empty() {
         findings.push(Finding::blocking(
             "E-SYNTH-QUAL-005",
@@ -1148,6 +1274,116 @@ mod tests {
 
     fn two_pin_symbol() -> Symbol {
         Symbol(["1".to_string(), "2".to_string()].into_iter().collect())
+    }
+
+    /// A symbol whose pads carry the same numbers but the signals swapped.
+    struct NamedSymbol(BTreeMap<String, BTreeSet<String>>);
+
+    impl SymbolFacts for NamedSymbol {
+        fn pin_numbers(&self, _lib_id: &str) -> Option<BTreeSet<String>> {
+            Some(self.0.keys().cloned().collect())
+        }
+
+        fn pin_names(&self, _lib_id: &str) -> Option<BTreeMap<String, BTreeSet<String>>> {
+            Some(self.0.clone())
+        }
+    }
+
+    #[test]
+    fn a_pin_name_on_another_symbol_pad_is_a_swapped_map() {
+        let part = part_with(vec![pin("a", "1"), pin("b", "2")]);
+        let symbol = NamedSymbol(BTreeMap::from([
+            ("1".to_string(), ["b".to_string()].into_iter().collect()),
+            ("2".to_string(), ["a".to_string()].into_iter().collect()),
+        ]));
+        let q = qualify_part(&part, &two_pads(), &symbol);
+        assert!(
+            findings(&q).contains(&"E-SYNTH-QUAL-005"),
+            "a swapped pin name must block: {:#?}",
+            q.checks
+        );
+    }
+
+    #[test]
+    fn a_declared_name_matching_no_symbol_pad_is_reported_not_skipped() {
+        // The 24LC256 shape taken one step further: the symbol carries no
+        // pad the declared name could have been swapped with, so the old
+        // swapped-only check passed silently. It must not.
+        let part = part_with(vec![pin("a", "1"), pin("b", "2")]);
+        let symbol = NamedSymbol(BTreeMap::from([
+            ("1".to_string(), ["c".to_string()].into_iter().collect()),
+            ("2".to_string(), ["d".to_string()].into_iter().collect()),
+        ]));
+        let q = qualify_part(&part, &two_pads(), &symbol);
+        assert!(
+            findings(&q).contains(&"E-SYNTH-QUAL-017"),
+            "a name on no symbol pad cannot be verified: {:#?}",
+            q.checks
+        );
+        assert_eq!(
+            q.status,
+            CheckStatus::Pass,
+            "an unverifiable name is a review finding, not a wrong-pad failure: {:#?}",
+            q.checks
+        );
+        let f = q
+            .findings()
+            .find(|f| f.code == "E-SYNTH-QUAL-017")
+            .expect("an unverifiable-name finding");
+        assert!(f.found.contains("`a` on pad 1"), "{f:?}");
+        assert!(f.found.contains("`b` on pad 2"), "{f:?}");
+    }
+
+    #[test]
+    fn a_symbol_reserved_pad_does_not_disprove_a_declared_name() {
+        let part = part_with(vec![pin("clkout", "22")]);
+        let symbol = NamedSymbol(BTreeMap::from([(
+            "22".to_string(),
+            ["RESV".to_string()].into_iter().collect(),
+        )]));
+        let q = qualify_part(&part, &two_pads(), &symbol);
+        assert!(
+            !findings(&q).contains(&"E-SYNTH-QUAL-017"),
+            "a reserved symbol pad cannot disprove the declared signal: {:#?}",
+            q.checks
+        );
+    }
+
+    #[test]
+    fn a_name_matching_through_a_synonym_is_not_blocked() {
+        // `vdd`/`VCC` and `gnd`/`VSS` are the same pads spelled the way
+        // datasheets and KiCad libraries each spell them.
+        let part = part_with(vec![pin("vdd", "1"), pin("gnd", "2")]);
+        let symbol = NamedSymbol(BTreeMap::from([
+            ("1".to_string(), ["VCC".to_string()].into_iter().collect()),
+            ("2".to_string(), ["VSS".to_string()].into_iter().collect()),
+        ]));
+        let q = qualify_part(&part, &two_pads(), &symbol);
+        assert!(
+            findings(&q).is_empty(),
+            "synonym spellings are the same pad: {:#?}",
+            q.checks
+        );
+        assert_eq!(q.status, CheckStatus::Pass);
+    }
+
+    #[test]
+    fn a_symbol_that_prints_no_names_skips_the_name_check() {
+        // Conn_01x02-style symbols whose pins carry KiCad's unnamed
+        // marker expose no names to disagree with; the number checks are
+        // the only ones that can speak, as before.
+        let part = part_with(vec![pin("p1", "1"), pin("p2", "2")]);
+        let symbol = NamedSymbol(BTreeMap::from([
+            ("1".to_string(), ["~".to_string()].into_iter().collect()),
+            ("2".to_string(), ["~".to_string()].into_iter().collect()),
+        ]));
+        let q = qualify_part(&part, &two_pads(), &symbol);
+        assert!(
+            findings(&q).is_empty(),
+            "no names, no name findings: {:#?}",
+            q.checks
+        );
+        assert_eq!(q.status, CheckStatus::Pass);
     }
 
     fn findings(q: &PartQualification) -> Vec<&str> {

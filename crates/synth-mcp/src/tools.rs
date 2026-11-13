@@ -1058,8 +1058,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "component U1: mcu \"stm32h743\" { placement_hint { region: top_left priority: hard } }"
                 },
                 {
-                    "form": "connect <REFDES>.<pin> -> <REFDES>.<pin>",
-                    "description": "Wires two component pins onto the same net. Pin names come from the part's registry entry. Repeat `connect` lines that share an endpoint to fan a net out to more than two pins.",
+                    "form": "connect <REFDES>.<pin> -> <REFDES>.<pin> [as \"<NET_NAME>\"] [class \"<netclass>\"]",
+                    "description": "Wires two component pins onto the same net. Pin names come from the part's registry entry. Repeat `connect` lines that share an endpoint to fan a net out to more than two pins. `as \"<NET_NAME>\"` joins a named net instead of an auto-named one. `class \"<netclass>\"` joins the declared netclass; without it the net is auto-classified.",
                     "example": "connect U1.vout -> C3.p1"
                 },
                 {
@@ -1098,8 +1098,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "net \"I2C_SCL\" { U1.scl U2.pb6 }"
                 },
                 {
-                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [layers \"<layer>\", …] [color \"#rrggbb\"] }",
-                    "description": "Routing and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. Pin a controlled-impedance pair to outer layers to clear W-SYNTH-IMPEDANCE-001.",
+                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [impedance <value><unit>] [current <value><unit>] [plane] [max_length <value><unit>] [max_skew <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [edge_rate <slow|medium|fast>] [layers \"<layer>\", …] [color \"#rrggbb\"] }",
+                    "description": "Routing, signal-integrity and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. `plane` asks for a copper pour, `impedance` sets the target characteristic impedance, `current` the current budget, `max_length`/`max_skew` the routed-length budgets, and `edge_rate` the return-via tier. Use `class \"<name>\"` on `connect`, `net` or `power` to join the class.",
                     "example": "netclass \"PWR\" { trace_width 0.4mm clearance 0.25mm color \"#d55e00\" }"
                 },
                 {
@@ -6191,6 +6191,38 @@ mod language_reference_tests {
         );
         let parse = synth_parser::parse(&source, "stackup_example.synth".to_string());
         assert!(parse.diagnostics.is_empty(), "{:?}", parse.diagnostics);
+    }
+
+    #[test]
+    fn language_reference_documents_net_classes_on_connect() {
+        let result = execute_language_reference(&serde_json::json!({}));
+        let statements = result["grammar"]["statements"].as_array().unwrap();
+        let connect = statements
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("connect <REFDES>.<pin> -> <REFDES>.<pin> [as")
+            })
+            .expect("the connect form names `as` and `class`");
+        assert!(connect["form"]
+            .as_str()
+            .unwrap()
+            .contains("class \"<netclass>\""));
+        let netclass = statements
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("netclass")
+            })
+            .expect("the netclass form");
+        let form = netclass["form"].as_str().unwrap();
+        for attr in ["max_length", "max_skew", "impedance", "plane", "edge_rate"] {
+            assert!(form.contains(attr), "{attr} missing from {form}");
+        }
     }
 
     #[test]

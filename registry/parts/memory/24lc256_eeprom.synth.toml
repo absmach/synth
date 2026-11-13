@@ -4,7 +4,7 @@ description = "DEPRECATED, use 24lc256_soic8, which carries provenance and a rev
 lifecycle = "obsolete"
 substitutes = ["24lc256_soic8"]
 mpn = "24LC256-I/SN"
-lcsc_pn = "C7611"
+lcsc_pn = "C411625"
 kicad_symbol = "Memory_EEPROM:24LC256"
 kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 

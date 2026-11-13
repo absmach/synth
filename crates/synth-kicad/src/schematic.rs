@@ -17,6 +17,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use synth_diagnostics::{Diagnostic, DiagnosticBuilder, Severity};
 use synth_ir::{Board, Component, ComponentId, NetId};
 /// Dedup key for a single emitted wire segment: `(net, endpoint_a, endpoint_b)`
 /// in quantized (x100) integer coordinates.
@@ -142,9 +143,24 @@ pub(crate) fn build_schematic_from_layout(
     project: &Uuid,
     layout: &synth_layout::Layout,
 ) -> Sexp {
+    let (sexp, _) = build_schematic_from_layout_with_warnings(board, project, layout);
+    sexp
+}
+
+/// [`build_schematic_from_layout`] with the exporter's warnings collected
+/// instead of dropped. The schematic builder produces no error-level
+/// diagnostics, but a name label with no clear segment anywhere on its net
+/// is a choice the export must not make silently — the warning travels to
+/// the export result so the CLI can surface it.
+pub(crate) fn build_schematic_from_layout_with_warnings(
+    board: &Board,
+    project: &Uuid,
+    layout: &synth_layout::Layout,
+) -> (Sexp, Vec<Diagnostic>) {
+    let mut warnings = Vec::new();
     let root_uuid = derive_entity_uuid(project, "sheet", "root");
     let mut power_refs = PowerRefAllocator::default();
-    build_sheet_schematic(
+    let sexp = build_sheet_schematic(
         board,
         project,
         layout,
@@ -158,7 +174,9 @@ pub(crate) fn build_schematic_from_layout(
             root_furniture: None,
         },
         &mut power_refs,
-    )
+        &mut warnings,
+    );
+    (sexp, warnings)
 }
 
 /// Which sheet is being rendered, and the cross-sheet furniture it
@@ -232,6 +250,7 @@ pub(crate) fn build_sheet_schematic(
     layout: &synth_layout::Layout,
     render: &SheetRender<'_>,
     power_refs: &mut PowerRefAllocator,
+    warnings: &mut Vec<Diagnostic>,
 ) -> Sexp {
     let placements: HashMap<ComponentId, &ComponentPlacement> =
         layout.components.iter().map(|p| (p.id, p)).collect();
@@ -583,6 +602,8 @@ pub(crate) fn build_sheet_schematic(
     // and the PCB use the same name instead of `Net-(...)`.
     let flagged = layout.labeled_net_ids();
     let power = layout.power_net_ids();
+    // Every flag stub is independent of the net being labelled, so build them
+    // once instead of rebuilding all of them for each net.
     let all_stubs: Vec<(synth_ir::NetId, Vec<(f64, f64)>)> = layout
         .net_labels
         .iter()
@@ -596,31 +617,68 @@ pub(crate) fn build_sheet_schematic(
         .iter()
         .filter(|n| !n.auto_named && !flagged.contains(&n.id) && !power.contains(&n.id))
     {
-        let longest = layout
+        // Every segment of the net, longest first: the label prefers the
+        // longest segment with a clear spot, falling back to the
+        // next-longest one, and only a net with no clear segment anywhere
+        // gets the midpoint fallback — with a warning, because a label on
+        // a blocked spot is exactly how one net silently merges into
+        // another.
+        let mut segments: Vec<&[(f64, f64)]> = layout
             .wires
             .iter()
             .filter(|w| w.net == net.id)
             .flat_map(|w| w.points.windows(2))
-            .max_by(|a, b| segment_len(a).total_cmp(&segment_len(b)));
-        if let Some(seg) = longest {
-            let stubs: Vec<&[(f64, f64)]> = all_stubs
-                .iter()
-                .filter(|(label_net, _)| *label_net != net.id)
-                .flat_map(|(_, wire)| wire.windows(2))
-                .collect();
-            let mut others: Vec<&[(f64, f64)]> = layout
-                .wires
-                .iter()
-                .filter(|w| w.net != net.id)
-                .flat_map(|w| w.points.windows(2))
-                .collect();
-            others.extend(stubs);
-            let mut points: Vec<(f64, f64)> = layout.junctions.clone();
-            points.extend(layout.wires.iter().flat_map(|w| w.points.iter().copied()));
-            let at = wire_name_label_at(seg, &others, &points);
-            let uuid = derive_entity_uuid(project, "wire_name_label", &net.name);
-            children.push(build_local_label(&net.name, at, uuid));
+            .collect();
+        if segments.is_empty() {
+            continue;
         }
+        segments.sort_by(|a, b| segment_len(b).total_cmp(&segment_len(a)));
+        // Another net's flag stub is a wire too, and the label may not touch it.
+        let stubs: Vec<&[(f64, f64)]> = all_stubs
+            .iter()
+            .filter(|(label_net, _)| *label_net != net.id)
+            .flat_map(|(_, wire)| wire.windows(2))
+            .collect();
+        let mut others: Vec<&[(f64, f64)]> = layout
+            .wires
+            .iter()
+            .filter(|w| w.net != net.id)
+            .flat_map(|w| w.points.windows(2))
+            .collect();
+        others.extend(stubs);
+        // A label also joins wires at a junction or a branch endpoint even
+        // when they belong to the same net; place it clear of both.
+        let mut points: Vec<(f64, f64)> = layout.junctions.clone();
+        points.extend(layout.wires.iter().flat_map(|w| w.points.iter().copied()));
+        let at = wire_name_label_pos(&segments, &others, &points).unwrap_or_else(|| {
+            warnings.push(
+                DiagnosticBuilder::new(
+                    "W-SYNTH-LABEL-001",
+                    Severity::Warning,
+                    "net name label has no clear segment",
+                )
+                .expected(format!(
+                    "a segment of net `{}` with a spot clear of junctions, same-net branch \
+                     endpoints and other nets' wires",
+                    net.name
+                ))
+                .found(format!(
+                    "every segment of net `{}` is blocked; the label sits on the longest \
+                     segment's midpoint, where it may join a wire it should not",
+                    net.name
+                ))
+                .message(format!(
+                    "no segment of net `{}` has a clear spot for its name label; widen the \
+                     net's wiring or rename it so the label can move",
+                    net.name
+                ))
+                .explanation_url("synth.docs/diagnostics/W-SYNTH-LABEL-001")
+                .build(),
+            );
+            segment_midpoint(segments[0])
+        });
+        let uuid = derive_entity_uuid(project, "wire_name_label", &net.name);
+        children.push(build_local_label(&net.name, at, uuid));
     }
 
     // Cross-sheet stubs (§P26): one stub per in-sheet endpoint of a
@@ -1313,15 +1371,18 @@ fn segment_len(seg: &[(f64, f64)]) -> f64 {
     (seg[1].0 - seg[0].0).hypot(seg[1].1 - seg[0].1)
 }
 
-/// Where a net's name label sits on its wire segment `seg`: the midpoint, or
-/// the nearest point to it that is clear of every wire in `others`. KiCad joins
-/// a label to every wire under it, so a midpoint where another net crosses
-/// would merge the two nets.
+/// Where a net's name label sits on its wire segment `seg`: `Some` at the
+/// midpoint, or the nearest clear point to it — `None` when the whole
+/// segment is blocked. KiCad joins a label to every wire under it, so a
+/// midpoint where another net crosses, or where the net's own branches
+/// meet at a junction, would merge the two nets; a caller that gets `None`
+/// moves to the next-longest segment of the same net instead of adjusting
+/// along a wire that has no clear spot.
 fn wire_name_label_at(
     seg: &[(f64, f64)],
     others: &[&[(f64, f64)]],
     points: &[(f64, f64)],
-) -> (f64, f64) {
+) -> Option<(f64, f64)> {
     const STEP_MM: f64 = 1.27;
     const CLEAR_MM: f64 = 0.5;
     let at = |t: f64| {
@@ -1348,11 +1409,38 @@ fn wire_name_label_at(
         let shift = f64::from(step) * STEP_MM / len.max(f64::EPSILON);
         for t in [0.5 - shift, 0.5 + shift] {
             if (0.0..=1.0).contains(&t) && clear(at(t)) {
-                return at(t);
+                return Some(at(t));
             }
         }
     }
-    at(0.5)
+    None
+}
+
+/// The spot for a net's name label: the longest of the net's segments that
+/// has a clear spot, longest first, per the fallback the exporter wants —
+/// the next-longest segment, not a shifted point on a blocked wire.
+/// Returns `None` when no segment of the net qualifies; the caller then
+/// places the label on the longest segment's midpoint and warns, because a
+/// name label that lands on a junction or a same-net branch may merge
+/// another net into this one and nothing downstream can tell.
+fn wire_name_label_pos(
+    segments: &[&[(f64, f64)]],
+    others: &[&[(f64, f64)]],
+    points: &[(f64, f64)],
+) -> Option<(f64, f64)> {
+    let mut ordered: Vec<&[(f64, f64)]> = segments.to_vec();
+    ordered.sort_by(|a, b| segment_len(b).total_cmp(&segment_len(a)));
+    ordered
+        .iter()
+        .find_map(|seg| wire_name_label_at(seg, others, points))
+}
+
+/// The midpoint of a segment, the unqualified fallback a warning names.
+fn segment_midpoint(seg: &[(f64, f64)]) -> (f64, f64) {
+    (
+        f64::midpoint(seg[0].0, seg[1].0),
+        f64::midpoint(seg[0].1, seg[1].1),
+    )
 }
 
 /// Distance in mm from `p` to the segment `a`-`b`.
@@ -2978,7 +3066,7 @@ mod tests {
         let bus = [(242.57, 31.75), (242.57, 67.31)];
         let crossing = [(245.11, 49.53), (240.03, 49.53)];
         let others: [&[(f64, f64)]; 1] = [&crossing];
-        let (x, y) = wire_name_label_at(&bus, &others, &[]);
+        let (x, y) = wire_name_label_at(&bus, &others, &[]).expect("a clear spot on the bus");
         assert!((x - 242.57).abs() < 1e-9, "the label stays on the wire");
         assert!((31.75..=67.31).contains(&y), "the label stays on the wire");
         assert!(
@@ -2993,11 +3081,41 @@ mod tests {
     fn a_wire_name_label_keeps_off_a_junction_of_the_same_net() {
         let wire = [(0.0, 0.0), (25.4, 0.0)];
         let junction = [(12.7, 0.0)];
-        let (x, y) = wire_name_label_at(&wire, &[], &junction);
+        let (x, y) =
+            wire_name_label_at(&wire, &[], &junction).expect("a clear spot off the junction");
         assert!((y - 0.0).abs() < 1e-9, "the label stays on the wire");
         assert!(
             (x - 12.7).abs() > 0.5,
             "the label at x {x} sits on the junction"
+        );
+    }
+
+    /// A segment with no clear spot at all answers `None`, so the caller
+    /// moves on to the next-longest segment instead of shifting along a
+    /// wire that is blocked everywhere.
+    #[test]
+    fn a_fully_blocked_segment_reports_none() {
+        let wire = [(0.0, 0.0), (25.4, 0.0)];
+        let overlapping = [(0.0, 0.0), (25.4, 0.0)];
+        let others: [&[(f64, f64)]; 1] = [&overlapping];
+        assert!(wire_name_label_at(&wire, &others, &[]).is_none());
+    }
+
+    /// The next-longest segment is where the label lands when the longest
+    /// one has no clear spot — the fallback the exporter wants, rather
+    /// than a shifted point on the blocked wire.
+    #[test]
+    fn the_label_moves_to_the_next_longest_qualifying_segment() {
+        let longest = [(0.0, 0.0), (25.4, 0.0)];
+        let blocked = [(0.0, 0.0), (25.4, 0.0)];
+        let shorter = [(0.0, 5.0), (12.7, 5.0)];
+        let segments = [&longest[..], &shorter[..]];
+        let others: [&[(f64, f64)]; 1] = [&blocked];
+        let (x, y) = wire_name_label_pos(&segments, &others, &[])
+            .expect("the shorter segment has a clear spot");
+        assert!(
+            (y - 5.0).abs() < 1e-9,
+            "the label must sit on the next-longest segment, not the blocked one: ({x},{y})"
         );
     }
 
@@ -3013,6 +3131,94 @@ mod tests {
             .canonicalize()
             .unwrap()
     }
+
+    fn board_from(src: &str) -> synth_ir::Board {
+        let registry = load_dir(&workspace_root().join("registry").join("parts")).unwrap();
+        let parsed = synth_parser::parse(src, "inline.synth");
+        assert!(
+            !parsed.has_errors(),
+            "parse diagnostics: {:?}",
+            parsed.diagnostics
+        );
+        lower(&parsed.ast.unwrap(), &registry, "inline.synth")
+            .board
+            .unwrap()
+    }
+
+    /// A net whose every segment is blocked leaves the decision to the
+    /// caller, which places the label on the longest segment's midpoint
+    /// and warns (`W-SYNTH-LABEL-001`) instead of doing it silently.
+    #[test]
+    fn a_net_with_no_clear_segment_anywhere_warns() {
+        let board = board_from(
+            r#"board "b" {
+                layers 2
+                component U1: connector "header_1x3"
+                component U2: connector "header_1x3"
+                connect U1.p1 -> U2.p1 as "crowded"
+                connect U1.p2 -> U2.p2 as "other"
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let mut layout = synth_layout::layout(&board);
+        let crowded = board
+            .nets
+            .iter()
+            .find(|n| n.name == "crowded")
+            .map(|n| n.id)
+            .expect("the named net exists");
+        let other = board
+            .nets
+            .iter()
+            .find(|n| n.name == "other")
+            .map(|n| n.id)
+            .expect("the second net exists");
+        // A second net drawn exactly on top of the first: every segment of
+        // `crowded` is blocked, so no segment qualifies.
+        let shadows: Vec<synth_layout::WirePath> = layout
+            .wires
+            .iter()
+            .filter(|w| w.net == crowded)
+            .map(|w| synth_layout::WirePath {
+                net: other,
+                points: w.points.clone(),
+                junctions: Vec::new(),
+            })
+            .collect();
+        assert!(
+            !shadows.is_empty(),
+            "precondition: the named net is drawn with wires"
+        );
+        layout.wires.extend(shadows);
+        let (_, warnings) = build_schematic_from_layout_with_warnings(&board, &project, &layout);
+        assert!(
+            warnings.iter().any(|w| w.code == "W-SYNTH-LABEL-001"),
+            "a label with no clear segment must warn: {warnings:?}"
+        );
+    }
+
+    /// A label that finds a clear spot on its longest segment warns about
+    /// nothing.
+    #[test]
+    fn a_net_with_a_clear_segment_stays_silent() {
+        let board = board_from(
+            r#"board "b" {
+                layers 2
+                component U1: connector "header_1x3"
+                component U2: connector "header_1x3"
+                connect U1.p1 -> U2.p1 as "clear"
+                connect U1.p2 -> U2.p2
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let layout = synth_layout::layout(&board);
+        let (_, warnings) = build_schematic_from_layout_with_warnings(&board, &project, &layout);
+        assert!(
+            warnings.is_empty(),
+            "no warning without a blocked net: {warnings:?}"
+        );
+    }
+
     #[test]
     fn schematic_for_single_mcu_is_deterministic() {
         let registry = load_dir(&workspace_root().join("registry").join("parts")).unwrap();

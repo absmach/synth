@@ -1340,6 +1340,7 @@ mod tests {
             max_distance_mm: None,
             to: None,
             through: None,
+            when_supply_over_v: None,
         }];
         let b = board(
             vec![comp(0, "U1", "mcu", p)],

@@ -1600,6 +1600,7 @@ mod tests {
                 max_distance_mm: None,
                 to: None,
                 through: None,
+                when_supply_over_v: None,
             }],
             kicad_symbol: None,
             kicad_footprint: None,

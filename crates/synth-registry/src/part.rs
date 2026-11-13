@@ -411,6 +411,12 @@ pub struct RequiredDecoupling {
     /// the inductor from `sw`, so `net = "sw"`, `through = "inductor"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub through: Option<String>,
+    /// Only apply this rule when the part's supply rail is above this
+    /// voltage. A bridge whose V3 pin is an internal regulator tap needs the
+    /// V3 capacitor at 5 V but ties V3 to a 3.3 V supply directly; one rule
+    /// cannot say both without this condition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when_supply_over_v: Option<f64>,
 }
 
 impl Part {

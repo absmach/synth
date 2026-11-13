@@ -506,6 +506,53 @@ pub fn synthetic_symbol_parts(board: &synth_ir::Board) -> Vec<String> {
         .collect()
 }
 
+/// Claims the design declares that Synth cannot verify, using the capability
+/// descriptor's categories. Sorted and deduplicated so the JSON report is
+/// stable.
+pub fn unverified_claims(board: &synth_ir::Board) -> Vec<String> {
+    let mut claims = std::collections::BTreeSet::new();
+    let has_impedance = board.diff_pairs.iter().any(|pair| pair.impedance.is_some())
+        || board
+            .netclasses
+            .iter()
+            .any(|class| class.impedance.is_some());
+    if has_impedance && board.stackup.is_none() {
+        claims.insert("impedance: the board declares no stackup".to_string());
+    }
+    // An inner-layer claim only applies when a controlled net can actually be
+    // routed on an inner layer. A class pinned to F.Cu/B.Cu is microstrip; a
+    // 4-layer board alone is not evidence that the impedance was inner.
+    let controlled_nets: Vec<&synth_ir::Net> = board
+        .nets
+        .iter()
+        .filter(|net| {
+            board.netclasses.iter().any(|class| {
+                class.impedance.is_some() && net.netclass.as_deref() == Some(class.name.as_str())
+            }) || board.diff_pairs.iter().any(|pair| {
+                pair.impedance.is_some() && (pair.positive == net.name || pair.negative == net.name)
+            })
+        })
+        .collect();
+    let inner_possible = controlled_nets.is_empty()
+        || controlled_nets.iter().any(|net| {
+            net.netclass
+                .as_deref()
+                .and_then(|name| board.netclasses.iter().find(|class| class.name == name))
+                .is_none_or(|class| !class.outer_layers_only())
+        });
+    if has_impedance && board.layers > 2 && inner_possible {
+        claims.insert("inner_layer_impedance: stripline impedance is not derived".to_string());
+    }
+    if board
+        .diff_pairs
+        .iter()
+        .any(|pair| pair.couple.is_some_and(|c| c != synth_ir::Couple::Loose))
+    {
+        claims.insert("coupled_diff_pair_routing: a coupled pair is not kept coupled".to_string());
+    }
+    claims.into_iter().collect()
+}
+
 pub fn reviewer_state(board: &synth_ir::Board) -> Vec<ReviewerState> {
     let mut by_id: BTreeMap<String, ReviewerState> = BTreeMap::new();
     for component in &board.components {
@@ -535,6 +582,54 @@ pub fn reviewer_state(board: &synth_ir::Board) -> Vec<ReviewerState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn board_from(src: &str) -> synth_ir::Board {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .unwrap();
+        let registry = synth_registry::load_dir(&root.join("registry").join("parts")).unwrap();
+        let parse = synth_parser::parse(src, "claims.synth");
+        assert!(!parse.has_errors(), "{:?}", parse.diagnostics);
+        synth_ir::lower(&parse.ast.unwrap(), &registry, "claims.synth")
+            .board
+            .expect("a board")
+    }
+
+    #[test]
+    fn a_declared_impedance_without_a_stackup_is_listed_as_unverified() {
+        let board = board_from(
+            r#"board "b" { layers 2
+               diff_pair USB_DP USB_DN { impedance 90ohm } }"#,
+        );
+        let claims = unverified_claims(&board);
+        assert!(claims.iter().any(|c| c.contains("impedance")), "{claims:?}");
+    }
+
+    #[test]
+    fn an_outer_layer_impedance_class_does_not_claim_inner_layer_impedance() {
+        let board = board_from(
+            r#"board "b" { layers 4
+               netclass "USB" { impedance 90ohm layers "F.Cu", "B.Cu" }
+               net "USB_DP" class "USB" { } }"#,
+        );
+        let claims = unverified_claims(&board);
+        assert!(
+            claims.iter().any(|c| c.contains("no stackup")),
+            "outer microstrip still needs a stackup: {claims:?}"
+        );
+        assert!(
+            !claims.iter().any(|c| c.contains("inner_layer_impedance")),
+            "a class pinned to outer layers is not an inner-layer claim: {claims:?}"
+        );
+    }
+
+    #[test]
+    fn a_board_with_no_controlled_impedance_claim_lists_none() {
+        let board = board_from(r#"board "b" { layers 2 }"#);
+        assert!(unverified_claims(&board).is_empty());
+    }
 
     fn manifest(overrides: Vec<OverrideRecord>) -> ReleaseManifest {
         ReleaseManifest::new(

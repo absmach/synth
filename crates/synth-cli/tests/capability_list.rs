@@ -42,6 +42,20 @@ fn json_and_human_output_name_every_unsupported_and_unverified_entry() {
 }
 
 #[test]
+fn skew_enforcement_is_not_disclosed_as_unsupported() {
+    // E-SYNTH-DRC-014 enforces `diff_pair.max_skew`, so the descriptor must
+    // not say nothing does.
+    let descriptor: serde_json::Value =
+        serde_json::from_str(&capability_list(&["--json"])).expect("descriptor is JSON");
+    let entry = descriptor["unsupported"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["constraint"] == "diff_pair.max_skew");
+    assert!(entry.is_none(), "{entry:?}");
+}
+
+#[test]
 fn the_native_router_fixed_rf_width_is_disclosed() {
     let descriptor: serde_json::Value =
         serde_json::from_str(&capability_list(&["--json"])).expect("descriptor is JSON");

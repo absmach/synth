@@ -3415,7 +3415,14 @@ pub fn pcb_courtyard_geometry_for_part(part: &synth_registry::Part) -> ((f64, f6
         }
     }
     if let Some(dim) = part.footprint_dimensions.as_ref() {
-        return ((0.0, 0.0), (dim.width_mm, dim.height_mm));
+        // The body dimensions exclude the courtyard rim the part declares.
+        // Growing the rectangle by the margin keeps the placer from landing
+        // another part inside that rim when KiCad is not installed.
+        let margin = dim.courtyard_margin_mm.unwrap_or(0.0);
+        return (
+            (0.0, 0.0),
+            (dim.width_mm + 2.0 * margin, dim.height_mm + 2.0 * margin),
+        );
     }
     ((0.0, 0.0), (10.0, 10.0))
 }

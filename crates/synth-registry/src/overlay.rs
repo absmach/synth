@@ -299,6 +299,7 @@ mod tests {
                 max_distance_mm: Some(5.0),
                 to: None,
                 through: None,
+                when_supply_over_v: None,
             }],
             kicad_symbol: Some("Lib:Sym".into()),
             kicad_footprint: Some("Lib:Fp".into()),
