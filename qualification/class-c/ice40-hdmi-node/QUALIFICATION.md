@@ -80,7 +80,7 @@ Everything committed comes from export 1. The authoritative evidence of how the 
 
 ## Images
 
-[`images/`](images/) holds `top.png`, `bottom.png` and `angled.png` (3D renders of the board) and `schematic.png` (every schematic sheet on one page).
+[`images/`](images/) holds `top.png`, `bottom.png` and `angled.png` (3D renders of the board) and `schematic.pdf` (every schematic sheet on one page).
 
 ## How to check
 
