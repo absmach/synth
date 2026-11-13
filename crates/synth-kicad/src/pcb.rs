@@ -559,19 +559,6 @@ pub fn build_pcb(
     // The land of a via filled and capped in a pad, where the process offers one
     // and a component declares the under-pad escape that makes it legal.
     let pad_via = PlaneVia::for_via_in_pad(&process);
-    // A microvia spans one dielectric: F.Cu to the first inner layer, not
-    // F.Cu to B.Cu like a through via. Exporting a filled and capped
-    // microvia as a through hole would drill the whole stackup for one layer
-    // hop and DRC would judge the annulus of a drill that goes nowhere.
-    let microvia_layers: Option<[&str; 2]> = if pad_via.is_some()
-        && process.microvia_drill_nm > 0
-        && process.microvia_diameter_nm > 0
-        && board.layers >= 4
-    {
-        Some(["F.Cu", "In1.Cu"])
-    } else {
-        None
-    };
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -602,7 +589,7 @@ pub fn build_pcb(
     let mut plane_stub_index = 0usize;
     if !power_layers.is_empty() {
         for (rail_index, (pcb_net, net)) in rails.iter().copied().enumerate() {
-            let layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
+            let rail_layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
                 vec![power_layers[rail_index % power_layers.len()]]
             } else {
                 power_layers
@@ -612,7 +599,10 @@ pub fn build_pcb(
                     .copied()
                     .collect()
             };
-            for layer in layers {
+            // A microvia can reach one plane layer. A rail that owns more than
+            // one layer keeps the through via so every layer it pours is tied.
+            let rail_microvia_layer = (rail_layers.len() == 1).then_some(rail_layers[0]);
+            for &layer in &rail_layers {
                 let zone_key = format!("plane/{}/{layer}", net.name);
                 children.push(build_zone(
                     placement,
@@ -626,7 +616,7 @@ pub fn build_pcb(
                 ));
             }
             for target in plane_pad_targets(board, placement, net) {
-                let (pad, layer) = (target.centre, target.layer);
+                let (pad, pad_layer) = (target.centre, target.layer);
                 let beside = plane_via_offset(
                     pad,
                     target.origin,
@@ -671,7 +661,7 @@ pub fn build_pcb(
                             detail: plane_via_refusal(
                                 &refusal,
                                 pad,
-                                layer,
+                                pad_layer,
                                 &ViaAttempt {
                                     via: land,
                                     filled_and_capped: target.underpad && pad_via == Some(land),
@@ -684,12 +674,26 @@ pub fn build_pcb(
                 };
                 let used = land;
                 placed_vias.push((via, used.pad_radius_nm));
-                let span: &[&str] = if Some(&used) == pad_via.as_ref() {
-                    microvia_layers
-                        .as_ref()
-                        .map_or(THROUGH_VIA_LAYERS.as_slice(), |layers| layers.as_slice())
-                } else {
-                    &THROUGH_VIA_LAYERS
+                // A microvia must land on the rail's own layer. Hard-coding
+                // F.Cu-In1.Cu left a rail on In2 unconnected: the via stopped
+                // one dielectric short. Span from the ball's outer layer to the
+                // layer this zone is poured on.
+                let outer = match pad_layer {
+                    Layer::Bottom => "B.Cu",
+                    _ => "F.Cu",
+                };
+                let span: &[&str] = match rail_microvia_layer {
+                    Some(plane_layer)
+                        if Some(&used) == pad_via.as_ref()
+                            && process.microvia_drill_nm > 0
+                            && process.microvia_diameter_nm > 0
+                            && board.layers >= 4
+                            && plane_layer != outer =>
+                    {
+                        // Borrow a local pair for the call below.
+                        &[outer, plane_layer]
+                    }
+                    _ => &THROUGH_VIA_LAYERS,
                 };
                 children.push(build_plane_via(
                     via.x_nm,
@@ -708,7 +712,7 @@ pub fn build_pcb(
                     children.push(build_segment(
                         &Segment {
                             net: net.id,
-                            layer,
+                            layer: pad_layer,
                             start: pad,
                             end: via,
                             width_nm: PLANE_STUB_WIDTH_NM,

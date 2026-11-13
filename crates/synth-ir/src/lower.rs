@@ -47,8 +47,8 @@ use synth_registry::{Part, PinCapability, Registry};
 use crate::board::{
     Board, BoardOutline, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net,
     NetClass, NetEndpoint, NetId, NoConnect, Note, PinId, PlacementEdge, PlacementRegion,
-    PlacementSide,
-    ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
+    PlacementSide, ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer,
+    Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -433,7 +433,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                     ))
                     .expected("a `no_connect` pin that no net or connect reaches")
                     .found(format!(
-                        "`{}.{} is also an endpoint of a net",
+                        "`{}.{}` is also an endpoint of a net",
                         declared.refdes, declared.pin
                     ))
                     .message(
