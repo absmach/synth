@@ -141,6 +141,10 @@ The STEP model covers every part and mechanical feature of the board. KiCad 10.0
 
 No JLCPCB DFM, BOM-matching or quote run is recorded for Gerber content hash `a26463bd09`.
 
+## Images
+
+[`images/`](images/) holds `top.png`, `bottom.png` and `angled.png` (3D renders of the board) and `schematic.png` (the schematic on one page).
+
 ## How to check
 
 From this directory, with the KiCad 10 footprint and symbol library tables configured:
