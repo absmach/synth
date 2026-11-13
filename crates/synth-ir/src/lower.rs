@@ -397,19 +397,53 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // A `no_connect` that names no component pin is a typo, not permission to
     // ignore a floating input. It is an error so the mistake cannot silently
     // suppress nothing.
+    //
+    // A `no_connect` on a pin that is also wired is a contradiction: the
+    // design says the pin is intentionally unused *and* connects it. The
+    // wiring wins, so the suppression would hide a live finding; lowering
+    // refuses the statement instead.
     for declared in &no_connects {
         let component = components
             .iter()
             .find(|component| component.refdes.eq_ignore_ascii_case(&declared.refdes));
-        let resolved = component.is_some_and(|component| {
-            component.part.as_ref().is_some_and(|part| {
-                part.pins.iter().any(|pin| {
+        let pin_index = component.as_ref().and_then(|component| {
+            component.part.as_ref().and_then(|part| {
+                part.pins.iter().position(|pin| {
                     pin.name.eq_ignore_ascii_case(&declared.pin)
                         || pin.number.0.eq_ignore_ascii_case(&declared.pin)
                 })
             })
         });
-        if resolved {
+        if let (Some(component), Some(pin_index)) = (component.as_ref(), pin_index) {
+            let pin = PinId(pin_index as u32);
+            if nets.iter().any(|net| {
+                net.endpoints
+                    .iter()
+                    .any(|e| e.component == component.id && e.pin == pin)
+            }) {
+                ctx.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-COMP-007",
+                        Severity::Error,
+                        "no_connect on a wired pin",
+                    )
+                    .location(Location::from_span(
+                        ctx.file.to_string(),
+                        declared.source_span,
+                    ))
+                    .expected("a `no_connect` pin that no net or connect reaches")
+                    .found(format!(
+                        "`{}.{} is also an endpoint of a net",
+                        declared.refdes, declared.pin
+                    ))
+                    .message(
+                        "A pin cannot be both intentionally unused and wired. Remove the \
+                         `no_connect` and let ERC judge the wired pin, or remove the wire.",
+                    )
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-007")
+                    .build(),
+                );
+            }
             continue;
         }
         ctx.diagnostics.push(

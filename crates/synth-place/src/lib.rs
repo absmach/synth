@@ -4648,6 +4648,11 @@ pub struct PlacementDescription {
     pub board_size_mm: [f64; 2],
     /// Sum of placed courtyard areas as a percentage of the board area. Sparse
     /// boards leave large open interior areas; 30 % is the review floor.
+    ///
+    /// `#[serde(default)]`: the field was added after the first placements
+    /// were serialized, so an older saved `PlacementDescription` JSON must
+    /// still deserialize instead of failing on the missing key.
+    #[serde(default)]
     pub courtyard_fill_pct: f64,
     pub component_regions: Vec<ComponentRegionEntry>,
     pub cluster_summary: String,
@@ -10519,6 +10524,30 @@ board "features_only" {
             desc.courtyard_fill_pct,
             desc.board_size_mm
         );
+    }
+
+    /// A `PlacementDescription` saved before `courtyard_fill_pct` existed has
+    /// no such key; the `#[serde(default)]` on the field lets the older JSON
+    /// deserialize instead of failing on the missing key.
+    #[test]
+    fn an_older_placement_json_without_a_fill_field_still_deserializes() {
+        let json = r#"{
+            "board_size_mm": [80.0, 50.0],
+            "component_regions": [],
+            "cluster_summary": "single cluster",
+            "drc_clean": null,
+            "unrouted_nets": null,
+            "dense_regions": [],
+            "functional_warnings": [],
+            "visual_review": {
+                "score": 80,
+                "requires_revision": false,
+                "findings": []
+            }
+        }"#;
+        let desc: PlacementDescription = serde_json::from_str(json).expect("older JSON parses");
+        assert_eq!(desc.courtyard_fill_pct, 0.0);
+        assert_eq!(desc.board_size_mm, [80.0, 50.0]);
     }
 
     /// An external connector inside the board edge is advised to go flush; a

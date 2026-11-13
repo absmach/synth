@@ -559,6 +559,19 @@ pub fn build_pcb(
     // The land of a via filled and capped in a pad, where the process offers one
     // and a component declares the under-pad escape that makes it legal.
     let pad_via = PlaneVia::for_via_in_pad(&process);
+    // A microvia spans one dielectric: F.Cu to the first inner layer, not
+    // F.Cu to B.Cu like a through via. Exporting a filled and capped
+    // microvia as a through hole would drill the whole stackup for one layer
+    // hop and DRC would judge the annulus of a drill that goes nowhere.
+    let microvia_layers: Option<[&str; 2]> = if pad_via.is_some()
+        && process.microvia_drill_nm > 0
+        && process.microvia_diameter_nm > 0
+        && board.layers >= 4
+    {
+        Some(["F.Cu", "In1.Cu"])
+    } else {
+        None
+    };
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -671,10 +684,18 @@ pub fn build_pcb(
                 };
                 let used = land;
                 placed_vias.push((via, used.pad_radius_nm));
+                let span: &[&str] = if Some(&used) == pad_via.as_ref() {
+                    microvia_layers
+                        .as_ref()
+                        .map_or(THROUGH_VIA_LAYERS.as_slice(), |layers| layers.as_slice())
+                } else {
+                    &THROUGH_VIA_LAYERS
+                };
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
                     &used,
+                    span,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -1286,6 +1307,7 @@ fn build_plane_via(
     x_nm: i64,
     y_nm: i64,
     via: &PlaneVia,
+    layers: &[&str],
     pcb_net: u32,
     project: &Uuid,
     idx: usize,
@@ -1297,12 +1319,18 @@ fn build_plane_via(
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
             Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
             Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
-            Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
+            Sexp::list(
+                "layers",
+                layers.iter().map(|layer| Sexp::str(*layer)).collect(),
+            ),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),
         ],
     )
 }
+
+/// The copper span of a through via: the two outer layers.
+const THROUGH_VIA_LAYERS: [&str; 2] = ["F.Cu", "B.Cu"];
 
 /// How far a via keeps from a mounting hole's edge, in mm. A screw head and its
 /// washer sit over the copper round the hole, so a via closer than this is
