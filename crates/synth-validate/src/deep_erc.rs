@@ -759,6 +759,14 @@ impl ErcRule for PowerBudgetRule {
                 if is_protection_part(load_part) {
                     continue;
                 }
+                // A connector's `max_current_ma` is its contact rating, the most
+                // it can carry, not a draw: a header idles at nothing, and an
+                // off-board load behind it is unknown to the compiler. Counting
+                // the rating charged an 800 mA LDO 3 A for an SWD header
+                // (`header_1x5`) whose VTref pin sits on the 3.3 V rail.
+                if load_part.kind.eq_ignore_ascii_case("connector") {
+                    continue;
+                }
                 let Some(draw) = load_part
                     .operating_conditions
                     .as_ref()
