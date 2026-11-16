@@ -582,6 +582,51 @@ fn power_budget_ignores_a_connector_rating_on_the_rail() {
 }
 
 #[test]
+fn power_budget_ignores_zener_clamps_on_the_rail() {
+    // Six 3.3 V zener clamps hang from the regulated rail. Their registry
+    // `max_current_ma` is a rating; counted as draw they put an 800 mA LDO
+    // feeding a 200 mA MCU over budget.
+    let src = r#"board "t" {
+      layers 2
+      component U1: regulator "ams1117_3v3"
+      component U2: mcu "atmega328p"
+      component C1: capacitor "c_generic_0805" value "10u"
+      component C2: capacitor "c_generic_0805" value "10u"
+      component J1: connector "header_1x4"
+      component DZ1: diode "bzt52c3v3"
+      component DZ2: diode "bzt52c3v3"
+      component DZ3: diode "bzt52c3v3"
+      component DZ4: diode "bzt52c3v3"
+      component DZ5: diode "bzt52c3v3"
+      component DZ6: diode "bzt52c3v3"
+      power "+3V3" 3.3v
+      connect J1.p1 -> U1.vin
+      connect J1.p2 -> U1.gnd
+      connect U1.vin -> C1.p1
+      connect U1.gnd -> C1.p2
+      connect U1.vout -> C2.p1 as "+3V3"
+      connect U1.gnd -> C2.p2
+      connect U1.vout -> U2.vcc
+      connect U1.vout -> DZ1.cathode
+      connect U1.vout -> DZ2.cathode
+      connect U1.vout -> DZ3.cathode
+      connect U1.vout -> DZ4.cathode
+      connect U1.vout -> DZ5.cathode
+      connect U1.vout -> DZ6.cathode
+      connect U1.gnd -> DZ1.anode
+      connect U1.gnd -> DZ2.anode
+      connect U1.gnd -> DZ3.anode
+      connect U1.gnd -> DZ4.anode
+      connect U1.gnd -> DZ5.anode
+      connect U1.gnd -> DZ6.anode
+    }"#;
+    assert!(
+        codes(&validate(src), "E-SYNTH-POWER-010").is_empty(),
+        "a zener clamp's rating is not a steady load"
+    );
+}
+
+#[test]
 fn power_budget_headroom_is_configurable() {
     // 3 MCUs = 600mA against an 800mA regulator: fine at 0% headroom,
     // over budget at 50% (600 > 800 × 0.5).

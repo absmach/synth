@@ -230,6 +230,37 @@ fn divider_output_v(board: &Board, domains: &Domains, net: NetId, rail_v: f64) -
 /// A protection device passes surge current rather than drawing steady
 /// current, so it is not a load (see [`PowerBudgetRule`]) and is what
 /// satisfies the connector-protection rule ([`net_has_protection`]).
+/// Whether a rail member's `max_current_ma` is a rating rather than a draw, so
+/// [`PowerBudgetRule`] must not count it as load on the rail.
+///
+/// - A protection device's figure is its clamping/surge rating: a TVS on a rail
+///   idles at microamps and only conducts during a surge. Counting it charges
+///   the regulator a full amp for a part that draws nothing, and the "fix" for
+///   a failing budget would be to drop the protection.
+/// - A connector's figure is its contact rating: a header idles at nothing, and
+///   an off-board load behind it is unknown to the compiler. Counting it charged
+///   an 800 mA LDO 3 A for an SWD header (`header_1x5`) whose VTref pin sits on
+///   the 3.3 V rail.
+/// - A zener's figure is its rating too: as a clamp on a signal or a rail it
+///   idles at leakage. Counting it charged a power hub's 3.3 V rail 150 mA for
+///   every sense-line clamp.
+fn max_current_is_a_rating(part: &synth_registry::Part) -> bool {
+    is_protection_part(part) || part.kind.eq_ignore_ascii_case("connector") || is_zener_part(part)
+}
+
+/// Whether a part is a zener diode, judged from its id and description the way
+/// [`is_protection_part`] judges protection parts.
+fn is_zener_part(part: &synth_registry::Part) -> bool {
+    part.kind.eq_ignore_ascii_case("diode")
+        && format!(
+            "{} {}",
+            part.id.as_str(),
+            part.description.as_deref().unwrap_or("")
+        )
+        .to_ascii_lowercase()
+        .contains("zener")
+}
+
 fn is_protection_part(part: &synth_registry::Part) -> bool {
     let hay = format!(
         "{} {} {}",
@@ -751,20 +782,7 @@ impl ErcRule for PowerBudgetRule {
                 let Some(load_part) = load.part.as_ref() else {
                     continue;
                 };
-                // A protection device's `max_current_ma` is its clamping/surge
-                // rating, not a steady draw: a TVS on a rail idles at microamps
-                // and only conducts during a surge. Counting it charges the
-                // regulator a full amp for a part that draws nothing, and the
-                // "fix" for a failing budget would be to drop the protection.
-                if is_protection_part(load_part) {
-                    continue;
-                }
-                // A connector's `max_current_ma` is its contact rating, the most
-                // it can carry, not a draw: a header idles at nothing, and an
-                // off-board load behind it is unknown to the compiler. Counting
-                // the rating charged an 800 mA LDO 3 A for an SWD header
-                // (`header_1x5`) whose VTref pin sits on the 3.3 V rail.
-                if load_part.kind.eq_ignore_ascii_case("connector") {
+                if max_current_is_a_rating(load_part) {
                     continue;
                 }
                 let Some(draw) = load_part
