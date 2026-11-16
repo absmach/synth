@@ -133,17 +133,22 @@ pub fn layout_sheets(board: &Board, global: Layout, sidecar: Option<&Path>) -> V
             layout: global,
         }];
     }
-    let partitions = plan_sheets(board);
-    if partitions
-        .iter()
-        .filter(|p| !p.components.is_empty())
-        .count()
-        < 2
-    {
+    let planned = plan_sheets(board);
+    if planned.iter().filter(|p| !p.components.is_empty()).count() < 2 {
         return vec![SheetLayout {
             name: None,
             layout: global,
         }];
+    }
+    let mut partitions = planned;
+    // A group is a drawing region, not a sheet the author asked for. When
+    // every component sits in one, splitting leaves the root with nothing
+    // but sheet symbols round empty space; the first group's content takes
+    // the root instead. Explicit `sheet` blocks are the author's own
+    // hierarchy, so they keep their empty root.
+    if partitions[0].components.is_empty() && board.components.iter().all(|c| c.sheet.is_none()) {
+        let first = partitions.remove(1);
+        partitions[0].components = first.components;
     }
     split_layout_with_pinned(board, &global, &partitions, pinned)
 }
@@ -182,18 +187,34 @@ fn split_layout_with_pinned(
         .iter()
         .filter_map(|(net, parts)| (parts.len() > 1).then_some(*net))
         .collect();
-    // Which page each note belongs on, decided against the whole drawing so a
-    // group note split across sheets still lands on one of them. The pinned
-    // path slices the finished page and never re-places notes.
-    let note_homes: Vec<Option<String>> = if pinned {
-        Vec::new()
-    } else {
-        board
-            .notes
-            .iter()
-            .map(|n| note_sheet(board, global, n))
-            .collect()
-    };
+    // Which rendered sheet each note belongs to: its own `sheet` block, else
+    // the partition holding most of its group's components (ties to the root,
+    // which comes first). Taken from the partitions actually rendered, so a
+    // group merged onto the root keeps its note.
+    let note_homes: Vec<Option<String>> = board
+        .notes
+        .iter()
+        .map(|note| {
+            if note.sheet.is_some() {
+                return note.sheet.clone();
+            }
+            let group = note.group.as_deref()?;
+            let mut best: Option<(&Option<String>, usize)> = None;
+            for partition in partitions {
+                let count = partition
+                    .components
+                    .iter()
+                    .filter(|&&id| {
+                        board.component(id).and_then(|c| c.group.as_deref()) == Some(group)
+                    })
+                    .count();
+                if count > 0 && best.is_none_or(|(_, most)| count > most) {
+                    best = Some((&partition.name, count));
+                }
+            }
+            best.and_then(|(name, _)| name.clone())
+        })
+        .collect();
 
     partitions
         .iter()
@@ -280,7 +301,7 @@ fn split_layout_with_pinned(
                 // the copied parts.
                 annotate_groups(board, &mut layout);
                 place_connector_legends(board, &mut layout);
-                place_sheet_notes(board, &mut layout, partition.name.as_deref());
+                place_sheet_notes(board, &mut layout, partition.name.as_deref(), &note_homes);
             } else if layout.components.is_empty() {
                 // An empty root still carries the board's own notes, but not
                 // the group notes that already sit on their own sheet.
@@ -629,7 +650,15 @@ fn anchor_sheet(
 /// group notes whose group lands mostly here, and — on the root
 /// sheet only — unscoped board notes. Mirrors `place_design_notes`
 /// but scoped to a partition instead of the whole board.
-fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
+///
+/// `homes` is one entry per `board.notes`, the sheet each is drawn on, as
+/// [`split_layout_with_pinned`] worked it out from the partitions.
+fn place_sheet_notes(
+    board: &Board,
+    layout: &mut Layout,
+    sheet: Option<&str>,
+    homes: &[Option<String>],
+) {
     let scoped = Board {
         groups: Vec::new(),
         legends: board.legends,
@@ -646,8 +675,9 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
         notes: board
             .notes
             .iter()
-            .filter(|n| note_sheet(board, layout, n).as_deref() == sheet)
-            .cloned()
+            .zip(homes)
+            .filter(|(_, home)| home.as_deref() == sheet)
+            .map(|(note, _)| note.clone())
             .collect(),
         keepouts: board.keepouts.clone(),
         stackup: board.stackup.clone(),
@@ -662,33 +692,6 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
     // Group boxes were recomputed for this subset already, so group
     // notes resolve against page-local geometry.
     place_design_notes(&scoped, layout);
-}
-
-/// Which sheet a note belongs on: its own sheet block first, else
-/// the sheet holding most of its group's placed components, else
-/// the root sheet.
-fn note_sheet(board: &Board, layout: &Layout, note: &synth_ir::Note) -> Option<String> {
-    if let Some(sheet) = note.sheet.clone() {
-        return Some(sheet);
-    }
-    let placed: HashSet<ComponentId> = layout.components.iter().map(|p| p.id).collect();
-    if let Some(group) = note.group.as_deref() {
-        let mut counts: HashMap<Option<String>, usize> = HashMap::new();
-        for component in &board.components {
-            if component.group.as_deref() != Some(group) || !placed.contains(&component.id) {
-                continue;
-            }
-            *counts.entry(component.sheet.clone()).or_default() += 1;
-        }
-        // Ties break to the root sheet deterministically: `None`
-        // sorts before any `Some`.
-        let mut ranked: Vec<(Option<String>, usize)> = counts.into_iter().collect();
-        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-        if let Some((sheet, _)) = ranked.into_iter().next() {
-            return sheet;
-        }
-    }
-    None
 }
 
 /// True when point `p` lies on segment `a→b` within tolerance.
@@ -1512,6 +1515,125 @@ mod tests {
         assert!(
             sheet_overflow(&b, &layout),
             "the pin ends hang past the page"
+        );
+    }
+
+    /// A split made only because the page is too small must not leave the
+    /// root holding nothing but sheet symbols: groups are drawing regions,
+    /// so the first one's parts take the root page.
+    #[test]
+    fn a_split_grouped_design_puts_its_first_group_on_the_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                grouped_component(0, "R1", "Input", two()),
+                grouped_component(1, "R2", "Input", two()),
+                grouped_component(2, "R3", "Power", two()),
+                grouped_component(3, "R4", "Power", two()),
+            ],
+            Vec::new(),
+        );
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        assert!(sheet_overflow(&b, &global));
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 2, "root + one sub-sheet");
+        assert_eq!(sheets[0].name, None);
+        assert_eq!(sheets[0].layout.components.len(), 2, "Input on the root");
+        assert_eq!(sheets[1].name.as_deref(), Some("Power"));
+        for sheet in &sheets {
+            assert!(
+                !sheet.layout.components.is_empty(),
+                "a sheet symbol with no content behind it"
+            );
+        }
+    }
+
+    /// Explicit `sheet` blocks are the author's own hierarchy, so they keep
+    /// a root that may be empty: it is the table of contents they asked for.
+    #[test]
+    fn an_explicit_sheet_split_keeps_an_empty_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("Power"), two()),
+                component(1, "R2", Some("Power"), two()),
+                component(2, "R3", Some("Signal"), two()),
+                component(3, "R4", Some("Signal"), two()),
+            ],
+            Vec::new(),
+        );
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        assert!(sheet_overflow(&b, &global));
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3);
+        assert!(sheets[0].layout.components.is_empty());
+        assert_eq!(sheets[1].name.as_deref(), Some("Power"));
+    }
+
+    /// A group's note belongs on the sheet that group was given, not on the
+    /// root: the note homes counted only the components' explicit `sheet`,
+    /// and a grouped part has none, so every group note landed on the root
+    /// page while its own sheet drew the box without the note.
+    #[test]
+    fn a_group_note_lands_on_the_groups_sheet() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                grouped_component(0, "R1", "Filter", two()),
+                grouped_component(1, "R2", "Filter", two()),
+                component(2, "R3", Some("Power"), two()),
+                component(3, "R4", Some("Power"), two()),
+            ],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Filter".to_string(),
+            lines: vec!["330 ohm series resistor".to_string()],
+            group: Some("Filter".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3);
+        let note = "330 ohm series resistor";
+        let has_note = |s: &SheetLayout| {
+            s.layout
+                .annotations
+                .iter()
+                .any(|annotation| annotation.text == note)
+        };
+        assert!(has_note(&sheets[1]), "the Filter sheet carries its note");
+        assert!(
+            !has_note(&sheets[0]),
+            "the root must not carry a group note"
         );
     }
 

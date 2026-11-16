@@ -126,12 +126,7 @@ pub(crate) fn export_sheets(
                 max_y = max_y.max(y);
             }
         }
-        let needed = synth_layout::fit_sheet_size(min_x, max_x, min_y, max_y);
-        let (have_w, have_h) = root.sheet_size.dims_mm();
-        let (want_w, want_h) = needed.dims_mm();
-        if want_w > have_w || want_h > have_h {
-            root.sheet_size = needed;
-        }
+        root.sheet_size = root_page(board, root.sheet_size, (min_x, max_x, min_y, max_y));
     }
 
     let mut power_refs = PowerRefAllocator::default();
@@ -209,6 +204,29 @@ fn content_bounds(board: &Board, layout: &synth_layout::Layout) -> (f64, f64, f6
         f64::INFINITY,
         f64::NEG_INFINITY,
     ))
+}
+
+/// The page the root file needs, from its content plus the sheet-instance
+/// row and wire channels below it.
+///
+/// A root that no longer holds the split content inherits the global layout's
+/// page — A0, for a design big enough to split — and kept it: notes and a row
+/// of sheet symbols on a mostly empty A0. Without an explicit
+/// `schematic { paper }` request the page tracks what the root draws; one is
+/// still honoured (the page may grow past it, never shrink below it).
+fn root_page(
+    board: &Board,
+    current: synth_layout::SheetSize,
+    bounds: (f64, f64, f64, f64),
+) -> synth_layout::SheetSize {
+    let needed = synth_layout::fit_sheet_size(bounds.0, bounds.1, bounds.2, bounds.3);
+    let (have_w, have_h) = current.dims_mm();
+    let (want_w, want_h) = needed.dims_mm();
+    if board.schematic_paper.is_none() || want_w > have_w || want_h > have_h {
+        needed
+    } else {
+        current
+    }
 }
 
 /// Everything the multi-sheet export needs: per-sheet files and
@@ -802,6 +820,28 @@ mod tests {
         let single = crate::schematic::build_schematic(&b, &project).to_string_pretty();
         assert_eq!(single.matches("(instances").count(), 0);
         let _ = Span::new(0, 0);
+    }
+
+    /// A root that no longer holds the split content gives back the A0 it
+    /// inherited from the global layout and keeps only the page it draws.
+    #[test]
+    fn the_root_page_tracks_its_content() {
+        let b = board(vec![component(0, None)], vec![]);
+        let page = root_page(&b, SheetSize::A0, (20.0, 120.0, 20.0, 120.0));
+        assert_eq!(
+            page,
+            SheetSize::A4,
+            "one part and a sheet-symbol row fit A4"
+        );
+
+        // An explicit paper request is honoured: the page may grow past it,
+        // never shrink below it.
+        let mut asked = board(vec![component(0, None)], vec![]);
+        asked.schematic_paper = Some(synth_ir::SchematicPaper::A3);
+        assert_eq!(
+            root_page(&asked, SheetSize::A3, (20.0, 120.0, 20.0, 120.0)),
+            SheetSize::A3
+        );
     }
 
     /// The root sheet is sized from the same content bounds as every other
