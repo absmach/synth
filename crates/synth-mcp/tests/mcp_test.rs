@@ -3,7 +3,7 @@
 //! Integration tests for `synth-mcp`.
 
 use serde_json::json;
-use synth_mcp::{handle_jsonrpc_request, list_tools, SERVER_INSTRUCTIONS};
+use synth_mcp::{SERVER_INSTRUCTIONS, handle_jsonrpc_request, list_tools};
 
 #[test]
 fn test_mcp_initialize() {
@@ -312,10 +312,12 @@ fn test_mcp_rejects_unknown_or_conflicting_board_family_profile() {
             }),
             None,
         );
-        assert!(resp["result"]["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains(expected));
+        assert!(
+            resp["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains(expected)
+        );
     }
 }
 
@@ -334,10 +336,12 @@ fn test_mcp_rejects_board_family_layer_mismatch() {
         }
     });
     let resp = handle_jsonrpc_request(req, None);
-    assert!(resp["result"]["content"][0]["text"]
-        .as_str()
-        .unwrap()
-        .contains("does not support the source layer count"));
+    assert!(
+        resp["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("does not support the source layer count")
+    );
 }
 
 #[test]
@@ -489,31 +493,31 @@ fn test_closed_loop_agent_drc_repair_convergence() {
     let iteration = 1;
     let mut wrote = false;
     for v in violations {
-        if let Some(sug) = v.get("suggested_override") {
-            if let (Some(refdes), Some(dx), Some(rot)) = (
+        if let Some(sug) = v.get("suggested_override")
+            && let (Some(refdes), Some(dx), Some(rot)) = (
                 sug["refdes"].as_str(),
                 sug["delta_x_mm"].as_f64(),
                 sug["rotation_deg"].as_u64(),
-            ) {
-                let write_req = json!({
-                    "jsonrpc": "2.0",
-                    "id": 61 + iteration,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "synth_write_layout_override",
-                        "arguments": {
-                            "layout_file_path": sidecar_tmp.to_str().unwrap(),
-                            "refdes": refdes,
-                            "x_mm": 20.0 + dx * f64::from(iteration),
-                            "y_mm": 20.0,
-                            "rotation": rot,
-                            "source": "agent"
-                        }
+            )
+        {
+            let write_req = json!({
+                "jsonrpc": "2.0",
+                "id": 61 + iteration,
+                "method": "tools/call",
+                "params": {
+                    "name": "synth_write_layout_override",
+                    "arguments": {
+                        "layout_file_path": sidecar_tmp.to_str().unwrap(),
+                        "refdes": refdes,
+                        "x_mm": 20.0 + dx * f64::from(iteration),
+                        "y_mm": 20.0,
+                        "rotation": rot,
+                        "source": "agent"
                     }
-                });
-                let _ = handle_jsonrpc_request(write_req, None);
-                wrote = true;
-            }
+                }
+            });
+            let _ = handle_jsonrpc_request(write_req, None);
+            wrote = true;
         }
     }
     if !wrote {

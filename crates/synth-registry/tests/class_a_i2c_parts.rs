@@ -5,7 +5,7 @@
 //! and decoupling. A part that merely loads would let a board omit any of them.
 
 use std::path::Path;
-use synth_registry::{load_dir, PinCapability};
+use synth_registry::{PinCapability, load_dir};
 
 fn registry() -> synth_registry::Registry {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../registry/parts");
@@ -145,15 +145,16 @@ fn the_eeprom_has_one_canonical_part_and_the_older_entry_points_at_it() {
     assert_eq!(active[0].0, "24lc256_soic8");
     let old = part("24lc256_eeprom");
     assert_eq!(old.lifecycle, synth_registry::Lifecycle::Obsolete);
-    assert!(old
-        .substitutes
-        .iter()
-        .any(|s| s.as_str() == "24lc256_soic8"));
+    assert!(
+        old.substitutes
+            .iter()
+            .any(|s| s.as_str() == "24lc256_soic8")
+    );
 }
 
 #[test]
 fn every_new_part_has_a_reviewer_a_date_a_datasheet_and_qualifies_without_findings() {
-    use synth_registry::qualify::{qualify_part, NoFacts};
+    use synth_registry::qualify::{NoFacts, qualify_part};
     for id in [
         "stm32g030f6p6",
         "bme680_lga8",

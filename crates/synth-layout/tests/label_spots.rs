@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
 use synth_layout::route::{net_label_plan, pin_terminal_xy};
-use synth_layout::{default_placer, layout_with_overrides, ComponentPlacement, LabelSpot, Layout};
+use synth_layout::{ComponentPlacement, LabelSpot, Layout, default_placer, layout_with_overrides};
 use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
 
 /// Flag box in mm: 1.12 per character plus 2.9, and 2.65 tall.

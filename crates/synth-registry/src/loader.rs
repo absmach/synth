@@ -207,11 +207,11 @@ fn load_from_sources(sources: &[(PathBuf, String)]) -> Result<Registry, LoadErro
 /// footprint, so it is not an unverified bounding-box fallback.
 fn add_compatibility_aliases(registry: &mut Registry) {
     for (alias, canonical) in [("rp2350a", "rp2350"), ("w25q128_qspi", "w25q128_flash")] {
-        if registry.lookup(alias).is_none() {
-            if let Some(mut part) = registry.lookup(canonical).cloned() {
-                part.id = PartId(alias.to_string());
-                registry.insert(part);
-            }
+        if registry.lookup(alias).is_none()
+            && let Some(mut part) = registry.lookup(canonical).cloned()
+        {
+            part.id = PartId(alias.to_string());
+            registry.insert(part);
         }
     }
 }
@@ -242,32 +242,7 @@ pub struct LoadResult {
 /// `None` when no base directory can be determined (e.g. no `HOME` on a
 /// non-XDG platform).
 pub fn user_registry_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SYNTH_USER_REGISTRY_DIR") {
-        if !dir.is_empty() {
-            return Some(PathBuf::from(dir));
-        }
-    }
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        if !xdg.is_empty() {
-            return Some(
-                PathBuf::from(xdg)
-                    .join("synth")
-                    .join("registry")
-                    .join("parts"),
-            );
-        }
-    }
-    std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .map(|home| {
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("synth")
-                .join("registry")
-                .join("parts")
-        })
+    registry_dir(&env_var, "SYNTH_USER_REGISTRY_DIR", "parts")
 }
 
 /// Resolve the *installed* Tier-1 (shipped) registry directory — the
@@ -281,32 +256,30 @@ pub fn user_registry_dir() -> Option<PathBuf> {
 /// determined.
 #[must_use]
 pub fn shipped_registry_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SYNTH_SHIPPED_REGISTRY_DIR") {
-        if !dir.is_empty() {
-            return Some(PathBuf::from(dir));
-        }
+    registry_dir(&env_var, "SYNTH_SHIPPED_REGISTRY_DIR", "shipped")
+}
+
+/// A non-empty environment variable.
+fn env_var(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// The registry directory for one tier: `override_key` if set, else
+/// `$XDG_DATA_HOME/synth/registry/<leaf>`, else
+/// `$HOME/.local/share/synth/registry/<leaf>`. `lookup` answers like
+/// [`std::env::var`]; an empty value counts as unset.
+fn registry_dir(
+    lookup: &dyn Fn(&str) -> Option<String>,
+    override_key: &str,
+    leaf: &str,
+) -> Option<PathBuf> {
+    let get = |key: &str| lookup(key).filter(|v| !v.is_empty()).map(PathBuf::from);
+    if let Some(dir) = get(override_key) {
+        return Some(dir);
     }
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        if !xdg.is_empty() {
-            return Some(
-                PathBuf::from(xdg)
-                    .join("synth")
-                    .join("registry")
-                    .join("shipped"),
-            );
-        }
-    }
-    std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .map(|home| {
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("synth")
-                .join("registry")
-                .join("shipped")
-        })
+    let data = get("XDG_DATA_HOME")
+        .or_else(|| get("HOME").map(|home| home.join(".local").join("share")))?;
+    Some(data.join("synth").join("registry").join(leaf))
 }
 
 /// Materialize the embedded seed registry into `target` (creating
@@ -535,16 +508,16 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
             });
         }
         for &cap in &pin.capabilities {
-            if let Some(required) = cap.required_electrical_type() {
-                if pin.electrical_type != required {
-                    return Err(LoadError::CapabilityElectricalMismatch {
-                        path: path.to_path_buf(),
-                        pin: pin.name.clone(),
-                        capability: cap,
-                        required,
-                        actual: pin.electrical_type,
-                    });
-                }
+            if let Some(required) = cap.required_electrical_type()
+                && pin.electrical_type != required
+            {
+                return Err(LoadError::CapabilityElectricalMismatch {
+                    path: path.to_path_buf(),
+                    pin: pin.name.clone(),
+                    capability: cap,
+                    required,
+                    actual: pin.electrical_type,
+                });
             }
         }
         if let Some(drive) = &pin.drive {
@@ -557,21 +530,12 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     // Skipped when KiCad isn't installed locally (CI without KiCad);
     // the schematic exporter then falls back to a synthesized
     // rectangle and there's no real symbol to disagree with.
-    if let Some(lib_id) = part.kicad_symbol.as_deref() {
-        if let Some(kicad_numbers) = crate::kicad_pin_check::kicad_pin_numbers(lib_id) {
-            for pin in &part.pins {
-                if pin.footprint_only {
-                    if kicad_numbers.contains(&pin.number.0) {
-                        return Err(LoadError::KicadPinMismatch {
-                            path: path.to_path_buf(),
-                            kicad_symbol: lib_id.to_string(),
-                            registry_pin: pin.name.clone(),
-                            registry_number: pin.number.0.clone(),
-                        });
-                    }
-                    continue;
-                }
-                if !kicad_numbers.contains(&pin.number.0) {
+    if let Some(lib_id) = part.kicad_symbol.as_deref()
+        && let Some(kicad_numbers) = crate::kicad_pin_check::kicad_pin_numbers(lib_id)
+    {
+        for pin in &part.pins {
+            if pin.footprint_only {
+                if kicad_numbers.contains(&pin.number.0) {
                     return Err(LoadError::KicadPinMismatch {
                         path: path.to_path_buf(),
                         kicad_symbol: lib_id.to_string(),
@@ -579,22 +543,31 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
                         registry_number: pin.number.0.clone(),
                     });
                 }
+                continue;
+            }
+            if !kicad_numbers.contains(&pin.number.0) {
+                return Err(LoadError::KicadPinMismatch {
+                    path: path.to_path_buf(),
+                    kicad_symbol: lib_id.to_string(),
+                    registry_pin: pin.name.clone(),
+                    registry_number: pin.number.0.clone(),
+                });
             }
         }
     }
 
     check_kicad_pin_roles(part, path)?;
 
-    if let Some(ref dims) = part.footprint_dimensions {
-        if dims.width_mm <= 0.0 || dims.height_mm <= 0.0 {
-            return Err(LoadError::InvalidFootprintDimensions {
-                path: path.to_path_buf(),
-                message: format!(
-                    "width_mm ({}) and height_mm ({}) must be positive",
-                    dims.width_mm, dims.height_mm
-                ),
-            });
-        }
+    if let Some(ref dims) = part.footprint_dimensions
+        && (dims.width_mm <= 0.0 || dims.height_mm <= 0.0)
+    {
+        return Err(LoadError::InvalidFootprintDimensions {
+            path: path.to_path_buf(),
+            message: format!(
+                "width_mm ({}) and height_mm ({}) must be positive",
+                dims.width_mm, dims.height_mm
+            ),
+        });
     }
 
     for rule in &part.required_decoupling {
@@ -608,16 +581,15 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         }
     }
 
-    if let Some(ref op) = part.operating_conditions {
-        if let (Some(min), Some(max)) = (op.min_voltage_v, op.max_voltage_v) {
-            if min > max {
-                return Err(LoadError::InvalidOperatingConditions {
-                    path: path.to_path_buf(),
-                    min,
-                    max,
-                });
-            }
-        }
+    if let Some(ref op) = part.operating_conditions
+        && let (Some(min), Some(max)) = (op.min_voltage_v, op.max_voltage_v)
+        && min > max
+    {
+        return Err(LoadError::InvalidOperatingConditions {
+            path: path.to_path_buf(),
+            min,
+            max,
+        });
     }
 
     if let Some(ref spice) = part.spice {
@@ -729,12 +701,12 @@ fn validate_pin_drive(
             return Err(invalid(format!("`{label}` must be greater than 0")));
         }
     }
-    if let Some(resistance) = drive.output_resistance_ohm {
-        if !resistance.is_finite() || resistance <= 0.0 {
-            return Err(invalid(
-                "`output_resistance_ohm` must be a positive finite number".to_string(),
-            ));
-        }
+    if let Some(resistance) = drive.output_resistance_ohm
+        && (!resistance.is_finite() || resistance <= 0.0)
+    {
+        return Err(invalid(
+            "`output_resistance_ohm` must be a positive finite number".to_string(),
+        ));
     }
     Ok(())
 }
@@ -1111,16 +1083,18 @@ electrical_type = "passive"
             }
         }
         assert_eq!(bme.pins.len(), 8);
-        assert!(bme
-            .find_pin("sda")
-            .unwrap()
-            .capabilities
-            .contains(&PinCapability::I2cSda));
-        assert!(bme
-            .find_pin("scl")
-            .unwrap()
-            .capabilities
-            .contains(&PinCapability::I2cScl));
+        assert!(
+            bme.find_pin("sda")
+                .unwrap()
+                .capabilities
+                .contains(&PinCapability::I2cSda)
+        );
+        assert!(
+            bme.find_pin("scl")
+                .unwrap()
+                .capabilities
+                .contains(&PinCapability::I2cScl)
+        );
         // nRF52840 PS table 64 MHz crystal (HFXO): CL max 12 pF; Nordic BOM: CL 8 pF, C1 = C2 = 12 pF.
         assert!(
             ldo.operating_conditions.as_ref().unwrap().max_voltage_v >= Some(5.0),
@@ -1360,12 +1334,43 @@ label_side = "inside"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// An environment holding exactly `pairs`.
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |key| {
+            pairs
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| (*v).to_string())
+        }
+    }
+
     #[test]
     fn shipped_registry_dir_respects_env_override() {
-        std::env::set_var("SYNTH_SHIPPED_REGISTRY_DIR", "/tmp/synth_shipped_test");
-        let got = shipped_registry_dir().expect("override honoured");
+        let lookup = env(&[
+            ("SYNTH_SHIPPED_REGISTRY_DIR", "/tmp/synth_shipped_test"),
+            ("XDG_DATA_HOME", "/xdg"),
+        ]);
+        let got = registry_dir(&lookup, "SYNTH_SHIPPED_REGISTRY_DIR", "shipped")
+            .expect("override honoured");
         assert_eq!(got, PathBuf::from("/tmp/synth_shipped_test"));
-        std::env::remove_var("SYNTH_SHIPPED_REGISTRY_DIR");
+    }
+
+    #[test]
+    fn registry_dirs_fall_back_to_xdg_then_home() {
+        let xdg = env(&[("XDG_DATA_HOME", "/xdg"), ("HOME", "/home/u")]);
+        assert_eq!(
+            registry_dir(&xdg, "SYNTH_SHIPPED_REGISTRY_DIR", "shipped"),
+            Some(PathBuf::from("/xdg/synth/registry/shipped"))
+        );
+        let home = env(&[("XDG_DATA_HOME", ""), ("HOME", "/home/u")]);
+        assert_eq!(
+            registry_dir(&home, "SYNTH_USER_REGISTRY_DIR", "parts"),
+            Some(PathBuf::from("/home/u/.local/share/synth/registry/parts"))
+        );
+        assert_eq!(
+            registry_dir(&env(&[]), "SYNTH_USER_REGISTRY_DIR", "parts"),
+            None
+        );
     }
 
     #[test]
@@ -1394,10 +1399,10 @@ label_side = "inside"
 
     #[test]
     fn user_registry_dir_respects_env_override() {
-        std::env::set_var("SYNTH_USER_REGISTRY_DIR", "/tmp/synth_user_test");
-        let got = user_registry_dir().expect("override honoured");
+        let lookup = env(&[("SYNTH_USER_REGISTRY_DIR", "/tmp/synth_user_test")]);
+        let got =
+            registry_dir(&lookup, "SYNTH_USER_REGISTRY_DIR", "parts").expect("override honoured");
         assert_eq!(got, PathBuf::from("/tmp/synth_user_test"));
-        std::env::remove_var("SYNTH_USER_REGISTRY_DIR");
     }
 
     fn part_with_spice(spice: &str) -> String {

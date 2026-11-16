@@ -81,12 +81,12 @@ impl KrtReport {
     pub fn below_floor(&self) -> Vec<String> {
         let mut below = Vec::new();
         for (key, floor) in &self.design_rules.board_floors {
-            if let Some(delivered) = self.design_rules.min_delivered.get(key) {
-                if *delivered + 1e-9 < *floor {
-                    below.push(format!(
-                        "{key}: delivered {delivered:.4} mm is below the board floor {floor:.4} mm"
-                    ));
-                }
+            if let Some(delivered) = self.design_rules.min_delivered.get(key)
+                && *delivered + 1e-9 < *floor
+            {
+                below.push(format!(
+                    "{key}: delivered {delivered:.4} mm is below the board floor {floor:.4} mm"
+                ));
             }
         }
         below
@@ -335,7 +335,7 @@ fn perimeter_plan(request: &RouteRequest) -> Vec<String> {
 /// Run KiCadRoutingTools over the request's baseline.
 #[allow(clippy::too_many_lines)]
 pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
-    let repo = resolve_repo().ok_or_else(|| {
+    let repo = resolve_repo(&request.tools).ok_or_else(|| {
         RouterFailure::for_stage(
             RouterEngine::KiCadRoutingTools,
             RouterStage::Capability,
@@ -355,7 +355,7 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
             ),
         ));
     }
-    let python = resolve_python().ok_or_else(|| {
+    let python = resolve_python(&request.tools).ok_or_else(|| {
         RouterFailure::for_stage(
             RouterEngine::KiCadRoutingTools,
             RouterStage::Capability,
@@ -573,12 +573,12 @@ fn escape_failure(invocation: &crate::process::Invocation) -> Option<RouterFailu
 
 /// Both resolvers are shared with capability discovery so the path an engine
 /// is *reported* available at is the path it actually runs from.
-fn resolve_repo() -> Option<PathBuf> {
-    crate::capability::resolve_krt_repo()
+fn resolve_repo(tools: &crate::tools::ToolPaths) -> Option<PathBuf> {
+    crate::capability::resolve_krt_repo(tools)
 }
 
-fn resolve_python() -> Option<PathBuf> {
-    crate::capability::resolve_python()
+fn resolve_python(tools: &crate::tools::ToolPaths) -> Option<PathBuf> {
+    crate::capability::resolve_python(tools)
 }
 
 fn read_report(path: &Path) -> Option<KrtReport> {

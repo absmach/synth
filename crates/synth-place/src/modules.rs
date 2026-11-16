@@ -8,11 +8,11 @@
 //! around the anchor rather than floating to distant top-row grid cells.
 
 use std::collections::{HashMap, HashSet};
-use synth_geometry::{mm_to_nm, Point, Rotation};
+use synth_geometry::{Point, Rotation, mm_to_nm};
 use synth_ir::{Board, ComponentId};
 
-use crate::floorplan;
 use crate::PadOffsetLookup;
+use crate::floorplan;
 
 /// Escape orientation for the far end of a differential pair.
 ///
@@ -59,8 +59,8 @@ pub(crate) fn pair_escape_rotations(
         else {
             continue;
         };
-        let positive_pad = pad_offsets.lookup(far, connection.pair.positive_pin.1 .0 as usize);
-        let negative_pad = pad_offsets.lookup(far, connection.pair.negative_pin.1 .0 as usize);
+        let positive_pad = pad_offsets.lookup(far, connection.pair.positive_pin.1.0 as usize);
+        let negative_pad = pad_offsets.lookup(far, connection.pair.negative_pin.1.0 as usize);
         let (Some(positive_pad), Some(negative_pad)) = (positive_pad, negative_pad) else {
             continue;
         };

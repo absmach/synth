@@ -74,14 +74,14 @@ use uuid::Uuid;
 
 use crate::field_clear;
 use crate::pin_reconcile::fanned_leg_stub;
-use crate::sexp::{num, pair, str_pair, Sexp};
+use crate::sexp::{Sexp, num, pair, str_pair};
 use crate::symbol_lib::{self, LIBRARY_NICKNAME};
 use crate::uuid_v5::derive_entity_uuid;
 
 pub use synth_layout::route::pin_terminal_xy;
 use synth_layout::route::{
-    classify_ic_pin, is_two_pin_symbol_kind, natural_rotation_offset, snap_grid_127,
-    synthesized_body, PIN_LENGTH, TWOPIN_HALF_W,
+    PIN_LENGTH, TWOPIN_HALF_W, classify_ic_pin, is_two_pin_symbol_kind, natural_rotation_offset,
+    snap_grid_127, synthesized_body,
 };
 
 /// Build the entire `.kicad_sch` s-expression for `board`.
@@ -740,8 +740,8 @@ pub(crate) fn build_sheet_schematic(
     // would place it on a distinct global net with no driver.
     for reconciled in &reconciled_pins {
         for leg in &reconciled.power_legs {
-            if let Some(rail) = leg_rail(leg) {
-                if let Some(sexps) = build_fanned_power_symbol(
+            if let Some(rail) = leg_rail(leg)
+                && let Some(sexps) = build_fanned_power_symbol(
                     board,
                     leg,
                     rail,
@@ -751,9 +751,9 @@ pub(crate) fn build_sheet_schematic(
                     &mut obstacles,
                     &mut power_names,
                     bounds.get(&leg.component).copied(),
-                ) {
-                    children.extend(sexps);
-                }
+                )
+            {
+                children.extend(sexps);
             }
         }
         for pin in &reconciled.no_connects {
@@ -1604,10 +1604,10 @@ fn stub_is_blocked(
             }) {
                 continue;
             }
-            if let Some((px, py, _, _)) = pin_terminal_xy(board, component.id, pin_id, placements) {
-                if point_on_segment((px, py), from, to) {
-                    return true;
-                }
+            if let Some((px, py, _, _)) = pin_terminal_xy(board, component.id, pin_id, placements)
+                && point_on_segment((px, py), from, to)
+            {
+                return true;
             }
         }
     }
@@ -2175,12 +2175,11 @@ fn variant_dnp_by_refdes(board: &Board) -> std::collections::BTreeMap<&str, Vec<
 fn symbol_unit_number(sym: &Sexp) -> u32 {
     if let Sexp::List { children, .. } = sym {
         for child in children {
-            if let Sexp::List { head, children } = child {
-                if head == "unit" {
-                    if let Some(Sexp::Atom(a)) = children.first() {
-                        return a.parse().unwrap_or(1);
-                    }
-                }
+            if let Sexp::List { head, children } = child
+                && head == "unit"
+                && let Some(Sexp::Atom(a)) = children.first()
+            {
+                return a.parse().unwrap_or(1);
             }
         }
     }
@@ -2946,10 +2945,10 @@ fn build_symbol_unit(
     // so KiCad always finds the alternate.
     for (number, name) in crate::alternates::pin_function_alternates(board, component) {
         // Only this unit's pins are drawn on this symbol.
-        if let Some(map) = units {
-            if map.get(&number).copied().unwrap_or(1) != unit {
-                continue;
-            }
+        if let Some(map) = units
+            && map.get(&number).copied().unwrap_or(1) != unit
+        {
+            continue;
         }
         let pin_uuid = derive_entity_uuid(
             project,
@@ -4457,7 +4456,7 @@ mod tests {
                 };
                 let key = format!(
                     "{:.2},{:.2}|{:.2},{:.2}",
-                    seg.0 .0, seg.0 .1, seg.1 .0, seg.1 .1
+                    seg.0.0, seg.0.1, seg.1.0, seg.1.1
                 );
                 if !seen.insert(key) {
                     return true;
@@ -4496,14 +4495,12 @@ mod tests {
                                     head: gh,
                                     children: ggc,
                                 } = gc
+                                    && (gh == "in_bom" || gh == "on_board")
+                                    && ggc.len() == 1
+                                    && let Sexp::Atom(a) = &ggc[0]
+                                    && a == "no"
                                 {
-                                    if (gh == "in_bom" || gh == "on_board") && ggc.len() == 1 {
-                                        if let Sexp::Atom(a) = &ggc[0] {
-                                            if a == "no" {
-                                                is_power = true;
-                                            }
-                                        }
-                                    }
+                                    is_power = true;
                                 }
                             }
                             if is_power {
@@ -4512,22 +4509,15 @@ mod tests {
                                         head: gh,
                                         children: ggc,
                                     } = gc
+                                        && gh == "at"
+                                        && let (Some(x), Some(y)) = (ggc.first(), ggc.get(1))
+                                        && let (Some(xv), Some(yv)) =
+                                            (parse_num_atom(x), parse_num_atom(y))
                                     {
-                                        if gh == "at" {
-                                            if let (Some(x), Some(y)) = (ggc.first(), ggc.get(1)) {
-                                                if let (Some(xv), Some(yv)) =
-                                                    (parse_num_atom(x), parse_num_atom(y))
-                                                {
-                                                    if !is_grid_aligned(xv) || !is_grid_aligned(yv)
-                                                    {
-                                                        println!(
-                                                            "UNALIGNED POWER_SYMBOL: xv={xv}, yv={yv}"
-                                                        );
-                                                    }
-                                                    coords.push((xv, yv));
-                                                }
-                                            }
+                                        if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
+                                            println!("UNALIGNED POWER_SYMBOL: xv={xv}, yv={yv}");
                                         }
+                                        coords.push((xv, yv));
                                     }
                                 }
                             }
@@ -4538,21 +4528,15 @@ mod tests {
                                     head: gh,
                                     children: ggc,
                                 } = gc
+                                    && gh == "at"
+                                    && let (Some(x), Some(y)) = (ggc.first(), ggc.get(1))
+                                    && let (Some(xv), Some(yv)) =
+                                        (parse_num_atom(x), parse_num_atom(y))
                                 {
-                                    if gh == "at" {
-                                        if let (Some(x), Some(y)) = (ggc.first(), ggc.get(1)) {
-                                            if let (Some(xv), Some(yv)) =
-                                                (parse_num_atom(x), parse_num_atom(y))
-                                            {
-                                                if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
-                                                    println!(
-                                                        "UNALIGNED GLOBAL_LABEL: xv={xv}, yv={yv}"
-                                                    );
-                                                }
-                                                coords.push((xv, yv));
-                                            }
-                                        }
+                                    if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
+                                        println!("UNALIGNED GLOBAL_LABEL: xv={xv}, yv={yv}");
                                     }
+                                    coords.push((xv, yv));
                                 }
                             }
                         }
@@ -4562,33 +4546,22 @@ mod tests {
                                     head: gh,
                                     children: ggc,
                                 } = gc
+                                    && gh == "pts"
                                 {
-                                    if gh == "pts" {
-                                        for ggg in ggc {
-                                            if let Sexp::List {
-                                                head: ggh,
-                                                children: gggc,
-                                            } = ggg
-                                            {
-                                                if ggh == "xy" {
-                                                    if let (Some(x), Some(y)) =
-                                                        (gggc.first(), gggc.get(1))
-                                                    {
-                                                        if let (Some(xv), Some(yv)) =
-                                                            (parse_num_atom(x), parse_num_atom(y))
-                                                        {
-                                                            if !is_grid_aligned(xv)
-                                                                || !is_grid_aligned(yv)
-                                                            {
-                                                                println!(
-                                                                    "UNALIGNED WIRE: xv={xv}, yv={yv}"
-                                                                );
-                                                            }
-                                                            coords.push((xv, yv));
-                                                        }
-                                                    }
-                                                }
+                                    for ggg in ggc {
+                                        if let Sexp::List {
+                                            head: ggh,
+                                            children: gggc,
+                                        } = ggg
+                                            && ggh == "xy"
+                                            && let (Some(x), Some(y)) = (gggc.first(), gggc.get(1))
+                                            && let (Some(xv), Some(yv)) =
+                                                (parse_num_atom(x), parse_num_atom(y))
+                                        {
+                                            if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
+                                                println!("UNALIGNED WIRE: xv={xv}, yv={yv}");
                                             }
+                                            coords.push((xv, yv));
                                         }
                                     }
                                 }
@@ -4788,7 +4761,7 @@ mod tests {
         for ((_, y), fields) in &rails {
             let value = power_value(fields);
             assert!(!value.4, "{} is hidden", value.1);
-            assert!(value.2 .1 < *y, "{} is not above its arrow", value.1);
+            assert!(value.2.1 < *y, "{} is not above its arrow", value.1);
         }
     }
 
@@ -4803,7 +4776,7 @@ mod tests {
         for ((_, y), fields) in &grounds {
             let value = power_value(fields);
             assert!(!value.4, "GND is hidden");
-            assert!(value.2 .1 > *y, "GND is not below its triangle");
+            assert!(value.2.1 > *y, "GND is not below its triangle");
         }
     }
 
@@ -5049,7 +5022,7 @@ mod tests {
             }
         }
         terminals.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.partial_cmp(&b.1).unwrap()));
-        terminals.dedup_by(|a, b| a.0 == b.0 && (a.1 .0 - b.1 .0).hypot(a.1 .1 - b.1 .1) < 0.01);
+        terminals.dedup_by(|a, b| a.0 == b.0 && (a.1.0 - b.1.0).hypot(a.1.1 - b.1.1) < 0.01);
         terminals
     }
 
@@ -5287,13 +5260,13 @@ mod tests {
                 .filter_map(|(angle, ((x, y), fields))| {
                     let value = power_value(&fields);
                     let drawing = if angle == 0.0 {
-                        let (y0, y1) = if value.2 .1 > y {
+                        let (y0, y1) = if value.2.1 > y {
                             (y, y + POWER_TIP_MM)
                         } else {
                             (y - POWER_TIP_MM, y)
                         };
                         (x - 1.27, y0, x + 1.27, y1)
-                    } else if value.2 .0 > x {
+                    } else if value.2.0 > x {
                         (x, y - 1.27, x + POWER_TIP_MM, y + 1.27)
                     } else {
                         (x - POWER_TIP_MM, y - 1.27, x, y + 1.27)

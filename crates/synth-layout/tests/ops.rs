@@ -8,8 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use synth_ir::Board;
-use synth_layout::ops::{apply_op, LayoutOp, LayoutOpError};
 use synth_layout::Rotation;
+use synth_layout::ops::{LayoutOp, LayoutOpError, apply_op};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

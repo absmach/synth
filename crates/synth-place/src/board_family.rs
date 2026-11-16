@@ -68,7 +68,7 @@ pub fn supports_layers(profile: &BoardFamilyProfile, layers: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{get, PROFILES};
+    use super::{PROFILES, get};
 
     #[test]
     fn catalog_contains_mechanical_envelopes_with_valid_dimensions() {

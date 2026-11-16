@@ -311,10 +311,12 @@ fn schem_003_fires_on_cap_far_from_ic() {
     let violations = rule(check(&layout, &board), "E-SYNTH-SCHEM-003");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-003");
-    assert!(violations[0]
-        .entities
-        .iter()
-        .any(|e| matches!(e, EntityRef::Component { id } if id == "U1")));
+    assert!(
+        violations[0]
+            .entities
+            .iter()
+            .any(|e| matches!(e, EntityRef::Component { id } if id == "U1"))
+    );
 }
 
 #[test]

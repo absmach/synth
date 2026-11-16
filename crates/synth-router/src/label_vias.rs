@@ -29,7 +29,7 @@ use std::path::Path;
 
 use synth_geometry::Rotation;
 
-use crate::pcb_read::{mm_to_nm, PcbBoard, Point, NM_PER_MM};
+use crate::pcb_read::{NM_PER_MM, PcbBoard, Point, mm_to_nm};
 
 /// The font size of a label that does not write one: KiCad's default.
 const DEFAULT_FONT_MM: f64 = 1.0;
@@ -910,26 +910,26 @@ fn kept_pieces(cuts: &[(f64, f64)], length_mm: f64) -> Vec<(f64, f64)> {
 fn piece_text(line: &str, start: (f64, f64), end: (f64, f64), n: usize) -> String {
     let mut text = line.to_string();
     for (key, to) in [("(start", start), ("(end", end)] {
-        if let Some(k) = text.find(key) {
-            if let Some(close) = text[k..].find(')') {
-                text.replace_range(
-                    k..k + close,
-                    &format!("{key} {} {}", number(to.0), number(to.1)),
-                );
-            }
+        if let Some(k) = text.find(key)
+            && let Some(close) = text[k..].find(')')
+        {
+            text.replace_range(
+                k..k + close,
+                &format!("{key} {} {}", number(to.0), number(to.1)),
+            );
         }
     }
-    if n > 0 {
-        if let Some(u) = text.rfind("(uuid \"") {
-            let body = u + "(uuid \"".len();
-            if let Some(close) = text[body..].find('"') {
-                let mut id: Vec<char> = text[body..body + close].chars().collect();
-                if let Some(last) = id.last_mut() {
-                    let digit = last.to_digit(16).unwrap_or(0);
-                    *last = char::from_digit((digit + n as u32) % 16, 16).unwrap_or('0');
-                }
-                text.replace_range(body..body + close, &id.into_iter().collect::<String>());
+    if n > 0
+        && let Some(u) = text.rfind("(uuid \"")
+    {
+        let body = u + "(uuid \"".len();
+        if let Some(close) = text[body..].find('"') {
+            let mut id: Vec<char> = text[body..body + close].chars().collect();
+            if let Some(last) = id.last_mut() {
+                let digit = last.to_digit(16).unwrap_or(0);
+                *last = char::from_digit((digit + n as u32) % 16, 16).unwrap_or('0');
             }
+            text.replace_range(body..body + close, &id.into_iter().collect::<String>());
         }
     }
     text
@@ -1155,12 +1155,11 @@ fn silk_segments(text: &str) -> Vec<Seg> {
                         .collect();
                     out.extend(ring.windows(2).map(|w| (to_board(w[0]), to_board(w[1]))));
                 }
-            } else if graphic.starts_with("(fp_arc") {
-                if let (Some(a), Some(m), Some(b)) = (point("(start"), point("(mid"), point("(end"))
-                {
-                    out.push((to_board(a), to_board(m)));
-                    out.push((to_board(m), to_board(b)));
-                }
+            } else if graphic.starts_with("(fp_arc")
+                && let (Some(a), Some(m), Some(b)) = (point("(start"), point("(mid"), point("(end"))
+            {
+                out.push((to_board(a), to_board(m)));
+                out.push((to_board(m), to_board(b)));
             }
         }
     }

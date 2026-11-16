@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use synth_diagnostics::UnknownReason;
@@ -174,11 +175,34 @@ pub fn run_binary(
 
 pub fn version() -> Option<String> {
     static VERSION: OnceLock<Option<String>> = OnceLock::new();
-    VERSION.get_or_init(probe_version).clone()
+    VERSION.get_or_init(|| probe_version(&binary())).clone()
 }
 
-fn probe_version() -> Option<String> {
-    let run = run(
+/// The version `bin` reports, probed once per binary for the process.
+///
+/// For a caller that names its `kicad-cli` explicitly rather than through
+/// `KICAD_CLI`; [`version`] answers for the environment's binary.
+pub fn version_of(bin: &str) -> Option<String> {
+    static VERSIONS: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+    let versions = VERSIONS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(known) = versions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .get(bin)
+    {
+        return known.clone();
+    }
+    let probed = probe_version(bin);
+    versions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(bin.to_string(), probed.clone());
+    probed
+}
+
+fn probe_version(bin: &str) -> Option<String> {
+    let run = run_binary(
+        bin,
         &["version".to_string()],
         Duration::from_secs(VERSION_PROBE_TIMEOUT_SECS),
     )

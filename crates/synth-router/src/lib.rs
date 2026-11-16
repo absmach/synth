@@ -56,6 +56,7 @@ pub mod outcomes;
 pub mod process;
 pub mod result;
 pub mod search_budget;
+pub mod tools;
 pub mod validate;
 pub mod zone_fill;
 
@@ -63,7 +64,7 @@ use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
-pub use capability::{discover, RouterCapability};
+pub use capability::{RouterCapability, discover};
 pub use contract::{
     FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
     RouteRequest, RouterEngine, RouterLimits,
@@ -72,11 +73,12 @@ pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
 pub use result::{
     PortfolioRank, RouteReport, RouteState, RouteStatistics, RouterProvenance, ValidationSummary,
 };
+pub use tools::ToolPaths;
 // The `.kicad_pcb` reader lives in `synth-drc`; this keeps the
 // `synth_router::pcb_read` path working for existing callers.
 pub use synth_drc::pcb_read;
 pub use validate::{
-    validate_candidate, ConnectivityReport, FabricationVerdict, OpenConnection, TopologyReport,
+    ConnectivityReport, FabricationVerdict, OpenConnection, TopologyReport, validate_candidate,
 };
 
 /// Schema version stamped into every [`RouteReport`] this crate writes.
@@ -452,7 +454,8 @@ fn finalize(
         let drill = request.policy.min_drill_diameter_nm;
         ground = ground.with_in_pad_via(drill + request.policy.via_in_pad_land_extra_nm, drill);
     }
-    match island_vias::tie_islands_for(&candidate.candidate_path, &ground) {
+    let kicad_cli = request.tools.kicad_cli_binary();
+    match island_vias::tie_islands_for(&candidate.candidate_path, &ground, &kicad_cli) {
         Ok(outcome) => {
             repair_blocking = outcome.unresolved;
             repair_advisory = outcome.advisory;
@@ -496,7 +499,9 @@ fn finalize(
         // Deliver the zones filled so KiCad opens the board with the
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.
-        if let Err(detail) = zone_fill::refill_zones(&candidate.candidate_path) {
+        if let Err(detail) =
+            zone_fill::refill_zones(&candidate.candidate_path, &request.tools.kicad_cli_binary())
+        {
             warn!(
                 "zones were not filled in {}: {detail}; KiCad will show \
                  plane-connected pads as unrouted until zones are filled (press B)",
@@ -679,10 +684,10 @@ pub(crate) fn repo_root() -> Option<PathBuf> {
         if path.join("tools").is_dir() {
             return Some(path);
         }
-        if let Some(up) = path.parent().and_then(Path::parent) {
-            if up.join("tools").is_dir() {
-                return Some(up.to_path_buf());
-            }
+        if let Some(up) = path.parent().and_then(Path::parent)
+            && up.join("tools").is_dir()
+        {
+            return Some(up.to_path_buf());
         }
     }
     std::env::current_dir()

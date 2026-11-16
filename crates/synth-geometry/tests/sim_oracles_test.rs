@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 use synth_geometry::{
-    calculate_microstrip_z0, calculate_stripline_z0, estimate_component_thermal, MicrostripParams,
+    MicrostripParams, calculate_microstrip_z0, calculate_stripline_z0, estimate_component_thermal,
 };
 
 #[test]

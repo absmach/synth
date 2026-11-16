@@ -79,7 +79,7 @@ The Linux binaries are built against glibc 2.35, so they run on Debian Bookworm,
 
 ### Cargo
 
-Synth is not on crates.io, so install it from Git. Requires Rust 1.85 or newer.
+Synth is not on crates.io, so install it from Git. Requires Rust 1.100 or newer.
 
 ```bash
 # Latest release

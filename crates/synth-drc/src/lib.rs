@@ -72,10 +72,10 @@ mod signal_integrity;
 /// a high-current net's trace for the router.
 pub use signal_integrity::required_width_nm;
 pub use signal_integrity::{
-    ground_net_names, is_ground_name, return_path_critical_net_names, return_path_medium_net_names,
-    MEDIUM_EDGE_WINDOW_NM,
+    MEDIUM_EDGE_WINDOW_NM, ground_net_names, is_ground_name, return_path_critical_net_names,
+    return_path_medium_net_names,
 };
-pub use signal_integrity::{return_via_window_nm, RETURN_VIA_CLEARANCE_NM};
+pub use signal_integrity::{RETURN_VIA_CLEARANCE_NM, return_via_window_nm};
 
 use serde::{Deserialize, Serialize};
 use synth_geometry::Point;
@@ -84,7 +84,7 @@ use synth_pcb::Routing;
 use synth_place::Placement;
 
 pub use profile::{ManufacturerProfile, ProfileError};
-pub use rules::{replay, run_kicad_cli_drc, DrcCounts, NativeDrcOutcome, DRC_STAGE};
+pub use rules::{DRC_STAGE, DrcCounts, NativeDrcOutcome, replay, run_kicad_cli_drc};
 /// Re-exported so a DRC caller can resolve and hand in a board's physical
 /// stack without depending on `synth-geometry` directly.
 pub use synth_geometry::StackupProfile;
@@ -955,12 +955,14 @@ mod tests {
             ],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_edge_coupling(
-            &far,
-            &ManufacturerProfile::jlc_standard(),
-            &stackup
-        )
-        .is_empty());
+        assert!(
+            super::signal_integrity::check_edge_coupling(
+                &far,
+                &ManufacturerProfile::jlc_standard(),
+                &stackup
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -1393,13 +1395,15 @@ mod tests {
             segments: vec![straight(net, 1_000_000, 0, 5_000_000)],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_ir_drop(
-            &board,
-            &short,
-            &ManufacturerProfile::jlc_standard(),
-            &stackup
-        )
-        .is_empty());
+        assert!(
+            super::signal_integrity::check_ir_drop(
+                &board,
+                &short,
+                &ManufacturerProfile::jlc_standard(),
+                &stackup
+            )
+            .is_empty()
+        );
 
         // A 45-degree diagonal on the same copper: 12 mm by 12 mm is 16.97 mm
         // of track (about 41 mV, within budget). Manhattan distance — abs(dx) +
@@ -1414,13 +1418,15 @@ mod tests {
             }],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_ir_drop(
-            &board,
-            &diagonal,
-            &ManufacturerProfile::jlc_standard(),
-            &stackup
-        )
-        .is_empty());
+        assert!(
+            super::signal_integrity::check_ir_drop(
+                &board,
+                &diagonal,
+                &ManufacturerProfile::jlc_standard(),
+                &stackup
+            )
+            .is_empty()
+        );
     }
 
     #[test]

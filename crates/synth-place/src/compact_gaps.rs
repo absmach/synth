@@ -18,10 +18,10 @@
 //! Mounting holes follow the new outline's corners.
 
 use super::{
-    courtyard_envelope, courtyard_rect_for_placement, courtyard_sizes, fallback_courtyard,
-    fit_outline_with_margin_mm, flush_edge_index, is_dense_part, is_hard_hinted,
-    tight_edge_margin_mm, total_hpwl_nm, trim_outline_to_grid, Board, ComponentPlacement,
-    Placement, Point, Rect,
+    Board, ComponentPlacement, Placement, Point, Rect, courtyard_envelope,
+    courtyard_rect_for_placement, courtyard_sizes, fallback_courtyard, fit_outline_with_margin_mm,
+    flush_edge_index, is_dense_part, is_hard_hinted, tight_edge_margin_mm, total_hpwl_nm,
+    trim_outline_to_grid,
 };
 use synth_geometry::{mm_to_nm, nm_to_mm};
 
@@ -719,8 +719,8 @@ fn hole_corner_offsets(
         .zip(roles)
         .map(|(p, role)| {
             (*role == Role::Hole).then(|| {
-                let right = p.center.x_nm > (outline.min.x_nm + outline.max.x_nm) / 2;
-                let bottom = p.center.y_nm > (outline.min.y_nm + outline.max.y_nm) / 2;
+                let right = p.center.x_nm > i64::midpoint(outline.min.x_nm, outline.max.x_nm);
+                let bottom = p.center.y_nm > i64::midpoint(outline.min.y_nm, outline.max.y_nm);
                 let corner_x = if right {
                     outline.max.x_nm
                 } else {

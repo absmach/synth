@@ -8,8 +8,8 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use synth_drc::dfm::{check_dfm, DfmSeverity};
 use synth_drc::ManufacturerProfile;
+use synth_drc::dfm::{DfmSeverity, check_dfm};
 
 fn counts_for(relative: &str) -> (BTreeMap<String, usize>, usize) {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

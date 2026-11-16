@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write as _;
 
 use synth_ir::PowerDomainKind;
-use synth_ir::{infer_power_domains, Board, Component, ComponentId, Net, NetId, PinId};
+use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId, infer_power_domains};
 use synth_registry::{ElectricalType, PinDrive};
 use synth_validate::{parse_capacitance, parse_resistance};
 

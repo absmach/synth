@@ -174,11 +174,7 @@ const MIN_ASPECT_RETENTION: f64 = 0.6;
 fn content_aspect(board: &Board, placements: &[ComponentPlacement]) -> f64 {
     let b = bounds_of_placements(board, placements);
     let (w, h) = (b.1 - b.0, b.3 - b.2);
-    if h > 0.0 {
-        w / h
-    } else {
-        0.0
-    }
+    if h > 0.0 { w / h } else { 0.0 }
 }
 
 /// Would this packing keep each declared group contiguous?
@@ -213,11 +209,7 @@ fn keeps_groups_contiguous(
             .collect();
         names.sort();
         names.dedup();
-        if names.len() == 1 {
-            names.pop()
-        } else {
-            None
-        }
+        if names.len() == 1 { names.pop() } else { None }
     };
 
     let placed: Vec<(Option<String>, Rect)> = boxes
@@ -724,7 +716,8 @@ mod tests {
                 assert!(
                     aa <= ba + 1e-6,
                     "{parts} pairs: compaction grew the drawing: {ba:.1} -> {aa:.1} (before bounds {:?}, after {:?})",
-                    bounds_of_placements(&board, &before), bounds_of_placements(&board, &after)
+                    bounds_of_placements(&board, &before),
+                    bounds_of_placements(&board, &after)
                 );
                 assert_eq!(
                     after.len(),

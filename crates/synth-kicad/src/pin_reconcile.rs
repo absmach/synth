@@ -5,7 +5,7 @@
 //! re-exports it and adds the one piece only the exporter needs, the
 //! s-expression for a no-connect marker.
 
-use crate::sexp::{num, Sexp};
+use crate::sexp::{Sexp, num};
 
 pub use synth_layout::pin_reconcile::*;
 

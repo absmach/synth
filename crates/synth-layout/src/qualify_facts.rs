@@ -5,7 +5,7 @@ use std::path::Path;
 
 use synth_registry::qualify::{FootprintFacts, ModelFacts, PadFacts, PadSide, SymbolFacts};
 
-use crate::kicad_footprint_loader::{self, PadCopperLayers, MODEL_DIR};
+use crate::kicad_footprint_loader::{self, MODEL_DIR, PadCopperLayers};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InstalledKicad;

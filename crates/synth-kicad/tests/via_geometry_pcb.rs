@@ -235,13 +235,13 @@ fn fabricated_vias(label: &str, extra: &str) -> Option<(Vec<String>, Vec<String>
     let mut pads = Vec::new();
     let mut lines = front.lines();
     while let Some(line) = lines.next() {
-        if line.contains("AperFunction,ViaPad") {
-            if let Some(aperture) = lines.next() {
-                let (_, diameter) = aperture
-                    .split_once("C,")
-                    .unwrap_or_else(|| panic!("a round via pad: {aperture}"));
-                pads.push(diameter.trim_end_matches("*%").to_string());
-            }
+        if line.contains("AperFunction,ViaPad")
+            && let Some(aperture) = lines.next()
+        {
+            let (_, diameter) = aperture
+                .split_once("C,")
+                .unwrap_or_else(|| panic!("a round via pad: {aperture}"));
+            pads.push(diameter.trim_end_matches("*%").to_string());
         }
     }
     let _ = fs::remove_dir_all(&tmp);

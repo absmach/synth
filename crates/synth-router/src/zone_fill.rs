@@ -16,10 +16,11 @@ use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::path::Path;
 
-use crate::drc::{first_line, DRC_BUDGET, DRC_OUTPUT_CAP};
+use crate::drc::{DRC_BUDGET, DRC_OUTPUT_CAP, first_line};
 use crate::pcb_read::PcbBoard;
 
-/// Fill the pour zones of the board at `board_path`, in place.
+/// Fill the pour zones of the board at `board_path`, in place, with the
+/// `kicad_cli` binary.
 ///
 /// A board with no fill-enabled zone is left untouched. Any fills the board
 /// already carries are discarded and recomputed, since they may be partial
@@ -29,8 +30,8 @@ use crate::pcb_read::PcbBoard;
 ///
 /// # Errors
 /// Returns why the board could not be filled and was left as it was.
-pub fn refill_zones(board_path: &Path) -> Result<(), String> {
-    match filled_text(board_path)? {
+pub fn refill_zones(board_path: &Path, kicad_cli: &str) -> Result<(), String> {
+    match filled_text(board_path, kicad_cli)? {
         Some(filled) => install(board_path, &filled),
         None => Ok(()),
     }
@@ -43,7 +44,7 @@ pub fn refill_zones(board_path: &Path) -> Result<(), String> {
 ///
 /// # Errors
 /// Returns why the board could not be filled.
-pub fn filled_text(board_path: &Path) -> Result<Option<String>, String> {
+pub fn filled_text(board_path: &Path, kicad_cli: &str) -> Result<Option<String>, String> {
     let text = std::fs::read_to_string(board_path)
         .map_err(|e| format!("could not read {}: {e}", board_path.display()))?;
     PcbBoard::parse(&text).map_err(|e| e.to_string())?;
@@ -53,9 +54,9 @@ pub fn filled_text(board_path: &Path) -> Result<Option<String>, String> {
     if !pours {
         return Ok(None);
     }
-    if let Some((_, detail)) =
-        synth_drc::kicad_cli::version_rejection(synth_drc::kicad_cli::version().as_deref())
-    {
+    if let Some((_, detail)) = synth_drc::kicad_cli::version_rejection(
+        synth_drc::kicad_cli::version_of(kicad_cli).as_deref(),
+    ) {
         return Err(detail);
     }
 
@@ -77,8 +78,7 @@ pub fn filled_text(board_path: &Path) -> Result<Option<String>, String> {
     .map(ToString::to_string)
     .chain([report.arg(), scratch.arg()])
     .collect();
-    let cli = synth_drc::kicad_cli::binary();
-    let invocation = crate::process::run(Path::new(&cli), &args, DRC_BUDGET, DRC_OUTPUT_CAP)
+    let invocation = crate::process::run(Path::new(kicad_cli), &args, DRC_BUDGET, DRC_OUTPUT_CAP)
         .map_err(|e| e.detail)?;
     if !invocation.succeeded() {
         return Err(format!(
@@ -239,10 +239,10 @@ fn forms(text: &str, name: &str, depth: usize) -> Vec<Range<usize>> {
             }
             b')' => {
                 level = level.saturating_sub(1);
-                if level == depth {
-                    if let Some(open) = start.take() {
-                        found.push(open..i + 1);
-                    }
+                if level == depth
+                    && let Some(open) = start.take()
+                {
+                    found.push(open..i + 1);
                 }
             }
             _ => {}

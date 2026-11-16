@@ -1807,16 +1807,16 @@ fn check(
                 "  release_ready: {}",
                 manufacturing["release_ready"].as_bool().unwrap_or(false)
             );
-            if let Some(overrides) = release.get("overrides").and_then(|o| o.as_array()) {
-                if !overrides.is_empty() {
-                    println!("  {}", release::UNTRUSTED_BANNER);
-                    for record in overrides {
-                        println!(
-                            "    {} via {}",
-                            record["code"].as_str().unwrap_or("?"),
-                            record["flag"].as_str().unwrap_or("?")
-                        );
-                    }
+            if let Some(overrides) = release.get("overrides").and_then(|o| o.as_array())
+                && !overrides.is_empty()
+            {
+                println!("  {}", release::UNTRUSTED_BANNER);
+                for record in overrides {
+                    println!(
+                        "    {} via {}",
+                        record["code"].as_str().unwrap_or("?"),
+                        record["flag"].as_str().unwrap_or("?")
+                    );
                 }
             }
         }
@@ -1902,11 +1902,7 @@ fn manufacturing_status(
     if native_unknown {
         return "unknown";
     }
-    if fab_pass {
-        "pass"
-    } else {
-        "fail"
-    }
+    if fab_pass { "pass" } else { "fail" }
 }
 
 fn registry_qualify(
@@ -1937,10 +1933,10 @@ fn registry_qualify(
     let report = synth_registry::qualify_registry(&subject, &facts, &facts, &tool_version);
 
     if let Some(path) = report_path {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
         info!("wrote {}", path.display());
@@ -2681,10 +2677,10 @@ fn import_kicad_batch(
     let mut imported = 0usize;
     let mut failed: Vec<(String, String)> = Vec::new();
     for lib_id in &lib_ids {
-        if let Some(cap) = limit {
-            if imported >= cap {
-                break;
-            }
+        if let Some(cap) = limit
+            && imported >= cap
+        {
+            break;
         }
         match import_kicad_one(lib_id, None, None, &user_dir, true) {
             Ok(_) => imported += 1,
@@ -3106,18 +3102,18 @@ fn resolve_tier1(explicit: Option<&Path>) -> Tier1Source {
     if let Some(p) = explicit {
         return Tier1Source::Dir(p.to_path_buf());
     }
-    if let Ok(env) = std::env::var("SYNTH_REGISTRY") {
-        if !env.is_empty() {
-            return Tier1Source::Dir(PathBuf::from(env));
-        }
+    if let Ok(env) = std::env::var("SYNTH_REGISTRY")
+        && !env.is_empty()
+    {
+        return Tier1Source::Dir(PathBuf::from(env));
     }
     if let Some(dir) = discover_registry_dir() {
         return Tier1Source::Dir(dir);
     }
-    if let Some(shipped) = synth_registry::shipped_registry_dir() {
-        if shipped.join("parts").is_dir() {
-            return Tier1Source::Dir(shipped.join("parts"));
-        }
+    if let Some(shipped) = synth_registry::shipped_registry_dir()
+        && shipped.join("parts").is_dir()
+    {
+        return Tier1Source::Dir(shipped.join("parts"));
     }
     Tier1Source::Embedded
 }
@@ -3339,10 +3335,11 @@ fn sim(
     if let Tier1Source::Dir(dir) = resolve_tier1(registry_dir) {
         registry_dirs.push(dir);
     }
-    if let Some(user) = synth_registry::user_registry_dir() {
-        if user.is_dir() && !registry_dirs.contains(&user) {
-            registry_dirs.push(user);
-        }
+    if let Some(user) = synth_registry::user_registry_dir()
+        && user.is_dir()
+        && !registry_dirs.contains(&user)
+    {
+        registry_dirs.push(user);
     }
 
     let report = synth_sim::simulate(
@@ -3437,55 +3434,50 @@ fn validate(
     let mut diagnostics = parse.diagnostics;
     let schematic_sidecar = sidecar_path_for(input);
 
-    if !parse_only {
-        if let Some(ast) = parse.ast.as_ref() {
-            // Resolve imports against the input file's parent directory
-            // (the sandbox root). Imports use relative paths only.
-            let import_root = input
-                .parent()
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            let loader = synth_ir::FsImportLoader { root: import_root };
-            let resolved = synth_ir::resolve_imports(ast, &loader, &file);
-            diagnostics.extend(resolved.diagnostics);
+    if !parse_only && let Some(ast) = parse.ast.as_ref() {
+        // Resolve imports against the input file's parent directory
+        // (the sandbox root). Imports use relative paths only.
+        let import_root = input
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        let loader = synth_ir::FsImportLoader { root: import_root };
+        let resolved = synth_ir::resolve_imports(ast, &loader, &file);
+        diagnostics.extend(resolved.diagnostics);
 
-            if let Some(registry) =
-                load_registry_strict(registry_dir, user_registry, strict_registry)
-            {
-                let lowered = synth_ir::lower(&resolved.program, &registry, &file);
-                diagnostics.extend(lowered.diagnostics);
-                if let Some(board) = lowered.board.as_ref() {
-                    // Per-design ERC config (`<design>.synth.erc.toml`),
-                    // when present, overrides the pin-conflict table and
-                    // the deeper-check thresholds.
-                    let erc_config = synth_validate::ErcConfig::load_for_design(input)
-                        .map_err(|e| anyhow::anyhow!("ERC config: {e}"))?
-                        .unwrap_or_default();
-                    diagnostics.extend(synth_validate::run_erc_with_config(
-                        board,
-                        &file,
-                        &erc_config,
-                    ));
-                    // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
-                    // warnings; never blocking. Per-sheet on §P26 split
-                    // boards so findings attribute to their page (and the
-                    // split itself clears the single-sheet overflow).
-                    //
-                    // Over the *schematic sidecar* layout, not the bare
-                    // auto-layout: the sheet these rules judge is the one
-                    // `synth render` and `synth_export` produce, and on the
-                    // auto-layout a tuned design reports sheet overflow and
-                    // low fill for a drawing that is fine.
-                    let global =
-                        synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
-                    let sheets = synth_layout::sheets::layout_sheets(
-                        board,
-                        global,
-                        schematic_sidecar.as_deref(),
-                    );
-                    let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
-                    synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
-                    diagnostics.extend(schem);
-                }
+        if let Some(registry) = load_registry_strict(registry_dir, user_registry, strict_registry) {
+            let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+            diagnostics.extend(lowered.diagnostics);
+            if let Some(board) = lowered.board.as_ref() {
+                // Per-design ERC config (`<design>.synth.erc.toml`),
+                // when present, overrides the pin-conflict table and
+                // the deeper-check thresholds.
+                let erc_config = synth_validate::ErcConfig::load_for_design(input)
+                    .map_err(|e| anyhow::anyhow!("ERC config: {e}"))?
+                    .unwrap_or_default();
+                diagnostics.extend(synth_validate::run_erc_with_config(
+                    board,
+                    &file,
+                    &erc_config,
+                ));
+                // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
+                // warnings; never blocking. Per-sheet on §P26 split
+                // boards so findings attribute to their page (and the
+                // split itself clears the single-sheet overflow).
+                //
+                // Over the *schematic sidecar* layout, not the bare
+                // auto-layout: the sheet these rules judge is the one
+                // `synth render` and `synth_export` produce, and on the
+                // auto-layout a tuned design reports sheet overflow and
+                // low fill for a drawing that is fine.
+                let global = synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
+                let sheets = synth_layout::sheets::layout_sheets(
+                    board,
+                    global,
+                    schematic_sidecar.as_deref(),
+                );
+                let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
+                synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
+                diagnostics.extend(schem);
             }
         }
     }
@@ -5183,10 +5175,10 @@ fn write_verification_report(
         "release_ready": release_ready,
         "stages": native,
     });
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
     Ok(())
@@ -5253,6 +5245,21 @@ fn router_options(
         fine_pitch_return_via_advisory: fine_pitch_advisory,
         timeout_secs: default_router_timeout_secs(),
     }
+}
+
+/// Overlay the CLI's tool-location flags on the locations a request read
+/// from the environment. A flag that was not passed leaves the environment's
+/// value in place.
+fn apply_tool_flags(tools: &mut synth_router::ToolPaths, options: &RouterOptions) {
+    let overlay = |slot: &mut Option<PathBuf>, flag: &Option<PathBuf>| {
+        if flag.is_some() {
+            slot.clone_from(flag);
+        }
+    };
+    overlay(&mut tools.freerouting_jar, &options.freerouting_jar);
+    overlay(&mut tools.freerouting_java, &options.freerouting_java);
+    overlay(&mut tools.krt_repo, &options.kicad_routing_tools_repo);
+    overlay(&mut tools.krt_python, &options.kicad_routing_tools_python);
 }
 
 fn default_router_timeout_secs() -> u64 {
@@ -5344,21 +5351,9 @@ fn build_route_request(
         .kicad_routing_tools
         .fab_overrides
         .clone_from(&options.fab_overrides);
-    // Environment-only configuration reaches the adapters through the
-    // environment they already read; explicit flags win because they are
-    // exported here before discovery runs.
-    if let Some(jar) = &options.freerouting_jar {
-        std::env::set_var("SYNTH_FREEROUTING_JAR", jar);
-    }
-    if let Some(java) = &options.freerouting_java {
-        std::env::set_var("SYNTH_FREEROUTING_JAVA", java);
-    }
-    if let Some(repo) = &options.kicad_routing_tools_repo {
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", repo);
-    }
-    if let Some(python) = &options.kicad_routing_tools_python {
-        std::env::set_var("SYNTH_KRT_PYTHON", python);
-    }
+    // The request read the environment when it was built; an explicit flag
+    // overrides that reading on this request only.
+    apply_tool_flags(&mut request.tools, options);
     request.routing_order = routing_order.to_vec();
     request.ground_nets = synth_drc::ground_net_names(board);
     request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
@@ -5477,64 +5472,60 @@ fn select_placement_for_routing(
     // the component carrying most of its pins, and keep it if it routes better.
     // It is one more routing run, so it gets what is left of the budget, or is
     // skipped.
-    if let Some((best_cost, _, order)) = best.clone() {
-        if !order.is_empty() {
-            let hints = synth_place::hard_net_proximity_hints(board, &order);
-            if !hints.is_empty() {
-                let Some(limit) = budget.candidate_limit(requested) else {
-                    info!("placement feedback: no budget left for the hardest-net grouping run");
-                    return Ok(best.map(|(_, placement, order)| (placement, order)));
-                };
-                let hinted = synth_place::with_hard_net_hints(board, &hints);
-                if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
-                    if let Some(candidate) = grouped.into_iter().next() {
-                        let began = std::time::Instant::now();
-                        let evaluated = evaluate_candidate(
-                            board,
-                            sidecars,
-                            engine,
-                            options,
-                            best_of,
-                            &candidate,
-                            usize::MAX,
-                            budget.run_clock(limit),
-                        )?;
-                        budget.note_run(began.elapsed());
-                        if matches!(evaluated, CliAttempt::NoTime) {
-                            info!(
-                                "placement feedback: the hardest-net grouping run used its time preparing; skipped"
-                            );
-                        }
-                        if let CliAttempt::Routed(cost, report) = evaluated {
-                            info!(
-                                "placement feedback: hardest-net grouping -> {cost:?} \
+    if let Some((best_cost, _, order)) = best.clone()
+        && !order.is_empty()
+    {
+        let hints = synth_place::hard_net_proximity_hints(board, &order);
+        if !hints.is_empty() {
+            let Some(limit) = budget.candidate_limit(requested) else {
+                info!("placement feedback: no budget left for the hardest-net grouping run");
+                return Ok(best.map(|(_, placement, order)| (placement, order)));
+            };
+            let hinted = synth_place::with_hard_net_hints(board, &hints);
+            if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars)
+                && let Some(candidate) = grouped.into_iter().next()
+            {
+                let began = std::time::Instant::now();
+                let evaluated = evaluate_candidate(
+                    board,
+                    sidecars,
+                    engine,
+                    options,
+                    best_of,
+                    &candidate,
+                    usize::MAX,
+                    budget.run_clock(limit),
+                )?;
+                budget.note_run(began.elapsed());
+                if matches!(evaluated, CliAttempt::NoTime) {
+                    info!(
+                        "placement feedback: the hardest-net grouping run used its time preparing; skipped"
+                    );
+                }
+                if let CliAttempt::Routed(cost, report) = evaluated {
+                    info!(
+                        "placement feedback: hardest-net grouping -> {cost:?} \
                                  (was {best_cost:?})"
-                            );
-                            if cost < best_cost {
-                                // Keep the grouped placement's own advice, not the
-                                // earlier candidate's: the routing order is
-                                // calculated per-placement, so the two are not
-                                // interchangeable.
-                                best = Some((
-                                    cost,
-                                    candidate,
-                                    report.recommended_routing_order.clone(),
-                                ));
-                            }
-                        }
+                    );
+                    if cost < best_cost {
+                        // Keep the grouped placement's own advice, not the
+                        // earlier candidate's: the routing order is
+                        // calculated per-placement, so the two are not
+                        // interchangeable.
+                        best = Some((cost, candidate, report.recommended_routing_order.clone()));
                     }
                 }
             }
         }
     }
 
-    if let Some((_, _, order)) = &best {
-        if !order.is_empty() {
-            info!(
-                "placement feedback: hardest nets first on a retry: {}",
-                order.join(", ")
-            );
-        }
+    if let Some((_, _, order)) = &best
+        && !order.is_empty()
+    {
+        info!(
+            "placement feedback: hardest nets first on a retry: {}",
+            order.join(", ")
+        );
     }
     Ok(best.map(|(_, placement, order)| (placement, order)))
 }
@@ -5820,24 +5811,21 @@ fn print_route_report(report: &synth_router::RouteReport) {
     for reason in report
         .validation
         .as_ref()
-        .map(|v| v.blocking_reasons.clone())
-        .unwrap_or_default()
+        .map_or_default(|v| v.blocking_reasons.clone())
     {
         eprintln!("  blocking: {reason}");
     }
     for check in report
         .validation
         .as_ref()
-        .map(|v| v.unavailable_checks.clone())
-        .unwrap_or_default()
+        .map_or_default(|v| v.unavailable_checks.clone())
     {
         eprintln!("  not checked: {check}");
     }
     for advisory in report
         .validation
         .as_ref()
-        .map(|v| v.advisories.clone())
-        .unwrap_or_default()
+        .map_or_default(|v| v.advisories.clone())
     {
         eprintln!("  advisory: {advisory}");
     }
@@ -5955,14 +5943,13 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
         diagnostics
             .iter()
             .filter_map(|d| {
-                if smt {
-                    if let Some(smt_patch) = d
+                if smt
+                    && let Some(smt_patch) = d
                         .suggested_fixes
                         .iter()
                         .find(|p| matches!(p.kind, synth_diagnostics::PatchKind::SolveSmt { .. }))
-                    {
-                        return Some((d, smt_patch.clone()));
-                    }
+                {
+                    return Some((d, smt_patch.clone()));
                 }
                 d.suggested_fixes.first().cloned().map(|p| (d, p))
             })
@@ -6092,10 +6079,8 @@ fn write_diagnostics(
             "{}: [{}] {} ({})",
             d.severity, d.code, d.title, where_
         )?;
-        if include_message {
-            if let Some(message) = &d.message {
-                writeln!(&mut err, "  {message}")?;
-            }
+        if include_message && let Some(message) = &d.message {
+            writeln!(&mut err, "  {message}")?;
         }
     }
     Ok(())
@@ -6485,6 +6470,37 @@ mod tests {
     /// The request every `route` caller builds carries the nets the DRC calls
     /// ground, found from the board's pins, so the router's return-via passes
     /// never fall back to guessing from names.
+    #[test]
+    fn a_tool_flag_overrides_the_environment_only_where_it_was_passed() {
+        let mut tools = synth_router::ToolPaths {
+            freerouting_jar: Some(PathBuf::from("/env/fr.jar")),
+            krt_repo: Some(PathBuf::from("/env/krt")),
+            ..synth_router::ToolPaths::default()
+        };
+        let options = RouterOptions {
+            freerouting_jar: Some(PathBuf::from("/flag/fr.jar")),
+            freerouting_java: None,
+            kicad_routing_tools_repo: None,
+            kicad_routing_tools_python: Some(PathBuf::from("/flag/python")),
+            escalation: KrtEscalation::Off,
+            fab_tier: KrtFabTier::Standard,
+            fab_overrides: None,
+            same_net_pad_clearance: 0.1,
+            allow_via_in_pad: false,
+            fine_pitch_return_via_advisory: false,
+            timeout_secs: 60,
+        };
+        apply_tool_flags(&mut tools, &options);
+        assert_eq!(tools.freerouting_jar, Some(PathBuf::from("/flag/fr.jar")));
+        assert_eq!(
+            tools.krt_repo,
+            Some(PathBuf::from("/env/krt")),
+            "no flag keeps the environment"
+        );
+        assert_eq!(tools.krt_python, Some(PathBuf::from("/flag/python")));
+        assert_eq!(tools.freerouting_java, None);
+    }
+
     #[test]
     fn the_route_request_carries_the_boards_ground_nets() {
         let source = r#"board "returns" { layers 2

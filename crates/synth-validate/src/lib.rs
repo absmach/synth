@@ -51,7 +51,7 @@ pub trait ErcRule {
 pub mod anomaly;
 pub mod config;
 pub mod deep_erc;
-pub use anomaly::{extract_features, BoardFeatureVec, GraphAnomalyDetectorRule};
+pub use anomaly::{BoardFeatureVec, GraphAnomalyDetectorRule, extract_features};
 pub use config::{ErcConfig, PinConflictTable};
 
 pub mod value;
@@ -384,10 +384,10 @@ fn check_capability_consistency(
         // Passive components (pullup resistors, ESD diodes, decoupling
         // caps) routinely sit on protocol nets without speaking the
         // protocol. Skip them so they don't trigger a false positive.
-        if let Some(pin) = board.pin(endpoint.component, endpoint.pin) {
-            if matches!(pin.electrical_type, synth_registry::ElectricalType::Passive) {
-                continue;
-            }
+        if let Some(pin) = board.pin(endpoint.component, endpoint.pin)
+            && matches!(pin.electrical_type, synth_registry::ElectricalType::Passive)
+        {
+            continue;
         }
         let component = board
             .component(endpoint.component)
@@ -604,25 +604,23 @@ fn decoupling_site<'a>(
         Some(kind) => series_far_net(board, component, pin_net, kind),
         None => Some(pin_net),
     };
-    let caps = cap_net
-        .map(|net| {
-            net.endpoints
-                .iter()
-                .filter_map(|e| {
-                    let cap = board.component(e.component)?;
-                    if cap.part.as_ref()?.kind != "capacitor" {
-                        return None;
-                    }
-                    let Some(want) = to_net else {
-                        return Some(cap);
-                    };
-                    let other = PinId(u32::from(e.pin.0 == 0));
-                    let (far, _) = board.nets_containing(cap.id, other).next()?;
-                    (far == want).then_some(cap)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
+    let caps = cap_net.map_or_default(|net| {
+        net.endpoints
+            .iter()
+            .filter_map(|e| {
+                let cap = board.component(e.component)?;
+                if cap.part.as_ref()?.kind != "capacitor" {
+                    return None;
+                }
+                let Some(want) = to_net else {
+                    return Some(cap);
+                };
+                let other = PinId(u32::from(e.pin.0 == 0));
+                let (far, _) = board.nets_containing(cap.id, other).next()?;
+                (far == want).then_some(cap)
+            })
+            .collect()
+    });
     Some(DecouplingSite {
         pin_net,
         cap_net,
@@ -2130,36 +2128,33 @@ impl ErcRule for KeepoutZeroRadiusRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for ko in &board.keepouts {
-            if let Some(radius) = ko.radius {
-                if radius.0 <= 0 {
-                    out.push(
-                        DiagnosticBuilder::new(
-                            self.code(),
-                            Severity::Error,
-                            "keepout has non-positive radius",
-                        )
-                        .location(Location::from_span(file.to_string(), ko.source_span))
-                        .expected(format!(
-                            "`keepout {}` to specify a strictly positive radius",
-                            ko.name,
-                        ))
-                        .found(format!("radius = {}nm", radius.0))
-                        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
-                        .suggested_fix(synth_diagnostics::Patch {
-                            confidence: 0.8,
-                            rationale: Some("set positive 10mm radius constraint".into()),
-                            patch_consequence_preview: None,
-                            kind: synth_diagnostics::PatchKind::ReplaceRange {
-                                range: ko.source_span,
-                                replacement: format!(
-                                    "keepout {} {{\n    radius 10mm\n  }}",
-                                    ko.name
-                                ),
-                            },
-                        })
-                        .build(),
-                    );
-                }
+            if let Some(radius) = ko.radius
+                && radius.0 <= 0
+            {
+                out.push(
+                    DiagnosticBuilder::new(
+                        self.code(),
+                        Severity::Error,
+                        "keepout has non-positive radius",
+                    )
+                    .location(Location::from_span(file.to_string(), ko.source_span))
+                    .expected(format!(
+                        "`keepout {}` to specify a strictly positive radius",
+                        ko.name,
+                    ))
+                    .found(format!("radius = {}nm", radius.0))
+                    .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+                    .suggested_fix(synth_diagnostics::Patch {
+                        confidence: 0.8,
+                        rationale: Some("set positive 10mm radius constraint".into()),
+                        patch_consequence_preview: None,
+                        kind: synth_diagnostics::PatchKind::ReplaceRange {
+                            range: ko.source_span,
+                            replacement: format!("keepout {} {{\n    radius 10mm\n  }}", ko.name),
+                        },
+                    })
+                    .build(),
+                );
             }
         }
         out
@@ -2504,22 +2499,24 @@ impl ErcRule for ProcessLayerApplicabilityRule {
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(", ");
-        vec![DiagnosticBuilder::new(
-            self.code(),
-            Severity::Error,
-            "the declared manufacturer process is not offered for this layer count",
-        )
-        .location(Location::from_span(file.to_string(), board.source_span))
-        .expected(format!(
-            "`manufacturer \"{}\"` on a board of {offered} layers",
-            profile.name
-        ))
-        .found(format!(
-            "`manufacturer \"{}\"` on a {}-layer board",
-            profile.name, board.layers
-        ))
-        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
-        .build()]
+        vec![
+            DiagnosticBuilder::new(
+                self.code(),
+                Severity::Error,
+                "the declared manufacturer process is not offered for this layer count",
+            )
+            .location(Location::from_span(file.to_string(), board.source_span))
+            .expected(format!(
+                "`manufacturer \"{}\"` on a board of {offered} layers",
+                profile.name
+            ))
+            .found(format!(
+                "`manufacturer \"{}\"` on a {}-layer board",
+                profile.name, board.layers
+            ))
+            .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+            .build(),
+        ]
     }
 }
 
@@ -2552,16 +2549,18 @@ impl ErcRule for ManufacturerNameRecognisedRule {
         if synth_drc::ManufacturerProfile::recognises_name(declared) {
             return Vec::new();
         }
-        vec![DiagnosticBuilder::new(
-            self.code(),
-            Severity::Warning,
-            "the declared manufacturer is not a known profile; `jlc-standard` floors apply",
-        )
-        .location(Location::from_span(file.to_string(), board.source_span))
-        .expected("`jlc-standard`, `jlc-filled-via`, `jlc-advanced`, `pcbway` or `oshpark`")
-        .found(format!("`manufacturer \"{declared}\"`"))
-        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
-        .build()]
+        vec![
+            DiagnosticBuilder::new(
+                self.code(),
+                Severity::Warning,
+                "the declared manufacturer is not a known profile; `jlc-standard` floors apply",
+            )
+            .location(Location::from_span(file.to_string(), board.source_span))
+            .expected("`jlc-standard`, `jlc-filled-via`, `jlc-advanced`, `pcbway` or `oshpark`")
+            .found(format!("`manufacturer \"{declared}\"`"))
+            .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+            .build(),
+        ]
     }
 }
 
@@ -3569,9 +3568,10 @@ impl ErcRule for PowerDomainMismatchRule {
                         continue;
                     };
 
-                    if let Some(v_max) = pin.voltage_max_v {
-                        if v_driver > v_max + 0.3 {
-                            out.push(
+                    if let Some(v_max) = pin.voltage_max_v
+                        && v_driver > v_max + 0.3
+                    {
+                        out.push(
                                 DiagnosticBuilder::new(
                                     self.code(),
                                     Severity::Error,
@@ -3595,7 +3595,6 @@ impl ErcRule for PowerDomainMismatchRule {
                                 .smt_constraint(format!("(assert (<= voltage_driver {v_max:.1}))"))
                                 .build(),
                             );
-                        }
                     }
                 }
             }
@@ -3618,9 +3617,10 @@ impl ErcRule for PowerDomainMismatchRule {
             if power_outputs.len() >= 2 {
                 let (c1, p1, _, v1_opt) = &power_outputs[0];
                 let (c2, p2, span2, v2_opt) = &power_outputs[1];
-                if let (Some(v1), Some(v2)) = (v1_opt, v2_opt) {
-                    if (v1 - v2).abs() > 0.3 {
-                        out.push(
+                if let (Some(v1), Some(v2)) = (v1_opt, v2_opt)
+                    && (v1 - v2).abs() > 0.3
+                {
+                    out.push(
                             DiagnosticBuilder::new(
                                 self.code(),
                                 Severity::Error,
@@ -3639,7 +3639,6 @@ impl ErcRule for PowerDomainMismatchRule {
                             .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
                             .build(),
                         );
-                    }
                 }
             }
         }
@@ -3689,41 +3688,41 @@ impl ErcRule for SupplyChainRule {
                 .get("LCSC", target_pn)
                 .or_else(|| cache.get("Nexar", target_pn));
 
-            if let Some(s) = status {
-                if s.lifecycle.is_problematic() || !s.in_stock {
-                    let issue = if s.lifecycle == synth_supply::LifecycleStatus::Obsolete {
-                        "marked Obsolete"
-                    } else if s.lifecycle == synth_supply::LifecycleStatus::Nrnd {
-                        "marked Not Recommended for New Designs (NRND)"
-                    } else {
-                        "out of stock (0 available)"
-                    };
+            if let Some(s) = status
+                && (s.lifecycle.is_problematic() || !s.in_stock)
+            {
+                let issue = if s.lifecycle == synth_supply::LifecycleStatus::Obsolete {
+                    "marked Obsolete"
+                } else if s.lifecycle == synth_supply::LifecycleStatus::Nrnd {
+                    "marked Not Recommended for New Designs (NRND)"
+                } else {
+                    "out of stock (0 available)"
+                };
 
-                    let ref_des = &inst.refdes;
-                    let part_id = &part.id;
+                let ref_des = &inst.refdes;
+                let part_id = &part.id;
 
-                    let mut b = DiagnosticBuilder::new(
-                        self.code(),
-                        Severity::Warning,
-                        format!(
-                            "Component {ref_des} ({part_id}) is {issue} at {} (PN: {})",
-                            s.distributor, s.part_number
-                        ),
-                    )
-                    .location(Location::from_span(file.to_string(), inst.source_span));
+                let mut b = DiagnosticBuilder::new(
+                    self.code(),
+                    Severity::Warning,
+                    format!(
+                        "Component {ref_des} ({part_id}) is {issue} at {} (PN: {})",
+                        s.distributor, s.part_number
+                    ),
+                )
+                .location(Location::from_span(file.to_string(), inst.source_span));
 
-                    if !part.substitutes.is_empty() {
-                        let subs = part
-                            .substitutes
-                            .iter()
-                            .map(synth_registry::PartId::as_str)
-                            .collect::<Vec<_>>()
-                            .join(", ");
-                        b = b.message(format!("Known substitute parts in registry: {subs}"));
-                    }
-
-                    diags.push(b.build());
+                if !part.substitutes.is_empty() {
+                    let subs = part
+                        .substitutes
+                        .iter()
+                        .map(synth_registry::PartId::as_str)
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    b = b.message(format!("Known substitute parts in registry: {subs}"));
                 }
+
+                diags.push(b.build());
             }
         }
 
@@ -3874,8 +3873,7 @@ impl ErcRule for UnverifiedPartRule {
             let source = part
                 .provenance
                 .as_ref()
-                .map(|p| format!(" ({:?})", p.source))
-                .unwrap_or_default();
+                .map_or_default(|p| format!(" ({:?})", p.source));
             out.push(
                 DiagnosticBuilder::new(
                     self.code(),
@@ -4053,16 +4051,12 @@ impl ErcRule for DividerRatioRule {
                 if !rail_ok {
                     continue;
                 }
-                let r2_other: Vec<PinId> = r2
-                    .part
-                    .as_ref()
-                    .map(|p| {
-                        (0..p.pins.len())
-                            .map(|i| PinId(i as u32))
-                            .filter(|pid| *pid != partner_ep.pin)
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let r2_other: Vec<PinId> = r2.part.as_ref().map_or_default(|p| {
+                    (0..p.pins.len())
+                        .map(|i| PinId(i as u32))
+                        .filter(|pid| *pid != partner_ep.pin)
+                        .collect()
+                });
                 let gnd_ok = r2_other.into_iter().any(|pid| {
                     board
                         .nets_containing(r2.id, pid)
@@ -4506,9 +4500,11 @@ mod tests {
                 "{ok} is a recognised name"
             );
         }
-        assert!(ManufacturerNameRecognisedRule
-            .check(&bare_board(None), "test.synth")
-            .is_empty());
+        assert!(
+            ManufacturerNameRecognisedRule
+                .check(&bare_board(None), "test.synth")
+                .is_empty()
+        );
     }
 
     /// A surcharged tier is quoted against a stackup. Without this, a
@@ -4574,20 +4570,24 @@ mod tests {
     fn an_undeclared_manufacturer_is_not_this_rules_business() {
         let mut board = bare_board(None);
         board.layers = 2;
-        assert!(ProcessLayerApplicabilityRule
-            .check(&board, "test.synth")
-            .is_empty());
+        assert!(
+            ProcessLayerApplicabilityRule
+                .check(&board, "test.synth")
+                .is_empty()
+        );
     }
 
     #[test]
     fn a_tier_that_sells_the_fill_satisfies_the_requirement() {
         let board = board_requiring_via_in_pad(Some("jlc-filled-via"));
 
-        assert!(RequiredProcessOfferedRule {
-            via_in_pad_override: false
-        }
-        .check(&board, "test.synth")
-        .is_empty());
+        assert!(
+            RequiredProcessOfferedRule {
+                via_in_pad_override: false
+            }
+            .check(&board, "test.synth")
+            .is_empty()
+        );
     }
 
     /// A refusal that names no way out leaves an agent guessing at profile
@@ -4703,9 +4703,11 @@ mod tests {
         // the smallest via the tier permits, which the escape arithmetic uses.
         let board = board_with_via(Some("jlcpcb"), Some(0.46), Some(0.20));
 
-        assert!(DeclaredViaGeometryRule
-            .check(&board, "test.synth")
-            .is_empty());
+        assert!(
+            DeclaredViaGeometryRule
+                .check(&board, "test.synth")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -4715,9 +4717,11 @@ mod tests {
         // the 0.20 mm ring its DFM check asks for.
         let board = board_with_via(Some("jlcpcb"), Some(0.60), Some(0.20));
 
-        assert!(DeclaredViaGeometryRule
-            .check(&board, "test.synth")
-            .is_empty());
+        assert!(
+            DeclaredViaGeometryRule
+                .check(&board, "test.synth")
+                .is_empty()
+        );
     }
 
     #[test]
@@ -4741,10 +4745,12 @@ mod tests {
         let found = DeclaredViaGeometryRule.check(&board, "test.synth");
 
         assert_eq!(found.len(), 1);
-        assert!(found[0]
-            .expected
-            .as_deref()
-            .is_some_and(|e| e.contains("annular ring")));
+        assert!(
+            found[0]
+                .expected
+                .as_deref()
+                .is_some_and(|e| e.contains("annular ring"))
+        );
     }
 
     /// Declaring one half is judged against the default for the other, which
@@ -4756,10 +4762,12 @@ mod tests {
         let found = DeclaredViaGeometryRule.check(&board, "test.synth");
 
         assert_eq!(found.len(), 1, "a hole is one finding, not two");
-        assert!(found[0]
-            .found
-            .as_deref()
-            .is_some_and(|f| f.contains("no copper")));
+        assert!(
+            found[0]
+                .found
+                .as_deref()
+                .is_some_and(|f| f.contains("no copper"))
+        );
     }
 
     /// A class that declares neither is making no claim about its vias, so
@@ -4768,20 +4776,24 @@ mod tests {
     fn a_class_declaring_no_via_geometry_is_not_judged() {
         let board = board_with_via(Some("jlcpcb"), None, None);
 
-        assert!(DeclaredViaGeometryRule
-            .check(&board, "test.synth")
-            .is_empty());
+        assert!(
+            DeclaredViaGeometryRule
+                .check(&board, "test.synth")
+                .is_empty()
+        );
     }
 
     #[test]
     fn a_board_requiring_nothing_is_not_judged() {
         let board = bare_board(Some("jlcpcb"));
 
-        assert!(RequiredProcessOfferedRule {
-            via_in_pad_override: false
-        }
-        .check(&board, "test.synth")
-        .is_empty());
+        assert!(
+            RequiredProcessOfferedRule {
+                via_in_pad_override: false
+            }
+            .check(&board, "test.synth")
+            .is_empty()
+        );
     }
 
     fn pin(name: &str, t: ElectricalType) -> Pin {
@@ -5261,9 +5273,11 @@ mod tests {
         board.components[0]
             .properties
             .insert("lcsc_pn".into(), "C110776".into());
-        assert!(InstanceLcscFormatRule
-            .check(&board, "test.synth")
-            .is_empty());
+        assert!(
+            InstanceLcscFormatRule
+                .check(&board, "test.synth")
+                .is_empty()
+        );
     }
 
     #[test]

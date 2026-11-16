@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use synth_geometry::{mm_to_nm, Point, Rect};
+use synth_geometry::{Point, Rect, mm_to_nm};
 
 fn board(src: &str) -> synth_ir::Board {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))

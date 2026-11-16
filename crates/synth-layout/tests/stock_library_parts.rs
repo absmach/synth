@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use synth_layout::qualify_facts::InstalledKicad;
-use synth_registry::qualify::{qualify_part, CheckStatus};
+use synth_registry::qualify::{CheckStatus, qualify_part};
 
 const DEFAULT_FOOTPRINT_DIR: &str = "/usr/share/kicad/footprints";
 

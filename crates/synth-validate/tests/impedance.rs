@@ -125,11 +125,13 @@ fn a_net_that_may_use_inner_layers_is_labelled_not_verified() {
     assert_eq!(flagged.len(), 1, "{diags:?}");
     assert_eq!(flagged[0].severity, Severity::Warning);
     says_estimate(flagged[0]);
-    assert!(flagged[0]
-        .found
-        .as_deref()
-        .unwrap()
-        .contains("not verified"));
+    assert!(
+        flagged[0]
+            .found
+            .as_deref()
+            .unwrap()
+            .contains("not verified")
+    );
 }
 
 #[test]
@@ -236,11 +238,13 @@ fn a_pair_that_may_use_inner_layers_is_labelled_not_verified_once() {
     assert_eq!(flagged.len(), 1, "{diags:?}");
     says_pair_estimate(flagged[0]);
     names_the_pair(flagged[0].found.as_deref());
-    assert!(flagged[0]
-        .found
-        .as_deref()
-        .unwrap()
-        .contains("not verified"));
+    assert!(
+        flagged[0]
+            .found
+            .as_deref()
+            .unwrap()
+            .contains("not verified")
+    );
 }
 
 /// Single-ended controlled impedance declared on a netclass, which has no

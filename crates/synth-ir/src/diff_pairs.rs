@@ -62,10 +62,10 @@ pub fn resolve_pairs(board: &Board) -> Vec<ResolvedPair> {
 fn resolve_one(board: &Board, pair: &crate::DiffPair) -> Option<ResolvedPair> {
     // Strategy 1: the halves name nets directly. Canonical when a design
     // names its nets (`connect … as "USB_DP"`).
-    if let (Some(positive_net), Some(negative_net)) = (pair.positive_net, pair.negative_net) {
-        if positive_net != negative_net {
-            return pair_endpoints(board, positive_net, negative_net);
-        }
+    if let (Some(positive_net), Some(negative_net)) = (pair.positive_net, pair.negative_net)
+        && positive_net != negative_net
+    {
+        return pair_endpoints(board, positive_net, negative_net);
     }
 
     // Strategy 2: the halves name nets by string, matched against declared
@@ -82,10 +82,10 @@ fn resolve_one(board: &Board, pair: &crate::DiffPair) -> Option<ResolvedPair> {
             .find(|n| n.name == pair.negative)
             .map(|n| n.id),
     );
-    if let (Some(positive_net), Some(negative_net)) = by_name {
-        if positive_net != negative_net {
-            return pair_endpoints(board, positive_net, negative_net);
-        }
+    if let (Some(positive_net), Some(negative_net)) = by_name
+        && positive_net != negative_net
+    {
+        return pair_endpoints(board, positive_net, negative_net);
     }
 
     // Strategy 3: the halves name pins (`U1_usb_dp`), which is how a
@@ -183,10 +183,10 @@ fn polarity_of(board: &Board, (component, pin): (ComponentId, PinId)) -> Option<
     for capability in &pin.capabilities {
         match capability {
             PinCapability::DiffPairPositive | PinCapability::UsbDp => {
-                return Some(HalfPolarity::Positive)
+                return Some(HalfPolarity::Positive);
             }
             PinCapability::DiffPairNegative | PinCapability::UsbDn => {
-                return Some(HalfPolarity::Negative)
+                return Some(HalfPolarity::Negative);
             }
             _ => {}
         }
@@ -257,15 +257,12 @@ pub struct PairConnection {
 
 /// Every component on a net.
 fn endpoints_of(board: &Board, net: NetId) -> Vec<ComponentId> {
-    board
-        .net(net)
-        .map(|net| {
-            net.endpoints
-                .iter()
-                .map(|endpoint| endpoint.component)
-                .collect()
-        })
-        .unwrap_or_default()
+    board.net(net).map_or_default(|net| {
+        net.endpoints
+            .iter()
+            .map(|endpoint| endpoint.component)
+            .collect()
+    })
 }
 
 /// The end of the pair opposite the one the halves leave from.
@@ -280,10 +277,10 @@ fn far_end(
     // pair that stays inside one component (an on-chip termination) has no
     // far end and is not a placement concern.
     for side in [negative, positive] {
-        if let Some(far) = side.iter().copied().find(|id| *id != near) {
-            if far != near {
-                return Some(far);
-            }
+        if let Some(far) = side.iter().copied().find(|id| *id != near)
+            && far != near
+        {
+            return Some(far);
         }
     }
     let _ = board;

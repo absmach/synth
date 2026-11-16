@@ -1405,7 +1405,7 @@ fn resolve_router(args: &Value) -> Result<synth_router::RouterEngine, String> {
     })
 }
 
-/// Read the routing arguments a tool accepts, applying environment overrides.
+/// Read the routing arguments a tool accepts.
 ///
 /// The explicit arguments win because they arrive from the caller; the
 /// environment is the fallback that lets a machine configure its own
@@ -1413,18 +1413,7 @@ fn resolve_router(args: &Value) -> Result<synth_router::RouterEngine, String> {
 fn routing_request(args: &Value, engine: synth_router::RouterEngine) -> synth_router::RouteRequest {
     let mut request =
         synth_router::RouteRequest::new(Path::new("board.kicad_pcb"), Path::new("."), engine);
-    if let Some(jar) = args["freerouting_jar"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAR", jar);
-    }
-    if let Some(java) = args["freerouting_java"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAVA", java);
-    }
-    if let Some(repo) = args["kicad_routing_tools_repo"].as_str() {
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", repo);
-    }
-    if let Some(python) = args["kicad_routing_tools_python"].as_str() {
-        std::env::set_var("SYNTH_KRT_PYTHON", python);
-    }
+    apply_tool_args(&mut request.tools, args);
     if let Some(secs) = args["router_timeout_secs"].as_u64() {
         request.limits = request.limits.with_wall_clock(secs);
     }
@@ -1433,6 +1422,33 @@ fn routing_request(args: &Value, engine: synth_router::RouterEngine) -> synth_ro
         .as_bool()
         .unwrap_or(false);
     request
+}
+
+/// Overlay a tool call's tool-location arguments on the locations its request
+/// read from the environment.
+///
+/// They apply to that request only. Writing them into the process environment
+/// instead would leak one call's paths into every later call, and race with a
+/// concurrent one.
+fn apply_tool_args(tools: &mut synth_router::ToolPaths, args: &Value) {
+    let arg = |key: &str| {
+        args[key]
+            .as_str()
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
+    if let Some(jar) = arg("freerouting_jar") {
+        tools.freerouting_jar = Some(jar);
+    }
+    if let Some(java) = arg("freerouting_java") {
+        tools.freerouting_java = Some(java);
+    }
+    if let Some(repo) = arg("kicad_routing_tools_repo") {
+        tools.krt_repo = Some(repo);
+    }
+    if let Some(python) = arg("kicad_routing_tools_python") {
+        tools.krt_python = Some(python);
+    }
 }
 
 /// Append a Dataset 6 outcome record when a caller asked for one.
@@ -1456,20 +1472,14 @@ fn log_routing_outcome(args: &Value, report: &synth_router::RouteReport) {
 // signature in the dispatch table, even though discovery cannot fail.
 #[allow(clippy::unnecessary_wraps)]
 fn execute_router_capabilities(args: &Value) -> Result<Value, String> {
-    if let Some(jar) = args["freerouting_jar"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAR", jar);
-    }
-    if let Some(java) = args["freerouting_java"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAVA", java);
-    }
-    if let Some(repo) = args["kicad_routing_tools_repo"].as_str() {
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", repo);
-    }
-    if let Some(python) = args["kicad_routing_tools_python"].as_str() {
-        std::env::set_var("SYNTH_KRT_PYTHON", python);
-    }
     let out_dir = std::env::temp_dir().join(format!("synth-routers-{}", std::process::id()));
-    let capabilities = synth_router::capability::discover_all_in_out_dir(&out_dir);
+    let mut request = synth_router::RouteRequest::new(
+        Path::new("board.kicad_pcb"),
+        &out_dir,
+        synth_router::RouterEngine::default(),
+    );
+    apply_tool_args(&mut request.tools, args);
+    let capabilities = synth_router::capability::discover_all(&request);
     Ok(serde_json::json!({
         "engines": capabilities,
         "default_engine": synth_router::RouterEngine::default().as_str(),
@@ -1695,11 +1705,12 @@ fn route_report_payload(report: &synth_router::RouteReport) -> Value {
                 .as_ref()
                 .is_some_and(|v| v.blocking_count() == 0)
     );
-    payload["violations"] = serde_json::json!(report
-        .validation
-        .as_ref()
-        .map(|v| v.blocking_reasons.clone())
-        .unwrap_or_default());
+    payload["violations"] = serde_json::json!(
+        report
+            .validation
+            .as_ref()
+            .map_or_default(|v| v.blocking_reasons.clone())
+    );
     payload
 }
 
@@ -2010,12 +2021,11 @@ fn normalize_layout_op(args: &Value) -> Value {
         return op;
     };
     for key in ["ids", "y_mm", "x_mm", "scale", "grow"] {
-        if !obj.contains_key(key) {
-            if let Some(v) = args.get(key) {
-                if !v.is_null() {
-                    obj.insert(key.to_string(), v.clone());
-                }
-            }
+        if !obj.contains_key(key)
+            && let Some(v) = args.get(key)
+            && !v.is_null()
+        {
+            obj.insert(key.to_string(), v.clone());
         }
     }
     op
@@ -2059,10 +2069,10 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
     // approximation of it can differ by a few millimetres because it ran on
     // a different starting layout. Return the reloaded sheet, which is what
     // every later render and export will show.
-    if let (synth_layout::ops::LayoutOp::FitSheet { .. }, Some(saved)) = (&op, persisted.as_ref()) {
-        if let Some(path) = saved["saved_path"].as_str() {
-            layout = synth_layout::layout_with_sidecar(&board, Some(Path::new(path)));
-        }
+    if let (synth_layout::ops::LayoutOp::FitSheet { .. }, Some(saved)) = (&op, persisted.as_ref())
+        && let Some(path) = saved["saved_path"].as_str()
+    {
+        layout = synth_layout::layout_with_sidecar(&board, Some(Path::new(path)));
     }
 
     let mut response = serde_json::to_value(&layout).map_err(|e| e.to_string())?;
@@ -2174,16 +2184,16 @@ fn persist_layout_op(
     }
 
     let mut forced_net_labels: Vec<String> = Vec::new();
-    if let LayoutOp::ReplaceWireWithLabel { net } = op {
-        if let Some(n) = board.net(*net) {
-            if !sidecar.forced_net_labels.iter().any(|f| f.net == n.name) {
-                sidecar.forced_net_labels.push(ForcedNetLabel {
-                    net: n.name.clone(),
-                    source: OverrideSource::Agent,
-                });
-            }
-            forced_net_labels.push(n.name.clone());
+    if let LayoutOp::ReplaceWireWithLabel { net } = op
+        && let Some(n) = board.net(*net)
+    {
+        if !sidecar.forced_net_labels.iter().any(|f| f.net == n.name) {
+            sidecar.forced_net_labels.push(ForcedNetLabel {
+                net: n.name.clone(),
+                source: OverrideSource::Agent,
+            });
         }
+        forced_net_labels.push(n.name.clone());
     }
 
     if matches!(op, LayoutOp::FitSheet { .. }) {
@@ -2289,10 +2299,11 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
     if tier1.is_dir() {
         registry_dirs.push(tier1);
     }
-    if let Some(user) = resolve_user_registry_opt(args) {
-        if user.is_dir() && !registry_dirs.contains(&user) {
-            registry_dirs.push(user);
-        }
+    if let Some(user) = resolve_user_registry_opt(args)
+        && user.is_dir()
+        && !registry_dirs.contains(&user)
+    {
+        registry_dirs.push(user);
     }
 
     let report = synth_sim::simulate(
@@ -2712,13 +2723,11 @@ fn execute_schematic_baseline(
                 .get("inline_diff")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
+                && let Some(first) = sheets.first()
             {
-                if let Some(first) = sheets.first() {
-                    use base64::Engine as _;
-                    result["png_base64"] = serde_json::json!(
-                        base64::engine::general_purpose::STANDARD.encode(&first.png)
-                    );
-                }
+                use base64::Engine as _;
+                result["png_base64"] =
+                    serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&first.png));
             }
             Ok(result)
         }
@@ -3015,44 +3024,44 @@ fn select_placement_by_route(
     // toward the component carrying most of its pins and keep it if better. It
     // is one more routing run, so it gets what is left, or is skipped.
     let mut hard_net_pass = "not_needed";
-    if let Some((best_cost, _, order)) = best.clone() {
-        if !order.is_empty() {
-            let hints = synth_place::hard_net_proximity_hints(board, &order);
-            if !hints.is_empty() {
-                if let Some(limit) = budget.candidate_limit(requested) {
-                    hard_net_pass = "run";
-                    let hinted = synth_place::with_hard_net_hints(board, &hints);
-                    if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
-                        if let Some(candidate) = grouped.into_iter().next() {
-                            let began = std::time::Instant::now();
-                            let evaluated = evaluate_candidate_mcp(
-                                board,
-                                sidecars,
-                                args,
-                                engine,
-                                &candidate,
-                                usize::MAX,
-                                budget.run_clock(limit),
-                            )?;
-                            budget.note_run(began.elapsed());
-                            match evaluated {
-                                synth_router::search_budget::Attempt::Routed(evaluated) => {
-                                    if evaluated.cost < best_cost {
-                                        best = Some((evaluated.cost, candidate, order));
-                                    }
-                                }
-                                synth_router::search_budget::Attempt::NoTime => {
-                                    hard_net_pass = "skipped_for_budget";
-                                    truncated = true;
-                                }
-                                synth_router::search_budget::Attempt::EngineUnavailable => {}
+    if let Some((best_cost, _, order)) = best.clone()
+        && !order.is_empty()
+    {
+        let hints = synth_place::hard_net_proximity_hints(board, &order);
+        if !hints.is_empty() {
+            if let Some(limit) = budget.candidate_limit(requested) {
+                hard_net_pass = "run";
+                let hinted = synth_place::with_hard_net_hints(board, &hints);
+                if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars)
+                    && let Some(candidate) = grouped.into_iter().next()
+                {
+                    let began = std::time::Instant::now();
+                    let evaluated = evaluate_candidate_mcp(
+                        board,
+                        sidecars,
+                        args,
+                        engine,
+                        &candidate,
+                        usize::MAX,
+                        budget.run_clock(limit),
+                    )?;
+                    budget.note_run(began.elapsed());
+                    match evaluated {
+                        synth_router::search_budget::Attempt::Routed(evaluated) => {
+                            if evaluated.cost < best_cost {
+                                best = Some((evaluated.cost, candidate, order));
                             }
                         }
+                        synth_router::search_budget::Attempt::NoTime => {
+                            hard_net_pass = "skipped_for_budget";
+                            truncated = true;
+                        }
+                        synth_router::search_budget::Attempt::EngineUnavailable => {}
                     }
-                } else {
-                    hard_net_pass = "skipped_for_budget";
-                    truncated = true;
                 }
+            } else {
+                hard_net_pass = "skipped_for_budget";
+                truncated = true;
             }
         }
     }
@@ -3498,7 +3507,7 @@ fn next_compact_permille(
     match bad {
         None => (good - step >= floor).then_some(good - step),
         Some(bad) if good - bad <= resolution => None,
-        Some(bad) => Some((good + bad) / 2),
+        Some(bad) => Some(i64::midpoint(good, bad)),
     }
 }
 
@@ -3539,7 +3548,7 @@ fn compact_direction(toward: Option<&str>) -> Result<(f64, f64), String> {
             _ => {
                 return Err(format!(
                     "toward must be center, a side (left, right, top, bottom) or a corner such as bottom_right, not '{toward}'"
-                ))
+                ));
             }
         }
     }
@@ -4144,11 +4153,10 @@ fn execute_place_with_hints(
 
     match placement_result {
         Ok((mut placement, report)) => {
-            if let Some(sc_path) = sidecar_opt.as_deref() {
-                if let Some(sidecar) = synth_layout::sidecar::SidecarLayout::load_from_file(sc_path)
-                {
-                    synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
-                }
+            if let Some(sc_path) = sidecar_opt.as_deref()
+                && let Some(sidecar) = synth_layout::sidecar::SidecarLayout::load_from_file(sc_path)
+            {
+                synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
             }
             let placement_description =
                 synth_place::describe_placement_external(&board, &placement);
@@ -4306,32 +4314,30 @@ fn execute_resolve_footprints(
         let cands = fr::candidates(&index, wanted, &pins, 3, 0.0);
         let best = fr::resolve_one(&index, wanted, &pins);
         let mut applied = None::<String>;
-        if apply {
-            if let (Some(best), Some(target)) = (best.as_ref(), resolve_user_registry_opt(args)) {
-                if let Some(part_def) = registry.lookup(part.id.as_str()) {
-                    let mut fixed = part_def.clone();
-                    fixed.kicad_footprint = Some(best.lib_id.clone());
-                    fixed.provenance = Some(synth_registry::Provenance {
-                        source: synth_registry::ProvenanceSource::Generated,
-                        generator: Some("synth-part-resolve-footprint 0.1".into()),
-                        ..Default::default()
-                    });
-                    let text = synth_registry::part_to_toml(
-                        &fixed,
-                        &[
-                            "Auto-repaired by `synth_resolve_footprints`.",
-                            "This file shadows the Tier-1 registry entry of the same id.",
-                            "`provenance.reviewed_by` is empty, so the part still reports",
-                            "W-SYNTH-PART-UNVERIFIED: set it once a human has checked the package.",
-                        ],
-                    );
-                    let _ = std::fs::create_dir_all(&target);
-                    let path = target.join(format!("{}.synth.toml", part.id));
-                    std::fs::write(&path, text)
-                        .map_err(|e| format!("writing {}: {e}", path.display()))?;
-                    applied = Some(path.display().to_string());
-                }
-            }
+        if apply
+            && let (Some(best), Some(target)) = (best.as_ref(), resolve_user_registry_opt(args))
+            && let Some(part_def) = registry.lookup(part.id.as_str())
+        {
+            let mut fixed = part_def.clone();
+            fixed.kicad_footprint = Some(best.lib_id.clone());
+            fixed.provenance = Some(synth_registry::Provenance {
+                source: synth_registry::ProvenanceSource::Generated,
+                generator: Some("synth-part-resolve-footprint 0.1".into()),
+                ..Default::default()
+            });
+            let text = synth_registry::part_to_toml(
+                &fixed,
+                &[
+                    "Auto-repaired by `synth_resolve_footprints`.",
+                    "This file shadows the Tier-1 registry entry of the same id.",
+                    "`provenance.reviewed_by` is empty, so the part still reports",
+                    "W-SYNTH-PART-UNVERIFIED: set it once a human has checked the package.",
+                ],
+            );
+            let _ = std::fs::create_dir_all(&target);
+            let path = target.join(format!("{}.synth.toml", part.id));
+            std::fs::write(&path, text).map_err(|e| format!("writing {}: {e}", path.display()))?;
+            applied = Some(path.display().to_string());
         }
         gaps.push(serde_json::json!({
             "part_id": part.id,
@@ -5319,12 +5325,11 @@ fn execute_search_registry_web(
     if let Ok(m) = search_registry_dir(&tier1, query, "") {
         local.extend(m);
     }
-    if let Some(tier2) = synth_registry::user_registry_dir() {
-        if tier2 != tier1 {
-            if let Ok(m) = search_registry_dir(&tier2, query, "") {
-                local.extend(m);
-            }
-        }
+    if let Some(tier2) = synth_registry::user_registry_dir()
+        && tier2 != tier1
+        && let Ok(m) = search_registry_dir(&tier2, query, "")
+    {
+        local.extend(m);
     }
     local.dedup_by(|a, b| a["id"] == b["id"]);
     let mut seen = std::collections::HashSet::new();
@@ -5393,6 +5398,41 @@ fn infer_kind(lib_id: &str) -> String {
 }
 
 #[cfg(test)]
+mod tool_path_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_calls_tool_paths_stay_on_that_calls_request() {
+        let engine = synth_router::RouterEngine::Freerouting;
+        let first = routing_request(
+            &json!({ "freerouting_jar": "/call-one/freerouting.jar", "kicad_routing_tools_repo": "/call-one/krt" }),
+            engine,
+        );
+        assert_eq!(
+            first.tools.freerouting_jar,
+            Some(PathBuf::from("/call-one/freerouting.jar"))
+        );
+        assert_eq!(first.tools.krt_repo, Some(PathBuf::from("/call-one/krt")));
+
+        // A later call that names nothing sees the environment, not the
+        // previous call's paths.
+        let second = routing_request(&json!({}), engine);
+        assert_eq!(second.tools, synth_router::ToolPaths::from_env());
+    }
+
+    #[test]
+    fn an_empty_tool_argument_keeps_the_environment() {
+        let mut tools = synth_router::ToolPaths {
+            freerouting_java: Some(PathBuf::from("/env/java")),
+            ..synth_router::ToolPaths::default()
+        };
+        apply_tool_args(&mut tools, &json!({ "freerouting_java": "" }));
+        assert_eq!(tools.freerouting_java, Some(PathBuf::from("/env/java")));
+    }
+}
+
+#[cfg(test)]
 mod import_tool_tests {
     use super::*;
     use serde_json::json;
@@ -5435,11 +5475,13 @@ mod import_tool_tests {
         let result = call_tool("synth_erc_report", &json!({ "source": source }), None)
             .expect("ERC should return a structured failure");
         assert_eq!(result["erc_clean"], false);
-        assert!(result["violations"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|d| d["code"] == "E-SYNTH-COMP-001"));
+        assert!(
+            result["violations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|d| d["code"] == "E-SYNTH-COMP-001")
+        );
     }
 
     #[test]
@@ -5785,8 +5827,9 @@ electrical_type = "input"
             );
             return;
         }
+        // The importer resolves the stock symbols exactly as `symbol_dir`
+        // was found above (`KICAD_SYMBOL_DIR`, then the distro path).
         let dir = scratch("import_kicad");
-        let () = std::env::set_var("KICAD_SYMBOL_DIR", &symbol_dir);
         let res = call_tool(
             "synth_import_part",
             &json!({ "source": "kicad", "lib_id": "Device:R", "footprint": footprint, "user_registry": dir.to_str().unwrap() }),
@@ -5865,9 +5908,10 @@ electrical_type = "input"
         assert_eq!(res["source"], "kicad-zip");
         assert_eq!(res["pin_count"].as_u64(), Some(2));
         assert!(dir.join("testpart.synth.toml").exists());
-        assert!(dir
-            .join("footprints/testpart.pretty/testpart.kicad_mod")
-            .exists());
+        assert!(
+            dir.join("footprints/testpart.pretty/testpart.kicad_mod")
+                .exists()
+        );
         // The footprint has pads and no courtyard, so the size is the pads' extent
         // (two 0.6 mm pads 2 mm apart). The part declares it, and the user
         // registry loads: without it `load_dir` failed for every part in it.
@@ -6197,17 +6241,21 @@ mod language_reference_tests {
     fn language_reference_returns_grammar_and_examples() {
         let result = execute_language_reference(&serde_json::json!({}));
         assert!(result["grammar"]["statements"].is_array());
-        assert!(!result["grammar"]["statements"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            !result["grammar"]["statements"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         let examples = result["examples"].as_array().expect("examples array");
         assert_eq!(examples.len(), 3);
         for example in examples {
-            assert!(example["source"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("board \""));
+            assert!(
+                example["source"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("board \"")
+            );
         }
     }
 
@@ -6326,7 +6374,7 @@ mod tool_registration_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{next_compact_permille, CompactAttempt};
+    use super::{CompactAttempt, next_compact_permille};
 
     fn attempt(permille: i64, passed: bool) -> CompactAttempt {
         CompactAttempt {

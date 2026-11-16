@@ -3,9 +3,9 @@
 //! MCP Server JSON-RPC 2.0 stdio & SSE transport implementation.
 
 use axum::{
+    Json, Router,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, BufReader};

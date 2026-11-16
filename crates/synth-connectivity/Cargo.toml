@@ -17,7 +17,5 @@ synth-registry = { workspace = true }
 synth-diagnostics = { workspace = true }
 synth-layout = { workspace = true }
 thiserror = { workspace = true }
-uuid = { workspace = true }
 serde = { workspace = true }
 indexmap = "2.14"
-smallvec = "1.16"

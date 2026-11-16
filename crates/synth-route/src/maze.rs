@@ -43,7 +43,7 @@ use synth_geometry::{Layer, Point, Rect};
 use synth_ir::{Board, NetId};
 
 use crate::diff_pair::{self, PairReport};
-use crate::grid::{build_grid_with_clearance, is_adjacent_to_foreign_pad, Cell, Grid};
+use crate::grid::{Cell, Grid, build_grid_with_clearance, is_adjacent_to_foreign_pad};
 use crate::{Routing, Segment};
 use synth_place::Placement;
 
@@ -1381,10 +1381,10 @@ fn is_adjacent_to_foreign_via(grid: &Grid, x: usize, y: usize, net: NetId, max_d
                 let ay = ay as usize;
                 if let (Some(Cell::Track(n0)), Some(Cell::Track(n1))) =
                     (grid.get(0, ax, ay), grid.get(1, ax, ay))
+                    && n0 == n1
+                    && n0 != net
                 {
-                    if n0 == n1 && n0 != net {
-                        return true;
-                    }
+                    return true;
                 }
             }
         }
@@ -1434,8 +1434,7 @@ fn astar(
         .nets
         .iter()
         .find(|candidate| candidate.id == net)
-        .map(|candidate| candidate.endpoints.iter().map(|ep| ep.component).collect())
-        .unwrap_or_default();
+        .map_or_default(|candidate| candidate.endpoints.iter().map(|ep| ep.component).collect());
     // Exact clearance checks below run per neighbour of every expanded cell;
     // index the fixed pad and courtyard rectangles so each check examines
     // only nearby copper instead of every rectangle on the board.
@@ -1675,7 +1674,7 @@ fn astar(
                                 if seg.net == net || seg.layer != cur_layer {
                                     continue;
                                 }
-                                let min_d = (width + seg.width_nm) / 2
+                                let min_d = i64::midpoint(width, seg.width_nm)
                                     + clearance_for_trace(width)
                                         .max(clearance_for_trace(seg.width_nm));
                                 if min_d <= grid.pitch_nm {
@@ -1771,7 +1770,7 @@ fn astar(
             }
 
             // Directional cost penalty: alternating layers prefer Horiz / Vert
-            let dir_cost = if (cl % 2 == 0 && dx != 0) || (cl % 2 == 1 && dy != 0) {
+            let dir_cost = if (cl.is_multiple_of(2) && dx != 0) || (cl % 2 == 1 && dy != 0) {
                 1
             } else {
                 3
@@ -2189,11 +2188,7 @@ fn emit_segments_and_vias(
             }
             min_d
         };
-        if score(c2) > score(c1) {
-            c2
-        } else {
-            c1
-        }
+        if score(c2) > score(c1) { c2 } else { c1 }
     };
 
     if n < 2 {
@@ -2227,17 +2222,18 @@ fn emit_segments_and_vias(
             );
         }
         // End jog: approach the snapped centroid along the grid.
-        if let Some(anchor) = verts.last().copied() {
-            if anchor.p != end && !axis_aligned(anchor.p, end) {
-                let corner = pick_corner(anchor.p, end);
-                push_vert(
-                    &mut verts,
-                    Vert {
-                        p: corner,
-                        layer: layer_of(n - 1),
-                    },
-                );
-            }
+        if let Some(anchor) = verts.last().copied()
+            && anchor.p != end
+            && !axis_aligned(anchor.p, end)
+        {
+            let corner = pick_corner(anchor.p, end);
+            push_vert(
+                &mut verts,
+                Vert {
+                    p: corner,
+                    layer: layer_of(n - 1),
+                },
+            );
         }
         push_vert(
             &mut verts,
@@ -2431,12 +2427,11 @@ fn trace_width_for(net: &synth_ir::Net, board: &Board, min_trace_width_nm: i64) 
     let lower_name = net.name.to_ascii_lowercase();
     let mut names = vec![lower_name];
     for ep in &net.endpoints {
-        if let Some(comp) = board.component(ep.component) {
-            if let Some(part) = comp.part.as_ref() {
-                if let Some(pin) = part.pins.get(ep.pin.0 as usize) {
-                    names.push(pin.name.to_ascii_lowercase());
-                }
-            }
+        if let Some(comp) = board.component(ep.component)
+            && let Some(part) = comp.part.as_ref()
+            && let Some(pin) = part.pins.get(ep.pin.0 as usize)
+        {
+            names.push(pin.name.to_ascii_lowercase());
         }
     }
     let matches_any = |keywords: &[&str]| {
@@ -2484,12 +2479,11 @@ fn trace_width_for(net: &synth_ir::Net, board: &Board, min_trace_width_nm: i64) 
 fn priority_class_for(net: &synth_ir::Net, board: &Board) -> u8 {
     let mut names = vec![net.name.to_ascii_lowercase()];
     for ep in &net.endpoints {
-        if let Some(comp) = board.component(ep.component) {
-            if let Some(part) = comp.part.as_ref() {
-                if let Some(pin) = part.pins.get(ep.pin.0 as usize) {
-                    names.push(pin.name.to_ascii_lowercase());
-                }
-            }
+        if let Some(comp) = board.component(ep.component)
+            && let Some(part) = comp.part.as_ref()
+            && let Some(pin) = part.pins.get(ep.pin.0 as usize)
+        {
+            names.push(pin.name.to_ascii_lowercase());
         }
     }
     let any = |keywords: &[&str]| {
@@ -2600,8 +2594,8 @@ mod tests {
     }
 
     use super::emit_segments_and_vias;
-    use crate::grid::{Cell, Grid};
     use crate::Segment;
+    use crate::grid::{Cell, Grid};
     use std::collections::HashMap;
     use synth_geometry::{Layer, Point, Rect};
     use synth_ir::NetId;

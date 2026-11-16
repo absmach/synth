@@ -114,8 +114,7 @@ fn f(v: &serde_json::Value, key: &str) -> f64 {
 fn s(v: &serde_json::Value, key: &str) -> String {
     v.get(key)
         .and_then(|x| x.as_str())
-        .map(str::to_string)
-        .unwrap_or_default()
+        .map_or_default(str::to_string)
 }
 
 /// Read a bare numeric `Value` (used for array elements like `[x, y]`).

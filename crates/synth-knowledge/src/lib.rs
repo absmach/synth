@@ -105,7 +105,7 @@ impl<'de> Deserialize<'de> for Condition {
                         "ic_without_decoupling",
                         "polarized_cap_ground_on_plus",
                     ],
-                ))
+                ));
             }
         })
     }
@@ -712,10 +712,10 @@ fn resistor_hop(board: &Board, net: &Net) -> Option<Net> {
             if pid == e.pin {
                 continue;
             }
-            if let Some((_, far)) = board.nets_containing(comp.id, pid).next() {
-                if far.id != net.id {
-                    return Some(far.clone());
-                }
+            if let Some((_, far)) = board.nets_containing(comp.id, pid).next()
+                && far.id != net.id
+            {
+                return Some(far.clone());
             }
         }
     }
@@ -1447,9 +1447,10 @@ mod tests {
     #[test]
     fn capacitor_kind_now_maps_to_polarity_template() {
         let kg = kg();
-        assert!(kg
-            .templates_for_kind("capacitor")
-            .iter()
-            .any(|t| t.id == "polarized_cap_miswired"));
+        assert!(
+            kg.templates_for_kind("capacitor")
+                .iter()
+                .any(|t| t.id == "polarized_cap_miswired")
+        );
     }
 }

@@ -27,10 +27,10 @@ use std::path::Path;
 use synth_ir::{Board, ComponentId, NetId};
 
 use crate::{
-    annotate_groups, clamp_annotations_to_sheet, compact_sheet_to_fit, effective_group,
-    grow_sheet_to_fit, place_connector_legends, place_design_notes, resolve_text_overlaps,
-    settle_sheet_size, sidecar, ComponentPlacement, HierarchicalLabel, Layout, SheetSize,
-    GROUP_CONTENT_PAD, GROUP_TITLE_BAND_MM, PAGE_MARGIN, SHEET_BORDER_MM,
+    ComponentPlacement, GROUP_CONTENT_PAD, GROUP_TITLE_BAND_MM, HierarchicalLabel, Layout,
+    PAGE_MARGIN, SHEET_BORDER_MM, SheetSize, annotate_groups, clamp_annotations_to_sheet,
+    compact_sheet_to_fit, effective_group, grow_sheet_to_fit, place_connector_legends,
+    place_design_notes, resolve_text_overlaps, settle_sheet_size, sidecar,
 };
 
 /// One sheet's share of a board: `None` is the root sheet, `Some`
@@ -712,7 +712,7 @@ mod tests {
     use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin as RegPin, PinNumber};
 
     use super::*;
-    use crate::{body_size_for_part, ComponentPlacement, Rotation, WirePath};
+    use crate::{ComponentPlacement, Rotation, WirePath, body_size_for_part};
 
     fn pin(name: &str) -> RegPin {
         RegPin {
@@ -1294,8 +1294,8 @@ mod tests {
     #[test]
     fn a_schematic_sidecar_with_a_placement_pins_the_split() {
         use crate::sidecar::{
-            OverridePriority, OverrideSource, SidecarLayout, SidecarPlacement,
-            SIDECAR_SCHEMA_VERSION,
+            OverridePriority, OverrideSource, SIDECAR_SCHEMA_VERSION, SidecarLayout,
+            SidecarPlacement,
         };
         let two = || vec![pin("p1"), pin("p2")];
         let b = board(

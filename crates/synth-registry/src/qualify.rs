@@ -370,7 +370,7 @@ pub fn qualify_registry(
     tool_version: &str,
 ) -> QualificationReport {
     let mut ordered: Vec<(&PartId, &Part)> = registry.iter().collect();
-    ordered.sort_by(|a, b| a.0 .0.cmp(&b.0 .0));
+    ordered.sort_by(|a, b| a.0.0.cmp(&b.0.0));
 
     let parts: Vec<PartQualification> = ordered
         .into_iter()
@@ -649,7 +649,10 @@ fn check_pad_pin_coverage(part: &Part, pads: Option<&[PadFacts]>) -> Check {
         vec![Finding::blocking(
             "E-SYNTH-QUAL-002",
             "footprint has copper pads no pin declares",
-            format!("every copper pad of `{lib_id}` to be declared by `{}`", part.id.0),
+            format!(
+                "every copper pad of `{lib_id}` to be declared by `{}`",
+                part.id.0
+            ),
             format!(
                 "{} undeclared pad(s): {} — an exposed or thermal pad left out of the pin map is a short waiting to happen",
                 orphans.len(),
@@ -801,15 +804,15 @@ fn check_declared_dimensions(part: &Part) -> Check {
         ));
     }
 
-    if let Some(margin) = declared.courtyard_margin_mm {
-        if margin < 0.0 || margin > MAX_COURTYARD_MARGIN_MM {
-            findings.push(Finding::review(
-                "E-SYNTH-QUAL-014",
-                "courtyard margin is outside the plausible range",
-                format!("0 .. {MAX_COURTYARD_MARGIN_MM} mm"),
-                format!("{margin} mm"),
-            ));
-        }
+    if let Some(margin) = declared.courtyard_margin_mm
+        && (margin < 0.0 || margin > MAX_COURTYARD_MARGIN_MM)
+    {
+        findings.push(Finding::review(
+            "E-SYNTH-QUAL-014",
+            "courtyard margin is outside the plausible range",
+            format!("0 .. {MAX_COURTYARD_MARGIN_MM} mm"),
+            format!("{margin} mm"),
+        ));
     }
 
     Check::from_findings(NAME, findings)

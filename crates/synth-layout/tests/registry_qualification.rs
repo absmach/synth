@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use synth_layout::qualify_facts::InstalledKicad;
-use synth_registry::qualify::{qualify_part, CheckStatus, FindingLevel, PartQualification};
+use synth_registry::qualify::{CheckStatus, FindingLevel, PartQualification, qualify_part};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -40,9 +40,35 @@ fn qualify(dir: &str, id: &str) -> PartQualification {
     qualify_part(&load(dir, id), &facts, &facts)
 }
 
+/// Set in the child process that runs the qualification checks.
+const CHILD_MARKER: &str = "SYNTH_REGISTRY_QUALIFICATION_CHILD";
+
 #[test]
 fn fixtures_qualify_and_every_mutation_is_caught() {
-    std::env::set_var("KICAD_FOOTPRINT_DIR", fixture_root().join("footprints"));
+    // The footprint index is built once per process from `KICAD_FOOTPRINT_DIR`,
+    // so the fixtures have to be named before the process starts. The test
+    // re-runs itself as a child with the variable set, rather than changing
+    // the environment of a process whose other tests run on other threads.
+    if std::env::var_os(CHILD_MARKER).is_none() {
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "fixtures_qualify_and_every_mutation_is_caught",
+                "--exact",
+                "--nocapture",
+            ])
+            .env(CHILD_MARKER, "1")
+            .env("KICAD_FOOTPRINT_DIR", fixture_root().join("footprints"))
+            .output()
+            .expect("run the qualification checks in a child process");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // A renamed test would match nothing and "pass"; require that it ran.
+        assert!(
+            output.status.success() && stdout.contains("1 passed"),
+            "the qualification checks failed in the child process:\n{stdout}\n{stderr}"
+        );
+        return;
+    }
     three_d_models_are_looked_up_on_disk();
     representative_parts_qualify();
     every_mutation_is_caught();

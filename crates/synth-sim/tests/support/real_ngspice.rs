@@ -11,16 +11,23 @@ pub const SKIP_MESSAGE: &str = "skipping: ngspice not found (searched NGSPICE, P
                                 /usr/bin/ngspice; sudo apt install ngspice)";
 
 pub fn real_ngspice() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("NGSPICE") {
-        return Some(PathBuf::from(path));
+    real_ngspice_from(std::env::var_os("NGSPICE"), std::env::var_os("PATH"))
+}
+
+/// [`real_ngspice`] for given `NGSPICE` and `PATH` values.
+pub fn real_ngspice_from(
+    ngspice: Option<std::ffi::OsString>,
+    path: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    if let Some(configured) = ngspice {
+        return Some(PathBuf::from(configured));
     }
-    if let Some(path) = std::env::var_os("PATH") {
-        if let Some(found) = std::env::split_paths(&path)
+    if let Some(path) = path
+        && let Some(found) = std::env::split_paths(&path)
             .map(|dir| dir.join("ngspice"))
             .find(|candidate| candidate.is_file())
-        {
-            return Some(found);
-        }
+    {
+        return Some(found);
     }
     let system = Path::new("/usr/bin/ngspice");
     system.is_file().then(|| system.to_path_buf())

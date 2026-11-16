@@ -247,7 +247,7 @@ fn stop(child: &mut std::process::Child, kill: KillScope) {
 
 #[cfg(unix)]
 fn kill_process_group(pid: u32) {
-    use nix::sys::signal::{killpg, Signal};
+    use nix::sys::signal::{Signal, killpg};
     use nix::unistd::Pid;
 
     if let Ok(pid) = i32::try_from(pid) {

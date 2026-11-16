@@ -20,8 +20,8 @@ use synth_ir::{Board, ComponentId, NetId, PinId};
 use synth_registry::{ElectricalType, Part, Pin, PinCapability};
 
 use crate::{
-    body_size_for_part, text_inclusive_half_width, ComponentPlacement, LabelSpot, Layout, PinSide,
-    Rotation, WirePath,
+    ComponentPlacement, LabelSpot, Layout, PinSide, Rotation, WirePath, body_size_for_part,
+    text_inclusive_half_width,
 };
 
 use grid::SchematicGrid;
@@ -200,44 +200,44 @@ pub fn pin_terminal_xy(
 
     let pin = part.pins.get(pin_id.0 as usize)?;
 
-    if let Some(lib_id) = part.kicad_symbol.as_deref() {
-        if let Some(pin_map) = crate::kicad_lib_loader::pin_positions(lib_id) {
-            let pin_data = pin_map
-                .get(&pin.number.0)
-                .or_else(|| pin_map.get(&pin.name.to_lowercase()));
-            if let Some(&(px, py, pin_angle)) = pin_data {
-                let natural_offset = natural_rotation_offset(part);
-                let logical_deg = match placement.rotation {
-                    Rotation::Zero => 0.0,
-                    Rotation::Ninety => 90.0,
-                    Rotation::OneEighty => 180.0,
-                    Rotation::TwoSeventy => 270.0,
-                };
-                let total_deg = (logical_deg + natural_offset).rem_euclid(360.0);
-                let rad = total_deg.to_radians();
+    if let Some(lib_id) = part.kicad_symbol.as_deref()
+        && let Some(pin_map) = crate::kicad_lib_loader::pin_positions(lib_id)
+    {
+        let pin_data = pin_map
+            .get(&pin.number.0)
+            .or_else(|| pin_map.get(&pin.name.to_lowercase()));
+        if let Some(&(px, py, pin_angle)) = pin_data {
+            let natural_offset = natural_rotation_offset(part);
+            let logical_deg = match placement.rotation {
+                Rotation::Zero => 0.0,
+                Rotation::Ninety => 90.0,
+                Rotation::OneEighty => 180.0,
+                Rotation::TwoSeventy => 270.0,
+            };
+            let total_deg = (logical_deg + natural_offset).rem_euclid(360.0);
+            let rad = total_deg.to_radians();
 
-                let rot_x = px * rad.cos() - py * rad.sin();
-                let rot_y = px * rad.sin() + py * rad.cos();
+            let rot_x = px * rad.cos() - py * rad.sin();
+            let rot_y = px * rad.sin() + py * rad.cos();
 
-                // Multi-unit symbols are drawn as a vertical stack; a
-                // pin of unit 2..N is shifted down by its unit slot,
-                // in sheet space (the stack does not rotate).
-                let (_, unit_dy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
-                let term_x = cx + rot_x;
-                let term_y = cy - rot_y + unit_dy;
+            // Multi-unit symbols are drawn as a vertical stack; a
+            // pin of unit 2..N is shifted down by its unit slot,
+            // in sheet space (the stack does not rotate).
+            let (_, unit_dy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
+            let term_x = cx + rot_x;
+            let term_y = cy - rot_y + unit_dy;
 
-                // KiCad's pin `angle` points INWARD (terminal →
-                // body); the outward stub direction is angle+180°.
-                // The loader frame is y-up while the sheet is
-                // y-down (`term_y` negates), which flips the sign
-                // of the y component: outward = (-cos θ, +sin θ).
-                let dir_deg = (pin_angle + total_deg).rem_euclid(360.0);
-                let dir_rad = dir_deg.to_radians();
-                let dx = -dir_rad.cos().round();
-                let dy = dir_rad.sin().round();
+            // KiCad's pin `angle` points INWARD (terminal →
+            // body); the outward stub direction is angle+180°.
+            // The loader frame is y-up while the sheet is
+            // y-down (`term_y` negates), which flips the sign
+            // of the y component: outward = (-cos θ, +sin θ).
+            let dir_deg = (pin_angle + total_deg).rem_euclid(360.0);
+            let dir_rad = dir_deg.to_radians();
+            let dx = -dir_rad.cos().round();
+            let dy = dir_rad.sin().round();
 
-                return Some((snap_grid_127(term_x), snap_grid_127(term_y), dx, dy));
-            }
+            return Some((snap_grid_127(term_x), snap_grid_127(term_y), dx, dy));
         }
     }
 
@@ -766,10 +766,11 @@ fn l_route_points(
             let mut clean_path: Vec<(f64, f64)> = Vec::new();
             for &p in path {
                 let snapped = (snap_grid_127(p.0), snap_grid_127(p.1));
-                if let Some(last) = clean_path.last() {
-                    if (snapped.0 - last.0).abs() < 0.01 && (snapped.1 - last.1).abs() < 0.01 {
-                        continue;
-                    }
+                if let Some(last) = clean_path.last()
+                    && (snapped.0 - last.0).abs() < 0.01
+                    && (snapped.1 - last.1).abs() < 0.01
+                {
+                    continue;
                 }
                 clean_path.push(snapped);
             }
@@ -803,23 +804,22 @@ fn l_route_points(
             .cloned();
     }
 
-    let pts = selected_pts.unwrap_or_else(|| {
+    selected_pts.unwrap_or_else(|| {
         let mut clean_path: Vec<(f64, f64)> = Vec::new();
         let default_path = vec![(ax, ay), (bx, by)];
         let path = candidate_paths.last().unwrap_or(&default_path);
         for &p in path {
             let snapped = (snap_grid_127(p.0), snap_grid_127(p.1));
-            if let Some(last) = clean_path.last() {
-                if (snapped.0 - last.0).abs() < 0.01 && (snapped.1 - last.1).abs() < 0.01 {
-                    continue;
-                }
+            if let Some(last) = clean_path.last()
+                && (snapped.0 - last.0).abs() < 0.01
+                && (snapped.1 - last.1).abs() < 0.01
+            {
+                continue;
             }
             clean_path.push(snapped);
         }
         clean_path
-    });
-
-    pts
+    })
 }
 
 // ----- Hashimoto-Stevens channel routing (§7.5.6 / §7.7.5) ---------------
@@ -975,11 +975,11 @@ pub fn decompose_channels(board: &Board, layout: &Layout) -> Vec<Channel> {
     // Merge overlapping / near-touching bands into rows.
     let mut merged: Vec<(f64, f64)> = Vec::new();
     for (top, bot) in bands {
-        if let Some(last) = merged.last_mut() {
-            if top <= last.1 + MIN_CHANNEL_HEIGHT_MM {
-                last.1 = last.1.max(bot);
-                continue;
-            }
+        if let Some(last) = merged.last_mut()
+            && top <= last.1 + MIN_CHANNEL_HEIGHT_MM
+        {
+            last.1 = last.1.max(bot);
+            continue;
         }
         merged.push((top, bot));
     }
@@ -1074,12 +1074,11 @@ fn channel_route_points(
     let mut pts: Vec<(f64, f64)> = Vec::with_capacity(raw.len());
     for &(px, py) in &raw {
         let snapped = (snap_grid_127(px), snap_grid_127(py));
-        if let Some(last) = pts.last() {
-            if (snapped.0 - last.0).abs() < COORD_EPSILON_MM
-                && (snapped.1 - last.1).abs() < COORD_EPSILON_MM
-            {
-                continue;
-            }
+        if let Some(last) = pts.last()
+            && (snapped.0 - last.0).abs() < COORD_EPSILON_MM
+            && (snapped.1 - last.1).abs() < COORD_EPSILON_MM
+        {
+            continue;
         }
         pts.push(snapped);
     }
@@ -1577,39 +1576,39 @@ pub fn route_board(board: &Board, layout: &Layout) -> RouteResult {
     // 1. Mark component body and text label (Reference/Value) obstacles.
     let mut bodies: Vec<(ComponentId, (f64, f64, f64, f64))> = Vec::new();
     for component in &board.components {
-        if let Some(part) = component.part.as_ref() {
-            if let Some(placement) = placements.get(&component.id) {
-                let (cx, cy) = (
-                    snap_grid_127(placement.center_mm.0),
-                    snap_grid_127(placement.center_mm.1),
-                );
-                let (bw, bh) = body_size_for_part(part);
-                let margin = 0.635;
+        if let Some(part) = component.part.as_ref()
+            && let Some(placement) = placements.get(&component.id)
+        {
+            let (cx, cy) = (
+                snap_grid_127(placement.center_mm.0),
+                snap_grid_127(placement.center_mm.1),
+            );
+            let (bw, bh) = body_size_for_part(part);
+            let margin = 0.635;
 
-                // Text-inclusive half-width — the exact sizing
-                // placement uses (`crate::text_inclusive_half_width`),
-                // so the router's obstacle rect reserves the room the
-                // sheet actually renders. Sizing the Value label off
-                // `part.id` alone underestimated long custom values
-                // and let A*/L routes run straight through the text.
-                let half_w = text_inclusive_half_width(component, part);
+            // Text-inclusive half-width — the exact sizing
+            // placement uses (`crate::text_inclusive_half_width`),
+            // so the router's obstacle rect reserves the room the
+            // sheet actually renders. Sizing the Value label off
+            // `part.id` alone underestimated long custom values
+            // and let A*/L routes run straight through the text.
+            let half_w = text_inclusive_half_width(component, part);
 
-                // Reference text sits ~3.81 mm above top edge; Value text sits ~3.81 mm below bottom edge
-                let text_margin_y = 6.35;
+            // Reference text sits ~3.81 mm above top edge; Value text sits ~3.81 mm below bottom edge
+            let text_margin_y = 6.35;
 
-                grid.mark_soft_rect(
-                    cx - half_w - margin,
-                    cy - bh / 2.0 - text_margin_y - margin,
-                    cx + half_w + margin,
-                    cy + bh / 2.0 + text_margin_y + margin,
-                );
-                // The body itself, square: the symbol size is that of the
-                // part unturned, so a part on its side needs both ways.
-                let reach = bw.max(bh) / 2.0 + margin;
-                let body = (cx - reach, cy - reach, cx + reach, cy + reach);
-                grid.mark_obstacle_rect(body.0, body.1, body.2, body.3);
-                bodies.push((component.id, body));
-            }
+            grid.mark_soft_rect(
+                cx - half_w - margin,
+                cy - bh / 2.0 - text_margin_y - margin,
+                cx + half_w + margin,
+                cy + bh / 2.0 + text_margin_y + margin,
+            );
+            // The body itself, square: the symbol size is that of the
+            // part unturned, so a part on its side needs both ways.
+            let reach = bw.max(bh) / 2.0 + margin;
+            let body = (cx - reach, cy - reach, cx + reach, cy + reach);
+            grid.mark_obstacle_rect(body.0, body.1, body.2, body.3);
+            bodies.push((component.id, body));
         }
     }
 

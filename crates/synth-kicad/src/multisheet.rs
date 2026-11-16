@@ -36,10 +36,10 @@ use synth_layout::route::snap_grid_127;
 use synth_layout::sheets::SheetLayout;
 use uuid::Uuid;
 
-use crate::export::{write_file, ExportError};
+use crate::export::{ExportError, write_file};
 use crate::schematic::{
-    build_sheet_schematic, PlacedSheetInstance, PowerRefAllocator, RootFurniture, RootWire,
-    SheetRender,
+    PlacedSheetInstance, PowerRefAllocator, RootFurniture, RootWire, SheetRender,
+    build_sheet_schematic,
 };
 use crate::uuid_v5::derive_entity_uuid;
 

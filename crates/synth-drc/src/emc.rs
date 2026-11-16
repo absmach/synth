@@ -7,7 +7,7 @@
 //! Advisory warnings, evaluated on the placement the export chose, so the
 //! candidate selection prefers a placement that satisfies them.
 
-use synth_geometry::{nm_to_mm, Point};
+use synth_geometry::{Point, nm_to_mm};
 use synth_ir::{Board, Component, ComponentId};
 use synth_place::Placement;
 
@@ -26,8 +26,7 @@ fn is_crystal(component: &Component) -> bool {
     let id = component
         .part
         .as_ref()
-        .map(|part| part.id.0.to_ascii_lowercase())
-        .unwrap_or_default();
+        .map_or_default(|part| part.id.0.to_ascii_lowercase());
     component.kind.as_str() == "crystal"
         || component.kind.as_str() == "oscillator"
         || id.contains("xtal")
@@ -40,8 +39,7 @@ fn is_switching_converter(component: &Component) -> bool {
     let id = component
         .part
         .as_ref()
-        .map(|part| part.id.0.to_ascii_lowercase())
-        .unwrap_or_default();
+        .map_or_default(|part| part.id.0.to_ascii_lowercase());
     id.contains("buck") || id.contains("boost") || id.contains("dcdc") || id.contains("dc_dc")
 }
 
@@ -87,22 +85,22 @@ pub fn check_emc_placement(board: &Board, placement: &Placement) -> Vec<Violatio
 
         if is_crystal(component) {
             let nearest = nearest_partner(board, placement, component.id);
-            if let Some((distance_mm, other)) = nearest {
-                if distance_mm > CRYSTAL_MAX_MM {
-                    out.push(Violation {
-                        code: "W-SYNTH-DRC-021".to_string(),
-                        message: format!(
-                            "crystal/oscillator {} is {distance_mm:.1} mm from {}, beyond the \
+            if let Some((distance_mm, other)) = nearest
+                && distance_mm > CRYSTAL_MAX_MM
+            {
+                out.push(Violation {
+                    code: "W-SYNTH-DRC-021".to_string(),
+                    message: format!(
+                        "crystal/oscillator {} is {distance_mm:.1} mm from {}, beyond the \
                              {CRYSTAL_MAX_MM:.0} mm at which its loop stops being compact",
-                            component.refdes, other
-                        ),
-                        witness: vec![here],
-                        nets: Vec::new(),
-                        components: vec![component.refdes.clone(), other],
-                        pos_mm: Some((nm_to_mm(here.x_nm), nm_to_mm(here.y_nm))),
-                        suggested_override: None,
-                    });
-                }
+                        component.refdes, other
+                    ),
+                    witness: vec![here],
+                    nets: Vec::new(),
+                    components: vec![component.refdes.clone(), other],
+                    pos_mm: Some((nm_to_mm(here.x_nm), nm_to_mm(here.y_nm))),
+                    suggested_override: None,
+                });
             }
         }
 

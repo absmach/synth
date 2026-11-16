@@ -474,8 +474,7 @@ fn export_inner(
         .and_then(synth_layout::sidecar::SidecarLayout::load_from_file);
     let (label_overrides, fixed_vias) = placement_sidecar
         .as_ref()
-        .map(|sidecar| (sidecar.labels.clone(), sidecar.vias.clone()))
-        .unwrap_or_default();
+        .map_or_default(|sidecar| (sidecar.labels.clone(), sidecar.vias.clone()));
     let outline: &[synth_layout::sidecar::SidecarPoint] = placement_sidecar
         .as_ref()
         .map_or(&[], |sidecar| sidecar.outline.as_slice());
@@ -1513,7 +1512,7 @@ mod tests {
     /// Manual 60 x 30 mm arrangement of [`edge_candidate_board`]: the MCU on
     /// the right, the header at `connector_x_mm`, the passives in two rows.
     fn edge_candidate_placement(board: &Board, connector_x_mm: f64) -> synth_place::Placement {
-        use synth_geometry::{mm_to_nm, Layer, Point, Rect, Rotation};
+        use synth_geometry::{Layer, Point, Rect, Rotation, mm_to_nm};
         let mut passive = 0_u32;
         let components = board
             .components

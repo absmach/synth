@@ -4,7 +4,7 @@
 
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[path = "../../synth-sim/tests/support/stub_build.rs"]
 mod stub_build;

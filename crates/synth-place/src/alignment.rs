@@ -13,7 +13,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use synth_geometry::{nm_to_mm, Point};
+use synth_geometry::{Point, nm_to_mm};
 use synth_ir::{Board, ComponentId};
 
 use crate::Placement;
@@ -88,7 +88,7 @@ pub(crate) fn misaligned_like_parts(board: &Board, placement: &Placement) -> Vec
         let mut parent: Vec<usize> = (0..members.len()).collect();
         for (i, a) in members.iter().enumerate() {
             for (j, b) in members.iter().enumerate().skip(i + 1) {
-                if (a.1 .0 - b.1 .0).hypot(a.1 .1 - b.1 .1) <= CLUSTER_MM {
+                if (a.1.0 - b.1.0).hypot(a.1.1 - b.1.1) <= CLUSTER_MM {
                     let (x, y) = (find(&mut parent, i), find(&mut parent, j));
                     parent[x] = y;
                 }
@@ -112,8 +112,8 @@ pub(crate) fn misaligned_like_parts(board: &Board, placement: &Placement) -> Vec
 /// The rows (or columns) of one cluster, with the parts that miss their line.
 fn bands(cluster: &[(ComponentId, (f64, f64))], row: bool) -> Vec<Misaligned> {
     // `across` is the coordinate the line fixes, `along` the one it runs over.
-    let across = |m: &(ComponentId, (f64, f64))| if row { m.1 .1 } else { m.1 .0 };
-    let along = |m: &(ComponentId, (f64, f64))| if row { m.1 .0 } else { m.1 .1 };
+    let across = |m: &(ComponentId, (f64, f64))| if row { m.1.1 } else { m.1.0 };
+    let along = |m: &(ComponentId, (f64, f64))| if row { m.1.0 } else { m.1.1 };
     let mut sorted: Vec<_> = cluster.to_vec();
     sorted.sort_by(|a, b| across(a).total_cmp(&across(b)));
     let mut out = Vec::new();
@@ -209,14 +209,14 @@ pub(crate) fn isolated_parts(board: &Board, placement: &Placement) -> Vec<Isolat
                 Some((n, (here.0 - c.0).hypot(here.1 - c.1)))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1));
-        if let Some((neighbour, mm)) = nearest {
-            if mm > ISOLATION_MM {
-                found.push(Isolated {
-                    id: *id,
-                    neighbour: *neighbour,
-                    mm,
-                });
-            }
+        if let Some((neighbour, mm)) = nearest
+            && mm > ISOLATION_MM
+        {
+            found.push(Isolated {
+                id: *id,
+                neighbour: *neighbour,
+                mm,
+            });
         }
     }
     found.sort_by(|a, b| b.mm.total_cmp(&a.mm));
@@ -283,10 +283,10 @@ pub(crate) fn rail_capacitors_far(board: &Board, placement: &Placement) -> Vec<I
                 Some((c, (here.0 - at.0).hypot(here.1 - at.1)))
             })
             .min_by(|a, b| a.1.total_cmp(&b.1));
-        if let Some((neighbour, mm)) = nearest {
-            if mm > RAIL_CAP_MM {
-                found.push(Isolated { id, neighbour, mm });
-            }
+        if let Some((neighbour, mm)) = nearest
+            && mm > RAIL_CAP_MM
+        {
+            found.push(Isolated { id, neighbour, mm });
         }
     }
     found.sort_by(|a, b| b.mm.total_cmp(&a.mm));

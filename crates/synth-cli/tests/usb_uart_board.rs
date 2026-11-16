@@ -32,8 +32,7 @@ fn mounting_holes_sit_one_per_corner_and_keep_a_rim_inside_edge_cuts() {
     let dir = std::env::temp_dir().join(format!("synth_usb_uart_board_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch dir");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
 
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -45,6 +44,7 @@ fn mounting_holes_sit_one_per_corner_and_keep_a_rim_inside_edge_cuts() {
     Command::new(env!("CARGO_BIN_EXE_synth"))
         .args(["export-kicad", source, "--router", "free-routing", "--out"])
         .arg(&out)
+        .envs(router.envs())
         .output()
         .expect("run synth export-kicad");
     let text = std::fs::read_to_string(out.join("usb_uart.synth.kicad_pcb")).expect("unrouted PCB");
