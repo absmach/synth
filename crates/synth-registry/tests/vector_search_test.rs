@@ -4,7 +4,7 @@
 
 use std::path::Path;
 use std::time::Instant;
-use synth_registry::{load_dir, VectorSearchIndex};
+use synth_registry::{VectorSearchIndex, load_dir};
 
 #[test]
 fn test_semantic_vector_search_finds_ldo_regulator() {

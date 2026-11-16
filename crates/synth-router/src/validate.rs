@@ -31,7 +31,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::contract::{FabricationPolicy, RouteRequest};
-use crate::pcb_read::{entry_is_copper, Pad, PcbBoard, Point};
+use crate::pcb_read::{Pad, PcbBoard, Point, entry_is_copper};
 /// Distance tolerance, in nanometres, for copper that is *meant* to touch.
 ///
 /// Routers round to four decimal places when they write coordinates, so
@@ -925,7 +925,7 @@ fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &[&Pad]) -> bool {
             let second = &board.segments[*y];
             first.layer == second.layer
                 && segment_distance(first.start, first.end, second.start, second.end)
-                    <= (first.width_nm + second.width_nm) / 2 + TOUCH_TOLERANCE_NM
+                    <= i64::midpoint(first.width_nm, second.width_nm) + TOUCH_TOLERANCE_NM
         }
         (Item::Segment(s), Item::Via(v)) | (Item::Via(v), Item::Segment(s)) => {
             // A via connects every layer it spans, so a track on any of
@@ -1138,7 +1138,7 @@ pub fn router_claim_disagreements(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pcb_read::{mm_to_nm, parse_sexpr, PcbParseError, SAMPLE_BOARD};
+    use crate::pcb_read::{PcbParseError, SAMPLE_BOARD, mm_to_nm, parse_sexpr};
 
     fn board(text: &str) -> PcbBoard {
         PcbBoard::parse(text).expect("fixture parses")
@@ -1472,10 +1472,12 @@ mod tests {
         let routed = board(&relocated);
         let report = compare_topology(&baseline, &routed);
         assert!(!report.renet_pads.is_empty(), "{report:?}");
-        assert!(report
-            .blocking_reasons()
-            .iter()
-            .any(|r| r.contains("changed net")));
+        assert!(
+            report
+                .blocking_reasons()
+                .iter()
+                .any(|r| r.contains("changed net"))
+        );
     }
 
     #[test]
@@ -1484,10 +1486,12 @@ mod tests {
         let routed = board(&SAMPLE_BOARD.replace("Edge.Cuts", "F.SilkS"));
         let report = compare_topology(&baseline, &routed);
         assert!(!report.outline_present);
-        assert!(report
-            .blocking_reasons()
-            .iter()
-            .any(|r| r.contains("outline")));
+        assert!(
+            report
+                .blocking_reasons()
+                .iter()
+                .any(|r| r.contains("outline"))
+        );
     }
 
     #[test]

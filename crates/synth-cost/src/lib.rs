@@ -477,10 +477,10 @@ pub fn calculate(input: &CostInput) -> Result<CostReport, CostError> {
             return Err(CostError::ConflictingPcbInputs);
         }
         if let Some(quote) = &input.pcb_quote {
-            if let Some(expected_hash) = &input.pcb_specification_hash {
-                if expected_hash != &quote.specification_hash {
-                    return Err(CostError::QuoteSpecificationMismatch);
-                }
+            if let Some(expected_hash) = &input.pcb_specification_hash
+                && expected_hash != &quote.specification_hash
+            {
+                return Err(CostError::QuoteSpecificationMismatch);
             }
             let amount = quote.amount;
             if amount.currency != input.currency {
@@ -882,10 +882,12 @@ mod tests {
         let mut input = incomplete_input();
         input.scenario.assembled_boards = 0;
         let report = calculate(&input).unwrap();
-        assert!(report
-            .lines
-            .iter()
-            .all(|line| line.category != "parts" && line.category != "assembly"));
+        assert!(
+            report
+                .lines
+                .iter()
+                .all(|line| line.category != "parts" && line.category != "assembly")
+        );
         assert!(report.complete_total.is_none());
         input.scenario.assembled_boards = 6;
         assert_eq!(calculate(&input), Err(CostError::InvalidQuantity));

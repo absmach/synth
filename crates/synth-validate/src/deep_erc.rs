@@ -23,7 +23,7 @@ use synth_ir::{Board, ComponentId, NetId, PinId};
 use synth_registry::{ElectricalType, Part, PinCapability};
 
 use crate::config::{ErcConfig, PinConflictTable};
-use crate::{endpoint_has_any_capability, ErcCategory, ErcRule};
+use crate::{ErcCategory, ErcRule, endpoint_has_any_capability};
 
 // -----------------------------------------------------------------------------
 // Shared helpers
@@ -139,10 +139,10 @@ fn pullup_on_net<'a>(
         if other == net {
             continue;
         }
-        if is_rail_net(domains, other) {
-            if let Some(v) = net_voltage(domains, other) {
-                return Some((component, v));
-            }
+        if is_rail_net(domains, other)
+            && let Some(v) = net_voltage(domains, other)
+        {
+            return Some((component, v));
         }
     }
     None
@@ -687,10 +687,10 @@ fn part_supplies_a_rail(part: &synth_registry::Part) -> bool {
         return false;
     };
     // An explicit answer wins over inference.
-    if let Some(budget) = oc.power_budget {
-        if !budget {
-            return false;
-        }
+    if let Some(budget) = oc.power_budget
+        && !budget
+    {
+        return false;
     }
     // Otherwise a part supplies a rail when it has a power_output pin,
     // preserving the previous generic behaviour for any supply kind.
@@ -1317,10 +1317,10 @@ fn numbers_in(text: &str) -> Vec<f64> {
             cur.clear();
         }
     }
-    if !cur.is_empty() {
-        if let Ok(v) = cur.parse() {
-            out.push(v);
-        }
+    if !cur.is_empty()
+        && let Ok(v) = cur.parse()
+    {
+        out.push(v);
     }
     out
 }

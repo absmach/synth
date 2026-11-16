@@ -77,7 +77,7 @@ pub mod miter;
 pub mod serpentine;
 mod spatial;
 
-pub use logger::{log_routing_outcome, RoutingOutcomeRecord};
+pub use logger::{RoutingOutcomeRecord, log_routing_outcome};
 
 use synth_geometry::Point;
 use synth_ir::Board;
@@ -233,7 +233,7 @@ const RF_STITCH_MIN_CLEARANCE_NM: i64 = 200_000;
 /// coordinates (≲ 1e9), far below f64's 52-bit mantissa — exact.
 #[allow(clippy::cast_precision_loss)]
 fn generate_rf_via_fence(board: &Board, placement: &Placement, routing: &mut Routing) {
-    use synth_ir::{infer_power_domains, NetId};
+    use synth_ir::{NetId, infer_power_domains};
 
     let domain_map = infer_power_domains(board);
 

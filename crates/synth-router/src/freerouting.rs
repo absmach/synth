@@ -23,10 +23,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::capability::{which, BUNDLED_JRE_DIR, PINNED_FREEROUTING_JAR};
+use crate::capability::{BUNDLED_JRE_DIR, PINNED_FREEROUTING_JAR, which};
 use crate::contract::{FreeroutingOptions, RouteRequest, RouterEngine};
 use crate::failure::{RouterFailure, RouterFailureReason, RouterStage};
 use crate::result::{RouteArtifacts, RouteStatistics, RouterProvenance};
+use crate::tools::ToolPaths;
 
 /// The helper script that drives the JAR, the Specctra export, and the
 /// SES import.
@@ -182,8 +183,9 @@ struct Prerequisite {
 }
 
 impl Prerequisite {
-    fn resolve(_request: &RouteRequest) -> Result<Self, RouterFailure> {
-        let jar = resolve_jar().ok_or_else(|| {
+    fn resolve(request: &RouteRequest) -> Result<Self, RouterFailure> {
+        let tools = &request.tools;
+        let jar = resolve_jar(tools).ok_or_else(|| {
             RouterFailure::for_stage(
                 RouterEngine::Freerouting,
                 RouterStage::Capability,
@@ -194,7 +196,7 @@ impl Prerequisite {
                 ),
             )
         })?;
-        let java = resolve_java().ok_or_else(|| {
+        let java = resolve_java(tools).ok_or_else(|| {
             RouterFailure::for_stage(
                 RouterEngine::Freerouting,
                 RouterStage::Capability,
@@ -202,7 +204,7 @@ impl Prerequisite {
                 format!("no Java runtime found; looked at {BUNDLED_JRE_DIR}/bin/java and `java`"),
             )
         })?;
-        let python = resolve_helper_python().ok_or_else(|| {
+        let python = resolve_helper_python(tools).ok_or_else(|| {
             RouterFailure::for_stage(
                 RouterEngine::Freerouting,
                 RouterStage::Capability,
@@ -449,14 +451,11 @@ pub fn check_process_outcome(
 /// before any looser match so a stray newer JAR in the directory cannot
 /// silently change which engine version runs.
 #[must_use]
-pub fn resolve_jar() -> Option<PathBuf> {
-    if let Some(configured) = std::env::var_os("SYNTH_FREEROUTING_JAR")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return configured.is_file().then_some(configured);
+pub fn resolve_jar(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.freerouting_jar {
+        return configured.is_file().then(|| configured.clone());
     }
-    for base in tool_roots() {
+    for base in tool_roots(tools) {
         let jar = base.join("freerouting").join(PINNED_FREEROUTING_JAR);
         if jar.is_file() {
             return Some(jar);
@@ -465,14 +464,14 @@ pub fn resolve_jar() -> Option<PathBuf> {
     None
 }
 
-fn resolve_java() -> Option<PathBuf> {
-    if let Some(configured) = std::env::var_os("SYNTH_FREEROUTING_JAVA")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return configured.is_file().then_some(configured);
+/// The Java runtime that runs FreeRouting: the configured one, else the
+/// bundled JRE, else `java` on `PATH`.
+#[must_use]
+pub fn resolve_java(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.freerouting_java {
+        return configured.is_file().then(|| configured.clone());
     }
-    for base in tool_roots() {
+    for base in tool_roots(tools) {
         let bundled = base.join("jre25").join("bin").join("java");
         if bundled.is_file() {
             return Some(bundled);
@@ -483,13 +482,10 @@ fn resolve_java() -> Option<PathBuf> {
 
 /// Directories that may hold `tools/freerouting/` and the bundled JRE.
 #[must_use]
-pub fn tool_roots() -> Vec<PathBuf> {
+pub fn tool_roots(tools: &ToolPaths) -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Ok(configured) = std::env::var("SYNTH_TOOLS_DIR") {
-        let path = PathBuf::from(configured);
-        if !path.as_os_str().is_empty() {
-            roots.push(path);
-        }
+    if let Some(configured) = &tools.tools_dir {
+        roots.push(configured.clone());
     }
     if let Some(root) = crate::repo_root() {
         roots.push(root.join("tools"));
@@ -517,18 +513,14 @@ pub fn tool_roots() -> Vec<PathBuf> {
 /// import `pcbnew` is answered at the route stage, where a failure names the
 /// module and the fix.
 ///
-/// `SYNTH_FREEROUTING_PYTHON` overrides the search outright.
-pub fn resolve_helper_python() -> Option<PathBuf> {
-    if let Some(configured) = override_python() {
-        return Some(configured);
+/// [`ToolPaths::freerouting_python`] (`SYNTH_FREEROUTING_PYTHON`) overrides
+/// the search outright.
+#[must_use]
+pub fn resolve_helper_python(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.freerouting_python {
+        return Some(configured.clone());
     }
     which("python3").or_else(|| which("python"))
-}
-
-fn override_python() -> Option<PathBuf> {
-    std::env::var_os("SYNTH_FREEROUTING_PYTHON")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
 }
 
 fn read_report(path: &Path) -> Option<FreeroutingReport> {

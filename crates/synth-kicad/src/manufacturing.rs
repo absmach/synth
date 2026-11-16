@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use synth_geometry::{nm_to_mm, Layer};
+use synth_geometry::{Layer, nm_to_mm};
 use synth_ir::{AssemblyDisposition, Board, ProcurementLock};
 use synth_place::Placement;
 

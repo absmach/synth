@@ -32,12 +32,12 @@
 use serde::{Deserialize, Serialize};
 use synth_ir::{Board, DielectricConstant, Length, Stackup, StackupLayer};
 
-use crate::sim_oracles::{
-    calculate_microstrip_z0, calculate_stripline_z0, coupled_microstrip_zdiff_ohms,
-    derive_coupled_microstrip, derive_microstrip_width_mm, CoupledGeometry, MicrostripParams,
-    SiImpedanceResult, UnreachableZ0,
-};
 use crate::Layer;
+use crate::sim_oracles::{
+    CoupledGeometry, MicrostripParams, SiImpedanceResult, UnreachableZ0, calculate_microstrip_z0,
+    calculate_stripline_z0, coupled_microstrip_zdiff_ohms, derive_coupled_microstrip,
+    derive_microstrip_width_mm,
+};
 
 /// How a copper layer's characteristic impedance is referenced: an outer layer
 /// with dielectric on one side (microstrip), or an inner layer between two
@@ -640,14 +640,16 @@ mod tests {
     #[test]
     fn coupled_geometry_is_unavailable_on_inner_layers() {
         let profile = StackupProfile::default_for_layers(4);
-        assert!(profile
-            .coupled_for_z0(
-                Layer::Inner1,
-                90.0,
-                crate::mm_to_nm(0.127),
-                crate::mm_to_nm(0.127)
-            )
-            .is_err());
+        assert!(
+            profile
+                .coupled_for_z0(
+                    Layer::Inner1,
+                    90.0,
+                    crate::mm_to_nm(0.127),
+                    crate::mm_to_nm(0.127)
+                )
+                .is_err()
+        );
     }
 
     #[test]

@@ -22,10 +22,10 @@ use serde::Deserialize;
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, EntityRef, Location, Severity, Span};
 use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId};
 use synth_registry::{SpiceDialect, SpiceModel};
-use synth_router::process::{run_cancellable, Invocation, KillScope};
+use synth_router::process::{Invocation, KillScope, run_cancellable};
 
 mod suggest;
-pub use suggest::{suggest_testbench, TestbenchSuggestion};
+pub use suggest::{TestbenchSuggestion, suggest_testbench};
 
 /// ngspice could not be found or started.
 pub const E_SYNTH_SIM_001: &str = "E-SYNTH-SIM-001";
@@ -303,12 +303,12 @@ impl Testbench {
             return Err(testbench_error("ground net is empty"));
         }
         reject_newline("ground", &self.ground)?;
-        if let Some(timeout) = self.options.timeout {
-            if !timeout.is_finite() || timeout <= 0.0 || timeout > MAX_TIMEOUT_SECONDS {
-                return Err(testbench_error(format!(
-                    "`[options] timeout` must be greater than 0 and at most {MAX_TIMEOUT_SECONDS} seconds"
-                )));
-            }
+        if let Some(timeout) = self.options.timeout
+            && (!timeout.is_finite() || timeout <= 0.0 || timeout > MAX_TIMEOUT_SECONDS)
+        {
+            return Err(testbench_error(format!(
+                "`[options] timeout` must be greater than 0 and at most {MAX_TIMEOUT_SECONDS} seconds"
+            )));
         }
         if self.analysis.op == self.analysis.ac.is_some() {
             return Err(testbench_error(
@@ -403,12 +403,12 @@ impl Testbench {
                             "source on net `{net}` has neither a `dc` nor an `ac` value"
                         )));
                     }
-                    if let Some(dc) = source.dc {
-                        if !dc.is_finite() {
-                            return Err(testbench_error(format!(
-                                "source on net `{net}` has a non-finite `dc` value"
-                            )));
-                        }
+                    if let Some(dc) = source.dc
+                        && !dc.is_finite()
+                    {
+                        return Err(testbench_error(format!(
+                            "source on net `{net}` has a non-finite `dc` value"
+                        )));
                     }
                     if let Some(ac) = source.ac {
                         if !ac.is_finite() {
@@ -535,16 +535,16 @@ impl Testbench {
                             ),
                         ));
                     }
-                    if let Some(drop_db) = measure.drop_db {
-                        if !drop_db.is_finite() || drop_db <= 0.0 {
-                            return Err(invalid_measure(
-                                measure,
-                                format!(
-                                    "measure `{}` has a `drop_db` that must be finite and greater than 0",
-                                    measure.name
-                                ),
-                            ));
-                        }
+                    if let Some(drop_db) = measure.drop_db
+                        && (!drop_db.is_finite() || drop_db <= 0.0)
+                    {
+                        return Err(invalid_measure(
+                            measure,
+                            format!(
+                                "measure `{}` has a `drop_db` that must be finite and greater than 0",
+                                measure.name
+                            ),
+                        ));
                     }
                 }
                 MeasureKind::Current => {
@@ -714,25 +714,25 @@ impl Testbench {
                 ));
             }
             for (label, value) in [("min", measure.min), ("max", measure.max)] {
-                if let Some(value) = value {
-                    if !value.is_finite() {
-                        return Err(invalid_measure(
-                            measure,
-                            format!("measure `{}` has a non-finite `{label}`", measure.name),
-                        ));
-                    }
-                }
-            }
-            if let (Some(min), Some(max)) = (measure.min, measure.max) {
-                if min > max {
+                if let Some(value) = value
+                    && !value.is_finite()
+                {
                     return Err(invalid_measure(
                         measure,
-                        format!(
-                            "measure `{}` has min {min} greater than max {max}",
-                            measure.name
-                        ),
+                        format!("measure `{}` has a non-finite `{label}`", measure.name),
                     ));
                 }
+            }
+            if let (Some(min), Some(max)) = (measure.min, measure.max)
+                && min > max
+            {
+                return Err(invalid_measure(
+                    measure,
+                    format!(
+                        "measure `{}` has min {min} greater than max {max}",
+                        measure.name
+                    ),
+                ));
             }
         }
         Ok(())
@@ -839,15 +839,17 @@ fn at_print_precision(value: f64, limit: f64) -> bool {
 }
 
 fn limit_outcome(min: Option<f64>, max: Option<f64>, value: f64) -> LimitOutcome {
-    if let Some(min) = min {
-        if value < min && !at_print_precision(value, min) {
-            return LimitOutcome::Below(min);
-        }
+    if let Some(min) = min
+        && value < min
+        && !at_print_precision(value, min)
+    {
+        return LimitOutcome::Below(min);
     }
-    if let Some(max) = max {
-        if value > max && !at_print_precision(value, max) {
-            return LimitOutcome::Above(max);
-        }
+    if let Some(max) = max
+        && value > max
+        && !at_print_precision(value, max)
+    {
+        return LimitOutcome::Above(max);
     }
     LimitOutcome::Pass
 }
@@ -894,21 +896,20 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
 
     // `wrdata` fails when the output directory is absent; create it before
     // ngspice starts so the failure is a start-up error, not a lost plot.
-    if let Some(plot) = &plot {
-        if let Some(parent) = plot.parent() {
-            if let Err(error) = std::fs::create_dir_all(parent) {
-                return failed(
-                    vec![testbench_error_at(
-                        options.testbench_path.as_deref(),
-                        format!(
-                            "could not create the plot directory `{}`: {error}",
-                            parent.display()
-                        ),
-                    )],
-                    options.testbench_path.as_deref(),
-                );
-            }
-        }
+    if let Some(plot) = &plot
+        && let Some(parent) = plot.parent()
+        && let Err(error) = std::fs::create_dir_all(parent)
+    {
+        return failed(
+            vec![testbench_error_at(
+                options.testbench_path.as_deref(),
+                format!(
+                    "could not create the plot directory `{}`: {error}",
+                    parent.display()
+                ),
+            )],
+            options.testbench_path.as_deref(),
+        );
     }
 
     let timeout = testbench
@@ -1599,13 +1600,13 @@ fn emit_deck(
         };
         if node != "0" {
             let key = node.to_ascii_lowercase();
-            if let Some(previous) = seen_nodes.insert(key, net.name.clone()) {
-                if previous != net.name {
-                    diagnostics.push(tb_error(format!(
-                        "nets `{previous}` and `{}` both emit as `{node}`",
-                        net.name
-                    )));
-                }
+            if let Some(previous) = seen_nodes.insert(key, net.name.clone())
+                && previous != net.name
+            {
+                diagnostics.push(tb_error(format!(
+                    "nets `{previous}` and `{}` both emit as `{node}`",
+                    net.name
+                )));
             }
         }
         node_by_net.insert(net.id, node);
@@ -1869,21 +1870,21 @@ fn emit_deck(
                 model_text.push(text);
             }
             let dialect = spice.dialect;
-            if let Some((known, known_refdes, known_part)) = dialects.first() {
-                if *known != dialect {
-                    diagnostics.push(model_error(
-                        component,
-                        &format!(
-                            "SPICE dialect conflict: `{}` uses {}, `{known_refdes}` \
+            if let Some((known, known_refdes, known_part)) = dialects.first()
+                && *known != dialect
+            {
+                diagnostics.push(model_error(
+                    component,
+                    &format!(
+                        "SPICE dialect conflict: `{}` uses {}, `{known_refdes}` \
                              (`{known_part}`) uses {}; all parts in one run must agree",
-                            component.refdes,
-                            dialect_name(dialect),
-                            dialect_name(*known)
-                        ),
-                        true,
-                        design_path,
-                    ));
-                }
+                        component.refdes,
+                        dialect_name(dialect),
+                        dialect_name(*known)
+                    ),
+                    true,
+                    design_path,
+                ));
             }
             if !dialects.iter().any(|(known, _, _)| *known == dialect) {
                 dialects.push((
@@ -1937,14 +1938,14 @@ fn emit_deck(
             continue;
         }
         let key = name.to_ascii_lowercase();
-        if let Some(previous) = seen_elements.insert(key, component.refdes.clone()) {
-            if previous != component.refdes {
-                diagnostics.push(tb_error(format!(
-                    "references `{previous}` and `{}` both emit as `{name}`",
-                    component.refdes
-                )));
-                continue;
-            }
+        if let Some(previous) = seen_elements.insert(key, component.refdes.clone())
+            && previous != component.refdes
+        {
+            diagnostics.push(tb_error(format!(
+                "references `{previous}` and `{}` both emit as `{name}`",
+                component.refdes
+            )));
+            continue;
         }
         match model {
             Model::Value { value, .. } => element_lines.push(format!(

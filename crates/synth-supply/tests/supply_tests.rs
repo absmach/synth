@@ -2,13 +2,13 @@
 
 use chrono::Utc;
 use synth_supply::{
+    LcscDistributor, NexarDistributor, SupplyCache, SupplyEngine,
     distributor::Distributor,
-    load_env_file,
+    env_or_dotenv,
     types::{
         AssemblyEligibility, BomQueryEntry, LifecycleStatus, PurchaseConstraints, StockStatus,
         SupplyStatus,
     },
-    LcscDistributor, NexarDistributor, SupplyCache, SupplyEngine,
 };
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -95,11 +95,10 @@ async fn test_supply_engine_with_memory_cache() {
 
 #[tokio::test]
 async fn test_nexar_distributor_loads_env_token() {
-    load_env_file();
     let nexar = NexarDistributor::new();
     assert_eq!(nexar.name(), "Nexar");
-    // Token should be loaded from .env if present
-    if std::env::var("NEXAR_TOKEN").is_ok() {
+    // Token should be loaded from the environment or .env if present
+    if env_or_dotenv("NEXAR_TOKEN").is_some() {
         // Run live token query test if network/token is available
         let res = nexar.query("RP2350A").await;
         assert!(res.is_ok());

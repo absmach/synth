@@ -113,7 +113,7 @@ fn the_inductor_carries_the_datasheet_current_rating() {
 
 #[test]
 fn every_hub_part_has_a_reviewer_a_date_a_datasheet_and_qualifies_without_findings() {
-    use synth_registry::qualify::{qualify_part, NoFacts};
+    use synth_registry::qualify::{NoFacts, qualify_part};
     for id in [
         "header_1x8",
         "bzt52c3v3",

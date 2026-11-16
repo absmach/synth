@@ -38,13 +38,13 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, Rect, Rotation};
+use synth_geometry::{Layer, Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, ComponentId, Stackup, StackupLayer};
 use synth_pcb::{Routing, Segment};
 use synth_place::{ComponentPlacement, Placement};
 use uuid::Uuid;
 
-use crate::sexp::{num, pair, str_pair, Sexp};
+use crate::sexp::{Sexp, num, pair, str_pair};
 use crate::silk_labels;
 use crate::uuid_v5::derive_entity_uuid;
 
@@ -476,10 +476,14 @@ pub fn build_pcb(
                 .map_or_else(
                     || {
                         Point::new(
-                            (placement.board_outline.min.x_nm + placement.board_outline.max.x_nm)
-                                / 2,
-                            (placement.board_outline.min.y_nm + placement.board_outline.max.y_nm)
-                                / 2,
+                            i64::midpoint(
+                                placement.board_outline.min.x_nm,
+                                placement.board_outline.max.x_nm,
+                            ),
+                            i64::midpoint(
+                                placement.board_outline.min.y_nm,
+                                placement.board_outline.max.y_nm,
+                            ),
                         )
                     },
                     |placed| placed.center,
@@ -989,9 +993,11 @@ fn plane_via_refusal(
                      {:.2} mm filled and capped via, or use a larger pad or another way to reach the plane.",
                     nm_to_mm(2 * small.pad_radius_nm)
                 ),
-                None => "Use a manufacturer tier with a finer drill, a larger pad, or another way to \
+                None => {
+                    "Use a manufacturer tier with a finer drill, a larger pad, or another way to \
                          reach the plane."
-                    .to_string(),
+                        .to_string()
+                }
             };
             format!(
                 "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
@@ -1537,8 +1543,8 @@ fn ground_zone_region(
             return Some(board_polygon);
         }
         let mid = synth_geometry::Point::new(
-            (mine.x_nm + theirs.x_nm) / 2,
-            (mine.y_nm + theirs.y_nm) / 2,
+            i64::midpoint(mine.x_nm, theirs.x_nm),
+            i64::midpoint(mine.y_nm, theirs.y_nm),
         );
         return Some(clip_half_plane(&board_polygon, mid, d));
     }
@@ -2293,13 +2299,12 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         if let Some(class) = board
             .net(synth_ir::NetId(ir_net_idx))
             .and_then(|n| n.netclass.as_deref())
+            && let Some(group) = declared.iter_mut().find(|g| g.name == class)
         {
-            if let Some(group) = declared.iter_mut().find(|g| g.name == class) {
-                group.nets.push(name.clone());
-                continue;
-            }
-            // Undeclared join on a hand-built board: heuristic fallback.
+            group.nets.push(name.clone());
+            continue;
         }
+        // Undeclared join on a hand-built board: heuristic fallback.
         // Primary: topological inference via power domain map (works with opaque net names).
         // Fallback: name-based heuristic (works for boards with semantic names but missing pins).
         let is_power_net = domain_map
@@ -2704,10 +2709,10 @@ fn build_footprint_instance(
     };
     let assignment_property = |name: &str, value: &str, uuid: &Uuid| {
         let mut property = doc_property(name, uuid);
-        if let Sexp::List { children, .. } = &mut property {
-            if let Some(Sexp::Str(current)) = children.get_mut(1) {
-                *current = value.to_string();
-            }
+        if let Sexp::List { children, .. } = &mut property
+            && let Some(Sexp::Str(current)) = children.get_mut(1)
+        {
+            *current = value.to_string();
         }
         property
     };
@@ -2872,10 +2877,8 @@ fn build_footprint_instance(
     // directory in the project's fp-lib-table (see `export_with_sidecars`) so the
     // reference resolves without a spurious "library not found" warning.
     children.insert(0, Sexp::str(lib_id));
-    if !has_model {
-        if let Some(model_sexp) = build_3d_model_sexp(lib_id) {
-            children.push(model_sexp);
-        }
+    if !has_model && let Some(model_sexp) = build_3d_model_sexp(lib_id) {
+        children.push(model_sexp);
     }
 
     Sexp::list("footprint", children)
@@ -4123,9 +4126,11 @@ mod tests {
             build_setup_with(None, &profile).to_string_pretty(),
             build_setup(&profile).to_string_pretty()
         );
-        assert!(!build_setup_with(None, &profile)
-            .to_string_pretty()
-            .contains("stackup"));
+        assert!(
+            !build_setup_with(None, &profile)
+                .to_string_pretty()
+                .contains("stackup")
+        );
         assert_eq!(
             board_thickness(None).to_string_pretty().trim(),
             DEFAULT_THICKNESS_MM.to_string()
@@ -4587,8 +4592,8 @@ mod tests {
 #[cfg(test)]
 mod plane_via_in_pad_tests {
     use super::{
-        plane_via_in_pad, plane_via_offset, InPadRules, Layer, PadRect, PlaneCopper, PlanePad,
-        PlaneVia, ViaRefusal, PLANE_VIA_DRILL_NM, PLANE_VIA_RADIUS_NM,
+        InPadRules, Layer, PLANE_VIA_DRILL_NM, PLANE_VIA_RADIUS_NM, PadRect, PlaneCopper, PlanePad,
+        PlaneVia, ViaRefusal, plane_via_in_pad, plane_via_offset,
     };
     use synth_geometry::{Point, Rect};
 

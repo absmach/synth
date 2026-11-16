@@ -13,10 +13,10 @@
 
 use std::collections::HashMap;
 
-use synth_geometry::{mm_to_nm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm};
 use synth_ir::{Board, ComponentId, NetId};
 
-use crate::{hpwl_total, overlaps_keepout, ComponentPlacement, PadOffsetLookup, PlaceError};
+use crate::{ComponentPlacement, PadOffsetLookup, PlaceError, hpwl_total, overlaps_keepout};
 
 /// Clearance gap kept around a placed macro (IC, connector, regulator) in
 /// nanometres (3.0 mm): room for the fan-out of its pads. Dropping this to
@@ -305,8 +305,8 @@ fn pack_passives_in_order(
         let target_point = compute_target_centroid(board, &comp_nets, &net_pad_positions)
             .unwrap_or_else(|| {
                 Point::new(
-                    (usable.min.x_nm + usable.max.x_nm) / 2,
-                    (usable.min.y_nm + usable.max.y_nm) / 2,
+                    i64::midpoint(usable.min.x_nm, usable.max.x_nm),
+                    i64::midpoint(usable.min.y_nm, usable.max.y_nm),
                 )
             });
 

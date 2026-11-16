@@ -66,7 +66,7 @@ pub mod route;
 pub mod score;
 pub mod sheets;
 
-pub use placer::{default_placer, NativeSemanticPlacer, Placer};
+pub use placer::{NativeSemanticPlacer, Placer, default_placer};
 
 /// One candidate arrangement produced by `place_clusters`' fitting
 /// sweep, with the lexicographic key used to pick between them.
@@ -664,10 +664,10 @@ fn row_clearance(board: &Board, members: &[ComponentId], vertical: bool) -> f64 
 fn compute_dynamic_member_dx(board: &Board, members: &[ComponentId]) -> f64 {
     let mut max_label_len = 0_usize;
     for &id in members {
-        if let Some(comp) = board.component(id) {
-            if let Some(part) = comp.part.as_ref() {
-                max_label_len = max_label_len.max(part.id.as_str().len().max(comp.refdes.len()));
-            }
+        if let Some(comp) = board.component(id)
+            && let Some(part) = comp.part.as_ref()
+        {
+            max_label_len = max_label_len.max(part.id.as_str().len().max(comp.refdes.len()));
         }
     }
     let text_w = (max_label_len as f64) * 0.762 + 5.08;
@@ -1316,15 +1316,13 @@ fn separate_group_boxes(board: &Board, layout: &mut Layout) -> bool {
     let mut order: Vec<usize> = (0..boxes.len()).collect();
     order.sort_by(|&a, &b| {
         let (ra, rb) = (&boxes[a].1, &boxes[b].1);
-        ra.0 .1
-            .total_cmp(&rb.0 .1)
-            .then(ra.0 .0.total_cmp(&rb.0 .0))
+        ra.0.1.total_cmp(&rb.0.1).then(ra.0.0.total_cmp(&rb.0.0))
     });
     let overlaps = |a: &Rect, b: &Rect| {
-        a.0 .0 < b.1 .0 + GROUP_TILE_GAP
-            && b.0 .0 < a.1 .0 + GROUP_TILE_GAP
-            && a.0 .1 < b.1 .1 + GROUP_TILE_GAP
-            && b.0 .1 < a.1 .1 + GROUP_TILE_GAP
+        a.0.0 < b.1.0 + GROUP_TILE_GAP
+            && b.0.0 < a.1.0 + GROUP_TILE_GAP
+            && a.0.1 < b.1.1 + GROUP_TILE_GAP
+            && b.0.1 < a.1.1 + GROUP_TILE_GAP
     };
     // Whole grid steps that clear `need` mm.
     let steps = |need: f64| (need / 2.54).ceil() * 2.54;
@@ -1339,16 +1337,16 @@ fn separate_group_boxes(board: &Board, layout: &mut Layout) -> bool {
                 break;
             };
             let rect = &mut boxes[i].1;
-            let right = steps(blocker.1 .0 + GROUP_TILE_GAP - rect.0 .0);
-            let down = steps(blocker.1 .1 + GROUP_TILE_GAP - rect.0 .1);
+            let right = steps(blocker.1.0 + GROUP_TILE_GAP - rect.0.0);
+            let down = steps(blocker.1.1 + GROUP_TILE_GAP - rect.0.1);
             let (dx, dy) = if right <= down {
                 (right, 0.0)
             } else {
                 (0.0, down)
             };
             *rect = (
-                (rect.0 .0 + dx, rect.0 .1 + dy),
-                (rect.1 .0 + dx, rect.1 .1 + dy),
+                (rect.0.0 + dx, rect.0.1 + dy),
+                (rect.1.0 + dx, rect.1.1 + dy),
             );
             let shift: &mut (f64, f64) = moved.entry(i).or_default();
             *shift = (shift.0 + dx, shift.1 + dy);
@@ -1391,16 +1389,15 @@ fn tile_group_boxes(boxes: &mut [GroupBox], fixed: &[Rect], gap: f64) {
             .chain(fixed.iter().copied())
             .collect()
     };
-    let overlap = |a: &Rect, b: &Rect| {
-        a.0 .0 < b.1 .0 && b.0 .0 < a.1 .0 && a.0 .1 < b.1 .1 && b.0 .1 < a.1 .1
-    };
+    let overlap =
+        |a: &Rect, b: &Rect| a.0.0 < b.1.0 && b.0.0 < a.1.0 && a.0.1 < b.1.1 && b.0.1 < a.1.1;
     let beside = |a: &Rect, b: &Rect| {
         // `b` starts at or past `a`'s right edge and shares some of its rows.
-        b.0 .0 >= a.1 .0 && b.0 .1 < a.1 .1 && a.0 .1 < b.1 .1
+        b.0.0 >= a.1.0 && b.0.1 < a.1.1 && a.0.1 < b.1.1
     };
     let below = |a: &Rect, b: &Rect| {
         // `b` starts at or past `a`'s bottom edge and shares some of its columns.
-        b.0 .1 >= a.1 .1 && b.0 .0 < a.1 .0 && a.0 .0 < b.1 .0
+        b.0.1 >= a.1.1 && b.0.0 < a.1.0 && a.0.0 < b.1.0
     };
     // A box that already overlaps another rectangle is left as it is: growing
     // it would only make the overlap worse.
@@ -1416,7 +1413,7 @@ fn tile_group_boxes(boxes: &mut [GroupBox], fixed: &[Rect], gap: f64) {
         .map(|i| {
             all.iter()
                 .filter(|b| beside(&all[i], b))
-                .map(|b| b.0 .0 - gap)
+                .map(|b| b.0.0 - gap)
                 .fold(right_edge, f64::min)
         })
         .collect();
@@ -1430,7 +1427,7 @@ fn tile_group_boxes(boxes: &mut [GroupBox], fixed: &[Rect], gap: f64) {
         .map(|i| {
             all.iter()
                 .filter(|b| below(&all[i], b))
-                .map(|b| b.0 .1 - gap)
+                .map(|b| b.0.1 - gap)
                 .fold(bottom_edge, f64::min)
         })
         .collect();
@@ -1601,7 +1598,7 @@ fn slicing_floorplan(
         shapes.insert(set, kept);
     }
     let (which, frame, root) = frames.iter().enumerate().find_map(|(which, frame)| {
-        let (frame_w, frame_h) = (frame.1 .0 - frame.0 .0, frame.1 .1 - frame.0 .1);
+        let (frame_w, frame_h) = (frame.1.0 - frame.0.0, frame.1.1 - frame.0.1);
         let aspect_miss = |s: &Shape| ((s.w / s.h).ln() - (frame_w / frame_h).ln()).abs();
         let root = shapes[&all]
             .iter()
@@ -1651,13 +1648,13 @@ fn slicing_floorplan(
 /// cut; with `any` all such sets are tried, else only those that take the
 /// regions of `set` in reading order from the front.
 fn first_sides(set: u64, any: bool) -> Vec<u64> {
-    let lowest = set & set.wrapping_neg();
+    let lowest = set.isolate_lowest_one();
     let rest = set ^ lowest;
     if !any {
         let mut sides = Vec::new();
         let (mut side, mut left) = (lowest, rest);
         while left != 0 {
-            let next = left & left.wrapping_neg();
+            let next = left.isolate_lowest_one();
             sides.push(side);
             side |= next;
             left ^= next;
@@ -1682,14 +1679,14 @@ fn first_sides(set: u64, any: bool) -> Vec<u64> {
 /// the top, left to right inside a row, and mechanical regions last.
 fn reading_order(board: &Board, boxes: &[(String, Rect)]) -> Vec<usize> {
     let mut by_top: Vec<usize> = (0..boxes.len()).collect();
-    by_top.sort_by(|&a, &b| boxes[a].1 .0 .1.total_cmp(&boxes[b].1 .0 .1));
+    by_top.sort_by(|&a, &b| boxes[a].1.0.1.total_cmp(&boxes[b].1.0.1));
     // A box joins the current row while it starts above the middle of the
     // row's first box.
     let mut rows: Vec<Vec<usize>> = Vec::new();
     for i in by_top {
         let same_row = rows.last().is_some_and(|row| {
             let first = &boxes[row[0]].1;
-            boxes[i].1 .0 .1 < f64::midpoint(first.0 .1, first.1 .1)
+            boxes[i].1.0.1 < f64::midpoint(first.0.1, first.1.1)
         });
         if same_row {
             rows.last_mut().into_iter().for_each(|row| row.push(i));
@@ -1700,7 +1697,7 @@ fn reading_order(board: &Board, boxes: &[(String, Rect)]) -> Vec<usize> {
     let mut order: Vec<usize> = rows
         .into_iter()
         .flat_map(|mut row| {
-            row.sort_by(|&a, &b| boxes[a].1 .0 .0.total_cmp(&boxes[b].1 .0 .0));
+            row.sort_by(|&a, &b| boxes[a].1.0.0.total_cmp(&boxes[b].1.0.0));
             row
         })
         .collect();
@@ -1740,10 +1737,10 @@ fn floorplan_sheets(board: &Board) -> Vec<SheetSize> {
 
 /// True when `inner` lies within `outer`.
 fn rect_within(inner: &Rect, outer: &Rect) -> bool {
-    inner.0 .0 >= outer.0 .0 - FLOOR_EPS
-        && inner.0 .1 >= outer.0 .1 - FLOOR_EPS
-        && inner.1 .0 <= outer.1 .0 + FLOOR_EPS
-        && inner.1 .1 <= outer.1 .1 + FLOOR_EPS
+    inner.0.0 >= outer.0.0 - FLOOR_EPS
+        && inner.0.1 >= outer.0.1 - FLOOR_EPS
+        && inner.1.0 <= outer.1.0 + FLOOR_EPS
+        && inner.1.1 <= outer.1.1 + FLOOR_EPS
 }
 
 /// Whole grid steps, in mm, that cover a move of `mm`.
@@ -1837,8 +1834,8 @@ fn apply_shifts(
             Some((
                 group.as_str(),
                 (
-                    grid_steps(cell.0 .0 - current.0 .0),
-                    grid_steps(cell.0 .1 - current.0 .1),
+                    grid_steps(cell.0.0 - current.0.0),
+                    grid_steps(cell.0.1 - current.0.1),
                 ),
             ))
         })
@@ -2859,12 +2856,11 @@ fn uniquify_and_place(board: &Board, layout: &mut Layout, placed: usize) {
 /// Locking connector placement to Rotation::Zero prevents pin-order flipping.
 fn lock_connector_rotations(board: &Board, layout: &mut Layout) {
     for placement in &mut layout.components {
-        if let Some(comp) = board.component(placement.id) {
-            if let Some(part) = comp.part.as_ref() {
-                if part.kind == "connector" {
-                    placement.rotation = Rotation::Zero;
-                }
-            }
+        if let Some(comp) = board.component(placement.id)
+            && let Some(part) = comp.part.as_ref()
+            && part.kind == "connector"
+        {
+            placement.rotation = Rotation::Zero;
         }
     }
 }
@@ -3362,19 +3358,19 @@ fn max_body_extent(board: &Board) -> (f64, f64) {
 /// to a synthesis matching the rectangle we emit in
 /// `synth-kicad::symbol_lib::build_symbol`.
 pub fn body_size_for_part(part: &synth_registry::Part) -> (f64, f64) {
-    if let Some(lib_id) = part.kicad_symbol.as_deref() {
-        if let Some(bbox) = kicad_lib_loader::body_bbox(lib_id) {
-            // A multi-unit symbol is drawn as a stack anchored at one
-            // placement, so its reserved box is taller than one unit.
-            let units = kicad_lib_loader::symbol_units(lib_id).map_or(1, |(_, count)| count);
-            let h = bbox.1
-                + if units > 1 {
-                    kicad_lib_loader::unit_stack_height_mm(lib_id)
-                } else {
-                    0.0
-                };
-            return (bbox.0, h);
-        }
+    if let Some(lib_id) = part.kicad_symbol.as_deref()
+        && let Some(bbox) = kicad_lib_loader::body_bbox(lib_id)
+    {
+        // A multi-unit symbol is drawn as a stack anchored at one
+        // placement, so its reserved box is taller than one unit.
+        let units = kicad_lib_loader::symbol_units(lib_id).map_or(1, |(_, count)| count);
+        let h = bbox.1
+            + if units > 1 {
+                kicad_lib_loader::unit_stack_height_mm(lib_id)
+            } else {
+                0.0
+            };
+        return (bbox.0, h);
     }
     // Fallback synthesis (mirrors synth-kicad's rectangle sizing).
     let pin_count = part.pins.len();
@@ -3409,10 +3405,10 @@ pub fn pcb_courtyard_for_part(part: &synth_registry::Part) -> (f64, f64) {
 /// PCB footprint courtyard offset and size for a part, in millimetres.
 /// Returns `((center_offset_x_mm, center_offset_y_mm), (width_mm, height_mm))`.
 pub fn pcb_courtyard_geometry_for_part(part: &synth_registry::Part) -> ((f64, f64), (f64, f64)) {
-    if let Some(lib_id) = part.kicad_footprint.as_deref() {
-        if let Some((cx, cy, w, h)) = kicad_footprint_loader::courtyard_rect(lib_id) {
-            return ((cx, cy), (w, h));
-        }
+    if let Some(lib_id) = part.kicad_footprint.as_deref()
+        && let Some((cx, cy, w, h)) = kicad_footprint_loader::courtyard_rect(lib_id)
+    {
+        return ((cx, cy), (w, h));
     }
     if let Some(dim) = part.footprint_dimensions.as_ref() {
         return ((0.0, 0.0), (dim.width_mm, dim.height_mm));
@@ -3938,10 +3934,10 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
     // declare no groups get one band and the order they always had.
     let mut group_bands: Vec<&str> = Vec::new();
     for component in &board.components {
-        if let Some(group) = effective_group(board, component.id) {
-            if !group_bands.contains(&group) {
-                group_bands.push(group);
-            }
+        if let Some(group) = effective_group(board, component.id)
+            && !group_bands.contains(&group)
+        {
+            group_bands.push(group);
         }
     }
     // Ungrouped clusters trail the named ones rather than interleaving:
@@ -5012,29 +5008,28 @@ fn place_cluster_into(
             if let Some(lx) = last_x {
                 placed_x = placed_x.max(snap_grid(lx + member_dx));
             }
-            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                if let Some(anchor) = board.component(cluster.anchor) {
-                    if let Some(part) = anchor.part.as_ref() {
-                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                        let target_x = snap_grid(anchor_x + px);
-                        let coord_key = (
-                            (target_x * 10.0).round() as i64,
-                            (row_y * 10.0).round() as i64,
-                        );
-                        let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                        let clears_neighbour = placements.iter().all(|placed| {
-                            (placed.center_mm.1 - row_y).abs() > 0.1
-                                || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                        });
-                        let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                        if remains_local
-                            && clears_neighbour
-                            && clears_last
-                            && !occupied.contains(&coord_key)
-                        {
-                            placed_x = target_x;
-                        }
-                    }
+            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id)
+                && let Some(anchor) = board.component(cluster.anchor)
+                && let Some(part) = anchor.part.as_ref()
+            {
+                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                let target_x = snap_grid(anchor_x + px);
+                let coord_key = (
+                    (target_x * 10.0).round() as i64,
+                    (row_y * 10.0).round() as i64,
+                );
+                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                let clears_neighbour = placements.iter().all(|placed| {
+                    (placed.center_mm.1 - row_y).abs() > 0.1
+                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                });
+                let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                if remains_local
+                    && clears_neighbour
+                    && clears_last
+                    && !occupied.contains(&coord_key)
+                {
+                    placed_x = target_x;
                 }
             }
             if let Some(lx) = last_x {
@@ -5094,29 +5089,28 @@ fn place_cluster_into(
             // each other. Mirrors the identical guard already on
             // the Left column below.
             if right.len() == 1 {
-                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                    if let Some(anchor) = board.component(cluster.anchor) {
-                        if let Some(part) = anchor.part.as_ref() {
-                            let (px, py, side) = compute_anchor_pin_offset(part, pin_idx);
-                            // Only honour pin-Y alignment when the
-                            // connecting pin actually sits on the
-                            // Right side of the anchor. Otherwise
-                            // (e.g. a reset pull-up whose other end
-                            // hits VCC on Top), `find_connecting_*`
-                            // would pick that wrong pin and yank
-                            // the member up-and-inside the body.
-                            if side == PinSide::Right {
-                                col_x = clear_of_flags(snap_grid(anchor_x + px + MEMBER_CLEARANCE))
-                                    .max(default_col_x);
-                                let target_y = snap_grid(anchor_y + py);
-                                let coord_key = (
-                                    (col_x * 10.0).round() as i64,
-                                    (target_y * 10.0).round() as i64,
-                                );
-                                if !occupied.contains(&coord_key) {
-                                    placed_y = target_y;
-                                }
-                            }
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id)
+                    && let Some(anchor) = board.component(cluster.anchor)
+                    && let Some(part) = anchor.part.as_ref()
+                {
+                    let (px, py, side) = compute_anchor_pin_offset(part, pin_idx);
+                    // Only honour pin-Y alignment when the
+                    // connecting pin actually sits on the
+                    // Right side of the anchor. Otherwise
+                    // (e.g. a reset pull-up whose other end
+                    // hits VCC on Top), `find_connecting_*`
+                    // would pick that wrong pin and yank
+                    // the member up-and-inside the body.
+                    if side == PinSide::Right {
+                        col_x = clear_of_flags(snap_grid(anchor_x + px + MEMBER_CLEARANCE))
+                            .max(default_col_x);
+                        let target_y = snap_grid(anchor_y + py);
+                        let coord_key = (
+                            (col_x * 10.0).round() as i64,
+                            (target_y * 10.0).round() as i64,
+                        );
+                        if !occupied.contains(&coord_key) {
+                            placed_y = target_y;
                         }
                     }
                 }
@@ -5162,38 +5156,37 @@ fn place_cluster_into(
             } else {
                 horizontal_row_y
             };
-            if !cluster.anchor_vertical {
-                if let Some(lx) = last_x {
-                    placed_x = placed_x.max(snap_grid(lx + member_dx));
-                }
+            if !cluster.anchor_vertical
+                && let Some(lx) = last_x
+            {
+                placed_x = placed_x.max(snap_grid(lx + member_dx));
             }
             // A turned anchor shows its pins on its own centre line, so the
             // unturned pin offset would only push the member off that line.
             let aligning_pin = find_connecting_active_pin(board, cluster.anchor, *id)
                 .filter(|_| !cluster.anchor_vertical);
-            if let Some(pin_idx) = aligning_pin {
-                if let Some(anchor) = board.component(cluster.anchor) {
-                    if let Some(part) = anchor.part.as_ref() {
-                        let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                        let target_x = snap_grid(anchor_x + px);
-                        let coord_key = (
-                            (target_x * 10.0).round() as i64,
-                            (target_y * 10.0).round() as i64,
-                        );
-                        let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                        let clears_neighbour = placements.iter().all(|placed| {
-                            (placed.center_mm.1 - target_y).abs() > 0.1
-                                || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                        });
-                        let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                        if remains_local
-                            && clears_neighbour
-                            && clears_last
-                            && !occupied.contains(&coord_key)
-                        {
-                            placed_x = target_x;
-                        }
-                    }
+            if let Some(pin_idx) = aligning_pin
+                && let Some(anchor) = board.component(cluster.anchor)
+                && let Some(part) = anchor.part.as_ref()
+            {
+                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                let target_x = snap_grid(anchor_x + px);
+                let coord_key = (
+                    (target_x * 10.0).round() as i64,
+                    (target_y * 10.0).round() as i64,
+                );
+                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                let clears_neighbour = placements.iter().all(|placed| {
+                    (placed.center_mm.1 - target_y).abs() > 0.1
+                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                });
+                let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                if remains_local
+                    && clears_neighbour
+                    && clears_last
+                    && !occupied.contains(&coord_key)
+                {
+                    placed_x = target_x;
                 }
             }
             if !cluster.anchor_vertical {
@@ -5244,20 +5237,19 @@ fn place_cluster_into(
                 snap_grid(prev_y + min_member_dy(board, prev_id, *id))
             };
             if left.len() == 1 {
-                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id) {
-                    if let Some(anchor) = board.component(cluster.anchor) {
-                        if let Some(part) = anchor.part.as_ref() {
-                            let (_px, py, side) = compute_anchor_pin_offset(part, pin_idx);
-                            if side == PinSide::Left {
-                                let target_y = snap_grid(anchor_y + py);
-                                let coord_key = (
-                                    (col_x * 10.0).round() as i64,
-                                    (target_y * 10.0).round() as i64,
-                                );
-                                if !occupied.contains(&coord_key) {
-                                    placed_y = target_y;
-                                }
-                            }
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id)
+                    && let Some(anchor) = board.component(cluster.anchor)
+                    && let Some(part) = anchor.part.as_ref()
+                {
+                    let (_px, py, side) = compute_anchor_pin_offset(part, pin_idx);
+                    if side == PinSide::Left {
+                        let target_y = snap_grid(anchor_y + py);
+                        let coord_key = (
+                            (col_x * 10.0).round() as i64,
+                            (target_y * 10.0).round() as i64,
+                        );
+                        if !occupied.contains(&coord_key) {
+                            placed_y = target_y;
                         }
                     }
                 }
@@ -5744,10 +5736,10 @@ pub(crate) fn pick_net_label_with_source(
     // (`net_<n>`) carry no identity and keep the pin-derived tokens
     // below (`SDA`, `D+`, ...). Power rails get their name from
     // their power symbols (`declared_rail_name`).
-    if !net.auto_named {
-        if let Some(ep) = net.endpoints.first() {
-            return Some((net.name.clone(), ep.component));
-        }
+    if !net.auto_named
+        && let Some(ep) = net.endpoints.first()
+    {
+        return Some((net.name.clone(), ep.component));
     }
     let active_kinds: &[&str] = &[
         "mcu",
@@ -6227,34 +6219,31 @@ fn shift_into_margin(board: &Board, layout: &mut Layout) {
 /// direction is `angle + 180°`; combined with the y-flip that gives
 /// `outward = (-cos θ, +sin θ)` in layout space.
 fn compute_anchor_pin_offset(part: &synth_registry::Part, pin_idx: usize) -> (f64, f64, PinSide) {
-    if let Some(lib_id) = part.kicad_symbol.as_deref() {
-        if let Some(pin_map) = kicad_lib_loader::pin_positions(lib_id) {
-            if let Some(pin) = part.pins.get(pin_idx) {
-                if let Some(&(px, py, angle)) = pin_map
-                    .get(&pin.number.0)
-                    .or_else(|| pin_map.get(&pin.name.to_lowercase()))
-                {
-                    let rad = angle.to_radians();
-                    let (ox, oy) = (-rad.cos(), rad.sin());
-                    let side = if ox.abs() >= oy.abs() {
-                        if ox > 0.0 {
-                            PinSide::Right
-                        } else {
-                            PinSide::Left
-                        }
-                    } else if oy > 0.0 {
-                        PinSide::Bottom
-                    } else {
-                        PinSide::Top
-                    };
-                    // A multi-unit symbol draws its units as a stack;
-                    // the pin belongs to unit `u`, so its offset is the
-                    // unit-local position shifted by that unit's slot.
-                    let (ux, uy) = kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
-                    return (px + ux, -py + uy, side);
-                }
+    if let Some(lib_id) = part.kicad_symbol.as_deref()
+        && let Some(pin_map) = kicad_lib_loader::pin_positions(lib_id)
+        && let Some(pin) = part.pins.get(pin_idx)
+        && let Some(&(px, py, angle)) = pin_map
+            .get(&pin.number.0)
+            .or_else(|| pin_map.get(&pin.name.to_lowercase()))
+    {
+        let rad = angle.to_radians();
+        let (ox, oy) = (-rad.cos(), rad.sin());
+        let side = if ox.abs() >= oy.abs() {
+            if ox > 0.0 {
+                PinSide::Right
+            } else {
+                PinSide::Left
             }
-        }
+        } else if oy > 0.0 {
+            PinSide::Bottom
+        } else {
+            PinSide::Top
+        };
+        // A multi-unit symbol draws its units as a stack;
+        // the pin belongs to unit `u`, so its offset is the
+        // unit-local position shifted by that unit's slot.
+        let (ux, uy) = kicad_lib_loader::pin_unit_offset(lib_id, &pin.number.0);
+        return (px + ux, -py + uy, side);
     }
     compute_anchor_pin_offset_synthesized(part, pin_idx)
 }
@@ -6266,11 +6255,7 @@ fn pin_is_left_at_zero(part: &synth_registry::Part, pin_idx: usize) -> bool {
     let vertical = route::natural_rotation_offset(part) != 0.0;
     let key = |idx: usize| {
         let (x, y, _) = compute_anchor_pin_offset(part, idx);
-        if vertical {
-            y
-        } else {
-            x
-        }
+        if vertical { y } else { x }
     };
     let d = key(pin_idx) - key(1 - pin_idx);
     d < -1e-6 || (d.abs() < 1e-6 && pin_idx == 0)
@@ -6372,22 +6357,21 @@ fn find_connecting_active_pin(
             for ep in &net.endpoints {
                 if ep.component == anchor_id {
                     let pin_idx = ep.pin.0 as usize;
-                    if let Some(component) = board.component(anchor_id) {
-                        if let Some(part) = component.part.as_ref() {
-                            if let Some(pin) = part.pins.get(pin_idx) {
-                                if matches!(
-                                    pin.electrical_type,
-                                    ElectricalType::PowerInput | ElectricalType::PowerOutput
-                                ) {
-                                    continue;
-                                }
-                                let side = classify_ic_pin_layout(pin);
-                                if side == PinSide::Bottom {
-                                    best_pin_idx = Some(pin_idx);
-                                } else {
-                                    return Some(pin_idx);
-                                }
-                            }
+                    if let Some(component) = board.component(anchor_id)
+                        && let Some(part) = component.part.as_ref()
+                        && let Some(pin) = part.pins.get(pin_idx)
+                    {
+                        if matches!(
+                            pin.electrical_type,
+                            ElectricalType::PowerInput | ElectricalType::PowerOutput
+                        ) {
+                            continue;
+                        }
+                        let side = classify_ic_pin_layout(pin);
+                        if side == PinSide::Bottom {
+                            best_pin_idx = Some(pin_idx);
+                        } else {
+                            return Some(pin_idx);
                         }
                     }
                 }
@@ -9814,7 +9798,7 @@ mod documentation_tests {
     }
 
     fn area(r: &Rect) -> f64 {
-        (r.1 .0 - r.0 .0) * (r.1 .1 - r.0 .1)
+        (r.1.0 - r.0.0) * (r.1.1 - r.0.1)
     }
 
     /// Total area of the region boxes of `layout`.
@@ -9845,11 +9829,11 @@ mod documentation_tests {
             "boxes cover {covered} of the {to_fill} the frame leaves the regions"
         );
         let hull = bounds(&boxes);
-        assert!((hull.0 .0 - frame.0 .0).abs() < 1e-6 && (hull.1 .0 - frame.1 .0).abs() < 1e-6);
+        assert!((hull.0.0 - frame.0.0).abs() < 1e-6 && (hull.1.0 - frame.1.0).abs() < 1e-6);
         // The bottom row runs on down beside the title block to the frame.
         let sheet_bottom = layout.sheet_size.dims_mm().1 - SHEET_BORDER_MM;
-        assert!((hull.0 .1 - frame.0 .1).abs() < 1e-6);
-        assert!(hull.1 .1 >= frame.1 .1 - 1e-6 && hull.1 .1 <= sheet_bottom + 1e-6);
+        assert!((hull.0.1 - frame.0.1).abs() < 1e-6);
+        assert!(hull.1.1 >= frame.1.1 - 1e-6 && hull.1.1 <= sheet_bottom + 1e-6);
     }
 
     #[test]
@@ -10356,21 +10340,21 @@ mod slicing_floorplan_tests {
         let lowest = |pick: fn(&Rect) -> f64| rects.iter().map(pick).fold(f64::MAX, f64::min);
         let highest = |pick: fn(&Rect) -> f64| rects.iter().map(pick).fold(f64::MIN, f64::max);
         (
-            (lowest(|r| r.0 .0), lowest(|r| r.0 .1)),
-            (highest(|r| r.1 .0), highest(|r| r.1 .1)),
+            (lowest(|r| r.0.0), lowest(|r| r.0.1)),
+            (highest(|r| r.1.0), highest(|r| r.1.1)),
         )
     }
 
     fn width(r: &Rect) -> f64 {
-        r.1 .0 - r.0 .0
+        r.1.0 - r.0.0
     }
 
     fn height(r: &Rect) -> f64 {
-        r.1 .1 - r.0 .1
+        r.1.1 - r.0.1
     }
 
     fn overlap(a: &Rect, b: &Rect) -> bool {
-        a.0 .0 < b.1 .0 && b.0 .0 < a.1 .0 && a.0 .1 < b.1 .1 && b.0 .1 < a.1 .1
+        a.0.0 < b.1.0 && b.0.0 < a.1.0 && a.0.1 < b.1.1 && b.0.1 < a.1.1
     }
 
     #[test]
@@ -10378,8 +10362,8 @@ mod slicing_floorplan_tests {
         let cells = cut_one_frame(&SIZES, FRAME, GAP).expect("fits");
         assert_eq!(cells.len(), SIZES.len());
         for (i, a) in cells.iter().enumerate() {
-            assert!(a.0 .0 >= FRAME.0 .0 && a.0 .1 >= FRAME.0 .1);
-            assert!(a.1 .0 <= FRAME.1 .0 + 1e-9 && a.1 .1 <= FRAME.1 .1 + 1e-9);
+            assert!(a.0.0 >= FRAME.0.0 && a.0.1 >= FRAME.0.1);
+            assert!(a.1.0 <= FRAME.1.0 + 1e-9 && a.1.1 <= FRAME.1.1 + 1e-9);
             for b in &cells[i + 1..] {
                 assert!(!overlap(a, b), "{a:?} overlaps {b:?}");
             }
@@ -10403,10 +10387,10 @@ mod slicing_floorplan_tests {
         assert!(covered <= frame && covered > frame - 4.0 * GAP * 200.0);
         let hull = bounds(&cells);
         for edge in [
-            hull.0 .0 - FRAME.0 .0,
-            hull.0 .1 - FRAME.0 .1,
-            FRAME.1 .0 - hull.1 .0,
-            FRAME.1 .1 - hull.1 .1,
+            hull.0.0 - FRAME.0.0,
+            hull.0.1 - FRAME.0.1,
+            FRAME.1.0 - hull.1.0,
+            FRAME.1.1 - hull.1.1,
         ] {
             assert!(edge.abs() < 1e-9, "a frame edge is not met: {edge}");
         }
@@ -10419,8 +10403,8 @@ mod slicing_floorplan_tests {
         // and the right cell starts one gap after it.
         let sizes = [(40.0, 40.0), (40.0, 40.0), (40.0, 90.0)];
         let cells = cut_one_frame(&sizes, FRAME, GAP).expect("fits");
-        assert!((cells[0].1 .0 - cells[1].1 .0).abs() < 1e-9);
-        assert!((cells[2].0 .0 - cells[0].1 .0 - GAP).abs() < 1e-9);
+        assert!((cells[0].1.0 - cells[1].1.0).abs() < 1e-9);
+        assert!((cells[2].0.0 - cells[0].1.0 - GAP).abs() < 1e-9);
         assert!((height(&cells[2]) - height(&FRAME)).abs() < 1e-9);
     }
 
@@ -10430,8 +10414,8 @@ mod slicing_floorplan_tests {
         let sizes = [(100.0, 40.0), (60.0, 100.0), (100.0, 50.0)];
         let frame = ((10.0, 10.0), (171.0, 110.0));
         let cells = cut_one_frame(&sizes, frame, GAP).expect("fits");
-        assert!((cells[0].1 .0 - cells[2].1 .0).abs() < 1e-9);
-        assert!(cells[1].0 .0 > cells[0].1 .0);
+        assert!((cells[0].1.0 - cells[2].1.0).abs() < 1e-9);
+        assert!(cells[1].0.0 > cells[0].1.0);
     }
 
     #[test]
@@ -10442,9 +10426,11 @@ mod slicing_floorplan_tests {
             super::slicing_floorplan(&sizes, &[small, FRAME, ((0.0, 0.0), (1000.0, 1000.0))], GAP)
                 .expect("fits");
         assert_eq!(which, 1);
-        assert!(cells
-            .iter()
-            .all(|c| c.1 .0 <= FRAME.1 .0 && c.0 .0 >= FRAME.0 .0));
+        assert!(
+            cells
+                .iter()
+                .all(|c| c.1.0 <= FRAME.1.0 && c.0.0 >= FRAME.0.0)
+        );
     }
 
     #[test]
@@ -10507,7 +10493,7 @@ mod slicing_floorplan_tests {
 
 #[cfg(test)]
 mod tile_group_boxes_tests {
-    use super::{tile_group_boxes, GroupBox};
+    use super::{GroupBox, tile_group_boxes};
 
     const GAP: f64 = 2.0;
 

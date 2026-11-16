@@ -379,10 +379,10 @@ fn stub_ngspice(label: &str) -> (PathBuf, Scratch) {
 fn read_pid(path: &Path) -> u32 {
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
-        if let Ok(text) = std::fs::read_to_string(path) {
-            if let Ok(pid) = text.trim().parse() {
-                return pid;
-            }
+        if let Ok(text) = std::fs::read_to_string(path)
+            && let Ok(pid) = text.trim().parse()
+        {
+            return pid;
         }
         assert!(
             Instant::now() < deadline,
@@ -3269,10 +3269,7 @@ fn source_tb(sources: &str) -> String {
 #[test]
 fn a_source_drives_either_a_net_or_a_pin() {
     for (label, sources) in [
-        (
-            "pin without level",
-            "[[source]]\npin = \"U1.gpio5\"",
-        ),
+        ("pin without level", "[[source]]\npin = \"U1.gpio5\""),
         (
             "level without a pin",
             "[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 5.0\nlevel = \"high\"",
@@ -3289,14 +3286,8 @@ fn a_source_drives_either_a_net_or_a_pin() {
             "pin with ac",
             "[[source]]\npin = \"U1.gpio5\"\nlevel = \"high\"\nac = 1.0",
         ),
-        (
-            "neither net nor pin",
-            "[[source]]\nkind = \"dc\"\ndc = 5.0",
-        ),
-        (
-            "empty pin",
-            "[[source]]\npin = \"\"\nlevel = \"high\"",
-        ),
+        ("neither net nor pin", "[[source]]\nkind = \"dc\"\ndc = 5.0"),
+        ("empty pin", "[[source]]\npin = \"\"\nlevel = \"high\""),
         (
             "pin without a dot",
             "[[source]]\npin = \"U1\"\nlevel = \"high\"",
@@ -3615,8 +3606,7 @@ fn ac_analysis_and_source_values_are_validated() {
         ),
     ] {
         let text = format!("ground = \"GND\"\n\n{source}\n");
-        let error = synth_sim::Testbench::from_toml(&text)
-            .expect_err(label);
+        let error = synth_sim::Testbench::from_toml(&text).expect_err(label);
         assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
     }
 }

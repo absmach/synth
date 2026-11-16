@@ -154,7 +154,7 @@ pub fn run(board_path: &Path, request: &RouteRequest) -> Option<synth_drc::DrcCo
 /// Run DRC and keep the findings, not just the counts.
 #[must_use]
 pub fn run_detailed(board_path: &Path, request: &RouteRequest) -> DrcReport {
-    let cli = synth_drc::kicad_cli::binary();
+    let cli = request.tools.kicad_cli_binary();
     let report_path = request.drc_report_path();
     if let Some(parent) = report_path.parent() {
         let _ = std::fs::create_dir_all(parent);
@@ -184,7 +184,7 @@ pub fn run_detailed(board_path: &Path, request: &RouteRequest) -> DrcReport {
                      unperformed DRC is not a clean DRC"
                 )),
                 ..DrcReport::default()
-            }
+            };
         }
     };
     let result = crate::process::run(Path::new(&cli), &args, DRC_BUDGET, DRC_OUTPUT_CAP);
@@ -199,7 +199,7 @@ pub fn run_detailed(board_path: &Path, request: &RouteRequest) -> DrcReport {
                     error.detail
                 )),
                 ..DrcReport::default()
-            }
+            };
         }
     };
 
@@ -394,17 +394,16 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
             let nets = item
                 .get("nets")
                 .and_then(serde_json::Value::as_array)
-                .map(|values| {
+                .map_or_default(|values| {
                     values
                         .iter()
                         .filter_map(serde_json::Value::as_i64)
                         .collect()
-                })
-                .unwrap_or_default();
+                });
             let references = item
                 .get("items")
                 .and_then(serde_json::Value::as_array)
-                .map(|values| {
+                .map_or_default(|values| {
                     values
                         .iter()
                         .filter_map(|v| {
@@ -414,8 +413,7 @@ pub fn parse_report_text(text: &str) -> Option<DrcReport> {
                                 .map(|(reference, _)| reference.to_string())
                         })
                         .collect()
-                })
-                .unwrap_or_default();
+                });
             let mut items_described: Vec<String> = Vec::new();
             for v in item
                 .get("items")

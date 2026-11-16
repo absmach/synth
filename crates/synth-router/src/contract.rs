@@ -113,7 +113,7 @@ pub struct RouterLimits {
 impl Default for RouterLimits {
     fn default() -> Self {
         Self {
-            wall_clock: Duration::from_secs(20 * 60),
+            wall_clock: Duration::from_mins(20),
             max_output_bytes: 1024 * 1024,
             max_passes: 40,
             max_threads: 4,
@@ -536,6 +536,15 @@ pub struct RouteRequest {
     /// request that carries one, rather than silently ignoring the pin.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub net_layers: Vec<NetLayers>,
+    /// Where the engines and their runtimes are found.
+    ///
+    /// Read from the environment when the request is built; a caller with
+    /// explicit settings overwrites fields here instead of exporting them.
+    /// Never serialised: these are machine-local paths, not part of the
+    /// routing contract, and a deserialised request re-reads its own
+    /// environment.
+    #[serde(skip_serializing, default = "crate::tools::ToolPaths::from_env")]
+    pub tools: crate::tools::ToolPaths,
 }
 
 /// One net's layer pin: the copper layers it may be routed on.
@@ -732,6 +741,7 @@ impl RouteRequest {
             return_via_medium_nets: Vec::new(),
             fine_pitch_return_via_advisory: false,
             net_layers: Vec::new(),
+            tools: crate::tools::ToolPaths::from_env(),
         }
     }
 }

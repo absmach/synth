@@ -180,17 +180,13 @@ fn fabrication_notes(
 impl RoutingState {
     /// Build the release-gate view of a routing run record.
     pub fn from_report(report: &synth_router::RouteReport, run_record: &Path) -> Self {
-        let mut reasons: Vec<String> = report
-            .validation
-            .as_ref()
-            .map(|v| {
-                v.blocking_reasons
-                    .iter()
-                    .chain(v.unavailable_checks.iter())
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut reasons: Vec<String> = report.validation.as_ref().map_or_default(|v| {
+            v.blocking_reasons
+                .iter()
+                .chain(v.unavailable_checks.iter())
+                .cloned()
+                .collect()
+        });
         if let Some(failure) = &report.failure {
             reasons.push(failure.remediation.clone());
         }
@@ -365,11 +361,11 @@ impl ReleaseManifest {
     /// override does: the package is not fabricable, and the reason is in
     /// the manifest rather than only in a stderr line nobody archived.
     pub fn with_routing(mut self, routing: Option<RoutingState>) -> Self {
-        if let Some(state) = &routing {
-            if !state.is_fabrication_ready() {
-                self.production_status = ProductionStatus::Untrusted;
-                self.release_ready = false;
-            }
+        if let Some(state) = &routing
+            && !state.is_fabrication_ready()
+        {
+            self.production_status = ProductionStatus::Untrusted;
+            self.release_ready = false;
         }
         self.routing = routing;
         self

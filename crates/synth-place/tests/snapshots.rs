@@ -198,12 +198,14 @@ fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
         .find(|component| component.id == usb.id)
         .expect("USB-C placement");
     assert_eq!(usb_placement.rotation, synth_geometry::Rotation::OneEighty);
-    assert!(synth_place::floorplan::connector_orientation_issues(
-        &board,
-        placement.board_outline,
-        &placement.components,
-    )
-    .is_empty());
+    assert!(
+        synth_place::floorplan::connector_orientation_issues(
+            &board,
+            placement.board_outline,
+            &placement.components,
+        )
+        .is_empty()
+    );
 
     let mut incorrect = placement.clone();
     incorrect
@@ -227,7 +229,7 @@ fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
 /// with its opening turned inward is reported, not skipped as an interior part.
 #[test]
 fn a_connector_with_an_edge_hint_is_checked_however_far_it_sits_from_the_edge() {
-    use synth_place::floorplan::{rotation_for_mating_edge, BoardEdge};
+    use synth_place::floorplan::{BoardEdge, rotation_for_mating_edge};
 
     let board = load_board("fixtures/designs/edge_jst_connectors.synth");
     let placement = synth_place::place(&board).expect("place");
@@ -272,7 +274,7 @@ fn a_connector_with_an_edge_hint_is_checked_however_far_it_sits_from_the_edge() 
 #[test]
 fn jst_connectors_face_outward_on_every_edge() {
     use synth_geometry::Rotation;
-    use synth_place::floorplan::{rotation_for_mating_edge, BoardEdge};
+    use synth_place::floorplan::{BoardEdge, rotation_for_mating_edge};
     use synth_registry::MatingFace;
 
     let board = load_board("fixtures/designs/edge_jst_connectors.synth");

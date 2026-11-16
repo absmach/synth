@@ -22,11 +22,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect};
-use synth_ir::{recognize_clusters, Board, ComponentId, MemberRole, PinId};
+use synth_geometry::{Point, Rect, mm_to_nm, nm_to_mm};
+use synth_ir::{Board, ComponentId, MemberRole, PinId, recognize_clusters};
 use synth_registry::{MatingFace, Part};
 
-use crate::{fallback_courtyard, Placement};
+use crate::{Placement, fallback_courtyard};
 
 /// Default pad-to-pad limit for a decoupling or rail capacitor.
 const SUPPORT_LIMIT_MM: f64 = 3.0;
@@ -445,20 +445,16 @@ fn area_efficiency(
 
 /// Pad-to-pad limit for one binding.
 fn support_limit(anchor: Option<&Part>, anchor_pin: PinId, role: MemberRole) -> f64 {
-    if let Some(part) = anchor {
-        if let Some(pin) = part.pins.get(anchor_pin.0 as usize) {
-            if let Some(rule) = part
-                .required_decoupling
-                .iter()
-                .find(|rule| rule.net == pin.name)
-            {
-                if let Some(limit) = rule.max_distance_mm {
-                    if limit > 0.0 {
-                        return limit;
-                    }
-                }
-            }
-        }
+    if let Some(part) = anchor
+        && let Some(pin) = part.pins.get(anchor_pin.0 as usize)
+        && let Some(rule) = part
+            .required_decoupling
+            .iter()
+            .find(|rule| rule.net == pin.name)
+        && let Some(limit) = rule.max_distance_mm
+        && limit > 0.0
+    {
+        return limit;
     }
     match role {
         MemberRole::RailCap | MemberRole::LoadCap | MemberRole::OrphanRailCap => {
@@ -606,7 +602,7 @@ fn isqrt_i128(value: i128) -> i128 {
     let mut next = (root + 1) / 2;
     while next < root {
         root = next;
-        next = (root + value / root) / 2;
+        next = i128::midpoint(root, value / root);
     }
     root
 }

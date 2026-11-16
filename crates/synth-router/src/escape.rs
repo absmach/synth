@@ -198,9 +198,7 @@ pub fn analyse(board: &PcbBoard, policy: &FabricationPolicy) -> Vec<PackageEscap
 /// [`read_baseline`].
 #[must_use]
 pub fn grid_arrays_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
-    read_baseline(request)
-        .map(|board| grid_arrays(&board))
-        .unwrap_or_default()
+    read_baseline(request).map_or_default(|board| grid_arrays(&board))
 }
 
 /// The request's exported baseline board, or why it cannot be read.
@@ -304,9 +302,7 @@ pub fn fine_pitch_perimeter(board: &PcbBoard) -> Vec<String> {
 /// [`fine_pitch_perimeter`] for the request's exported baseline board.
 #[must_use]
 pub fn fine_pitch_perimeter_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
-    read_baseline(request)
-        .map(|board| fine_pitch_perimeter(&board))
-        .unwrap_or_default()
+    read_baseline(request).map_or_default(|board| fine_pitch_perimeter(&board))
 }
 
 fn describe(

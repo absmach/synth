@@ -39,20 +39,20 @@ pub use board::{
     SchematicPaper, Stackup, StackupLayer, Variant,
 };
 pub use clusters::{
-    recognize_clusters, ClusterKind, ClusterMember, FunctionalCluster, MemberBinding, MemberRole,
+    ClusterKind, ClusterMember, FunctionalCluster, MemberBinding, MemberRole, recognize_clusters,
 };
-pub use diff_pairs::{pair_connections, resolve_pairs, PairConnection, ResolvedPair};
+pub use diff_pairs::{PairConnection, ResolvedPair, pair_connections, resolve_pairs};
 pub use imports::{
-    resolve as resolve_imports, FsImportLoader, ImportLoadError, ImportLoader, MemoryImportLoader,
-    ResolveResult as ImportResolveResult, MAX_IMPORT_DEPTH, MAX_IMPORT_SIZE,
+    FsImportLoader, ImportLoadError, ImportLoader, MAX_IMPORT_DEPTH, MAX_IMPORT_SIZE,
+    MemoryImportLoader, ResolveResult as ImportResolveResult, resolve as resolve_imports,
 };
-pub use lower::{lower, LowerResult};
-pub use modules::{expand as expand_modules, BusBundle, ModuleDesc};
+pub use lower::{LowerResult, lower};
+pub use modules::{BusBundle, ModuleDesc, expand as expand_modules};
 pub use multiboard::{InterBoardPinMapping, MultiBoardProject, MultiBoardValidationResult};
-pub use power_domains::{infer_power_domains, PowerDomainKind, PowerDomainMap};
+pub use power_domains::{PowerDomainKind, PowerDomainMap, infer_power_domains};
 pub use procurement::{
-    lock_board, lock_board_with_dispositions, rank_candidates, record_substitution,
     AssemblyDisposition, CandidateRequirements, PartAssignment, ProcurementError, ProcurementLock,
+    lock_board, lock_board_with_dispositions, rank_candidates, record_substitution,
 };
 /// Re-export of the registry's `Pin` type so consumers of the IR
 /// don't need to depend on `synth-registry` directly.

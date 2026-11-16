@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::pcb_read::{mm_to_nm, PcbBoard, Point, NM_PER_MM};
+use crate::pcb_read::{NM_PER_MM, PcbBoard, Point, mm_to_nm};
 
 /// The via a net takes when it has none to copy: the Default net class.
 const DEFAULT_VIA_SIZE_NM: i64 = 600_000;
@@ -114,11 +114,17 @@ pub struct TieOutcome {
 /// as well as by name; a net whose name does not say so, such as `POWER_RETURN`,
 /// is ground only if it is listed. The name rule still applies on top.
 ///
+/// `kicad_cli` is the binary that fills the zones.
+///
 /// # Errors
 /// Returns why the board could not be filled, read or written. A caller must
 /// treat that as the repair not having run, never as nothing to repair.
-pub fn tie_islands(candidate: &Path, ground_nets: &[String]) -> Result<TieOutcome, String> {
-    tie_islands_for(candidate, &Ground::new(ground_nets))
+pub fn tie_islands(
+    candidate: &Path,
+    ground_nets: &[String],
+    kicad_cli: &str,
+) -> Result<TieOutcome, String> {
+    tie_islands_for(candidate, &Ground::new(ground_nets), kicad_cli)
 }
 
 /// [`tie_islands`] for a [`Ground`] that may also say which nets must keep a
@@ -126,9 +132,13 @@ pub fn tie_islands(candidate: &Path, ground_nets: &[String]) -> Result<TieOutcom
 ///
 /// # Errors
 /// As [`tie_islands`].
-pub fn tie_islands_for(candidate: &Path, ground: &Ground) -> Result<TieOutcome, String> {
+pub fn tie_islands_for(
+    candidate: &Path,
+    ground: &Ground,
+    kicad_cli: &str,
+) -> Result<TieOutcome, String> {
     tie_islands_with(candidate, ground, &mut |path| {
-        crate::zone_fill::filled_text(path)
+        crate::zone_fill::filled_text(path, kicad_cli)
     })
 }
 
@@ -1396,11 +1406,10 @@ fn declared_via_size(candidate: &Path, net: &str) -> Option<(i64, i64)> {
             if let (Some(name), Some(pattern)) = (
                 pat.get("netclass").and_then(|v| v.as_str()),
                 pat.get("pattern").and_then(|v| v.as_str()),
-            ) {
-                if net == pattern || net.contains(pattern) {
-                    class_name = name.to_string();
-                    break;
-                }
+            ) && (net == pattern || net.contains(pattern))
+            {
+                class_name = name.to_string();
+                break;
             }
         }
     }
@@ -1490,10 +1499,10 @@ fn best_spot(
             while y <= a.max.1 - need {
                 let mut x = a.min.0 + need;
                 while x <= a.max.0 - need {
-                    if let Some(margin) = margin_at(a, (x, y)) {
-                        if found.is_none_or(|(m, _)| margin > m) {
-                            found = Some((margin, (x, y)));
-                        }
+                    if let Some(margin) = margin_at(a, (x, y))
+                        && found.is_none_or(|(m, _)| margin > m)
+                    {
+                        found = Some((margin, (x, y)));
                     }
                     x += step;
                 }
@@ -1512,11 +1521,11 @@ fn best_spot(
                             point.0 + f64::from(ix) * fine,
                             point.1 + f64::from(iy) * fine,
                         );
-                        if let Some(m) = margin_at(a, p) {
-                            if m > margin {
-                                margin = m;
-                                point = p;
-                            }
+                        if let Some(m) = margin_at(a, p)
+                            && m > margin
+                        {
+                            margin = m;
+                            point = p;
                         }
                     }
                 }
@@ -1623,15 +1632,13 @@ fn dielectric_reach_mm(text: &str, copper_layers: usize) -> f64 {
         let dielectric = layer.contains("dielectric")
             || layer.contains("(type \"core\")")
             || layer.contains("(type \"prepreg\")");
-        if dielectric {
-            if let Some(at) = layer.find("(thickness ") {
-                let number: String = layer[at + "(thickness ".len()..]
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit() || *c == '.')
-                    .collect();
-                if let Ok(value) = number.parse::<f64>() {
-                    dielectrics.push(value);
-                }
+        if dielectric && let Some(at) = layer.find("(thickness ") {
+            let number: String = layer[at + "(thickness ".len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if let Ok(value) = number.parse::<f64>() {
+                dielectrics.push(value);
             }
         }
         rest = &rest[index + layer.len().max(1)..];
@@ -2579,12 +2586,13 @@ fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
             if let Some(after) = rest.strip_prefix(tag) {
                 let close = after.find(')').unwrap_or(after.len());
                 let mut numbers = after[..close].split_whitespace().map(str::parse::<f64>);
-                if let (Some(Ok(x)), Some(Ok(y))) = (numbers.next(), numbers.next()) {
-                    if (x - from.0).abs() < 0.002 && (y - from.1).abs() < 0.002 {
-                        let _ = write!(out, "{tag}{:.6} {:.6}", to.0, to.1);
-                        rest = &after[close..];
-                        continue 'scan;
-                    }
+                if let (Some(Ok(x)), Some(Ok(y))) = (numbers.next(), numbers.next())
+                    && (x - from.0).abs() < 0.002
+                    && (y - from.1).abs() < 0.002
+                {
+                    let _ = write!(out, "{tag}{:.6} {:.6}", to.0, to.1);
+                    rest = &after[close..];
+                    continue 'scan;
                 }
             }
         }
@@ -2823,10 +2831,10 @@ fn remove_segment_in_text(text: &str, ends: ((f64, f64), (f64, f64)), layer: &st
         let same = numbers("(start ")
             .zip(numbers("(end "))
             .is_some_and(|(a, b)| {
-                (a.0 - ends.0 .0).abs() < 0.002
-                    && (a.1 - ends.0 .1).abs() < 0.002
-                    && (b.0 - ends.1 .0).abs() < 0.002
-                    && (b.1 - ends.1 .1).abs() < 0.002
+                (a.0 - ends.0.0).abs() < 0.002
+                    && (a.1 - ends.0.1).abs() < 0.002
+                    && (b.0 - ends.1.0).abs() < 0.002
+                    && (b.1 - ends.1.1).abs() < 0.002
             })
             && body.contains(&format!("\"{layer}\""));
         if same {

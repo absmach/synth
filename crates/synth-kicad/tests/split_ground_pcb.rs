@@ -114,17 +114,14 @@ fn split_grounds_keep_their_names_and_each_zone_its_own_uuid() {
 fn split_ground_fence_vias_stay_inside_their_own_pour() {
     let pcb = export_pcb(SPLIT_GROUND_SOURCE, "fence");
     let number = |text: &str, key: &str| -> Vec<f64> {
-        text.split(key)
-            .nth(1)
-            .map(|rest| {
-                rest.split(')')
-                    .next()
-                    .unwrap_or("")
-                    .split_whitespace()
-                    .filter_map(|word| word.parse().ok())
-                    .collect()
-            })
-            .unwrap_or_default()
+        text.split(key).nth(1).map_or_default(|rest| {
+            rest.split(')')
+                .next()
+                .unwrap_or("")
+                .split_whitespace()
+                .filter_map(|word| word.parse().ok())
+                .collect()
+        })
     };
     let mut vias = 0;
     for via in pcb

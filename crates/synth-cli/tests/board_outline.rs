@@ -96,7 +96,7 @@ fn edge_cuts(text: &str) -> (f64, f64, f64, f64) {
     )
 }
 
-fn export(out: &Path) -> String {
+fn export(out: &Path, router: &stub_router::StubRouter) -> String {
     let source = out.join("outline_fixture.synth");
     std::fs::write(&source, SOURCE).expect("write source");
     std::fs::write(out.join("outline_fixture.placement.layout.toml"), SIDECAR)
@@ -108,6 +108,7 @@ fn export(out: &Path) -> String {
         .arg(&source)
         .args(["--router", "free-routing", "--out"])
         .arg(out.join("kicad"))
+        .envs(router.envs())
         .output()
         .expect("run synth export-kicad");
     std::fs::read_to_string(out.join("kicad/outline_fixture.synth.kicad_pcb"))
@@ -124,9 +125,8 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn the_declared_outline_is_the_exported_edge() {
     let dir = scratch("edge");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
-    let text = export(&dir);
+    let router = stub_router::install(&dir);
+    let text = export(&dir, &router);
 
     let (min_x, max_x, min_y, max_y) = edge_cuts(&text);
     for (actual, expected, side) in [
@@ -145,8 +145,7 @@ fn the_declared_outline_is_the_exported_edge() {
 #[test]
 fn a_part_outside_the_declared_outline_is_reported() {
     let dir = scratch("outside");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let source = dir.join("outline_fixture.synth");
     std::fs::write(&source, SOURCE).expect("write source");
     std::fs::write(
@@ -159,6 +158,7 @@ fn a_part_outside_the_declared_outline_is_reported() {
         .arg(&source)
         .args(["--router", "free-routing", "--out"])
         .arg(dir.join("kicad"))
+        .envs(router.envs())
         .output()
         .expect("run synth export-kicad");
     let text = format!(
@@ -179,9 +179,8 @@ fn a_part_outside_the_declared_outline_is_reported() {
 #[test]
 fn a_mounting_hole_keeps_its_edge_coordinate_and_has_no_via_beside_it() {
     let dir = scratch("hole");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
-    let text = export(&dir);
+    let router = stub_router::install(&dir);
+    let text = export(&dir, &router);
 
     let footprint = text
         .split("\n\t(footprint")

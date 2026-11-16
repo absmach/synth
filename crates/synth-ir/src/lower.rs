@@ -1268,10 +1268,10 @@ impl<'a> LowerCtx<'a> {
             // one of the two fires.
             let mut functions: Vec<PinCapability> = Vec::new();
             for (n, _) in &distinct_names {
-                if let Some(f) = PinCapability::from_net_name(n) {
-                    if !functions.contains(&f) {
-                        functions.push(f);
-                    }
+                if let Some(f) = PinCapability::from_net_name(n)
+                    && !functions.contains(&f)
+                {
+                    functions.push(f);
                 }
             }
             if functions.len() > 1 {
@@ -2486,10 +2486,12 @@ mod tests {
             let back: Net = serde_json::from_str(&serde_json::to_string(net).unwrap()).unwrap();
             assert_eq!(&back, net, "{} must round-trip", net.name);
         }
-        assert!(board
-            .nets
-            .iter()
-            .any(|n| n.name == "net_7" && !n.auto_named));
+        assert!(
+            board
+                .nets
+                .iter()
+                .any(|n| n.name == "net_7" && !n.auto_named)
+        );
     }
 
     #[test]
@@ -2755,9 +2757,11 @@ mod tests {
                 requires via_in_pad
             }"#,
         );
-        assert!(board
-            .required_processes
-            .contains(&ProcessRequirement::ViaInPad));
+        assert!(
+            board
+                .required_processes
+                .contains(&ProcessRequirement::ViaInPad)
+        );
     }
 
     /// A board that says nothing must not read as a board that asked, which

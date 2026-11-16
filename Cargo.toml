@@ -28,8 +28,8 @@ members = [
 
 [workspace.package]
 version = "0.1.2"
-edition = "2021"
-rust-version = "1.85"
+edition = "2024"
+rust-version = "1.100"
 license = "Apache-2.0"
 repository = "https://github.com/synth-eda/synth"
 authors = ["The Synth Authors"]
@@ -53,6 +53,9 @@ cast_possible_truncation = "allow"
 return_self_not_must_use = "allow"
 # Exact float equality is required in serde round-trip and snapshot tests.
 float_cmp = "allow"
+# New in Rust 1.100. `assert!(x.is_empty())` reads better in tests than the
+# suggested `assert_eq!(x, [] as [T; 0])`.
+assert_is_empty = "allow"
 # Product/proper nouns (SynthSpec, KiCad, ...) are intentionally not
 # backticked in prose documentation.
 doc_markdown = "allow"
@@ -95,7 +98,6 @@ tokio = { version = "1", features = [
   "io-util",
 ] }
 axum = "0.8"
-tower-http = { version = "0.7", features = ["fs", "trace", "set-header"] }
 include_dir = "0.7"
 schemars = "1.2"
 
@@ -118,7 +120,6 @@ synth-drc = { path = "crates/synth-drc", version = "0.1.2" }
 synth-mcp = { path = "crates/synth-mcp", version = "0.1.2" }
 synth-render = { path = "crates/synth-render", version = "0.1.2" }
 synth-smt = { path = "crates/synth-smt", version = "0.1.2" }
-synth-connectivity = { path = "crates/synth-connectivity", version = "0.1.2" }
 synth-supply = { path = "crates/synth-supply", version = "0.1.2" }
 synth-cost = { path = "crates/synth-cost", version = "0.1.2" }
 synth-sim = { path = "crates/synth-sim", version = "0.1.2" }

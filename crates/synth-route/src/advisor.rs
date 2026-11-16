@@ -34,7 +34,7 @@ impl Default for CongestionCost {
 pub trait CongestionAdvisor: Send + Sync {
     /// Evaluate the congestion penalty for a point on a given layer.
     fn evaluate_cell_cost(&self, board: &Board, point: Point, layer_index: usize)
-        -> CongestionCost;
+    -> CongestionCost;
 }
 
 /// Default open-source congestion advisor emitting zero penalty.

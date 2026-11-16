@@ -36,14 +36,14 @@
 
 use std::collections::HashMap;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, ComponentId, NetId};
 use synth_layout::kicad_footprint_loader;
 use synth_pcb::{Routing, Segment};
 use synth_place::Placement;
 
-use crate::profile::ManufacturerProfile;
 use crate::Violation;
+use crate::profile::ManufacturerProfile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObstacleLayer {
@@ -341,11 +341,7 @@ fn segment_capsule(s: &Segment) -> Rect {
 }
 
 fn sort_pair(a: i64, b: i64) -> (i64, i64) {
-    if a < b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a < b { (a, b) } else { (b, a) }
 }
 
 /// Minimum gap between two axis-aligned rectangles. Manhattan
@@ -367,7 +363,7 @@ fn rect_gap_nm(a: &Rect, b: &Rect) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use synth_geometry::{mm_to_nm, Layer};
+    use synth_geometry::{Layer, mm_to_nm};
     use synth_ir::Board;
 
     fn load_board(path: &str) -> Board {

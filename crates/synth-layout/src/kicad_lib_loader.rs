@@ -125,27 +125,27 @@ pub fn load_symbol(lib_id: &str) -> Option<String> {
     let mut main_rewritten = rewrite_outer_name(main_block, lib_id);
     main_rewritten = remove_extends_line(&main_rewritten);
 
-    if !extra_sub_symbols.is_empty() {
-        if let Some(last_paren) = main_rewritten.rfind(')') {
-            let mut insert_str = String::new();
-            for sub in extra_sub_symbols {
-                insert_str.push_str("\n\t\t");
-                insert_str.push_str(&sub);
-            }
-            main_rewritten.insert_str(last_paren, &insert_str);
+    if !extra_sub_symbols.is_empty()
+        && let Some(last_paren) = main_rewritten.rfind(')')
+    {
+        let mut insert_str = String::new();
+        for sub in extra_sub_symbols {
+            insert_str.push_str("\n\t\t");
+            insert_str.push_str(&sub);
         }
+        main_rewritten.insert_str(last_paren, &insert_str);
     }
 
     Some(main_rewritten)
 }
 
 fn remove_extends_line(text: &str) -> String {
-    if let Some(start) = text.find("(extends \"") {
-        if let Some(end) = text[start..].find('\n') {
-            let mut s = text.to_string();
-            s.drain(start..=start + end);
-            return s;
-        }
+    if let Some(start) = text.find("(extends \"")
+        && let Some(end) = text[start..].find('\n')
+    {
+        let mut s = text.to_string();
+        s.drain(start..=start + end);
+        return s;
     }
     text.to_string()
 }
@@ -521,11 +521,7 @@ pub fn physical_pins_from_source(text: &str, sym_name: &str) -> Option<Vec<Physi
         collect_physical_pins(block, &mut pins, &mut seen);
     }
 
-    if pins.is_empty() {
-        None
-    } else {
-        Some(pins)
-    }
+    if pins.is_empty() { None } else { Some(pins) }
 }
 
 /// Find the name of the first top-level `(symbol "Name" ...)` block
@@ -554,16 +550,15 @@ fn collect_physical_pins(block: &str, out: &mut Vec<PhysicalPin>, seen: &mut Has
         let electrical = electrical_type_of(pin_block);
         if let (Some(num), Some(name), Some((x, y, _)), Some(et)) =
             (number, name, xy_angle, electrical)
+            && seen.insert(num.clone())
         {
-            if seen.insert(num.clone()) {
-                out.push(PhysicalPin {
-                    number: num,
-                    name,
-                    electrical_type: et,
-                    x,
-                    y,
-                });
-            }
+            out.push(PhysicalPin {
+                number: num,
+                name,
+                electrical_type: et,
+                x,
+                y,
+            });
         }
         pos = absolute + "(pin ".len();
     }
@@ -600,10 +595,10 @@ fn pin_positions_inner(
     let block = extract_symbol(text, sym_name)?;
     let mut map = std::collections::HashMap::new();
 
-    if let Some(target) = extends_target(&block) {
-        if let Some(target_map) = pin_positions_inner(text, &target) {
-            map.extend(target_map);
-        }
+    if let Some(target) = extends_target(&block)
+        && let Some(target_map) = pin_positions_inner(text, &target)
+    {
+        map.extend(target_map);
     }
 
     let mut pos = 0;
@@ -623,21 +618,18 @@ fn pin_positions_inner(
             if let Some(num) = number {
                 map.insert(num.clone(), (x, y, angle));
             }
-            if let Some(n) = name {
-                if n != "~" && !n.is_empty() {
-                    map.insert(n.to_lowercase(), (x, y, angle));
-                }
+            if let Some(n) = name
+                && n != "~"
+                && !n.is_empty()
+            {
+                map.insert(n.to_lowercase(), (x, y, angle));
             }
         }
 
         pos = absolute + "(pin ".len();
     }
 
-    if map.is_empty() {
-        None
-    } else {
-        Some(map)
-    }
+    if map.is_empty() { None } else { Some(map) }
 }
 
 fn find_xy_angle(text: &str, key: &str) -> Option<(f64, f64, f64)> {
@@ -690,10 +682,10 @@ pub fn body_bbox(lib_id: &str) -> Option<(f64, f64)> {
 
 fn body_bbox_inner(text: &str, sym_name: &str) -> Option<(f64, f64)> {
     let block = extract_symbol(text, sym_name)?;
-    if let Some(target) = extends_target(&block) {
-        if let Some(bbox) = body_bbox_inner(text, &target) {
-            return Some(bbox);
-        }
+    if let Some(target) = extends_target(&block)
+        && let Some(bbox) = body_bbox_inner(text, &target)
+    {
+        return Some(bbox);
     }
     rect_bbox(&block).or_else(|| pin_extent_bbox(&block))
 }

@@ -811,18 +811,18 @@ impl Parser {
         // Per-instance sourcing. Plain identifiers, not reserved words, so a
         // design that already uses `mpn` as a name keeps parsing. Stored
         // lowercase, which never collides with the capitalised KiCad fields.
-        if let TokenKind::Ident(name) = self.peek_kind() {
-            if name == "lcsc_pn" || name == "mpn" {
-                let key = name.clone();
-                self.bump();
-                if let Some(s) = self.expect_string(
-                    "E-SYNTH-PARSE-002",
-                    "expected a quoted value after the field keyword",
-                ) {
-                    properties.insert(key, s);
-                }
-                return true;
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && (name == "lcsc_pn" || name == "mpn")
+        {
+            let key = name.clone();
+            self.bump();
+            if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected a quoted value after the field keyword",
+            ) {
+                properties.insert(key, s);
             }
+            return true;
         }
         if matches!(self.peek_kind(), TokenKind::KwDnp) {
             self.bump(); // consume `dnp`
@@ -993,7 +993,7 @@ impl Parser {
         let mut additional = Vec::new();
         while matches!(self.peek_kind(), TokenKind::Comma) {
             self.bump(); // consume `,`
-                         // Allow a trailing comma before `as` / `class` / EOL.
+            // Allow a trailing comma before `as` / `class` / EOL.
             if matches!(
                 self.peek_kind(),
                 TokenKind::KwAs | TokenKind::KwClass | TokenKind::RBrace | TokenKind::Eof
@@ -1170,7 +1170,7 @@ impl Parser {
         while !self.at_eof() {
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Comma | TokenKind::KwClass | TokenKind::Ident(_) => {
-                    return
+                    return;
                 }
                 _ => {
                     self.bump();
@@ -1273,7 +1273,7 @@ impl Parser {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::KwDnp => {
                     self.bump(); // consume `dnp`
-                                 // One or more refdes until the body closes.
+                    // One or more refdes until the body closes.
                     while let TokenKind::Ident(_) = self.peek_kind() {
                         if let Some(refdes) =
                             self.expect_ident("E-SYNTH-PARSE-010", "expected component refdes")
@@ -1343,9 +1343,9 @@ impl Parser {
     fn parse_diff_pair(&mut self) -> Option<DiffPairStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `diff_pair`
-                     // Legs reference named nets, so accept both bare idents
-                     // (`diff_pair USB_DP USB_DN`) and quoted names
-                     // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
+        // Legs reference named nets, so accept both bare idents
+        // (`diff_pair USB_DP USB_DN`) and quoted names
+        // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
         let pos = self.expect_net_ref("expected positive net identifier")?;
         let neg = self.expect_net_ref("expected negative net identifier")?;
         if !matches!(self.peek_kind(), TokenKind::LBrace) {
@@ -3328,10 +3328,11 @@ mod tests {
             .as_ref()
             .expect("named hint attached");
         assert!(hint.component.is_none());
-        assert!(hint
-            .attrs
-            .iter()
-            .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right")));
+        assert!(
+            hint.attrs
+                .iter()
+                .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right"))
+        );
     }
 
     #[test]

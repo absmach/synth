@@ -8,7 +8,7 @@
 //! those tracks — guaranteed minimum pitch and zero line overlap.
 
 use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
-use synth_layout::{route, ComponentPlacement, Layout, Rotation, SheetSize};
+use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize, route};
 use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
 
 fn two_pin_part() -> Part {

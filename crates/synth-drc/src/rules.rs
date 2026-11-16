@@ -12,13 +12,13 @@
 //! 1-second budget for a sensor_logger-class design).
 
 use synth_diagnostics::{NativeCheckEvidence, UnknownReason};
-use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_pcb::{Routing, Segment, Via};
 use synth_place::Placement;
 
+use crate::Violation;
 use crate::kicad_cli;
 use crate::profile::ManufacturerProfile;
-use crate::Violation;
 
 pub const DRC_STAGE: &str = "kicad_drc";
 
@@ -175,8 +175,8 @@ pub fn check_min_copper_clearance(
                 if a.net == b.net || a.layer != b.layer {
                     continue;
                 }
-                let pad_a = (a.width_nm + clearance) / 2 + 1;
-                let pad_b = (b.width_nm + clearance) / 2 + 1;
+                let pad_a = i64::midpoint(a.width_nm, clearance) + 1;
+                let pad_b = i64::midpoint(b.width_nm, clearance) + 1;
                 let inflated_pad = pad_a + pad_b;
                 if !bboxes_overlap(a, b, inflated_pad) {
                     continue;
@@ -187,7 +187,7 @@ pub fn check_min_copper_clearance(
                 // common case (one horizontal + one vertical, or
                 // parallel pairs).
                 let d = segment_distance_nm(a, b);
-                let min_allowed = (a.width_nm + b.width_nm) / 2 + clearance;
+                let min_allowed = i64::midpoint(a.width_nm, b.width_nm) + clearance;
                 if d < min_allowed {
                     local.push(Violation {
                         code: "E-SYNTH-DRC-002".to_string(),
@@ -708,11 +708,7 @@ fn manhattan(a: Point, b: Point) -> i64 {
 }
 
 fn sort_pair(a: i64, b: i64) -> (i64, i64) {
-    if a < b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a < b { (a, b) } else { (b, a) }
 }
 
 /// Reconstruct a DRC outcome from counts another stage already produced.
@@ -860,7 +856,7 @@ pub fn run_kicad_cli_drc(kicad_pcb_path: &std::path::Path) -> NativeDrcOutcome {
                 )
                 .with_version(version.clone())
                 .with_stderr(&run.stderr),
-            }
+            };
         }
     };
 
@@ -944,18 +940,19 @@ fn parse_drc_report(json: &serde_json::Value) -> Result<DrcReport, (UnknownReaso
 
             if let Some(items) = v.get("items").and_then(|i| i.as_array()) {
                 for item in items {
-                    if let Some(refdes) = item.get("reference").and_then(|r| r.as_str()) {
-                        if !refdes.is_empty() && !comps.contains(&refdes.to_string()) {
-                            comps.push(refdes.to_string());
-                        }
+                    if let Some(refdes) = item.get("reference").and_then(|r| r.as_str())
+                        && !refdes.is_empty()
+                        && !comps.contains(&refdes.to_string())
+                    {
+                        comps.push(refdes.to_string());
                     }
-                    if let Some(p) = item.get("pos") {
-                        if let (Some(x), Some(y)) = (
+                    if let Some(p) = item.get("pos")
+                        && let (Some(x), Some(y)) = (
                             p.get("x").and_then(serde_json::Value::as_f64),
                             p.get("y").and_then(serde_json::Value::as_f64),
-                        ) {
-                            pos = Some((x, y));
-                        }
+                        )
+                    {
+                        pos = Some((x, y));
                     }
                 }
             }
@@ -998,7 +995,7 @@ mod tests {
     //! inputs to exercise.
 
     use super::*;
-    use synth_geometry::{mm_to_nm, Layer};
+    use synth_geometry::{Layer, mm_to_nm};
     use synth_ir::NetId;
     use synth_route::{Routing, Segment, Via};
 
