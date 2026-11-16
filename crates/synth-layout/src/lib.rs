@@ -3228,12 +3228,42 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
         // An RF matching network is a board-placement motif with no
         // meaningful schematic grouping, so the sheet leaves its parts
         // to the singleton sweep at the end.
-        if cluster.kind == ClusterKind::RfMatching {
+        if cluster.kind == ClusterKind::RfMatching || drawn.contains(&cluster.anchor) {
             continue;
         }
-        out.push(draw_cluster(board, cluster));
+        let mut presented = draw_cluster(board, cluster);
+        // A series resistor with a rail-returned clamp on its far pin is
+        // its own cell, like a divider. Kept as a connector member it
+        // stacked in one column beside the connector, while the clamp —
+        // a singleton with no signal net to pull it — was swept into a
+        // grid far away. A dozen protected lines then made a region
+        // taller than the page and split the whole design.
+        if presented.kind == ClusterKind::ConnectorBlock {
+            let mut kept = Vec::new();
+            for member in std::mem::take(&mut presented.members) {
+                match clamp_partner(board, &member) {
+                    Some((clamp, clamp_pin)) => {
+                        out.push(Cluster {
+                            anchor: member.id,
+                            kind: ClusterKind::Divider,
+                            anchor_vertical: false,
+                            members: vec![ClusterMember {
+                                id: clamp,
+                                side: MemberSide::Below,
+                                anchor_facing_pin: Some(clamp_pin),
+                            }],
+                        });
+                        drawn.insert(member.id);
+                        drawn.insert(clamp);
+                    }
+                    None => kept.push(member),
+                }
+            }
+            presented.members = kept;
+        }
         drawn.insert(cluster.anchor);
-        drawn.extend(cluster.members.iter().map(|m| m.component));
+        drawn.extend(presented.members.iter().map(|m| m.id));
+        out.push(presented);
     }
     for component in &board.components {
         if drawn.insert(component.id) {
@@ -3246,6 +3276,36 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
         }
     }
     out
+}
+
+/// The rail-returned two-pin clamp on a connector member's far pin, and
+/// the pin it joins on the signal net.
+///
+/// A zener/TVS/Schottky with one pin on the member's signal net and the
+/// other on a power net has no signal net to be pulled by, so as a
+/// singleton it was placed far from the resistor it clamps.
+fn clamp_partner(board: &Board, member: &ClusterMember) -> Option<(ComponentId, PinId)> {
+    let facing = member.anchor_facing_pin?;
+    let part = board.component(member.id)?.part.as_ref()?;
+    if part.pins.len() != 2 {
+        return None;
+    }
+    let (_, signal) = board
+        .nets_containing(member.id, PinId(1 - facing.0))
+        .next()?;
+    if signal.endpoints.len() != 2 {
+        return None;
+    }
+    let clamp = signal.endpoints.iter().find(|e| e.component != member.id)?;
+    let clamp_part = board.component(clamp.component)?.part.as_ref()?;
+    if clamp_part.pins.len() != 2 || clamp_part.kind != "diode" {
+        return None;
+    }
+    let (_, rail) = board
+        .nets_containing(clamp.component, PinId(1 - clamp.pin.0))
+        .next()?;
+    crate::classify_power_net(board, rail)?;
+    Some((clamp.component, clamp.pin))
 }
 
 /// Present one recognized cluster on the sheet: every member gets a
@@ -4376,25 +4436,21 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                     .ok()
                     .and_then(|b| group_bands.get(b))
                     .copied();
-                let (reach_above, reach_below) = (start..end)
-                    .flat_map(|col| col_groups[col].iter().copied())
-                    .map(|cluster_idx| {
-                        let mut alone = Vec::new();
-                        place_cluster_into(
-                            board,
-                            &clusters[cluster_idx],
-                            0.0,
-                            0.0,
-                            grid_w,
-                            &mut alone,
-                            &mut std::collections::HashSet::new(),
-                        );
-                        body_bbox_of(board, &alone).map_or((0.0, 0.0), |b| (-b.2, b.3))
-                    })
-                    .fold((0.0_f64, 0.0_f64), |(above, below), (a, b)| {
-                        (above.max(a), below.max(b))
-                    });
-                let row_pitch = snap_grid(reach_above + reach_below + REGION_ROW_GAP);
+                // Row pitch: one row of clusters is as tall as its tallest
+                // member hangs above the anchor plus its deepest hangs below.
+                // Charging every row the *region's* worst reach instead put
+                // single-row clusters (a 12-part clamp grid) on rows ~70 mm
+                // apart and made the region taller than its own content, so
+                // the page grew and the design split.
+                let region_rows = row_offsets(
+                    board,
+                    clusters,
+                    &bk_units,
+                    &(start..end)
+                        .flat_map(|col| col_groups[col].iter().copied())
+                        .collect::<Vec<_>>(),
+                    grid_w,
+                );
                 if group_name.is_some_and(|n| mechanical.contains(n)) {
                     // A mechanical region lays its parts in one tight row, in
                     // declaration order, instead of on the circuit grid.
@@ -4426,8 +4482,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                         for col in start..end {
                             for &cluster_idx in &col_groups[col] {
                                 let anchor_x = snap_grid(col_x_local[col]);
-                                let anchor_y =
-                                    snap_grid((bk_units[cluster_idx] - bk_min) * row_pitch);
+                                let anchor_y = region_rows[&cluster_idx];
                                 place_cluster_into(
                                     board,
                                     &clusters[cluster_idx],
@@ -4440,10 +4495,6 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                             }
                         }
                     } else {
-                        let region_bk_min = (start..end)
-                            .flat_map(|col| col_groups[col].iter().copied())
-                            .map(|idx| bk_units[idx])
-                            .fold(f64::INFINITY, f64::min);
                         let mut shelf_y = 0.0_f64;
                         for shelf_idx in 0..=shelf {
                             let mut local_shelf: Vec<ComponentPlacement> = Vec::new();
@@ -4453,15 +4504,19 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                                 .filter(|&col| shelf_of[col - start] == shelf_idx)
                                 .map(|col| col_x_local[col])
                                 .fold(f64::INFINITY, f64::min);
+                            let shelf_clusters: Vec<usize> = (start..end)
+                                .filter(|&col| shelf_of[col - start] == shelf_idx)
+                                .flat_map(|col| col_groups[col].iter().copied())
+                                .collect();
+                            let shelf_rows =
+                                row_offsets(board, clusters, &bk_units, &shelf_clusters, grid_w);
                             for col in start..end {
                                 if shelf_of[col - start] != shelf_idx {
                                     continue;
                                 }
                                 for &cluster_idx in &col_groups[col] {
                                     let anchor_x = snap_grid(col_x_local[col] - base_x);
-                                    let anchor_y = snap_grid(
-                                        (bk_units[cluster_idx] - region_bk_min) * row_pitch,
-                                    );
+                                    let anchor_y = shelf_rows[&cluster_idx];
                                     place_cluster_into(
                                         board,
                                         &clusters[cluster_idx],
@@ -4478,7 +4533,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                             }
                             let (local_min_x, _, local_min_y, local_max_y) =
                                 body_bbox_of(board, &local_shelf)
-                                    .unwrap_or((0.0, 0.0, 0.0, row_pitch));
+                                    .unwrap_or((0.0, 0.0, 0.0, grid_h));
                             let dx = snap_grid(-local_min_x);
                             let dy = snap_grid(shelf_y - local_min_y);
                             for mut place in local_shelf {
@@ -4925,6 +4980,65 @@ fn side_column_growth(board: &Board, cluster: &Cluster, member_side: MemberSide)
     let half_w = half_width_of(board, cluster.anchor);
     side_column_offset(board, cluster.anchor, pin_side, &members, half_w)
         - (half_w + MEMBER_CLEARANCE)
+}
+
+/// Row offsets for a region's clusters, keyed by cluster index.
+///
+/// A row of clusters is as tall as its tallest member hangs above the anchor
+/// plus its deepest hangs below. Charging every row the *region's* worst
+/// reach instead put single-row clusters (a 12-part clamp grid) on rows
+/// ~70 mm apart and made the region taller than its own content, so the
+/// page grew and the design split.
+fn row_offsets(
+    board: &Board,
+    clusters: &[Cluster],
+    bk_units: &[f64],
+    indices: &[usize],
+    grid_w: f64,
+) -> HashMap<usize, f64> {
+    // BK units are half-steps after the four-sweep balance; doubling keeps
+    // two rows distinct rather than rounding them together.
+    let min = indices
+        .iter()
+        .map(|&i| bk_units[i])
+        .fold(f64::INFINITY, f64::min);
+    let unit = |i: usize| ((bk_units[i] - min) * 2.0).round() as i64;
+    let mut row_units: Vec<i64> = Vec::new();
+    let mut reach: HashMap<i64, (f64, f64)> = HashMap::new();
+    for &i in indices {
+        let mut alone = Vec::new();
+        place_cluster_into(
+            board,
+            &clusters[i],
+            0.0,
+            0.0,
+            grid_w,
+            &mut alone,
+            &mut std::collections::HashSet::new(),
+        );
+        let (above, below) = body_bbox_of(board, &alone)
+            .map_or((0.0, 0.0), |b| ((-b.2).max(0.0), b.3.max(0.0)));
+        let u = unit(i);
+        if !reach.contains_key(&u) {
+            row_units.push(u);
+        }
+        let row = reach.entry(u).or_insert((0.0, 0.0));
+        row.0 = row.0.max(above);
+        row.1 = row.1.max(below);
+    }
+    row_units.sort_unstable();
+    let mut y_of: HashMap<i64, f64> = HashMap::new();
+    let mut y = 0.0_f64;
+    let mut previous_below = 0.0_f64;
+    for (n, u) in row_units.into_iter().enumerate() {
+        let (above, below) = reach[&u];
+        if n > 0 {
+            y = snap_grid(y + previous_below + REGION_ROW_GAP + above);
+        }
+        y_of.insert(u, y);
+        previous_below = below;
+    }
+    indices.iter().map(|&i| (i, y_of[&unit(i)])).collect()
 }
 
 /// Place one cluster's anchor and members into `placements`, updating
