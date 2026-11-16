@@ -287,6 +287,7 @@ pub fn plan_multisheet(
     let box_h = pin_y - box_y;
     let mut instances = Vec::new();
     let mut files = Vec::new();
+    let mut used_files: HashSet<String> = HashSet::new();
     for (index, sheet) in sheets.iter().enumerate() {
         let Some(name) = sheet.name.as_deref() else {
             continue;
@@ -299,6 +300,16 @@ pub fn plan_multisheet(
         let width =
             snap_grid_127(INSTANCE_MIN_W.max(pins_here.len() as f64 * PIN_PITCH + 2.0 * PIN_PITCH));
         let uuid = sheet_uuid(project, name);
+        // Two sheet names can sanitise to one file name ("A / B" and
+        // "A + B"): the second gets a numeric suffix rather than
+        // overwriting the first sheet's file.
+        let base = sanitize_sheet(name);
+        let mut file = sheet_filename(stem, name);
+        let mut suffix = 2;
+        while !used_files.insert(file.clone()) {
+            file = format!("{stem}_{base}_{suffix}.kicad_sch");
+            suffix += 1;
+        }
         let mut pins = Vec::new();
         for (pi, net) in pins_here.iter().enumerate() {
             let px =
@@ -308,7 +319,7 @@ pub fn plan_multisheet(
         }
         instances.push(PlacedSheetInstance {
             name: name.to_string(),
-            file: sheet_filename(stem, name),
+            file: file.clone(),
             uuid,
             at_mm: (cursor_x, box_y),
             size_mm: (width, box_h),
@@ -317,7 +328,7 @@ pub fn plan_multisheet(
         files.push(SheetFile {
             name: name.to_string(),
             uuid,
-            file: sheet_filename(stem, name),
+            file,
             members,
         });
         cursor_x += width + INSTANCE_GAP;
@@ -820,6 +831,153 @@ mod tests {
         let single = crate::schematic::build_schematic(&b, &project).to_string_pretty();
         assert_eq!(single.matches("(instances").count(), 0);
         let _ = Span::new(0, 0);
+    }
+
+    /// Every sheet a cross-sheet net touches gets exactly one pin for it,
+    /// however many endpoints it has there; a net that stays on one sheet
+    /// gets none.
+    #[test]
+    fn a_cross_sheet_net_gets_one_pin_per_sheet() {
+        use synth_diagnostics::Span;
+        use synth_ir::{Net, NetEndpoint, NetId, PinId};
+
+        let ep = |c: u32, p: u32| NetEndpoint {
+            component: ComponentId(c),
+            pin: PinId(p),
+            source_span: Span::new(0, 0),
+        };
+        let b = board(
+            vec![
+                component(0, Some("A")),
+                component(1, Some("A")),
+                component(2, Some("B")),
+                component(3, Some("C")),
+            ],
+            vec![
+                Net {
+                    id: NetId(0),
+                    name: "SIG".to_string(),
+                    auto_named: false,
+                    // Two endpoints on A, one each on B and C.
+                    endpoints: vec![ep(0, 0), ep(1, 0), ep(2, 0), ep(3, 0)],
+                    netclass: None,
+                    voltage: None,
+                },
+                Net {
+                    id: NetId(1),
+                    name: "LOCAL".to_string(),
+                    auto_named: false,
+                    endpoints: vec![ep(0, 1), ep(1, 1)],
+                    netclass: None,
+                    voltage: None,
+                },
+            ],
+        );
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[
+            (0, 30.0, 30.0),
+            (1, 60.0, 30.0),
+            (2, ceiling_w * 2.0, 30.0),
+            (3, ceiling_w * 2.0 + 60.0, 30.0),
+        ]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 4, "root + A + B + C");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        assert_eq!(plan.files.len(), 3);
+        for instance in &plan.furniture.instances {
+            let nets: Vec<&str> = instance.pins.iter().map(|(net, ..)| net.as_str()).collect();
+            assert_eq!(
+                nets,
+                vec!["SIG"],
+                "sheet {} gets one SIG pin, no LOCAL pin",
+                instance.name
+            );
+        }
+    }
+
+    /// Two sheet names that sanitise to the same file must not write the
+    /// same `.kicad_sch`: the root would point two instances at one file
+    /// and one sheet's content would be lost.
+    #[test]
+    fn colliding_sheet_file_names_are_disambiguated() {
+        let b = board(
+            vec![
+                component(0, Some("I2C + EEPROM")),
+                component(1, Some("I2C / EEPROM")),
+            ],
+            vec![],
+        );
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[(0, 30.0, 30.0), (1, ceiling_w * 2.0, 30.0)]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3, "root + two named sheets");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        let files: Vec<&str> = plan.files.iter().map(|f| f.file.as_str()).collect();
+        assert_ne!(files[0], files[1], "two sheets, two files: {files:?}");
+        let instances: Vec<&str> = plan
+            .furniture
+            .instances
+            .iter()
+            .map(|i| i.file.as_str())
+            .collect();
+        assert_eq!(instances, files, "instances point at their own files");
+    }
+
+    /// A sub-sheet prints the same Value the root does. `(no value)` is the
+    /// documented value -> MPN sentinel, not something a split adds.
+    #[test]
+    fn a_sub_sheet_prints_the_same_value_as_the_root() {
+        let mut valued = component(0, None);
+        valued.value = Some("330".to_string());
+        let mut unset = component(1, None);
+        unset.refdes = "DZ9".to_string();
+        let mut sub_valued = component(2, Some("A"));
+        sub_valued.value = Some("330".to_string());
+        let mut sub_unset = component(3, Some("A"));
+        sub_unset.refdes = "DZ10".to_string();
+        let b = board(vec![valued, unset, sub_valued, sub_unset], vec![]);
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[
+            (0, 30.0, 30.0),
+            (1, 60.0, 30.0),
+            (2, ceiling_w * 2.0, 30.0),
+            (3, ceiling_w * 2.0 + 30.0, 30.0),
+        ]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 2);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let render = |layout: &Layout, name: Option<&str>| {
+            crate::schematic::build_sheet_schematic(
+                &b,
+                &project,
+                layout,
+                &crate::schematic::SheetRender {
+                    name,
+                    uuid: derive_entity_uuid(&project, "sheet", name.unwrap_or("root")),
+                    project_name: &b.name,
+                    symbol_path: Some("/x".to_string()),
+                    members: None,
+                    power_drivers: None,
+                    root_furniture: None,
+                },
+                &mut crate::schematic::PowerRefAllocator::default(),
+            )
+            .to_string_pretty()
+        };
+        let root = render(&sheets[0].layout, None);
+        let sub = render(&sheets[1].layout, Some("A"));
+        for text in [&root, &sub] {
+            assert!(text.contains("\"330\""), "the value is drawn:\n{text}");
+            assert_eq!(
+                text.matches("(no value)").count(),
+                1,
+                "one part has no value, on every sheet:\n{text}"
+            );
+        }
     }
 
     /// A root that no longer holds the split content gives back the A0 it

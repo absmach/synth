@@ -333,7 +333,8 @@ fn split_layout_with_pinned(
             // passes, and its notes were cut down to this sheet's before it
             // was laid out, so its page is already the smallest this content
             // needs. Re-running them here would grow it around the bottom
-            // edge `extend_boxes_to_frame_bottom` just filled.
+            // edge `extend_boxes_to_frame_bottom` just filled, so only the
+            // annotations are clamped.
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
@@ -1555,6 +1556,122 @@ mod tests {
                 "a sheet symbol with no content behind it"
             );
         }
+    }
+
+    /// A group merged onto the root keeps its note. The note follows the
+    /// partition that holds the group, and that partition is now the root.
+    #[test]
+    fn a_group_note_survives_being_merged_onto_the_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                grouped_component(0, "R1", "Input", two()),
+                grouped_component(1, "R2", "Input", two()),
+                grouped_component(2, "R3", "Power", two()),
+                grouped_component(3, "R4", "Power", two()),
+            ],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Input".to_string(),
+            lines: vec!["fused 5 V input".to_string()],
+            group: Some("Input".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 2);
+        assert!(
+            sheets[0]
+                .layout
+                .annotations
+                .iter()
+                .any(|a| a.text == "fused 5 V input"),
+            "the merged group's note is drawn on the root that holds it"
+        );
+    }
+
+    /// A group with one part still draws a box round everything that part
+    /// draws, not just round its body.
+    #[test]
+    fn a_one_part_group_box_holds_that_part() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![grouped_component(0, "C1", "Filter", two())],
+            Vec::new(),
+        );
+        let l = crate::layout(&b);
+        let bx = l
+            .group_boxes
+            .iter()
+            .find(|b| b.group == "Filter")
+            .expect("the group has a box");
+        let mut checked = 0;
+        for (id, (x0, y0, x1, y1)) in crate::drawn_beyond_bodies(&b, &l) {
+            if id != ComponentId(0) {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                x0 >= bx.min_mm.0 - 1e-6
+                    && x1 <= bx.max_mm.0 + 1e-6
+                    && y0 >= bx.min_mm.1 - 1e-6
+                    && y1 <= bx.max_mm.1 + 1e-6,
+                "drawn at ({x0:.1}, {y0:.1})..({x1:.1}, {y1:.1}) is outside                  ({:.1}, {:.1})..({:.1}, {:.1})",
+                bx.min_mm.0,
+                bx.min_mm.1,
+                bx.max_mm.0,
+                bx.max_mm.1
+            );
+        }
+        assert!(checked > 0, "the part draws past its body");
+    }
+
+    /// A long group note is measured into the box it is drawn in, so the
+    /// text never hangs out of its region.
+    #[test]
+    fn a_group_note_stays_inside_its_box() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Filter".to_string(),
+            lines: vec!["series termination on every line of the bus ".repeat(4)],
+            group: Some("Filter".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let l = crate::layout(&b);
+        let bx = l
+            .group_boxes
+            .iter()
+            .find(|b| b.group == "Filter")
+            .expect("the group has a box");
+        let mut notes = 0;
+        for annotation in &l.annotations {
+            if !matches!(annotation.kind, crate::TextKind::NoteLine) {
+                continue;
+            }
+            notes += 1;
+            let (x0, y0, x1, y1) = crate::text_run_rect(annotation);
+            assert!(
+                x0 >= bx.min_mm.0 && x1 <= bx.max_mm.0 && y0 >= bx.min_mm.1 && y1 <= bx.max_mm.1,
+                "note text at ({x0:.1}, {y0:.1})..({x1:.1}, {y1:.1}) is outside the box"
+            );
+        }
+        assert_eq!(notes, 1);
     }
 
     /// Explicit `sheet` blocks are the author's own hierarchy, so they keep
