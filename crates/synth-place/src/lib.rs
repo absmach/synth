@@ -2175,6 +2175,10 @@ enum FeatureSlot {
 }
 
 impl FeatureSlot {
+    fn is_corner(self) -> bool {
+        matches!(self, Self::TopLeft | Self::TopRight | Self::BottomLeft | Self::BottomRight)
+    }
+
     /// The point on the envelope this slot aims at: a corner, or the middle
     /// of an edge.
     fn anchor(self, envelope: Rect) -> Point {
@@ -2341,15 +2345,7 @@ fn place_board_features(
                 continue;
             }
             let anchor = slot.anchor(envelope);
-            for ring in 0..2 {
-                let search = if ring == 0 {
-                    envelope
-                } else {
-                    Rect::new(
-                        Point::new(envelope.min.x_nm - band_nm, envelope.min.y_nm - band_nm),
-                        Point::new(envelope.max.x_nm + band_nm, envelope.max.y_nm + band_nm),
-                    )
-                };
+            let band_candidates = |search: Rect| -> Vec<Point> {
                 let mut candidates: Vec<Point> = Vec::new();
                 let mut y = search.min.y_nm + half_h;
                 while y <= search.max.y_nm - half_h {
@@ -2366,6 +2362,27 @@ fn place_board_features(
                     }
                     y += step_nm;
                 }
+                candidates
+            };
+            let outer = Rect::new(
+                Point::new(envelope.min.x_nm - band_nm, envelope.min.y_nm - band_nm),
+                Point::new(envelope.max.x_nm + band_nm, envelope.max.y_nm + band_nm),
+            );
+            // An edge slot keeps the inner ring first: a feature slides along
+            // the edge rather than growing the board. A corner is different. A
+            // mounting hole is only useful in its corner, so when the circuit
+            // took that corner the hole steps just outside it (the board grows
+            // by one band) instead of settling tens of millimetres along an
+            // edge, where it no longer holds the board square. Both rings are
+            // searched together, nearest the corner first.
+            let rings: Vec<Vec<Point>> = if slot.is_corner() {
+                let mut both = band_candidates(envelope);
+                both.extend(band_candidates(outer));
+                vec![both]
+            } else {
+                vec![band_candidates(envelope), band_candidates(outer)]
+            };
+            for mut candidates in rings {
                 candidates.sort_by_key(|point| {
                     (
                         (point.x_nm - anchor.x_nm).abs() + (point.y_nm - anchor.y_nm).abs(),
