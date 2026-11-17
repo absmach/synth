@@ -5150,12 +5150,24 @@ fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionRe
                 // `U1.dvdd` anchors the part `U1`; the pin is honoured by the
                 // pad-aware target, not by the halo.
                 let refdes = anchor.split_once('.').map_or(anchor.as_str(), |(r, _)| r);
+                // Match the anchor the way `resolve_hint_target` does: it
+                // lowercases both names, so a hint that names `u1` (or a
+                // pin `u1.vcc`) anchors the placed part `U1`. A case-sensitive
+                // comparison here would report such a honoured hard hint as
+                // relaxed even though the placer kept it inside the halo.
                 placement
                     .components
                     .iter()
-                    .find(|p| board.component(p.id).is_some_and(|c| c.refdes == refdes))
+                    .find(|p| {
+                        board
+                            .component(p.id)
+                            .is_some_and(|c| c.refdes.eq_ignore_ascii_case(refdes))
+                    })
                     .is_some_and(|anchor_placed| {
-                        let Some(anchor) = board.components.iter().find(|c| c.refdes == refdes)
+                        let Some(anchor) = board
+                            .components
+                            .iter()
+                            .find(|c| c.refdes.eq_ignore_ascii_case(refdes))
                         else {
                             return false;
                         };
@@ -9224,6 +9236,23 @@ board "near" {
             .find(|h| h.component == "C1")
             .expect("C1");
         assert_eq!(outcome.status, HintStatus::Honoured, "{report:?}");
+    }
+
+    #[test]
+    fn a_near_anchor_is_matched_case_insensitively_like_the_placer() {
+        // `resolve_hint_target` lowercases both names, so `u1` and `u1.vcc`
+        // anchor the placed `U1` just as `U1` and `U1.vcc` do. The report must
+        // use the same matching or a honoured hard hint is misreported as
+        // relaxed for no physical reason.
+        for anchor in ["u1", "u1.vcc"] {
+            let report = near_report(anchor, (35.0, 25.0));
+            let outcome = report
+                .hints
+                .iter()
+                .find(|h| h.component == "C1")
+                .expect("C1");
+            assert_eq!(outcome.status, HintStatus::Honoured, "{anchor}: {report:?}");
+        }
     }
 
     #[test]

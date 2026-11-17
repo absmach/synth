@@ -361,14 +361,18 @@ enum Command {
         pretty: bool,
     },
 
-    /// Route a design with an external router and dump the routing run
-    /// record — router identity and version, settings, input hash, retained
-    /// artifacts, and the terminal state — as JSON to stdout.
+    /// Route a design and dump the routing run record — router identity and
+    /// version, settings, input hash, retained artifacts, and the terminal
+    /// state — as JSON to stdout.
     ///
-    /// Synth does not generate copper. The run record is the answer, and
-    /// exit code 0 means the board was independently validated rather than
-    /// that a router exited successfully. See `synth routers` for what is
-    /// installed.
+    /// The selected external router generates the copper. When no external
+    /// engine is installed, this command falls back to the workspace's own
+    /// deterministic router and names it as the engine in the run record;
+    /// `export-kicad` never falls back, so a fabricable package always carries
+    /// copper from a validated external route. The run record is the answer,
+    /// and exit code 0 means the board was independently validated rather
+    /// than that a router exited successfully. See `synth routers` for what
+    /// is installed.
     Route {
         /// Path to a `.synth` source file.
         input: PathBuf,
@@ -426,12 +430,14 @@ enum Command {
         pretty: bool,
     },
 
-    /// Route a design externally and report the independent physical checks:
-    /// topology against the baseline the router was given, connectivity
-    /// re-derived from copper, and `kicad-cli pcb drc` with zones refilled.
+    /// Route a design and report the independent physical checks: topology
+    /// against the baseline the router was given, connectivity re-derived
+    /// from copper, and `kicad-cli pcb drc` with zones refilled.
     ///
-    /// Dumps the routing run record as JSON to stdout, and exits with the
-    /// validation error code unless the board is fabrication-ready.
+    /// The selected external router generates the copper, falling back to the
+    /// workspace's own router when none is installed. Dumps the routing run
+    /// record as JSON to stdout, and exits with the validation error code
+    /// unless the board is fabrication-ready.
     Drc {
         /// Path to a `.synth` source file.
         input: PathBuf,
@@ -876,18 +882,6 @@ impl From<ExternalRouter> for synth_router::RouterEngine {
     }
 }
 
-impl From<synth_router::RouterEngine> for ExternalRouter {
-    fn from(value: synth_router::RouterEngine) -> Self {
-        match value {
-            synth_router::RouterEngine::Freerouting => Self::FreeRouting,
-            // The internal engine is not an external choice; a caller that
-            // converts it selected it deliberately and never through here.
-            synth_router::RouterEngine::Internal
-            | synth_router::RouterEngine::KiCadRoutingTools => Self::KicadRoutingTools,
-        }
-    }
-}
-
 /// Which router a DRC route runs, and who chose it.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 enum DrcRouter {
@@ -931,7 +925,10 @@ fn select_drc_router(cli: ExternalRouter, qualify: Option<&str>) -> (DrcRouter, 
     };
     let router = match engine {
         synth_router::RouterEngine::Internal => DrcRouter::Internal,
-        external => DrcRouter::External(ExternalRouter::from(external)),
+        synth_router::RouterEngine::Freerouting => DrcRouter::External(ExternalRouter::FreeRouting),
+        synth_router::RouterEngine::KiCadRoutingTools => {
+            DrcRouter::External(ExternalRouter::KicadRoutingTools)
+        }
     };
     (router, false)
 }
