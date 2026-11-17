@@ -2226,6 +2226,76 @@ fn hinted_feature_slot(hint: &synth_ir::PlacementConstraint) -> Option<FeatureSl
     }
 }
 
+/// Move each net-less board feature that asked for a corner into that corner
+/// of the *final* outline, when the spot is free.
+///
+/// Features are placed into the corner of the circuit envelope as it stood
+/// after the solver. Later passes (seeded candidates, connector docking, the
+/// export's tight rim) can still move parts and refit the outline, which left
+/// a mounting hole 16 mm along the bottom edge of the I2C sensor node with its
+/// own corner empty. Run once the outline is final: a hole whose corner is
+/// free goes there; one whose corner is taken keeps its place.
+pub fn snap_features_to_corners(board: &Board, placement: &mut Placement, edge_margin_mm: f64) {
+    let outline = placement.board_outline;
+    let margin_nm = mm_to_nm(edge_margin_mm);
+    for index in 0..placement.components.len() {
+        let placed = placement.components[index];
+        if !is_netless_board_feature(board, placed.id) {
+            continue;
+        }
+        let Some(component) = board.component(placed.id) else {
+            continue;
+        };
+        let Some(slot) = component
+            .placement_hint
+            .as_ref()
+            .and_then(hinted_feature_slot)
+            .filter(|slot| slot.is_corner())
+        else {
+            continue;
+        };
+        let rect = sidecar_courtyard_rect(board, component, &placed);
+        let half_w = rect.width_nm() / 2;
+        let half_h = rect.height_nm() / 2;
+        // Courtyard centre relative to the placement origin (a hole's is zero).
+        let off_x = (rect.min.x_nm + rect.max.x_nm) / 2 - placed.center.x_nm;
+        let off_y = (rect.min.y_nm + rect.max.y_nm) / 2 - placed.center.y_nm;
+        let left = outline.min.x_nm + margin_nm + half_w;
+        let right = outline.max.x_nm - margin_nm - half_w;
+        let top = outline.min.y_nm + margin_nm + half_h;
+        let bottom = outline.max.y_nm - margin_nm - half_h;
+        if left > right || top > bottom {
+            continue;
+        }
+        let corner = match slot {
+            FeatureSlot::TopLeft => Point::new(left, top),
+            FeatureSlot::TopRight => Point::new(right, top),
+            FeatureSlot::BottomLeft => Point::new(left, bottom),
+            _ => Point::new(right, bottom),
+        };
+        let mut candidate = placed;
+        candidate.center = Point::new(corner.x_nm - off_x, corner.y_nm - off_y);
+        let moved = sidecar_courtyard_rect(board, component, &candidate);
+        let distance = |p: &ComponentPlacement| {
+            let r = sidecar_courtyard_rect(board, component, p);
+            ((r.min.x_nm + r.max.x_nm) / 2 - corner.x_nm).abs()
+                + ((r.min.y_nm + r.max.y_nm) / 2 - corner.y_nm).abs()
+        };
+        if distance(&placed) <= mm_to_nm(1.0) {
+            continue;
+        }
+        let blocked = placement.components.iter().any(|other| {
+            other.id != placed.id
+                && board.component(other.id).is_some_and(|other_component| {
+                    moved.intersects(&sidecar_courtyard_rect(board, other_component, other))
+                })
+        });
+        if !blocked {
+            placement.components[index] = candidate;
+        }
+    }
+}
+
 /// Place every net-less board feature in the border band of the finished
 /// circuit, as close as it can get to the corner or edge it asked for.
 ///
