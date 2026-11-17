@@ -1017,7 +1017,22 @@ pub fn layout_with_overrides(
     placer: &dyn Placer,
     overlay: &dyn Fn(&mut Layout),
 ) -> Layout {
-    let clusters = build_clusters(board);
+    layout_with_overrides_and_power(board, placer, overlay, &HashSet::new())
+}
+
+/// [`layout_with_overrides`] with power nets the caller knows but this board
+/// alone cannot prove — a split sheet that holds only part of a rail.
+pub(crate) fn layout_with_power(board: &Board, power_nets: &HashSet<NetId>) -> Layout {
+    layout_with_overrides_and_power(board, &default_placer(), &|_| {}, power_nets)
+}
+
+fn layout_with_overrides_and_power(
+    board: &Board,
+    placer: &dyn Placer,
+    overlay: &dyn Fn(&mut Layout),
+    power_nets: &HashSet<NetId>,
+) -> Layout {
+    let clusters = build_clusters_with_power(board, power_nets);
     let mut layout = placer.place(board, &clusters);
     align_to_pin_grid(board, &mut layout);
     layout.power_flags = classify_power_flags(board);
@@ -3221,6 +3236,15 @@ pub enum MemberSide {
 /// LDO blocks, crystals, IC blocks, I²C buses, dividers, adopted rail
 /// capacitors, then singletons in declaration order.
 pub fn build_clusters(board: &Board) -> Vec<Cluster> {
+    build_clusters_with_power(board, &HashSet::new())
+}
+
+/// [`build_clusters`] with the power nets the caller already knows about.
+///
+/// A sheet of a split design holds only part of a rail, so a diode returned
+/// to it looks like it is on a passive net; `sheets::relayout_sheet` passes
+/// the whole design's classification so the clamp still pairs on that page.
+fn build_clusters_with_power(board: &Board, power_nets: &HashSet<NetId>) -> Vec<Cluster> {
     let recognized = synth_ir::recognize_clusters(board);
     let mut out = Vec::new();
     let mut drawn: std::collections::HashSet<ComponentId> = std::collections::HashSet::new();
@@ -3228,12 +3252,44 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
         // An RF matching network is a board-placement motif with no
         // meaningful schematic grouping, so the sheet leaves its parts
         // to the singleton sweep at the end.
-        if cluster.kind == ClusterKind::RfMatching {
+        if cluster.kind == ClusterKind::RfMatching || drawn.contains(&cluster.anchor) {
             continue;
         }
-        out.push(draw_cluster(board, cluster));
+        let mut presented = draw_cluster(board, cluster);
+        // A series resistor with a rail-returned clamp on its far pin is
+        // its own cell, like a divider. Kept as a connector member it
+        // stacked in one column beside the connector, while the clamp —
+        // a singleton with no signal net to pull it — was swept into a
+        // grid far away. A dozen protected lines then made a region
+        // taller than the page and split the whole design.
+        if presented.kind == ClusterKind::ConnectorBlock {
+            let mut kept = Vec::new();
+            for member in std::mem::take(&mut presented.members) {
+                match clamp_partner(board, &member, power_nets) {
+                    Some((clamp, clamp_pin)) => {
+                        out.push(Cluster {
+                            anchor: member.id,
+                            // Reuses a divider's placement (series element
+                            // above its shunt); there is no clamp kind.
+                            kind: ClusterKind::Divider,
+                            anchor_vertical: false,
+                            members: vec![ClusterMember {
+                                id: clamp,
+                                side: MemberSide::Below,
+                                anchor_facing_pin: Some(clamp_pin),
+                            }],
+                        });
+                        drawn.insert(member.id);
+                        drawn.insert(clamp);
+                    }
+                    None => kept.push(member),
+                }
+            }
+            presented.members = kept;
+        }
         drawn.insert(cluster.anchor);
-        drawn.extend(cluster.members.iter().map(|m| m.component));
+        drawn.extend(presented.members.iter().map(|m| m.id));
+        out.push(presented);
     }
     for component in &board.components {
         if drawn.insert(component.id) {
@@ -3246,6 +3302,45 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
         }
     }
     out
+}
+
+/// The rail-returned two-pin clamp on a connector member's far pin, and
+/// the pin it joins on the signal net.
+///
+/// A zener/TVS/Schottky with one pin on the member's signal net and the
+/// other on a power net has no signal net to be pulled by, so as a
+/// singleton it was placed far from the resistor it clamps.
+///
+/// Any two-pin `diode` returned to a power net counts, LEDs included; an LED
+/// with a series resistor is claimed by its own cluster before this runs.
+fn clamp_partner(
+    board: &Board,
+    member: &ClusterMember,
+    power_nets: &HashSet<NetId>,
+) -> Option<(ComponentId, PinId)> {
+    let facing = member.anchor_facing_pin?;
+    let part = board.component(member.id)?.part.as_ref()?;
+    if part.pins.len() != 2 {
+        return None;
+    }
+    let (_, signal) = board
+        .nets_containing(member.id, PinId(1 - facing.0))
+        .next()?;
+    if signal.endpoints.len() != 2 {
+        return None;
+    }
+    let clamp = signal.endpoints.iter().find(|e| e.component != member.id)?;
+    let clamp_part = board.component(clamp.component)?.part.as_ref()?;
+    if clamp_part.pins.len() != 2 || clamp_part.kind != "diode" {
+        return None;
+    }
+    let (_, rail) = board
+        .nets_containing(clamp.component, PinId(1 - clamp.pin.0))
+        .next()?;
+    if !power_nets.contains(&rail.id) {
+        crate::classify_power_net(board, rail)?;
+    }
+    Some((clamp.component, clamp.pin))
 }
 
 /// Present one recognized cluster on the sheet: every member gets a
@@ -4376,25 +4471,21 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                     .ok()
                     .and_then(|b| group_bands.get(b))
                     .copied();
-                let (reach_above, reach_below) = (start..end)
-                    .flat_map(|col| col_groups[col].iter().copied())
-                    .map(|cluster_idx| {
-                        let mut alone = Vec::new();
-                        place_cluster_into(
-                            board,
-                            &clusters[cluster_idx],
-                            0.0,
-                            0.0,
-                            grid_w,
-                            &mut alone,
-                            &mut std::collections::HashSet::new(),
-                        );
-                        body_bbox_of(board, &alone).map_or((0.0, 0.0), |b| (-b.2, b.3))
-                    })
-                    .fold((0.0_f64, 0.0_f64), |(above, below), (a, b)| {
-                        (above.max(a), below.max(b))
-                    });
-                let row_pitch = snap_grid(reach_above + reach_below + REGION_ROW_GAP);
+                // Row pitch: one row of clusters is as tall as its tallest
+                // member hangs above the anchor plus its deepest hangs below.
+                // Charging every row the *region's* worst reach instead put
+                // single-row clusters (a 12-part clamp grid) on rows ~70 mm
+                // apart and made the region taller than its own content, so
+                // the page grew and the design split.
+                let region_rows = row_offsets(
+                    board,
+                    clusters,
+                    &bk_units,
+                    &(start..end)
+                        .flat_map(|col| col_groups[col].iter().copied())
+                        .collect::<Vec<_>>(),
+                    grid_w,
+                );
                 if group_name.is_some_and(|n| mechanical.contains(n)) {
                     // A mechanical region lays its parts in one tight row, in
                     // declaration order, instead of on the circuit grid.
@@ -4426,8 +4517,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                         for col in start..end {
                             for &cluster_idx in &col_groups[col] {
                                 let anchor_x = snap_grid(col_x_local[col]);
-                                let anchor_y =
-                                    snap_grid((bk_units[cluster_idx] - bk_min) * row_pitch);
+                                let anchor_y = region_rows[&cluster_idx];
                                 place_cluster_into(
                                     board,
                                     &clusters[cluster_idx],
@@ -4440,10 +4530,6 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                             }
                         }
                     } else {
-                        let region_bk_min = (start..end)
-                            .flat_map(|col| col_groups[col].iter().copied())
-                            .map(|idx| bk_units[idx])
-                            .fold(f64::INFINITY, f64::min);
                         let mut shelf_y = 0.0_f64;
                         for shelf_idx in 0..=shelf {
                             let mut local_shelf: Vec<ComponentPlacement> = Vec::new();
@@ -4453,15 +4539,19 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                                 .filter(|&col| shelf_of[col - start] == shelf_idx)
                                 .map(|col| col_x_local[col])
                                 .fold(f64::INFINITY, f64::min);
+                            let shelf_clusters: Vec<usize> = (start..end)
+                                .filter(|&col| shelf_of[col - start] == shelf_idx)
+                                .flat_map(|col| col_groups[col].iter().copied())
+                                .collect();
+                            let shelf_rows =
+                                row_offsets(board, clusters, &bk_units, &shelf_clusters, grid_w);
                             for col in start..end {
                                 if shelf_of[col - start] != shelf_idx {
                                     continue;
                                 }
                                 for &cluster_idx in &col_groups[col] {
                                     let anchor_x = snap_grid(col_x_local[col] - base_x);
-                                    let anchor_y = snap_grid(
-                                        (bk_units[cluster_idx] - region_bk_min) * row_pitch,
-                                    );
+                                    let anchor_y = shelf_rows[&cluster_idx];
                                     place_cluster_into(
                                         board,
                                         &clusters[cluster_idx],
@@ -4478,7 +4568,7 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
                             }
                             let (local_min_x, _, local_min_y, local_max_y) =
                                 body_bbox_of(board, &local_shelf)
-                                    .unwrap_or((0.0, 0.0, 0.0, row_pitch));
+                                    .unwrap_or((0.0, 0.0, 0.0, grid_h));
                             let dx = snap_grid(-local_min_x);
                             let dy = snap_grid(shelf_y - local_min_y);
                             for mut place in local_shelf {
@@ -4925,6 +5015,65 @@ fn side_column_growth(board: &Board, cluster: &Cluster, member_side: MemberSide)
     let half_w = half_width_of(board, cluster.anchor);
     side_column_offset(board, cluster.anchor, pin_side, &members, half_w)
         - (half_w + MEMBER_CLEARANCE)
+}
+
+/// Row offsets for a region's clusters, keyed by cluster index.
+///
+/// A row of clusters is as tall as its tallest member hangs above the anchor
+/// plus its deepest hangs below. Charging every row the *region's* worst
+/// reach instead put single-row clusters (a 12-part clamp grid) on rows
+/// ~70 mm apart and made the region taller than its own content, so the
+/// page grew and the design split.
+fn row_offsets(
+    board: &Board,
+    clusters: &[Cluster],
+    bk_units: &[f64],
+    indices: &[usize],
+    grid_w: f64,
+) -> HashMap<usize, f64> {
+    // BK units are half-steps after the four-sweep balance; doubling keeps
+    // two rows distinct rather than rounding them together.
+    let min = indices
+        .iter()
+        .map(|&i| bk_units[i])
+        .fold(f64::INFINITY, f64::min);
+    let unit = |i: usize| ((bk_units[i] - min) * 2.0).round() as i64;
+    let mut row_units: Vec<i64> = Vec::new();
+    let mut reach: HashMap<i64, (f64, f64)> = HashMap::new();
+    for &i in indices {
+        let mut alone = Vec::new();
+        place_cluster_into(
+            board,
+            &clusters[i],
+            0.0,
+            0.0,
+            grid_w,
+            &mut alone,
+            &mut std::collections::HashSet::new(),
+        );
+        let (above, below) =
+            body_bbox_of(board, &alone).map_or((0.0, 0.0), |b| ((-b.2).max(0.0), b.3.max(0.0)));
+        let u = unit(i);
+        if !reach.contains_key(&u) {
+            row_units.push(u);
+        }
+        let row = reach.entry(u).or_insert((0.0, 0.0));
+        row.0 = row.0.max(above);
+        row.1 = row.1.max(below);
+    }
+    row_units.sort_unstable();
+    let mut y_of: HashMap<i64, f64> = HashMap::new();
+    let mut y = 0.0_f64;
+    let mut previous_below = 0.0_f64;
+    for (n, u) in row_units.into_iter().enumerate() {
+        let (above, below) = reach[&u];
+        if n > 0 {
+            y = snap_grid(y + previous_below + REGION_ROW_GAP + above);
+        }
+        y_of.insert(u, y);
+        previous_below = below;
+    }
+    indices.iter().map(|&i| (i, y_of[&unit(i)])).collect()
 }
 
 /// Place one cluster's anchor and members into `placements`, updating
@@ -7981,6 +8130,158 @@ mod patterns_tests {
         let div = find_cluster(&clusters, 1);
         assert_member(div, 2, MemberSide::Below);
         assert_layout_places_everything(&b);
+    }
+
+    /// J0 → R1 → D0, with D0's other pin on `return_pin` of J0. `signal_extra`
+    /// adds a third endpoint to the R1/D0 node; `return_is_rail` decides
+    /// whether J0's second pin names a rail (`gnd`) or a plain signal.
+    fn clamp_board(signal_extra: bool, return_is_rail: bool) -> Board {
+        let j0 = component(
+            0,
+            "J0",
+            part(
+                "connector",
+                vec![
+                    pin("p1", ElectricalType::Passive, &[]),
+                    pin(
+                        if return_is_rail { "gnd" } else { "p2" },
+                        if return_is_rail {
+                            ElectricalType::PowerInput
+                        } else {
+                            ElectricalType::Passive
+                        },
+                        &[],
+                    ),
+                ],
+            ),
+        );
+        let two_pin = |id: &str, kind: &str| {
+            part(
+                kind,
+                vec![
+                    pin(id, ElectricalType::Passive, &[]),
+                    pin(id, ElectricalType::Passive, &[]),
+                ],
+            )
+        };
+        let r1 = component(1, "R1", two_pin("p1", "resistor"));
+        let d0 = component(2, "D0", two_pin("p1", "diode"));
+        let mut nets = vec![
+            net(0, "sig_in", &[(0, 0), (1, 0)]),
+            net(1, "node", &[(1, 1), (2, 0)]),
+            net(2, "return", &[(0, 1), (2, 1)]),
+        ];
+        let mut components = vec![j0, r1, d0];
+        if signal_extra {
+            components.push(component(3, "R2", two_pin("p1", "resistor")));
+            nets[1].endpoints.push(synth_ir::NetEndpoint {
+                component: ComponentId(3),
+                pin: PinId(0),
+                source_span: Span::new(0, 0),
+            });
+        }
+        board(components, nets)
+    }
+
+    fn series_member(facing: Option<u32>) -> ClusterMember {
+        ClusterMember {
+            id: ComponentId(1),
+            side: MemberSide::Below,
+            anchor_facing_pin: facing.map(PinId),
+        }
+    }
+
+    #[test]
+    fn clamp_partner_needs_a_series_member() {
+        let b = clamp_board(false, true);
+        assert_eq!(
+            clamp_partner(&b, &series_member(None), &HashSet::new()),
+            None,
+            "a member with no connector-facing pin is not a series resistor"
+        );
+    }
+
+    #[test]
+    fn clamp_partner_ignores_a_three_endpoint_net() {
+        let b = clamp_board(true, true);
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
+            None,
+            "the clamp is only unambiguous on a two-endpoint node"
+        );
+        // The plain two-endpoint form still pairs, so the fixture is load-bearing.
+        assert_eq!(
+            clamp_partner(
+                &clamp_board(false, true),
+                &series_member(Some(0)),
+                &HashSet::new()
+            ),
+            Some((ComponentId(2), PinId(0)))
+        );
+    }
+
+    #[test]
+    fn clamp_partner_ignores_a_shunt_with_no_rail() {
+        let b = clamp_board(false, false);
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
+            None,
+            "a diode returned to a signal net is not a clamp"
+        );
+    }
+
+    #[test]
+    fn clamp_partner_accepts_a_rail_the_caller_knows() {
+        // A split sheet holds only the clamp side of the rail, so nothing on
+        // it proves the net is power; the caller's global classification does.
+        let b = clamp_board(false, false);
+        let power: HashSet<NetId> = [NetId(2)].into();
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0)), &power),
+            Some((ComponentId(2), PinId(0))),
+            "a known power net pairs without a local power pin"
+        );
+    }
+
+    #[test]
+    fn clamp_partner_accepts_a_clamp_on_a_vcc_rail() {
+        let j0 = component(
+            0,
+            "J0",
+            part(
+                "connector",
+                vec![
+                    pin("p1", ElectricalType::Passive, &[]),
+                    pin("vcc", ElectricalType::PowerOutput, &[]),
+                ],
+            ),
+        );
+        let two = |id: &str, kind: &str| {
+            part(
+                kind,
+                vec![
+                    pin(id, ElectricalType::Passive, &[]),
+                    pin(id, ElectricalType::Passive, &[]),
+                ],
+            )
+        };
+        let b = board(
+            vec![
+                j0,
+                component(1, "R1", two("p1", "resistor")),
+                component(2, "D0", two("p1", "diode")),
+            ],
+            vec![
+                net(0, "sig_in", &[(0, 0), (1, 0)]),
+                net(1, "node", &[(1, 1), (2, 0)]),
+                net(2, "vcc", &[(0, 1), (2, 1)]),
+            ],
+        );
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
+            Some((ComponentId(2), PinId(0))),
+            "VCC clamps pair like GND clamps"
+        );
     }
 }
 
