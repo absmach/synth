@@ -1,8 +1,8 @@
 schema_version = "synth.qualification.v1"
 
-# Only the Class-B buck board (SYN-67) is declared here. The full reference
-# matrix and its harness are in #247; this file uses #247's schema so the row
-# moves over unchanged when that lands.
+# The Class-B buck board (SYN-67) and the usb-uart board (SYN-66) are declared
+# here. The full reference matrix and its harness are in #247; this file uses
+# #247's schema so the rows move over unchanged when that lands.
 [matrix]
 release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"

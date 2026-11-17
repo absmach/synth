@@ -76,6 +76,10 @@ fn parts_that_named_missing_libraries_qualify_against_the_stock_ones() {
         "osc_smd_25mhz",
         // #152: the pin map is the RP2350A, not the RP2040's.
         "rp2350",
+        // #428: the record once named `Transistor_FET:AO3400A`, a symbol
+        // some stock libraries do not ship; it now names the generic
+        // `Q_NMOS_GSD` and must still qualify against them.
+        "ao3400a_nmos",
     ] {
         let part = registry
             .lookup(id)

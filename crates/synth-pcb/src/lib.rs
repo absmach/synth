@@ -103,8 +103,11 @@ pub struct Routing {
     pub pad_escape_rejections: usize,
 }
 
-/// Dijkstra from `start`, returning `(distance_nm, farthest_node)`.
-fn farthest_point(graph: &CopperGraph, start: (i64, i64)) -> (i64, (i64, i64)) {
+/// Dijkstra from `start`, returning the distance to every node it reaches.
+fn distances(
+    graph: &CopperGraph,
+    start: (i64, i64),
+) -> std::collections::BTreeMap<(i64, i64), i64> {
     use std::cmp::Reverse;
     use std::collections::{BTreeMap, BinaryHeap};
     let mut dist: BTreeMap<(i64, i64), i64> = BTreeMap::new();
@@ -123,9 +126,20 @@ fn farthest_point(graph: &CopperGraph, start: (i64, i64)) -> (i64, (i64, i64)) {
             }
         }
     }
-    dist.into_iter()
+    dist
+}
+
+/// The longest distance Dijkstra from `start` finds, in nm.
+fn longest_from(graph: &CopperGraph, start: (i64, i64)) -> i64 {
+    distances(graph, start).into_values().max().unwrap_or(0)
+}
+
+/// The node `start` is farthest from, by the shortest-path metric.
+fn farthest_node(graph: &CopperGraph, start: (i64, i64)) -> (i64, i64) {
+    distances(graph, start)
+        .into_iter()
         .max_by_key(|(node, distance)| (*distance, *node))
-        .map_or((0, start), |(node, distance)| (distance, node))
+        .map_or(start, |(node, _distance)| node)
 }
 
 /// Undirected point-to-point copper graph of one net, with Euclidean weights.
@@ -146,8 +160,14 @@ impl Routing {
     /// not the sum of every branch: a T-shaped clock with two loads has two
     /// paths, and the longer one is the delay. The copper is treated as an
     /// undirected weighted graph of segment endpoints; the result is its
-    /// diameter (two farthest-point searches). Physical (Euclidean) length is
-    /// used, so diagonal copper is not overstated by Manhattan arithmetic.
+    /// diameter. Physical (Euclidean) length is used, so diagonal copper is
+    /// not overstated by Manhattan arithmetic.
+    ///
+    /// Two farthest-point sweeps are the exact diameter of a tree, which is
+    /// what normal routing is. Copper can also close a loop or split into
+    /// more than one island, and there a sweep from one node can miss a
+    /// longer shortest path the sweep never starts from — so a graph that is
+    /// not a single tree is measured from every node instead.
     #[must_use]
     #[allow(clippy::cast_precision_loss)]
     pub fn length_for_net(&self, net: NetId) -> i64 {
@@ -164,8 +184,24 @@ impl Routing {
         let Some(start) = graph.keys().next().copied() else {
             return 0;
         };
-        let far = farthest_point(&graph, start);
-        farthest_point(&graph, far.1).0
+        // An undirected graph is a single spanning tree exactly when it
+        // holds `nodes - 1` edges and one Dijkstra reaches every node; two
+        // sweeps are its exact diameter. Anything else — a loop, or more
+        // than one island — is measured from every node, because a sweep
+        // can miss a longest shortest path it never starts from.
+        let nodes = graph.len();
+        let edges = graph.values().map(Vec::len).sum::<usize>() / 2;
+        let reached = distances(&graph, start).len();
+        if edges == nodes.saturating_sub(1) && reached == nodes {
+            let far = farthest_node(&graph, start);
+            return longest_from(&graph, far);
+        }
+        graph
+            .keys()
+            .copied()
+            .map(|node| longest_from(&graph, node))
+            .max()
+            .unwrap_or(0)
     }
 
     /// Convert every [`UnroutedNet`] into an `E-SYNTH-ROUTE-001` diagnostic.
@@ -249,6 +285,56 @@ mod tests {
                     layer: Layer::Top,
                     start: Point::new(10_000_000, 0),
                     end: Point::new(10_000_000, 5_000_000),
+                    width_nm: 127_000,
+                },
+            ],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 20_000_000);
+    }
+
+    #[test]
+    fn a_looped_net_is_measured_by_the_longest_path_the_loop_carries() {
+        // A square loop of 10 mm sides with a diagonal chord: the longest
+        // shortest path runs from one far corner to the other, 20 mm along
+        // the loop's rim. Sweeps from a corner only ever reach the chord's
+        // far end, 14.14 mm, which would understate the delay the loop
+        // carries.
+        let routing = Routing {
+            segments: vec![
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 0),
+                    end: Point::new(10_000_000, 10_000_000),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 10_000_000),
+                    end: Point::new(0, 10_000_000),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 10_000_000),
+                    end: Point::new(0, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 10_000_000),
                     width_nm: 127_000,
                 },
             ],
