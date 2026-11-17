@@ -28,10 +28,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use synth_router::{
-    ToolPaths,
+    RouterFailureReason, ToolPaths,
     contract::{FabricationPolicy, RouteRequest, RouterEngine, RouterLimits},
     result::RouteState,
-    RouterFailureReason,
 };
 
 struct Scratch {

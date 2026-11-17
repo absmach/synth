@@ -4043,7 +4043,14 @@ fn route_design(
         .artifacts
         .candidate
         .clone()
-        .or_else(|| report.artifacts.delivered.clone())
+        .filter(|path| path.exists())
+        .or_else(|| {
+            report
+                .artifacts
+                .delivered
+                .clone()
+                .filter(|path| path.exists())
+        })
         .unwrap_or_else(|| result.pcb_path.clone());
     let signal_integrity = synth_drc_on_routed(board, &si_board, &profile);
     Ok((report, signal_integrity))
@@ -4664,6 +4671,7 @@ fn export_kicad(
         .artifacts
         .candidate
         .clone()
+        .filter(|path| path.exists())
         .unwrap_or_else(|| delivered.clone());
     let synth_violations = synth_drc_on_routed(board, &si_board, &drc_profile);
     let blocking = print_signal_integrity(&synth_violations);
@@ -6016,10 +6024,10 @@ fn route_internally(
         .map_err(|e| anyhow::anyhow!("could not stage the internal route: {e}"))?;
 
     let mut statistics = synth_router::RouteStatistics::empty();
-    if let Ok(text) = std::fs::read_to_string(request.candidate_path()) {
-        if let Ok(routed_board) = synth_drc::pcb_read::PcbBoard::parse(&text) {
-            synth_router::kicad_routing_tools::refresh_counts(&mut statistics, &routed_board);
-        }
+    if let Ok(text) = std::fs::read_to_string(request.candidate_path())
+        && let Ok(routed_board) = synth_drc::pcb_read::PcbBoard::parse(&text)
+    {
+        synth_router::kicad_routing_tools::refresh_counts(&mut statistics, &routed_board);
     }
     let candidate = synth_router::freerouting::Candidate {
         candidate_path: request.candidate_path(),

@@ -104,10 +104,7 @@ pub struct Routing {
 }
 
 /// Dijkstra from `start`, returning `(distance_nm, farthest_node)`.
-fn farthest_point(
-    graph: &std::collections::BTreeMap<(i64, i64), Vec<((i64, i64), i64)>>,
-    start: (i64, i64),
-) -> (i64, (i64, i64)) {
+fn farthest_point(graph: &CopperGraph, start: (i64, i64)) -> (i64, (i64, i64)) {
     use std::cmp::Reverse;
     use std::collections::{BTreeMap, BinaryHeap};
     let mut dist: BTreeMap<(i64, i64), i64> = BTreeMap::new();
@@ -131,6 +128,9 @@ fn farthest_point(
         .map_or((0, start), |(node, distance)| (distance, node))
 }
 
+/// Undirected point-to-point copper graph of one net, with Euclidean weights.
+type CopperGraph = std::collections::BTreeMap<(i64, i64), Vec<((i64, i64), i64)>>;
+
 impl Routing {
     /// True when nothing was routed.
     ///
@@ -149,9 +149,9 @@ impl Routing {
     /// diameter (two farthest-point searches). Physical (Euclidean) length is
     /// used, so diagonal copper is not overstated by Manhattan arithmetic.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn length_for_net(&self, net: NetId) -> i64 {
-        let mut graph: std::collections::BTreeMap<(i64, i64), Vec<((i64, i64), i64)>> =
-            std::collections::BTreeMap::new();
+        let mut graph: CopperGraph = std::collections::BTreeMap::new();
         for segment in self.segments.iter().filter(|s| s.net == net) {
             let a = (segment.start.x_nm, segment.start.y_nm);
             let b = (segment.end.x_nm, segment.end.y_nm);

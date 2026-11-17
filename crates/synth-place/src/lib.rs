@@ -5117,6 +5117,7 @@ fn board_with_external_hints(board: &Board, external_hints: &[ExternalHint]) -> 
     modified_board
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionReport {
     let mut outcomes = Vec::new();
     let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
