@@ -103,6 +103,34 @@ pub struct Routing {
     pub pad_escape_rejections: usize,
 }
 
+/// Dijkstra from `start`, returning `(distance_nm, farthest_node)`.
+fn farthest_point(
+    graph: &std::collections::BTreeMap<(i64, i64), Vec<((i64, i64), i64)>>,
+    start: (i64, i64),
+) -> (i64, (i64, i64)) {
+    use std::cmp::Reverse;
+    use std::collections::{BTreeMap, BinaryHeap};
+    let mut dist: BTreeMap<(i64, i64), i64> = BTreeMap::new();
+    let mut heap: BinaryHeap<Reverse<(i64, (i64, i64))>> = BinaryHeap::new();
+    dist.insert(start, 0);
+    heap.push(Reverse((0, start)));
+    while let Some(Reverse((distance, node))) = heap.pop() {
+        if dist.get(&node).is_some_and(|known| *known < distance) {
+            continue;
+        }
+        for (next, weight) in graph.get(&node).into_iter().flatten() {
+            let candidate = distance.saturating_add(*weight);
+            if dist.get(next).is_none_or(|known| candidate < *known) {
+                dist.insert(*next, candidate);
+                heap.push(Reverse((candidate, *next)));
+            }
+        }
+    }
+    dist.into_iter()
+        .max_by_key(|(node, distance)| (*distance, *node))
+        .map_or((0, start), |(node, distance)| (distance, node))
+}
+
 impl Routing {
     /// True when nothing was routed.
     ///
@@ -112,18 +140,32 @@ impl Routing {
         self.segments.is_empty() && self.vias.is_empty()
     }
 
-    /// Sum of segment lengths attributed to `net`, in nm.
+    /// Length of the longest routed path on `net`, in nm.
+    ///
+    /// A delay budget is about the path from a driver to the farthest load,
+    /// not the sum of every branch: a T-shaped clock with two loads has two
+    /// paths, and the longer one is the delay. The copper is treated as an
+    /// undirected weighted graph of segment endpoints; the result is its
+    /// diameter (two farthest-point searches). Physical (Euclidean) length is
+    /// used, so diagonal copper is not overstated by Manhattan arithmetic.
     #[must_use]
     pub fn length_for_net(&self, net: NetId) -> i64 {
-        self.segments
-            .iter()
-            .filter(|s| s.net == net)
-            .map(|s| {
-                let dx = (s.end.x_nm - s.start.x_nm).abs();
-                let dy = (s.end.y_nm - s.start.y_nm).abs();
-                dx + dy
-            })
-            .sum()
+        let mut graph: std::collections::BTreeMap<(i64, i64), Vec<((i64, i64), i64)>> =
+            std::collections::BTreeMap::new();
+        for segment in self.segments.iter().filter(|s| s.net == net) {
+            let a = (segment.start.x_nm, segment.start.y_nm);
+            let b = (segment.end.x_nm, segment.end.y_nm);
+            let dx = (b.0 - a.0) as f64;
+            let dy = (b.1 - a.1) as f64;
+            let length = dx.hypot(dy).round() as i64;
+            graph.entry(a).or_default().push((b, length));
+            graph.entry(b).or_default().push((a, length));
+        }
+        let Some(start) = graph.keys().next().copied() else {
+            return 0;
+        };
+        let far = farthest_point(&graph, start);
+        farthest_point(&graph, far.1).0
     }
 
     /// Convert every [`UnroutedNet`] into an `E-SYNTH-ROUTE-001` diagnostic.
@@ -165,6 +207,54 @@ mod tests {
         assert!(routing.is_empty());
         assert!(routing.unrouted_nets.is_empty());
         assert!(routing.to_diagnostics("board.synth").is_empty());
+    }
+
+    #[test]
+    fn a_diagonal_track_is_its_physical_length_not_manhattan() {
+        let routing = Routing {
+            segments: vec![Segment {
+                net: NetId(1),
+                layer: Layer::Top,
+                start: Point::new(0, 0),
+                end: Point::new(3_000_000, 4_000_000),
+                width_nm: 127_000,
+            }],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 5_000_000);
+    }
+
+    #[test]
+    fn a_branched_net_is_measured_by_its_longest_path_not_its_sum() {
+        // 0 -> 10 mm -> 20 mm (20 mm path), with a 5 mm spur at the middle.
+        // Summing every branch would report 25 mm; the delay is 20 mm.
+        let routing = Routing {
+            segments: vec![
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 0),
+                    end: Point::new(20_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 0),
+                    end: Point::new(10_000_000, 5_000_000),
+                    width_nm: 127_000,
+                },
+            ],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 20_000_000);
     }
 
     #[test]

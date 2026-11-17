@@ -3939,12 +3939,16 @@ fn route_design(
         board.manufacturer.as_deref().unwrap_or("jlc-standard"),
         board.layers,
     );
-    let delivered = report
+    // Signal integrity is about the copper the router produced. When a
+    // candidate was rejected, `delivered` is the untouched baseline; reading
+    // that would make every SI rule no-op on exactly the board under review.
+    let si_board = report
         .artifacts
-        .delivered
+        .candidate
         .clone()
+        .or_else(|| report.artifacts.delivered.clone())
         .unwrap_or_else(|| result.pcb_path.clone());
-    let signal_integrity = synth_drc_on_routed(board, &delivered, &profile);
+    let signal_integrity = synth_drc_on_routed(board, &si_board, &profile);
     Ok((report, signal_integrity))
 }
 
@@ -4556,7 +4560,12 @@ fn export_kicad(
         .delivered
         .clone()
         .unwrap_or_else(|| result.pcb_path.clone());
-    let synth_violations = synth_drc_on_routed(board, &delivered, &drc_profile);
+    let si_board = routing
+        .artifacts
+        .candidate
+        .clone()
+        .unwrap_or_else(|| delivered.clone());
+    let synth_violations = synth_drc_on_routed(board, &si_board, &drc_profile);
     let blocking = print_signal_integrity(&synth_violations);
     if blocking > 0 && !force {
         error!(

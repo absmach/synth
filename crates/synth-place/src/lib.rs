@@ -5139,6 +5139,21 @@ fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionRe
             let cx = usable.min.x_nm + usable.width_nm() / 2;
             let cy = usable.min.y_nm + usable.height_nm() / 2;
 
+            // A hard `near` hint is a connectivity constraint. The placer
+            // creates an 8 mm halo when it can; the report must not claim the
+            // hint was honoured when the part landed outside it.
+            let near_honoured = hint.near.as_ref().is_none_or(|anchor| {
+                placement
+                    .components
+                    .iter()
+                    .find(|p| board.component(p.id).is_some_and(|c| &c.refdes == anchor))
+                    .is_some_and(|anchor_placed| {
+                        let dx = (placed_comp.center.x_nm - anchor_placed.center.x_nm) as f64;
+                        let dy = (placed_comp.center.y_nm - anchor_placed.center.y_nm) as f64;
+                        dx.hypot(dy) <= mm_to_nm(8.0) as f64
+                    })
+            });
+
             let status = if let Some(req_region) = &hint.region {
                 let is_honoured = match req_region {
                     synth_ir::PlacementRegion::TopLeft => {
@@ -5171,15 +5186,19 @@ fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionRe
                     }
                 };
 
-                if is_honoured {
+                if is_honoured && near_honoured {
                     HintStatus::Honoured
                 } else if hint.priority == synth_ir::PlacementPriority::Hard {
                     HintStatus::RelaxedToSoft
                 } else {
                     HintStatus::FallbackUsed
                 }
-            } else {
+            } else if near_honoured {
                 HintStatus::Honoured
+            } else if hint.priority == synth_ir::PlacementPriority::Hard {
+                HintStatus::RelaxedToSoft
+            } else {
+                HintStatus::FallbackUsed
             };
 
             outcomes.push(HintOutcome {
