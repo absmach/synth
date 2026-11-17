@@ -111,7 +111,7 @@ impl PackageEscape {
 /// the escape analysis is advisory, and the run proper already reports a
 /// baseline it cannot read.
 ///
-/// The advice names the board's own layer count ([`RouteRequest::use_board_layers`])
+/// The advice names the board's own layer count ([`crate::contract::RouteRequest::use_board_layers`])
 /// when the caller recorded one, because the exported file it would
 /// otherwise read can under-report the board it was written from.
 #[must_use]
