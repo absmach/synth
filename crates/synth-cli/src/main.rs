@@ -6550,7 +6550,7 @@ fn render(
     let export_res = synth_kicad::export(board, &tmp_dir)
         .map_err(|e| anyhow::anyhow!("kicad export for rendering failed: {e}"))?;
 
-    let kicad_cli = std::env::var("KICAD_CLI").unwrap_or_else(|_| "kicad-cli".into());
+    let kicad_cli = synth_drc::kicad_cli::binary();
 
     let out_str = out_path
         .to_str()

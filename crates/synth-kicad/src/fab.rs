@@ -143,9 +143,24 @@ fn create_dir(path: &Path) -> Result<(), FabError> {
 }
 
 /// Resolve the `kicad-cli` binary. The `KICAD_CLI` env var lets
-/// CI pin a specific build; otherwise we trust `PATH`.
+/// CI pin a specific build; otherwise we trust `PATH` and standard locations.
 fn kicad_cli_binary() -> String {
-    std::env::var("KICAD_CLI").unwrap_or_else(|_| "kicad-cli".to_string())
+    if let Ok(val) = std::env::var("KICAD_CLI") {
+        return val;
+    }
+    for candidate in [
+        "D:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "C:\\Program Files\\KiCad\\9.0\\bin\\kicad-cli.exe",
+        "C:\\Program Files\\KiCad\\8.0\\bin\\kicad-cli.exe",
+        "D:\\Program Files\\KiCad\\9.0\\bin\\kicad-cli.exe",
+        "D:\\Program Files\\KiCad\\8.0\\bin\\kicad-cli.exe",
+    ] {
+        if Path::new(candidate).is_file() {
+            return candidate.to_string();
+        }
+    }
+    "kicad-cli".to_string()
 }
 
 fn run_kicad_cli(subcommand: &'static str, args: &[String]) -> Result<(), FabError> {

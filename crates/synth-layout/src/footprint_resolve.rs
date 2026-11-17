@@ -108,6 +108,13 @@ impl FootprintIndex {
             Some(PathBuf::from(
                 "/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints",
             )),
+            Some(PathBuf::from("D:\\Program Files\\KiCad\\10.0\\share\\kicad\\footprints")),
+            Some(PathBuf::from("C:\\Program Files\\KiCad\\10.0\\share\\kicad\\footprints")),
+            Some(PathBuf::from("C:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints")),
+            Some(PathBuf::from("C:\\Program Files\\KiCad\\8.0\\share\\kicad\\footprints")),
+            Some(PathBuf::from("C:\\Program Files\\KiCad\\7.0\\share\\kicad\\footprints")),
+            Some(PathBuf::from("D:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints")),
+            Some(PathBuf::from("D:\\Program Files\\KiCad\\8.0\\share\\kicad\\footprints")),
         ]
         .into_iter()
         .flatten()
@@ -501,6 +508,13 @@ pub fn search_roots() -> Vec<PathBuf> {
         Some(PathBuf::from(
             "/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints",
         )),
+        Some(PathBuf::from("D:\\Program Files\\KiCad\\10.0\\share\\kicad\\footprints")),
+        Some(PathBuf::from("C:\\Program Files\\KiCad\\10.0\\share\\kicad\\footprints")),
+        Some(PathBuf::from("C:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints")),
+        Some(PathBuf::from("C:\\Program Files\\KiCad\\8.0\\share\\kicad\\footprints")),
+        Some(PathBuf::from("C:\\Program Files\\KiCad\\7.0\\share\\kicad\\footprints")),
+        Some(PathBuf::from("D:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints")),
+        Some(PathBuf::from("D:\\Program Files\\KiCad\\8.0\\share\\kicad\\footprints")),
     ]
     .into_iter()
     .flatten()

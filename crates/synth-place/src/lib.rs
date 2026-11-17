@@ -74,6 +74,15 @@
 )]
 
 pub mod advisor;
+pub mod analysis;
+pub mod directional_affinity;
+pub mod pad_geometry;
+pub use analysis::{analyze_placement, PlacementAnalysisReport};
+pub use directional_affinity::{AffinityVector, ComponentAffinity, DirectionalAffinityEngine};
+pub use pad_geometry::{
+    classify_pad_side, extract_all_pad_geometries, extract_component_pad_geometry,
+    ComponentPadGeometry, PadSide, PhysicalPad,
+};
 mod compact_gaps;
 pub use compact_gaps::{GapSpacing, compact_by_gaps, courtyard_rect_probe, hpwl_probe};
 mod alignment;
@@ -4337,36 +4346,64 @@ fn keepout_circles(
             continue;
         }
 
-        let anchor = board.components.iter().find(|c| {
-            c.refdes.to_lowercase() == keepout.name.to_lowercase()
-                || c.kind.to_lowercase() == keepout.name.to_lowercase()
-                || c.refdes
-                    .to_lowercase()
-                    .starts_with(&keepout.name.to_lowercase())
-        });
-
-        let keepout_center = if let Some(anchor) = anchor {
-            if anchor.id == id {
-                continue;
+        let keepout_center = if let Some((x, y)) = keepout.at {
+            Some(Point::new(mm_to_nm(x.to_mm()), mm_to_nm(y.to_mm())))
+        } else if let Some(wanted) = keepout.anchor.as_deref() {
+            let anchor = board.components.iter().find(|c| {
+                c.refdes.eq_ignore_ascii_case(wanted)
+                    || c.kind.eq_ignore_ascii_case(wanted)
+            });
+            if let Some(anchor) = anchor {
+                if anchor.id == id {
+                    continue;
+                }
+                lookup(anchor.id)
+                    .map(|r| {
+                        Point::new(
+                            i64::midpoint(r.min.x_nm, r.max.x_nm),
+                            i64::midpoint(r.min.y_nm, r.max.y_nm),
+                        )
+                    })
+                    .or_else(|| {
+                        Some(Point::new(
+                            board_outline.max.x_nm / 2,
+                            board_outline.max.y_nm / 2,
+                        ))
+                    })
+            } else {
+                None
             }
-            lookup(anchor.id)
-                .map(|r| {
-                    Point::new(
-                        i64::midpoint(r.min.x_nm, r.max.x_nm),
-                        i64::midpoint(r.min.y_nm, r.max.y_nm),
-                    )
-                })
-                .or_else(|| {
-                    Some(Point::new(
-                        board_outline.max.x_nm / 2,
-                        board_outline.max.y_nm / 2,
-                    ))
-                })
         } else {
-            Some(Point::new(
-                board_outline.max.x_nm / 2,
-                board_outline.max.y_nm / 2,
-            ))
+            let anchor = board.components.iter().find(|c| {
+                c.refdes.to_lowercase() == keepout.name.to_lowercase()
+                    || c.kind.to_lowercase() == keepout.name.to_lowercase()
+                    || c.refdes
+                        .to_lowercase()
+                        .starts_with(&keepout.name.to_lowercase())
+            });
+            if let Some(anchor) = anchor {
+                if anchor.id == id {
+                    continue;
+                }
+                lookup(anchor.id)
+                    .map(|r| {
+                        Point::new(
+                            i64::midpoint(r.min.x_nm, r.max.x_nm),
+                            i64::midpoint(r.min.y_nm, r.max.y_nm),
+                        )
+                    })
+                    .or_else(|| {
+                        Some(Point::new(
+                            board_outline.max.x_nm / 2,
+                            board_outline.max.y_nm / 2,
+                        ))
+                    })
+            } else {
+                Some(Point::new(
+                    board_outline.max.x_nm / 2,
+                    board_outline.max.y_nm / 2,
+                ))
+            }
         };
 
         if let Some(center) = keepout_center {
