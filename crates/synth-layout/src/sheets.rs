@@ -332,9 +332,8 @@ fn split_layout_with_pinned(
             // The re-laid-out page already went through the same sizing
             // passes, and its notes were cut down to this sheet's before it
             // was laid out, so its page is already the smallest this content
-            // needs. Re-running them here would grow it around the bottom
-            // edge `extend_boxes_to_frame_bottom` just filled, so only the
-            // annotations are clamped.
+            // needs. Re-running them here would grow it around the region
+            // boxes' bottom edge, so only the annotations are clamped.
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
@@ -1365,10 +1364,10 @@ mod tests {
         assert_eq!(power.layout.sheet_size, SheetSize::A0);
     }
 
-    /// The regions of a re-laid-out sheet tile the page the sheet chose, so
-    /// the page is not just smaller but actually used.
+    /// A re-laid-out sheet takes its own page and its boxes hug their
+    /// content instead of being stretched over the page.
     #[test]
-    fn a_relaid_out_sheet_fills_its_page() {
+    fn a_relaid_out_sheet_hugs_its_content_on_a_page_of_its_own() {
         let two = || vec![pin("p1"), pin("p2")];
         let mut input = component(0, "R1", Some("S"), two());
         input.group = Some("Input".to_string());
@@ -1403,16 +1402,18 @@ mod tests {
             .iter()
             .find(|s| s.name.as_deref() == Some("S"))
             .expect("the S sheet");
-        let (min_x, max_x, min_y, max_y) =
-            crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
+        assert_eq!(sheet.layout.sheet_size, SheetSize::A4);
         let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
-        let fill = (max_x - min_x) * (max_y - min_y) / (sheet_w * sheet_h);
+        let boxed: f64 = sheet
+            .layout
+            .group_boxes
+            .iter()
+            .map(|g| (g.max_mm.0 - g.min_mm.0) * (g.max_mm.1 - g.min_mm.1))
+            .sum();
         assert!(
-            fill >= 0.45,
-            "the page is only {:.0}% filled: {:.0} × {:.0} mm on {sheet_w} × {sheet_h}",
-            fill * 100.0,
-            max_x - min_x,
-            max_y - min_y
+            boxed < 0.5 * sheet_w * sheet_h,
+            "the boxes cover {:.0}% of the page: they were stretched again",
+            100.0 * boxed / (sheet_w * sheet_h)
         );
     }
 
@@ -1420,7 +1421,7 @@ mod tests {
     /// page is laid out from its own content, not left as a slice of the
     /// global one.
     #[test]
-    fn a_four_sheet_board_reuses_each_pages_space() {
+    fn a_four_sheet_board_gives_each_page_its_own_layout() {
         let two = || vec![pin("p1"), pin("p2")];
         let mut input = component(0, "R1", Some("S"), two());
         input.group = Some("Input".to_string());
@@ -1460,21 +1461,22 @@ mod tests {
             .iter()
             .find(|s| s.name.as_deref() == Some("S"))
             .expect("the S sheet");
-        assert_ne!(
+        assert_eq!(
             sheet.layout.sheet_size,
-            SheetSize::A0,
+            SheetSize::A4,
             "the S page is still the global strip"
         );
-        let (min_x, max_x, min_y, max_y) =
-            crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
         let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
-        let fill = (max_x - min_x) * (max_y - min_y) / (sheet_w * sheet_h);
+        let boxed: f64 = sheet
+            .layout
+            .group_boxes
+            .iter()
+            .map(|g| (g.max_mm.0 - g.min_mm.0) * (g.max_mm.1 - g.min_mm.1))
+            .sum();
         assert!(
-            fill >= 0.45,
-            "the S page is only {:.0}% filled: {:.0} × {:.0} mm on {sheet_w} × {sheet_h}",
-            fill * 100.0,
-            max_x - min_x,
-            max_y - min_y
+            boxed < 0.5 * sheet_w * sheet_h,
+            "the S page's boxes cover {:.0}% of the page: they were stretched again",
+            100.0 * boxed / (sheet_w * sheet_h)
         );
     }
 
