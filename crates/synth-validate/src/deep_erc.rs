@@ -591,25 +591,23 @@ impl OperatingEnvelopeRule {
             }
             // Voltage: the rail's nominal voltage above the part's declared
             // maximum is the overstress the review asks about.
-            if let Some(rail_v) = net_voltage(domains, net_id) {
-                if let Some(max_v) = part
+            if let Some(rail_v) = net_voltage(domains, net_id)
+                && let Some(max_v) = part
                     .operating_conditions
                     .as_ref()
                     .and_then(|oc| oc.max_voltage_v)
-                {
-                    if rail_v > max_v + 1e-6 {
-                        return Some(format!("a {rail_v:.1}V rail"));
-                    }
-                }
+                && rail_v > max_v + 1e-6
+            {
+                return Some(format!("a {rail_v:.1}V rail"));
             }
             // Current: a rail whose declared budget exceeds the part's
             // declared maximum. The budget is the netclass `current` the
             // board declares for the rail's nets; a rail without one has no
             // budget to exceed.
-            if let Some(budget_ma) = current_budget_ma(board, net) {
-                if exceeds_current(part, budget_ma) {
-                    return Some(format!("a rail with a {budget_ma:.0}mA budget"));
-                }
+            if let Some(budget_ma) = current_budget_ma(board, net)
+                && exceeds_current(part, budget_ma)
+            {
+                return Some(format!("a rail with a {budget_ma:.0}mA budget"));
             }
         }
         None

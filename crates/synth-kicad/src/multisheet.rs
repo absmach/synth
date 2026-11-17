@@ -1005,6 +1005,7 @@ mod tests {
                     root_furniture: None,
                 },
                 &mut crate::schematic::PowerRefAllocator::default(),
+                &mut Vec::new(),
             )
             .to_string_pretty()
         };

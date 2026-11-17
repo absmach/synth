@@ -372,15 +372,15 @@ fn numbered_repeat_matches(declared: &str, symbol: &str) -> bool {
         }
         Some((base, digits))
     }
-    if let Some((base, _)) = split(declared) {
-        if base == symbol {
-            return true;
-        }
+    if let Some((base, _)) = split(declared)
+        && base == symbol
+    {
+        return true;
     }
-    if let Some((base, _)) = split(symbol) {
-        if base == declared {
-            return true;
-        }
+    if let Some((base, _)) = split(symbol)
+        && base == declared
+    {
+        return true;
     }
     false
 }

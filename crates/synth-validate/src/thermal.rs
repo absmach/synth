@@ -133,10 +133,10 @@ fn supplies_a_rail(component: &synth_ir::Component) -> bool {
     if operating.max_current_ma.is_none() {
         return false;
     }
-    if let Some(budget) = operating.power_budget {
-        if !budget {
-            return false;
-        }
+    if let Some(budget) = operating.power_budget
+        && !budget
+    {
+        return false;
     }
     part.pins
         .iter()

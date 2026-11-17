@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use synth_registry::qualify::{
-    qualify_part, CheckStatus, FootprintFacts, PadFacts, PadSide, PartQualification, SymbolFacts,
+    CheckStatus, FootprintFacts, PadFacts, PadSide, PartQualification, SymbolFacts, qualify_part,
 };
 
 const BASE: &str = r#"

@@ -488,8 +488,14 @@ pub fn build_pcb(
                     .into());
                 }
                 None => Point::new(
-                    i64::midpoint(placement.board_outline.min.x_nm, placement.board_outline.max.x_nm),
-                    i64::midpoint(placement.board_outline.min.y_nm, placement.board_outline.max.y_nm),
+                    i64::midpoint(
+                        placement.board_outline.min.x_nm,
+                        placement.board_outline.max.x_nm,
+                    ),
+                    i64::midpoint(
+                        placement.board_outline.min.y_nm,
+                        placement.board_outline.max.y_nm,
+                    ),
                 ),
             }
         };

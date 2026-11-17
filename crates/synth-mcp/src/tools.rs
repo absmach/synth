@@ -6250,10 +6250,12 @@ mod language_reference_tests {
                     .starts_with("connect <REFDES>.<pin> -> <REFDES>.<pin> [as")
             })
             .expect("the connect form names `as` and `class`");
-        assert!(connect["form"]
-            .as_str()
-            .unwrap()
-            .contains("class \"<netclass>\""));
+        assert!(
+            connect["form"]
+                .as_str()
+                .unwrap()
+                .contains("class \"<netclass>\"")
+        );
         let netclass = statements
             .iter()
             .find(|s| {

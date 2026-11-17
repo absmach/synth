@@ -740,10 +740,10 @@ impl ErcRule for MissingDecouplingRule {
             for decoupling in &part.required_decoupling {
                 // A conditional rule applies only above the stated supply.
                 // An unknown rail voltage fails closed (the rule still runs).
-                if let Some(threshold) = decoupling.when_supply_over_v {
-                    if supply_voltage_v(board, component, part).is_some_and(|v| v <= threshold) {
-                        continue;
-                    }
+                if let Some(threshold) = decoupling.when_supply_over_v
+                    && supply_voltage_v(board, component, part).is_some_and(|v| v <= threshold)
+                {
+                    continue;
                 }
                 let Some(site) = decoupling_site(board, component, part, decoupling) else {
                     continue;
