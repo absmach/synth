@@ -125,7 +125,7 @@ human record.
 | `class-a/negative-broken-mcu-board` | A | negative test: the source gate must fail with the planted diagnostics |
 | `class-a/i2c-sensor-node` | A | cannot run: the route is rejected (99 blocking findings; see the row's `skip_reason`) |
 | `class-a/protected-power-entry` | A | cannot run: no route verdict re-established within budget (see the row's `skip_reason`) |
-| `class-b/buck` | B | positive: release passes with FreeRouting copper, the fab package passes with KiCadRoutingTools copper |
+| `class-b/buck` | B | cannot run: the DRC stage is unknown and the manufacturing gate fails on this branch (see the row's `skip_reason`) |
 | `class-b/usb-uart` | B | cannot run: the source gate rejects it with E-SYNTH-POWER-010 (see the row's `skip_reason`) |
 | `class-b/rtd-afe` | B | cannot run: the route does not validate (13 blocking findings; see the row's `skip_reason`) |
 
