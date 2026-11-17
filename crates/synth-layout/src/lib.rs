@@ -1017,7 +1017,22 @@ pub fn layout_with_overrides(
     placer: &dyn Placer,
     overlay: &dyn Fn(&mut Layout),
 ) -> Layout {
-    let clusters = build_clusters(board);
+    layout_with_overrides_and_power(board, placer, overlay, &HashSet::new())
+}
+
+/// [`layout_with_overrides`] with power nets the caller knows but this board
+/// alone cannot prove — a split sheet that holds only part of a rail.
+pub(crate) fn layout_with_power(board: &Board, power_nets: &HashSet<NetId>) -> Layout {
+    layout_with_overrides_and_power(board, &default_placer(), &|_| {}, power_nets)
+}
+
+fn layout_with_overrides_and_power(
+    board: &Board,
+    placer: &dyn Placer,
+    overlay: &dyn Fn(&mut Layout),
+    power_nets: &HashSet<NetId>,
+) -> Layout {
+    let clusters = build_clusters_with_power(board, power_nets);
     let mut layout = placer.place(board, &clusters);
     align_to_pin_grid(board, &mut layout);
     layout.power_flags = classify_power_flags(board);
@@ -3221,6 +3236,15 @@ pub enum MemberSide {
 /// LDO blocks, crystals, IC blocks, I²C buses, dividers, adopted rail
 /// capacitors, then singletons in declaration order.
 pub fn build_clusters(board: &Board) -> Vec<Cluster> {
+    build_clusters_with_power(board, &HashSet::new())
+}
+
+/// [`build_clusters`] with the power nets the caller already knows about.
+///
+/// A sheet of a split design holds only part of a rail, so a diode returned
+/// to it looks like it is on a passive net; `sheets::relayout_sheet` passes
+/// the whole design's classification so the clamp still pairs on that page.
+fn build_clusters_with_power(board: &Board, power_nets: &HashSet<NetId>) -> Vec<Cluster> {
     let recognized = synth_ir::recognize_clusters(board);
     let mut out = Vec::new();
     let mut drawn: std::collections::HashSet<ComponentId> = std::collections::HashSet::new();
@@ -3241,7 +3265,7 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
         if presented.kind == ClusterKind::ConnectorBlock {
             let mut kept = Vec::new();
             for member in std::mem::take(&mut presented.members) {
-                match clamp_partner(board, &member) {
+                match clamp_partner(board, &member, power_nets) {
                     Some((clamp, clamp_pin)) => {
                         out.push(Cluster {
                             anchor: member.id,
@@ -3289,7 +3313,11 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
 ///
 /// Any two-pin `diode` returned to a power net counts, LEDs included; an LED
 /// with a series resistor is claimed by its own cluster before this runs.
-fn clamp_partner(board: &Board, member: &ClusterMember) -> Option<(ComponentId, PinId)> {
+fn clamp_partner(
+    board: &Board,
+    member: &ClusterMember,
+    power_nets: &HashSet<NetId>,
+) -> Option<(ComponentId, PinId)> {
     let facing = member.anchor_facing_pin?;
     let part = board.component(member.id)?.part.as_ref()?;
     if part.pins.len() != 2 {
@@ -3309,7 +3337,9 @@ fn clamp_partner(board: &Board, member: &ClusterMember) -> Option<(ComponentId, 
     let (_, rail) = board
         .nets_containing(clamp.component, PinId(1 - clamp.pin.0))
         .next()?;
-    crate::classify_power_net(board, rail)?;
+    if !power_nets.contains(&rail.id) {
+        crate::classify_power_net(board, rail)?;
+    }
     Some((clamp.component, clamp.pin))
 }
 
@@ -8165,7 +8195,7 @@ mod patterns_tests {
     fn clamp_partner_needs_a_series_member() {
         let b = clamp_board(false, true);
         assert_eq!(
-            clamp_partner(&b, &series_member(None)),
+            clamp_partner(&b, &series_member(None), &HashSet::new()),
             None,
             "a member with no connector-facing pin is not a series resistor"
         );
@@ -8175,13 +8205,17 @@ mod patterns_tests {
     fn clamp_partner_ignores_a_three_endpoint_net() {
         let b = clamp_board(true, true);
         assert_eq!(
-            clamp_partner(&b, &series_member(Some(0))),
+            clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
             None,
             "the clamp is only unambiguous on a two-endpoint node"
         );
         // The plain two-endpoint form still pairs, so the fixture is load-bearing.
         assert_eq!(
-            clamp_partner(&clamp_board(false, true), &series_member(Some(0))),
+            clamp_partner(
+                &clamp_board(false, true),
+                &series_member(Some(0)),
+                &HashSet::new()
+            ),
             Some((ComponentId(2), PinId(0)))
         );
     }
@@ -8190,9 +8224,22 @@ mod patterns_tests {
     fn clamp_partner_ignores_a_shunt_with_no_rail() {
         let b = clamp_board(false, false);
         assert_eq!(
-            clamp_partner(&b, &series_member(Some(0))),
+            clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
             None,
             "a diode returned to a signal net is not a clamp"
+        );
+    }
+
+    #[test]
+    fn clamp_partner_accepts_a_rail_the_caller_knows() {
+        // A split sheet holds only the clamp side of the rail, so nothing on
+        // it proves the net is power; the caller's global classification does.
+        let b = clamp_board(false, false);
+        let power: HashSet<NetId> = [NetId(2)].into();
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0)), &power),
+            Some((ComponentId(2), PinId(0))),
+            "a known power net pairs without a local power pin"
         );
     }
 
@@ -8231,7 +8278,7 @@ mod patterns_tests {
             ],
         );
         assert_eq!(
-            clamp_partner(&b, &series_member(Some(0))),
+            clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
             Some((ComponentId(2), PinId(0))),
             "VCC clamps pair like GND clamps"
         );

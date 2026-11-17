@@ -430,7 +430,11 @@ fn relayout_sheet(
             sheet_size: crate::requested_sheet(board),
         };
     }
-    let mut layout = crate::layout(&sub.board);
+    let power_nets: HashSet<NetId> = global_flags
+        .iter()
+        .filter_map(|flag| sub.sub_net_ids.get(&flag.net).copied())
+        .collect();
+    let mut layout = crate::layout_with_power(&sub.board, &power_nets);
     // The global classification knows a rail is power even when this sheet
     // holds only its decoupling pins. Keep it, and re-route if the local
     // one drew a wire the page should draw as a symbol.
