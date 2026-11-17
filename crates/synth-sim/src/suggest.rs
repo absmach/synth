@@ -299,19 +299,19 @@ impl<'a> Draft<'a> {
         timing: Option<&TranTiming>,
         shape: &str,
     ) -> bool {
-        if let Some(existing) = self.measures.first().map(|measure| measure.analysis) {
-            if existing != analysis {
-                let other = match existing {
-                    AnalysisKind::Op => "an `op`",
-                    AnalysisKind::Ac => "an `ac`",
-                    AnalysisKind::Tran => "a `tran`",
-                };
-                self.not_covered.push(format!(
-                    "{shape} needs a different analysis and cannot share a file with \
+        if let Some(existing) = self.measures.first().map(|measure| measure.analysis)
+            && existing != analysis
+        {
+            let other = match existing {
+                AnalysisKind::Op => "an `op`",
+                AnalysisKind::Ac => "an `ac`",
+                AnalysisKind::Tran => "a `tran`",
+            };
+            self.not_covered.push(format!(
+                "{shape} needs a different analysis and cannot share a file with \
                      {other} measure"
-                ));
-                return false;
-            }
+            ));
+            return false;
         }
         if analysis == AnalysisKind::Tran {
             let Some(timing) = timing else {

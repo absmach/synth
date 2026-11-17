@@ -627,12 +627,12 @@ impl Testbench {
                                     "source on net `{net}` has neither a `dc` nor an `ac` value"
                                 )));
                             }
-                            if let Some(dc) = source.dc {
-                                if !dc.is_finite() {
-                                    return Err(testbench_error(format!(
-                                        "source on net `{net}` has a non-finite `dc` value"
-                                    )));
-                                }
+                            if let Some(dc) = source.dc
+                                && !dc.is_finite()
+                            {
+                                return Err(testbench_error(format!(
+                                    "source on net `{net}` has a non-finite `dc` value"
+                                )));
                             }
                             if let Some(ac) = source.ac {
                                 if !ac.is_finite() {
@@ -1116,13 +1116,13 @@ impl Testbench {
                     ("window_start", measure.window_start),
                     ("window_end", measure.window_end),
                 ] {
-                    if let Some(value) = value {
-                        if !value.is_finite() {
-                            return Err(invalid_measure(
-                                measure,
-                                format!("measure `{}` has a non-finite `{field}`", measure.name),
-                            ));
-                        }
+                    if let Some(value) = value
+                        && !value.is_finite()
+                    {
+                        return Err(invalid_measure(
+                            measure,
+                            format!("measure `{}` has a non-finite `{field}`", measure.name),
+                        ));
                     }
                 }
                 let start = measure.window_start.unwrap_or(0.0);
@@ -1327,11 +1327,7 @@ fn measure_unit(measure: &Measure) -> &'static str {
         MeasureKind::RelativeDb => "Hz",
         MeasureKind::PinCurrent => "mA",
         MeasureKind::Average | MeasureKind::Rms | MeasureKind::PeakToPeak => {
-            if measure.element.is_some() {
-                "A"
-            } else {
-                "V"
-            }
+            if measure.element.is_some() { "A" } else { "V" }
         }
         MeasureKind::SettlingTime | MeasureKind::RiseTime => "s",
         MeasureKind::Overshoot => "%",
@@ -1869,9 +1865,9 @@ fn parse_sentinels(
     }
 
     if !done {
-        let reason = stderr_analysis_failure(stderr)
-            .map(|reason| format!("; ngspice reported: {reason}"))
-            .unwrap_or_default();
+        let reason = stderr_analysis_failure(stderr).map_or_else(String::new, |reason| {
+            format!("; ngspice reported: {reason}")
+        });
         diagnostics.push(measure_error(format!(
             "ngspice did not print SYNTH_DONE{reason}"
         )));

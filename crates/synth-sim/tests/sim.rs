@@ -4223,32 +4223,44 @@ fn pulse_sources_reject_bad_fields() {
     let cases: [(&str, String, &str); 9] = [
         (
             "duty above one",
-            with_source("kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 1.5\nrise = \"100ns\"\nfall = \"100ns\""),
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 1.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
             "a `duty` that must be greater than 0 and at most 1",
         ),
         (
             "zero duty",
-            with_source("kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.0\nrise = \"100ns\"\nfall = \"100ns\""),
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.0\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
             "a `duty` that must be greater than 0 and at most 1",
         ),
         (
             "missing low",
-            with_source("kind = \"pulse\"\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\""),
+            with_source(
+                "kind = \"pulse\"\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
             "has no `low`",
         ),
         (
             "inverted levels",
-            with_source("kind = \"pulse\"\nlow = 3.3\nhigh = 0.0\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\""),
+            with_source(
+                "kind = \"pulse\"\nlow = 3.3\nhigh = 0.0\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
             "not less than `high`",
         ),
         (
             "edges over the period",
-            with_source("kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"60us\"\nfall = \"60us\""),
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"60us\"\nfall = \"60us\"",
+            ),
             "`rise` + `fall` greater than `period`",
         ),
         (
             "dc value with pulse",
-            with_source("kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"\ndc = 1.0"),
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"\ndc = 1.0",
+            ),
             "must not have a `dc` or `ac` value",
         ),
         (
@@ -4263,7 +4275,9 @@ fn pulse_sources_reject_bad_fields() {
         ),
         (
             "zero period",
-            with_source("kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"0s\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\""),
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"0s\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
             "a `period` that must be a positive finite time",
         ),
     ];
@@ -4350,22 +4364,34 @@ node = "OUT"
     let cases: [(&str, String, &str); 6] = [
         (
             "tolerance on average",
-            measure_block("average", "window_start = \"1ms\"\nwindow_end = \"2ms\"\ntolerance = 0.1\n"),
+            measure_block(
+                "average",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\ntolerance = 0.1\n",
+            ),
             "must not have `tolerance`",
         ),
         (
             "thresholds on peak_to_peak",
-            measure_block("peak_to_peak", "window_start = \"1ms\"\nwindow_end = \"2ms\"\nlow_threshold = 0.1\nhigh_threshold = 3.0\n"),
+            measure_block(
+                "peak_to_peak",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\nlow_threshold = 0.1\nhigh_threshold = 3.0\n",
+            ),
             "must not have `low_threshold`",
         ),
         (
             "at_frequency",
-            measure_block("average", "window_start = \"1ms\"\nwindow_end = \"2ms\"\nat_frequency = 1000.0\n"),
+            measure_block(
+                "average",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\nat_frequency = 1000.0\n",
+            ),
             "must not have `at_frequency`",
         ),
         (
             "pin",
-            measure_block("average", "window_start = \"1ms\"\nwindow_end = \"2ms\"\npin = \"U1.gpio5\"\n"),
+            measure_block(
+                "average",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\npin = \"U1.gpio5\"\n",
+            ),
             "must not have `pin`",
         ),
         (
@@ -4555,10 +4581,9 @@ fn the_pwm_rc_shape_measures_average_and_ripple_on_real_ngspice() {
 /// Round into a band the way the suggest engine does: three significant
 /// digits, so the printed limits match the printed values.
 fn round_to_band(value: f64, factor: f64) -> f64 {
-    let rounded = format!("{:.3e}", value * factor)
+    format!("{:.3e}", value * factor)
         .parse::<f64>()
-        .expect("band");
-    rounded
+        .expect("band")
 }
 
 #[test]

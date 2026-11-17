@@ -5,8 +5,8 @@
 use axum::{
     Json, Router,
     response::{
-        sse::{Event, Sse},
         IntoResponse, Response,
+        sse::{Event, Sse},
     },
     routing::{get, post},
 };

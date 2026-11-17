@@ -6419,10 +6419,10 @@ fn procurement_lock(
         {
             anyhow::bail!("disposition names `{refdes}`, which this board does not have");
         }
-        if let Some(previous) = dispositions.insert(refdes.clone(), disposition) {
-            if previous != disposition {
-                anyhow::bail!("disposition for `{refdes}` is given twice with different values");
-            }
+        if let Some(previous) = dispositions.insert(refdes.clone(), disposition)
+            && previous != disposition
+        {
+            anyhow::bail!("disposition for `{refdes}` is given twice with different values");
         }
     }
     let lock = synth_ir::lock_board_with_dispositions(board, variant, &dispositions)

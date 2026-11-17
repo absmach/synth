@@ -1376,11 +1376,13 @@ mod tests {
         );
         request.use_board_diff_pairs(&empty_board());
         assert!(request.diff_pairs.is_empty());
-        assert!(!DiffPairRequest {
-            positive: "A".to_string(),
-            negative: "B".to_string(),
-            max_skew_nm: None,
-        }
-        .declares_skew());
+        assert!(
+            !DiffPairRequest {
+                positive: "A".to_string(),
+                negative: "B".to_string(),
+                max_skew_nm: None,
+            }
+            .declares_skew()
+        );
     }
 }

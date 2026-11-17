@@ -12845,12 +12845,11 @@ board "near" {
         // to stay inside Edge.Cuts. Non-flush edges keep the full rim.
         let mut flush_edges = [false; 4];
         for component in &board.components {
-            if crate::is_edge_flush_connector(component) {
-                if let Some(hint) = component.placement_hint.as_ref() {
-                    if let Some(edge) = hint.edge.as_ref() {
-                        flush_edges[crate::edge_index(edge)] = true;
-                    }
-                }
+            if crate::is_edge_flush_connector(component)
+                && let Some(hint) = component.placement_hint.as_ref()
+                && let Some(edge) = hint.edge.as_ref()
+            {
+                flush_edges[crate::edge_index(edge)] = true;
             }
         }
         for component in &board.components {
