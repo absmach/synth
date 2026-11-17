@@ -3245,6 +3245,8 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
                     Some((clamp, clamp_pin)) => {
                         out.push(Cluster {
                             anchor: member.id,
+                            // Reuses a divider's placement (series element
+                            // above its shunt); there is no clamp kind.
                             kind: ClusterKind::Divider,
                             anchor_vertical: false,
                             members: vec![ClusterMember {
@@ -3284,6 +3286,9 @@ pub fn build_clusters(board: &Board) -> Vec<Cluster> {
 /// A zener/TVS/Schottky with one pin on the member's signal net and the
 /// other on a power net has no signal net to be pulled by, so as a
 /// singleton it was placed far from the resistor it clamps.
+///
+/// Any two-pin `diode` returned to a power net counts, LEDs included; an LED
+/// with a series resistor is claimed by its own cluster before this runs.
 fn clamp_partner(board: &Board, member: &ClusterMember) -> Option<(ComponentId, PinId)> {
     let facing = member.anchor_facing_pin?;
     let part = board.component(member.id)?.part.as_ref()?;

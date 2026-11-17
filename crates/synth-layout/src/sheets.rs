@@ -1627,7 +1627,8 @@ mod tests {
                     && x1 <= bx.max_mm.0 + 1e-6
                     && y0 >= bx.min_mm.1 - 1e-6
                     && y1 <= bx.max_mm.1 + 1e-6,
-                "drawn at ({x0:.1}, {y0:.1})..({x1:.1}, {y1:.1}) is outside                  ({:.1}, {:.1})..({:.1}, {:.1})",
+                "drawn at ({x0:.1}, {y0:.1})..({x1:.1}, {y1:.1}) is outside \
+                 ({:.1}, {:.1})..({:.1}, {:.1})",
                 bx.min_mm.0,
                 bx.min_mm.1,
                 bx.max_mm.0,
