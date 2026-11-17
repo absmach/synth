@@ -927,6 +927,41 @@ mod tests {
         assert_eq!(instances, files, "instances point at their own files");
     }
 
+    /// A sheet literally named with the suffix a disambiguated sheet took
+    /// (`A_2`) still gets its own file.
+    #[test]
+    fn a_literal_suffix_does_not_collide_with_a_disambiguated_name() {
+        let b = board(
+            vec![
+                component(0, Some("A/B")),
+                component(1, Some("A B")),
+                component(2, Some("A_B_2")),
+            ],
+            vec![],
+        );
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[
+            (0, 30.0, 30.0),
+            (1, ceiling_w * 2.0, 30.0),
+            (2, ceiling_w * 2.0 + 60.0, 30.0),
+        ]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 4, "root + three named sheets");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        let files: Vec<&str> = plan.files.iter().map(|f| f.file.as_str()).collect();
+        let unique: HashSet<&&str> = files.iter().collect();
+        assert_eq!(unique.len(), files.len(), "one file per sheet: {files:?}");
+        let instances: Vec<&str> = plan
+            .furniture
+            .instances
+            .iter()
+            .map(|i| i.file.as_str())
+            .collect();
+        assert_eq!(instances, files);
+    }
+
     /// A sub-sheet prints the same Value the root does. `(no value)` is the
     /// documented value -> MPN sentinel, not something a split adds.
     #[test]

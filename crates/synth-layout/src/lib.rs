@@ -5021,8 +5021,8 @@ fn row_offsets(
             &mut alone,
             &mut std::collections::HashSet::new(),
         );
-        let (above, below) = body_bbox_of(board, &alone)
-            .map_or((0.0, 0.0), |b| ((-b.2).max(0.0), b.3.max(0.0)));
+        let (above, below) =
+            body_bbox_of(board, &alone).map_or((0.0, 0.0), |b| ((-b.2).max(0.0), b.3.max(0.0)));
         let u = unit(i);
         if !reach.contains_key(&u) {
             row_units.push(u);
@@ -8100,6 +8100,141 @@ mod patterns_tests {
         let div = find_cluster(&clusters, 1);
         assert_member(div, 2, MemberSide::Below);
         assert_layout_places_everything(&b);
+    }
+
+    /// J0 → R1 → D0, with D0's other pin on `return_pin` of J0. `signal_extra`
+    /// adds a third endpoint to the R1/D0 node; `return_is_rail` decides
+    /// whether J0's second pin names a rail (`gnd`) or a plain signal.
+    fn clamp_board(signal_extra: bool, return_is_rail: bool) -> Board {
+        let j0 = component(
+            0,
+            "J0",
+            part(
+                "connector",
+                vec![
+                    pin("p1", ElectricalType::Passive, &[]),
+                    pin(
+                        if return_is_rail { "gnd" } else { "p2" },
+                        if return_is_rail {
+                            ElectricalType::PowerInput
+                        } else {
+                            ElectricalType::Passive
+                        },
+                        &[],
+                    ),
+                ],
+            ),
+        );
+        let two_pin = |id: &str, kind: &str| {
+            part(
+                kind,
+                vec![
+                    pin(id, ElectricalType::Passive, &[]),
+                    pin(id, ElectricalType::Passive, &[]),
+                ],
+            )
+        };
+        let r1 = component(1, "R1", two_pin("p1", "resistor"));
+        let d0 = component(2, "D0", two_pin("p1", "diode"));
+        let mut nets = vec![
+            net(0, "sig_in", &[(0, 0), (1, 0)]),
+            net(1, "node", &[(1, 1), (2, 0)]),
+            net(2, "return", &[(0, 1), (2, 1)]),
+        ];
+        let mut components = vec![j0, r1, d0];
+        if signal_extra {
+            components.push(component(3, "R2", two_pin("p1", "resistor")));
+            nets[1].endpoints.push(synth_ir::NetEndpoint {
+                component: ComponentId(3),
+                pin: PinId(0),
+                source_span: Span::new(0, 0),
+            });
+        }
+        board(components, nets)
+    }
+
+    fn series_member(facing: Option<u32>) -> ClusterMember {
+        ClusterMember {
+            id: ComponentId(1),
+            side: MemberSide::Below,
+            anchor_facing_pin: facing.map(PinId),
+        }
+    }
+
+    #[test]
+    fn clamp_partner_needs_a_series_member() {
+        let b = clamp_board(false, true);
+        assert_eq!(
+            clamp_partner(&b, &series_member(None)),
+            None,
+            "a member with no connector-facing pin is not a series resistor"
+        );
+    }
+
+    #[test]
+    fn clamp_partner_ignores_a_three_endpoint_net() {
+        let b = clamp_board(true, true);
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0))),
+            None,
+            "the clamp is only unambiguous on a two-endpoint node"
+        );
+        // The plain two-endpoint form still pairs, so the fixture is load-bearing.
+        assert_eq!(
+            clamp_partner(&clamp_board(false, true), &series_member(Some(0))),
+            Some((ComponentId(2), PinId(0)))
+        );
+    }
+
+    #[test]
+    fn clamp_partner_ignores_a_shunt_with_no_rail() {
+        let b = clamp_board(false, false);
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0))),
+            None,
+            "a diode returned to a signal net is not a clamp"
+        );
+    }
+
+    #[test]
+    fn clamp_partner_accepts_a_clamp_on_a_vcc_rail() {
+        let j0 = component(
+            0,
+            "J0",
+            part(
+                "connector",
+                vec![
+                    pin("p1", ElectricalType::Passive, &[]),
+                    pin("vcc", ElectricalType::PowerOutput, &[]),
+                ],
+            ),
+        );
+        let two = |id: &str, kind: &str| {
+            part(
+                kind,
+                vec![
+                    pin(id, ElectricalType::Passive, &[]),
+                    pin(id, ElectricalType::Passive, &[]),
+                ],
+            )
+        };
+        let b = board(
+            vec![
+                j0,
+                component(1, "R1", two("p1", "resistor")),
+                component(2, "D0", two("p1", "diode")),
+            ],
+            vec![
+                net(0, "sig_in", &[(0, 0), (1, 0)]),
+                net(1, "node", &[(1, 1), (2, 0)]),
+                net(2, "vcc", &[(0, 1), (2, 1)]),
+            ],
+        );
+        assert_eq!(
+            clamp_partner(&b, &series_member(Some(0))),
+            Some((ComponentId(2), PinId(0))),
+            "VCC clamps pair like GND clamps"
+        );
     }
 }
 

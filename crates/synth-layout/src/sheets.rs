@@ -1558,6 +1558,121 @@ mod tests {
         }
     }
 
+    /// A design whose content ends exactly on the page limit is not over
+    /// it: `sheet_overflow` is a strict `>`.
+    #[test]
+    fn a_design_exactly_at_the_sheet_limit_stays_single_sheet() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        let (ceiling_w, ceiling_h) = crate::max_single_sheet(&b).dims_mm();
+        let mut l = layout(vec![placed(0, 40.0, 40.0)], Vec::new());
+        l.group_boxes.push(crate::GroupBox {
+            group: "Filter".to_string(),
+            min_mm: (SHEET_BORDER_MM, SHEET_BORDER_MM),
+            // Both edges land exactly on the limit page_needs folds in.
+            max_mm: (
+                ceiling_w - SHEET_BORDER_MM,
+                ceiling_h - crate::FRAME_INSET - crate::TITLE_BLOCK_H,
+            ),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        assert!(
+            !sheet_overflow(&b, &l),
+            "content exactly at the limit is not over it"
+        );
+        assert_eq!(layout_sheets(&b, l, None).len(), 1);
+    }
+
+    /// A part with both a `sheet` and a `group` is partitioned by the
+    /// sheet: an explicit block outranks the drawing region.
+    #[test]
+    fn a_sheet_block_outranks_the_group_on_the_same_part() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut c = component(0, "R1", Some("Power"), two());
+        c.group = Some("Filter".to_string());
+        let b = board(vec![c], Vec::new());
+        let plan = plan_sheets(&b);
+        assert_eq!(plan.len(), 2, "root + Power, no Filter partition");
+        assert!(plan[0].components.is_empty());
+        assert_eq!(plan[1].name.as_deref(), Some("Power"));
+    }
+
+    /// A mix of explicit `sheet` parts and grouped parts keeps an empty
+    /// root: the sheets are the author's hierarchy, and the root is its
+    /// table of contents.
+    #[test]
+    fn a_mixed_sheet_and_group_split_keeps_its_empty_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("A"), two()),
+                grouped_component(1, "R2", "Filter", two()),
+            ],
+            Vec::new(),
+        );
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![placed(0, 30.0, 30.0), placed(1, ceiling_w * 2.0, 30.0)],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3, "root + A + Filter");
+        assert!(
+            sheets[0].layout.components.is_empty(),
+            "an explicit sheet keeps the root as its table of contents"
+        );
+    }
+
+    /// A note whose group has no components lands on the root and does not
+    /// panic.
+    #[test]
+    fn a_note_for_a_group_with_no_parts_lands_on_the_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                grouped_component(0, "R1", "Filter", two()),
+                component(1, "R2", Some("A"), two()),
+            ],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Ghost".to_string(),
+            lines: vec!["nothing is here".to_string()],
+            group: Some("Ghost".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![placed(0, 30.0, 30.0), placed(1, ceiling_w * 2.0, 30.0)],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3);
+        assert!(
+            sheets[0]
+                .layout
+                .annotations
+                .iter()
+                .any(|a| a.text == "nothing is here"),
+            "an orphan note stays on the root"
+        );
+        for sheet in &sheets[1..] {
+            assert!(
+                !sheet
+                    .layout
+                    .annotations
+                    .iter()
+                    .any(|a| a.text == "nothing is here"),
+                "no other sheet draws it"
+            );
+        }
+    }
+
     /// A group merged onto the root keeps its note. The note follows the
     /// partition that holds the group, and that partition is now the root.
     #[test]

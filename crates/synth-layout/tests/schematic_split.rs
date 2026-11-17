@@ -91,3 +91,59 @@ fn grouped_clamps_stay_compact_and_on_one_sheet() {
         "the design fits one sheet, so it must not split"
     );
 }
+
+/// A 20-pin header with 20 series resistors in one group, plus a small
+/// regulator group: a tall-ish region that still fits the largest sheet.
+fn tall_grouped() -> String {
+    use std::fmt::Write as _;
+    let mut source = String::from(
+        r#"board "tall_grouped" {
+  layers 2
+  group "HEADER" {
+    component J1: connector "header_1x20"
+"#,
+    );
+    for i in 0..20 {
+        let _ = writeln!(
+            source,
+            "    component R{i}: resistor \"r_generic_0603\" value \"100\""
+        );
+    }
+    source.push_str(
+        "  }\n  group \"POWER\" {\n    component U1: regulator \"ams1117_3v3\"\n    component C1: capacitor \"c_generic_0805\" value \"10uF\"\n    component C2: capacitor \"c_generic_0805\" value \"10uF\"\n  }\n",
+    );
+    for i in 0..20 {
+        let _ = writeln!(source, "  connect J1.p{} -> R{i}.p1", i + 1);
+    }
+    source.push_str(
+        "  connect U1.vin -> C1.p1\n  connect U1.gnd -> C1.p2\n  connect U1.vout -> C2.p1\n  connect U1.gnd -> C2.p2\n}\n",
+    );
+    source
+}
+
+/// A grouped design whose regions fit together stays on one sheet even
+/// when one region is tall: a tall region is not an overflow.
+#[test]
+fn a_tall_grouped_region_that_fits_stays_on_one_sheet() {
+    let board = board_from_source("tall_grouped.synth", &tall_grouped());
+    let layout = synth_layout::layout(&board);
+    let header = layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == "HEADER")
+        .expect("the header group has a box");
+    let height = header.max_mm.1 - header.min_mm.1;
+    assert!(
+        height > 200.0,
+        "the fixture must produce a tall-ish region, got {height:.0} mm"
+    );
+    assert!(
+        !synth_layout::sheets::sheet_overflow(&board, &layout),
+        "the content fits one sheet"
+    );
+    assert_eq!(
+        synth_layout::sheets::layout_sheets(&board, layout, None).len(),
+        1,
+        "a tall region that fits must not force a split"
+    );
+}
