@@ -208,7 +208,7 @@ def run_row(
         "drc_state": (stages.get("drc", {}).get("result") or {}).get("state"),
         "drc_engine": (stages.get("drc", {}).get("result") or {}).get("engine"),
         "source_sha256": report.get("source_sha256"),
-        "drc_counts": (stages.get("drc", {}).get("result") or {}).get("validation", {}).get(
+        "drc_counts": ((stages.get("drc", {}).get("result") or {}).get("validation") or {}).get(
             "kicad_drc"
         ),
         # The routing stage's own words, for the human reading a result that

@@ -1356,9 +1356,10 @@ fn a_declared_pair_outside_its_skew_budget_blocks_the_release() {
     // as its candidate: the same copper the request was built from.
     let router = StubRouter::new("skewed_router", Behaviour::CopyBaseline);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = diff_pair_request(&scratch, &board, 150_000);
+    let mut request = diff_pair_request(&scratch, &board, 150_000);
+    request.tools = tools;
     let report = synth_router::route(&request);
     assert_eq!(report.state, RouteState::ValidationFailed);
     assert!(!report.is_fabrication_ready());
@@ -1387,9 +1388,10 @@ fn a_declared_pair_inside_its_skew_budget_releases() {
     let board = diff_pair_board("20.825");
     let router = StubRouter::new("matched_router", Behaviour::CopyBaseline);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = diff_pair_request(&scratch, &board, 150_000);
+    let mut request = diff_pair_request(&scratch, &board, 150_000);
+    request.tools = tools;
     let report = synth_router::route(&request);
     let validation = report.validation.as_ref();
     assert!(
@@ -1416,7 +1418,7 @@ fn a_board_without_a_declared_pair_is_unchanged() {
     let board = diff_pair_board("21.225");
     let router = StubRouter::new("no-pair_router", Behaviour::CopyBaseline);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
     let board_path = scratch.write("demo.kicad_pcb", &board);
     let mut request = RouteRequest::new(&board_path, &scratch.path, RouterEngine::Freerouting);
@@ -1425,6 +1427,7 @@ fn a_board_without_a_declared_pair_is_unchanged() {
     request.policy = FabricationPolicy::default();
     request.input_hash = "test-input-hash".to_string();
     request.profile_name = "jlc-standard".to_string();
+    request.tools = tools;
     request.preserve_baseline().expect("baseline preserved");
     let report = synth_router::route(&request);
     let no_pair_finding = report.validation.as_ref().is_none_or(|v| {
