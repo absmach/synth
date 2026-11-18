@@ -246,7 +246,7 @@ pub fn route_best_of(base: &RouteRequest, engines: &[RouterEngine]) -> Portfolio
         let mut request = base.clone();
         request.engine = *engine;
         request.out_dir = base.out_dir.join(engine.artifact_tag());
-        request.board_path = stable_board.clone();
+        request.board_path.clone_from(&stable_board);
         attempts.push(route(&request));
     }
 
