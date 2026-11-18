@@ -47,7 +47,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: kicad/kicad:10.0.8-full
-      options: --user root
+      # --init puts a reaper at PID 1. Without it a killed grandchild stays a
+      # zombie, `kill -0` still finds it, and the process-timeout tests fail.
+      options: --user root --init
     env:
       # GitHub mounts /github/home for the step user; the container runs as
       # root, so rustup otherwise refuses with "$HOME differs from euid home".
@@ -141,7 +143,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: kicad/kicad:10.0.8-full
-      options: --user root
+      # --init puts a reaper at PID 1. Without it a killed grandchild stays a
+      # zombie, `kill -0` still finds it, and the process-timeout tests fail.
+      options: --user root --init
     env:
       # GitHub mounts /github/home for the step user; the container runs as
       # root, so rustup otherwise refuses with "$HOME differs from euid home".
