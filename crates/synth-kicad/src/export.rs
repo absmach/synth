@@ -866,7 +866,11 @@ fn place_candidates_with_margins(
     // The outline is final now: put each corner-hinted mounting hole into the
     // corner it asked for when that spot is free.
     for candidate in &mut candidates {
-        synth_place::snap_features_to_corners(board, candidate, synth_place::passive_edge_margin_mm(board));
+        synth_place::snap_features_to_corners(
+            board,
+            candidate,
+            synth_place::passive_edge_margin_mm(board),
+        );
     }
 
     let mut distinct: Vec<synth_place::Placement> = Vec::with_capacity(candidates.len());

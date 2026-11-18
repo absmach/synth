@@ -2176,7 +2176,10 @@ enum FeatureSlot {
 
 impl FeatureSlot {
     fn is_corner(self) -> bool {
-        matches!(self, Self::TopLeft | Self::TopRight | Self::BottomLeft | Self::BottomRight)
+        matches!(
+            self,
+            Self::TopLeft | Self::TopRight | Self::BottomLeft | Self::BottomRight
+        )
     }
 
     /// The point on the envelope this slot aims at: a corner, or the middle
@@ -2258,8 +2261,8 @@ pub fn snap_features_to_corners(board: &Board, placement: &mut Placement, edge_m
         let half_w = rect.width_nm() / 2;
         let half_h = rect.height_nm() / 2;
         // Courtyard centre relative to the placement origin (a hole's is zero).
-        let off_x = (rect.min.x_nm + rect.max.x_nm) / 2 - placed.center.x_nm;
-        let off_y = (rect.min.y_nm + rect.max.y_nm) / 2 - placed.center.y_nm;
+        let off_x = i64::midpoint(rect.min.x_nm, rect.max.x_nm) - placed.center.x_nm;
+        let off_y = i64::midpoint(rect.min.y_nm, rect.max.y_nm) - placed.center.y_nm;
         let left = outline.min.x_nm + margin_nm + half_w;
         let right = outline.max.x_nm - margin_nm - half_w;
         let top = outline.min.y_nm + margin_nm + half_h;
@@ -2278,8 +2281,8 @@ pub fn snap_features_to_corners(board: &Board, placement: &mut Placement, edge_m
         let moved = sidecar_courtyard_rect(board, component, &candidate);
         let distance = |p: &ComponentPlacement| {
             let r = sidecar_courtyard_rect(board, component, p);
-            ((r.min.x_nm + r.max.x_nm) / 2 - corner.x_nm).abs()
-                + ((r.min.y_nm + r.max.y_nm) / 2 - corner.y_nm).abs()
+            (i64::midpoint(r.min.x_nm, r.max.x_nm) - corner.x_nm).abs()
+                + (i64::midpoint(r.min.y_nm, r.max.y_nm) - corner.y_nm).abs()
         };
         if distance(&placed) <= mm_to_nm(1.0) {
             continue;
