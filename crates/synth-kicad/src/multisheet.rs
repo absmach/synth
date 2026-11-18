@@ -94,14 +94,19 @@ pub fn sheet_uuid(project: &Uuid, sheet: &str) -> Uuid {
     derive_entity_uuid(project, "sheet", sheet)
 }
 
-/// The sub-sheet files a hierarchy writes, in sheet order: `(uuid, file)`
-/// for each named sheet, with a numeric suffix when two names sanitise to
-/// one file name. The root and the project's sheet table both take their
-/// file names from here, so they cannot disagree.
-pub fn sheet_files(stem: &str, project: &Uuid, sheets: &[SheetLayout]) -> Vec<(Uuid, String)> {
+/// The sub-sheet files a hierarchy writes, in sheet order: `(sheet
+/// index, uuid, file)` for each named sheet, with a numeric suffix when
+/// two names sanitise to one file name. The index is the sheet's
+/// position in `sheets`, so a caller can pair it with its layout without
+/// walking a second list. The root and the project's sheet table both
+/// take their file names from here, so they cannot disagree.
+pub fn sheet_files(stem: &str, project: &Uuid, sheets: &[SheetLayout]) -> Vec<(usize, Uuid, String)> {
     let mut used = HashSet::new();
     let mut out = Vec::new();
-    for name in sheets.iter().filter_map(|sheet| sheet.name.as_deref()) {
+    for (index, sheet) in sheets.iter().enumerate() {
+        let Some(name) = sheet.name.as_deref() else {
+            continue;
+        };
         // Two sheet names can sanitise to one file name ("A / B" and
         // "A + B"): the second gets a numeric suffix rather than
         // overwriting the first sheet's file.
@@ -112,7 +117,7 @@ pub fn sheet_files(stem: &str, project: &Uuid, sheets: &[SheetLayout]) -> Vec<(U
             file = format!("{stem}_{base}_{suffix}.kicad_sch");
             suffix += 1;
         }
-        out.push((sheet_uuid(project, name), file));
+        out.push((index, sheet_uuid(project, name), file));
     }
     out
 }
@@ -256,6 +261,61 @@ fn root_page(
     }
 }
 
+/// One named sub-sheet's fixed layout inputs. Its box width and pins do
+/// not depend on the root page, so a candidate page only has to place the
+/// boxes.
+struct SheetBox {
+    name: String,
+    uuid: Uuid,
+    file: String,
+    width: f64,
+    pins: Vec<String>,
+    members: HashSet<ComponentId>,
+}
+
+/// Place every sub-sheet box on the root, left to right then top to
+/// bottom, wrapping at `wrap_limit`. All coordinates that carry copper
+/// (pins, stubs) snap to the 1.27 mm connection grid, so KiCad ERC can
+/// exact-match wire ends to pins.
+fn place_instances(
+    boxes: &[SheetBox],
+    wrap_limit: f64,
+    row_start: f64,
+    box_y: f64,
+    row_h: f64,
+    project: &Uuid,
+) -> Vec<PlacedSheetInstance> {
+    let mut cursor_x = row_start;
+    let mut row_y = box_y;
+    let mut instances = Vec::new();
+    for b in boxes {
+        if cursor_x > row_start && cursor_x + b.width > wrap_limit {
+            cursor_x = row_start;
+            row_y = snap_grid_127(row_y + row_h + INSTANCE_GAP);
+        }
+        let pin_y = snap_grid_127(row_y + INSTANCE_H);
+        let box_h = pin_y - row_y;
+        let mut pins = Vec::new();
+        for (pi, net) in b.pins.iter().enumerate() {
+            let px = snap_grid_127(
+                cursor_x + (pi + 1) as f64 * b.width / (b.pins.len() + 1) as f64,
+            );
+            let pin_uuid = derive_entity_uuid(project, "sheet_pin", &format!("{}/{net}", b.name));
+            pins.push((net.clone(), (px, pin_y), pin_uuid));
+        }
+        instances.push(PlacedSheetInstance {
+            name: b.name.clone(),
+            file: b.file.clone(),
+            uuid: b.uuid,
+            at_mm: (cursor_x, row_y),
+            size_mm: (b.width, box_h),
+            pins,
+        });
+        cursor_x += b.width + INSTANCE_GAP;
+    }
+    instances
+}
+
 /// Everything the multi-sheet export needs: per-sheet files and
 /// members, root furniture, and per-sheet power drivers.
 #[derive(Debug)]
@@ -270,11 +330,6 @@ pub struct MultiSheetPlan {
 /// Plan root furniture and per-sheet drivers for `sheets` (root
 /// first). `stem` names the sub-sheet files; `root_bounds` is the
 /// root layout's content `(min_x, max_x, min_y, max_y)`.
-///
-/// # Panics
-///
-/// Never in practice: [`sheet_files`] returns one entry per named sheet,
-/// and this walks the same named sheets in the same order.
 pub fn plan_multisheet(
     board: &Board,
     project: &Uuid,
@@ -311,7 +366,6 @@ pub fn plan_multisheet(
     let (_min_x, _max_x, _min_y, root_max_y) = root_bounds;
     let row_start = snap_grid_127(INSTANCE_MARGIN);
     let row_limit = synth_layout::SheetSize::A0.dims_mm().0 - INSTANCE_MARGIN;
-    let mut cursor_x = row_start;
     let box_y = snap_grid_127(if root_max_y.is_finite() {
         root_max_y + INSTANCE_GAP
     } else {
@@ -320,53 +374,46 @@ pub fn plan_multisheet(
     // Pin row is snapped independently; the box height is then
     // derived from it so the bottom edge lands exactly on the pins.
     let row_h = snap_grid_127(box_y + INSTANCE_H) - box_y;
-    let mut row_y = box_y;
-    let mut instances = Vec::new();
-    let mut files = Vec::new();
-    let mut planned_files = sheet_files(stem, project, sheets).into_iter();
+
+    let mut planned: HashMap<usize, (Uuid, String)> = sheet_files(stem, project, sheets)
+        .into_iter()
+        .map(|(index, uuid, file)| (index, (uuid, file)))
+        .collect();
+    let mut boxes = Vec::new();
     for (index, sheet) in sheets.iter().enumerate() {
         let Some(name) = sheet.name.as_deref() else {
             continue;
         };
+        let Some((uuid, file)) = planned.remove(&index) else {
+            continue;
+        };
         let members: HashSet<ComponentId> = sheet.layout.components.iter().map(|p| p.id).collect();
-        let pins_here: Vec<&String> = cross_nets
+        let pins: Vec<String> = cross_nets
             .iter()
             .filter(|net| cross[net.as_str()].contains(&index))
+            .cloned()
             .collect();
         let width =
-            snap_grid_127(INSTANCE_MIN_W.max(pins_here.len() as f64 * PIN_PITCH + 2.0 * PIN_PITCH));
-        let (uuid, file) = planned_files
-            .next()
-            .expect("one planned file per named sheet");
-        if cursor_x > row_start && cursor_x + width > row_limit {
-            cursor_x = row_start;
-            row_y = snap_grid_127(row_y + row_h + INSTANCE_GAP);
-        }
-        let pin_y = snap_grid_127(row_y + INSTANCE_H);
-        let box_h = pin_y - row_y;
-        let mut pins = Vec::new();
-        for (pi, net) in pins_here.iter().enumerate() {
-            let px =
-                snap_grid_127(cursor_x + (pi + 1) as f64 * width / (pins_here.len() + 1) as f64);
-            let pin_uuid = derive_entity_uuid(project, "sheet_pin", &format!("{name}/{net}"));
-            pins.push(((*net).clone(), (px, pin_y), pin_uuid));
-        }
-        instances.push(PlacedSheetInstance {
-            name: name.to_string(),
-            file: file.clone(),
-            uuid,
-            at_mm: (cursor_x, row_y),
-            size_mm: (width, box_h),
-            pins,
-        });
-        files.push(SheetFile {
+            snap_grid_127(INSTANCE_MIN_W.max(pins.len() as f64 * PIN_PITCH + 2.0 * PIN_PITCH));
+        boxes.push(SheetBox {
             name: name.to_string(),
             uuid,
             file,
+            width,
+            pins,
             members,
         });
-        cursor_x += width + INSTANCE_GAP;
     }
+    let instances = place_instances(&boxes, row_limit, row_start, box_y, row_h, project);
+    let files = boxes
+        .iter()
+        .map(|b| SheetFile {
+            name: b.name.clone(),
+            uuid: b.uuid,
+            file: b.file.clone(),
+            members: b.members.clone(),
+        })
+        .collect();
 
     // Root wires: one channel per net below the boxes, vertical stubs
     // from each pin plus a horizontal span. Channels never collide
