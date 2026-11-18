@@ -120,17 +120,10 @@ synth routers
 
 `--check` reports what is installed without changing anything, and `synth routers` tells you which engines Synth can actually use, with the reason for each one that it cannot.
 
-**If an external engine is missing**, capability discovery reports
-`router_unavailable` with the reason and the paths it searched. FreeRouting
-needs a Java runtime and the JAR; both are found automatically.
+**If an engine is missing**, Synth reports `router_unavailable` along with the paths it searched. FreeRouting needs a Java runtime and the JAR; both are found automatically.
 
-`synth drc` and `synth route` fall back to the workspace's own deterministic
-router when no external engine is installed, so the stage still ends in a
-real verdict (see `docs/qualification-matrix.md`).
-`synth export-kicad` does not: a manufacturing package carries copper from a
-validated external route, so a missing engine stays an unavailable check
-there. `SYNTH_QUALIFY_ROUTER` pins an engine and disables the fallback, so a
-pinned run reports the pinned engine honestly missing.
+`SYNTH_QUALIFY_ROUTER` pins the engine a qualification run records; the run
+then reports that engine honestly missing rather than routing with another.
 
 > [!TIP]
 > There is one failure that catches almost everyone. The helper that drives FreeRouting imports KiCad's `pcbnew` module, which ships with **KiCad's own Python** — and that is usually _not_ the `python3` first on your `PATH`. When that happens, point the pipeline at the right interpreter:

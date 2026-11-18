@@ -1,6 +1,6 @@
 # Reference-board qualification matrix
 
-Status: accepted, 2026-11-13. Covers #45, #95 and #98.
+Status: accepted, 2026-11-13. Covers #45 and #98; #95 is deferred because this tree has no Synth-native router.
 
 ## The rule
 
@@ -13,32 +13,27 @@ synth drc <board>.synth --pretty
 synth export-kicad <board>.synth --out <dir> --gerbers --drill --step --pnp
 ```
 
-`synth drc` now routes with a real engine on every machine, so its DRC column
-is a verdict, not an availability report:
+`synth drc` routes with the selected external engine, so its DRC column is a
+verdict when that engine is installed and an availability report when it is
+not:
 
 - when an external engine is configured and available, its copper is routed,
   validated independently and DRC-checked as before;
-- when no external engine is installed, the stage falls back to the
-  workspace's own deterministic router (`synth-route`), which routes the board
-  against the export's own placement and goes through the same independent
-  validation and `kicad-cli pcb drc`, so the run record carries real
-  per-board counts. A board the fallback cannot route still fails with counts
-  — a real verdict, not an unknown — and only a fallback that cannot run at
-  all leaves `unknown` (issue #95);
+- when no external engine is installed, the stage reports
+  `router_unavailable` and the DRC column stays `unknown` — never a pass;
 - a board with nothing to route (no nets, or every net on one pad) is a
   validated empty route: zero copper, real DRC counts, `pass` when KiCad
   agrees (#98).
 
 The pin: `SYNTH_QUALIFY_ROUTER=kicad-routing-tools` names the engine a
-qualification run records. A pin outranks both the `--router` flag and the
-fallback, so a pinned run gets the pinned engine or an honest
-`router_unavailable` — never copper from an engine its record does not name.
+qualification run records. A pin outranks the `--router` flag, so a pinned run
+gets the pinned engine or an honest `router_unavailable` — never copper from
+an engine its record does not name.
 
-Manufacturing is still fail-closed on routing: `synth check --fab` and
-`synth export-kicad` never fall back, because a fabricable package carries
-copper from a validated external route. Without an engine installed the
-manufacturing stage reports `unknown`/`router_unavailable`, which is an
-**unavailable** check, not a clean one.
+Manufacturing is fail-closed on routing: `synth check --fab` and
+`synth export-kicad` need a validated external route. Without an engine
+installed the manufacturing stage reports `unknown`/`router_unavailable`, which
+is an **unavailable** check, not a clean one.
 
 ## Matrix status
 

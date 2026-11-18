@@ -864,10 +864,10 @@ enum Format {
 
 /// The external router an operator selected.
 ///
-/// KiCadRoutingTools is the default; FreeRouting is the managed alternative
-/// and therefore always an explicit choice. There is no third variant, and no
-/// built-in router: a missing engine is a capability error, never a silent
-/// fallback to something else.
+/// KiCadRoutingTools is the default; FreeRouting and FastRoute are the
+/// alternatives and therefore always an explicit choice. There is no
+/// Synth-native route: a missing engine is an unavailable run, not copper
+/// from another engine.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum ExternalRouter {
     FreeRouting,
@@ -899,6 +899,34 @@ fn validate_stdout_passed(stdout: &[u8]) -> bool {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false)
     })
+}
+
+/// The engine `SYNTH_QUALIFY_ROUTER` pins, or `selected` when unset.
+///
+/// A qualification run records the engine its corpus was routed with, so the
+/// pin outranks `--router` and the run record always names the engine that
+/// produced the copper. A value naming no engine is ignored with a warning
+/// rather than quietly routing with something else.
+fn pinned_engine(selected: ExternalRouter) -> ExternalRouter {
+    let value = std::env::var("SYNTH_QUALIFY_ROUTER")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let Some(value) = value else {
+        return selected;
+    };
+    match synth_router::RouterEngine::parse(&value) {
+        Some(synth_router::RouterEngine::Freerouting) => ExternalRouter::FreeRouting,
+        Some(synth_router::RouterEngine::KiCadRoutingTools) => ExternalRouter::KicadRoutingTools,
+        Some(synth_router::RouterEngine::Fastroute) => ExternalRouter::Fastroute,
+        None => {
+            warn!(
+                "SYNTH_QUALIFY_ROUTER={value} names no router (kicad-routing-tools, \
+                 freerouting or fastroute); the pin is ignored"
+            );
+            selected
+        }
+    }
 }
 
 impl ExternalRouter {
@@ -4019,6 +4047,10 @@ fn route_design(
     let sidecars = synth_kicad::Sidecars::resolve_for(input);
     let result = synth_kicad::export_with_sidecars(board, &out_dir, &sidecars)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+
+    // The qualification pin outranks the flag, so a recorded run names the
+    // engine the corpus used.
+    let engine = pinned_engine(engine);
     let report = route_externally(board, &result, input, engine, options, best_of, &[])?;
 
     // Signal/power-integrity on the delivered copper, so `synth route` and

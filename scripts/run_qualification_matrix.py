@@ -146,7 +146,7 @@ def run_row(
     flags = row.get("flags", [])
     # A row can name the engine each command records: the corpus records which
     # router produced its evidence, so the matrix re-runs it with that engine
-    # pinned (issue #95's pin semantics: a pin never falls back).
+    # pinned so the evidence names the engine that produced it.
     router = row.get("router", qualify_router)
     environment = dict(os.environ)
     environment["SYNTH_QUALIFY_ROUTER"] = router

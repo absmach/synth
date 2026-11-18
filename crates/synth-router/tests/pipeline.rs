@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use synth_router::{
-    RouterFailureReason, ToolPaths,
+    ToolPaths,
     contract::{FabricationPolicy, RouteRequest, RouterEngine, RouterLimits},
     result::RouteState,
 };
