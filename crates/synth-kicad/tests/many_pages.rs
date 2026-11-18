@@ -17,6 +17,11 @@ use synth_ir::{
 use synth_layout::SheetSize;
 use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin as RegPin, PinNumber};
 
+/// A name long enough to make a real file name, not a special case.
+const LONG_NAME_LEN: usize = 120;
+/// Parts per explicit sheet in the collision, long-name and mixed cases.
+const SHEET_PARTS: usize = 8;
+
 struct Spec {
     group: Option<String>,
     sheet: Option<String>,
@@ -186,8 +191,15 @@ fn grouped(name: &str, groups: usize) -> Board {
 
 struct Export {
     dir: PathBuf,
+    root_path: PathBuf,
     root: String,
     project: String,
+}
+
+impl Drop for Export {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
 }
 
 fn export(board: &Board) -> Export {
@@ -201,9 +213,61 @@ fn export(board: &Board) -> Export {
     }
     synth_kicad::export_schematic_only(board, &dir, None).expect("schematic export");
     let stem = &board.name;
-    let root = std::fs::read_to_string(dir.join(format!("{stem}.kicad_sch"))).unwrap();
+    let root_path = dir.join(format!("{stem}.kicad_sch"));
+    let root = std::fs::read_to_string(&root_path).unwrap();
     let project = std::fs::read_to_string(dir.join(format!("{stem}.kicad_pro"))).unwrap();
-    Export { dir, root, project }
+    Export {
+        dir,
+        root_path,
+        root,
+        project,
+    }
+}
+
+fn first_quoted(s: &str) -> Option<&str> {
+    let start = s.find('"')? + 1;
+    Some(&s[start..start + s[start..].find('"')?])
+}
+
+fn quoted_after<'a>(s: &'a str, key: &str) -> Option<&'a str> {
+    first_quoted(s.split(key).nth(1)?)
+}
+
+fn two_numbers(s: &str) -> Option<(f64, f64)> {
+    let mut numbers = s
+        .split(|c: char| c == ')' || c.is_whitespace())
+        .filter(|part| !part.is_empty())
+        .map(str::parse::<f64>);
+    Some((numbers.next()?.ok()?, numbers.next()?.ok()?))
+}
+
+fn parse_xy(s: &str, key: &str) -> Option<(f64, f64)> {
+    two_numbers(s.split(key).nth(1)?)
+}
+
+fn paper(root: &str) -> (String, f64, f64) {
+    let line = root
+        .lines()
+        .find(|line| line.contains("(paper"))
+        .expect("the root declares a paper");
+    let name = quoted_after(line, "(paper").expect("the paper has a name");
+    if name == "User" {
+        let (width, height) = two_numbers(line.split("\"User\"").nth(1).expect("custom size"))
+            .expect("two custom dimensions");
+        (name.to_string(), width, height)
+    } else {
+        let size = match name {
+            "A5" => SheetSize::A5,
+            "A4" => SheetSize::A4,
+            "A3" => SheetSize::A3,
+            "A2" => SheetSize::A2,
+            "A1" => SheetSize::A1,
+            "A0" => SheetSize::A0,
+            other => panic!("unknown paper {other}"),
+        };
+        let (width, height) = size.dims_mm();
+        (name.to_string(), width, height)
+    }
 }
 
 /// One `(sheet …)` block from the root as `(text, x, y, width, height)`.
@@ -211,30 +275,8 @@ fn sheet_blocks(root: &str) -> Vec<(&str, f64, f64, f64, f64)> {
     let mut out = Vec::new();
     for chunk in root.split("\n\t(sheet\n").skip(1) {
         let block = &chunk[..chunk.find("\n\t)").expect("sheet block closes")];
-        let at = block
-            .split("(at ")
-            .nth(1)
-            .and_then(|r| r.split(')').next())
-            .expect("sheet has a position");
-        let size = block
-            .split("(size ")
-            .nth(1)
-            .and_then(|r| r.split(')').next())
-            .expect("sheet has a size");
-        let nums = |s: &str| -> Vec<f64> {
-            s.split_whitespace()
-                .take(2)
-                .map(|v| v.parse().unwrap())
-                .collect()
-        };
-        let (x, y) = {
-            let n = nums(at);
-            (n[0], n[1])
-        };
-        let (w, h) = {
-            let n = nums(size);
-            (n[0], n[1])
-        };
+        let (x, y) = parse_xy(block, "(at ").expect("sheet has a position");
+        let (w, h) = parse_xy(block, "(size ").expect("sheet has a size");
         out.push((block, x, y, w, h));
     }
     out
@@ -258,11 +300,7 @@ fn pages(root: &str) -> Vec<u32> {
 fn sheet_files(root: &str) -> Vec<String> {
     root.split("\"Sheetfile\"")
         .skip(1)
-        .map(|r| {
-            let rest = r.trim_start();
-            let start = rest.find('"').unwrap() + 1;
-            rest[start..start + rest[start..].find('"').unwrap()].to_string()
-        })
+        .map(|chunk| first_quoted(chunk).expect("Sheetfile value").to_string())
         .collect()
 }
 
@@ -285,13 +323,9 @@ fn unique(mut v: Vec<String>) -> Vec<String> {
 }
 
 fn sheet_name(block: &str) -> String {
-    let rest = block
-        .split("\"Sheetname\"")
-        .nth(1)
+    quoted_after(block, "\"Sheetname\"")
         .expect("sheet has a name")
-        .trim_start();
-    let start = rest.find('"').unwrap() + 1;
-    rest[start..start + rest[start..].find('"').unwrap()].to_string()
+        .to_string()
 }
 
 fn assert_boxes_fit(boxes: &[(&str, f64, f64, f64, f64)], width: f64, height: f64) {
@@ -341,7 +375,7 @@ fn colliding_sheet_names_get_distinct_project_entries() {
     let names = ["A / B", "A + B", "A_B_2", "Z"];
     let mut specs = Vec::new();
     for name in names {
-        for _ in 0..8 {
+        for _ in 0..SHEET_PARTS {
             specs.push(Spec::sheet(name, 2));
         }
     }
@@ -379,11 +413,6 @@ fn colliding_sheet_names_get_distinct_project_entries() {
 fn the_root_declares_its_own_page() {
     let board = grouped("rootpage", 3);
     let out = export(&board);
-    assert!(
-        out.root.contains("(sheet_instances"),
-        "the root has no sheet_instances block:\n{}",
-        &out.root[..out.root.len().min(400)]
-    );
     let root_page = out
         .root
         .split("(sheet_instances")
@@ -396,19 +425,24 @@ fn the_root_declares_its_own_page() {
 }
 
 #[test]
+fn a_single_sheet_root_has_no_sheet_instances_block() {
+    let board = grouped("single", 2);
+    let out = export(&board);
+    // Two groups still fit one page, so there is no hierarchy root.
+    assert!(pages(&out.root).is_empty());
+    assert!(
+        !out.root.contains("(sheet_instances"),
+        "a single-sheet export grew a root instance block"
+    );
+}
+
+#[test]
 fn each_sub_sheet_page_is_keyed_to_its_parent_instance() {
     let board = grouped("pagepaths", 25);
     let out = export(&board);
-    let root_uuid = out
-        .root
-        .split("(uuid \"")
-        .nth(1)
-        .and_then(|r| r.split('"').next())
-        .expect("the root has a uuid");
+    let root_uuid = quoted_after(&out.root, "(uuid ").expect("the root has a uuid");
     for (block, ..) in sheet_blocks(&out.root) {
-        let after = block.split("(path").nth(1).expect("a sheet instance path");
-        let start = after.find('"').expect("the path is quoted") + 1;
-        let path = &after[start..start + after[start..].find('"').unwrap()];
+        let path = quoted_after(block, "(path").expect("a sheet instance path");
         assert_eq!(
             path,
             format!("/{root_uuid}"),
@@ -423,7 +457,7 @@ fn a_hierarchy_with_one_sub_sheet_keeps_page_two() {
     // 40-pin parts are tall enough that one explicit sheet of them no longer
     // fits the requested A4 page, so the design really splits.
     let mut specs = vec![Spec::root(40)];
-    for _ in 0..8 {
+    for _ in 0..SHEET_PARTS {
         specs.push(Spec::sheet("Only", 40));
     }
     let board = build("onesub", &specs, &[], None);
@@ -435,73 +469,41 @@ fn a_hierarchy_with_one_sub_sheet_keeps_page_two() {
 }
 
 #[test]
-fn pages_are_unique_and_contiguous_at_twelve_sheets() {
-    let board = grouped("pages12", 12);
-    let out = export(&board);
-    let pages = pages(&out.root);
-    assert_eq!(pages, (2..=12).collect::<Vec<_>>(), "pages: {pages:?}");
-    assert!(
-        out.root.contains("(paper \"A0\")"),
-        "root page grew or shrank"
-    );
-    let boxes = sheet_blocks(&out.root);
-    assert_eq!(boxes.len(), 11);
-    assert!(
-        boxes.windows(2).all(|w| w[0].1 < w[1].1),
-        "the boxes are not laid out left to right"
-    );
-    assert_boxes_fit(&boxes, SheetSize::A0.dims_mm().0, SheetSize::A0.dims_mm().1);
-    assert_boxes_do_not_overlap(&boxes);
-}
-
-#[test]
-fn pages_are_unique_and_contiguous_at_twenty_five_sheets() {
-    let board = grouped("pages25", 25);
-    let out = export(&board);
-    let pages = pages(&out.root);
-    assert_eq!(pages, (2..=25).collect::<Vec<_>>(), "pages: {pages:?}");
-    assert!(
-        !out.root.contains("(paper \"User\""),
-        "the root row invented a custom page wider than A0"
-    );
-    let boxes = sheet_blocks(&out.root);
-    assert!(
-        boxes
-            .iter()
-            .map(|b| b.2)
-            .collect::<Vec<_>>()
-            .windows(2)
-            .any(|w| w[0] != w[1]),
-        "24 sheet symbols are still one unwrapped row"
-    );
-    assert_boxes_fit(&boxes, SheetSize::A0.dims_mm().0, SheetSize::A0.dims_mm().1);
-    assert_boxes_do_not_overlap(&boxes);
-    assert_pages_follow_reading_order(&boxes, &pages);
-}
-
-#[test]
-fn pages_are_unique_and_contiguous_at_sixty_sheets() {
-    let board = grouped("pages60", 60);
-    let out = export(&board);
-    let pages = pages(&out.root);
-    assert_eq!(pages, (2..=60).collect::<Vec<_>>(), "pages: {pages:?}");
-    assert!(
-        !out.root.contains("(paper \"User\""),
-        "the root row invented a custom page wider than A0"
-    );
-    let boxes = sheet_blocks(&out.root);
-    assert!(
-        boxes
-            .iter()
-            .map(|b| b.2)
-            .collect::<Vec<_>>()
-            .windows(2)
-            .any(|w| w[0] != w[1]),
-        "59 sheet symbols are still one unwrapped row"
-    );
-    assert_boxes_fit(&boxes, SheetSize::A0.dims_mm().0, SheetSize::A0.dims_mm().1);
-    assert_boxes_do_not_overlap(&boxes);
-    assert_pages_follow_reading_order(&boxes, &pages);
+fn the_root_page_is_the_smallest_ladder_page_that_holds_the_rows() {
+    let cases = [
+        (3, SheetSize::A4, 1),
+        (6, SheetSize::A3, 2),
+        (12, SheetSize::A2, 3),
+        (13, SheetSize::A2, 3),
+        (25, SheetSize::A1, 4),
+        (60, SheetSize::A0, 6),
+    ];
+    for (n, page, rows) in cases {
+        let board = grouped(&format!("pages{n}"), n);
+        let out = export(&board);
+        let pages = pages(&out.root);
+        assert_eq!(
+            pages,
+            (2..=n as u32).collect::<Vec<_>>(),
+            "N={n} pages: {pages:?}"
+        );
+        assert!(
+            out.root.contains(&format!("(paper \"{page:?}\")")),
+            "N={n} root is not {page:?}: {}",
+            out.root
+                .lines()
+                .find(|l| l.contains("(paper"))
+                .unwrap_or("no paper")
+        );
+        let boxes = sheet_blocks(&out.root);
+        assert_eq!(boxes.len(), n - 1, "N={n} boxes: {}", boxes.len());
+        let actual_rows = 1 + boxes.windows(2).filter(|w| w[0].2 != w[1].2).count();
+        assert_eq!(actual_rows, rows, "N={n} rows");
+        let (w, h) = page.dims_mm();
+        assert_boxes_fit(&boxes, w, h);
+        assert_boxes_do_not_overlap(&boxes);
+        assert_pages_follow_reading_order(&boxes, &pages);
+    }
 }
 
 #[test]
@@ -569,25 +571,14 @@ fn many_cross_nets_stay_on_the_box_bottom_edge() {
         );
     }
     for pin in pins {
-        let at = pin
-            .split("(at ")
-            .nth(1)
-            .and_then(|r| r.split(')').next())
-            .expect("a pin has a position");
-        let pos: Vec<f64> = at
-            .split_whitespace()
-            .take(2)
-            .map(|v| v.parse().unwrap())
-            .collect();
+        let (px, py) = parse_xy(pin, "(at ").expect("a pin has a position");
         assert!(
-            pos[0] >= box_x && pos[0] <= box_x + box_w,
-            "pin {} is outside the box horizontally",
-            pos[0]
+            px >= box_x && px <= box_x + box_w,
+            "pin {px} is outside the box horizontally"
         );
         assert!(
-            (pos[1] - (box_y + box_h)).abs() < 0.01,
-            "pin at y={} is not on the box bottom edge {}",
-            pos[1],
+            (py - (box_y + box_h)).abs() < 0.01,
+            "pin at y={py} is not on the box bottom edge {}",
             box_y + box_h
         );
     }
@@ -599,7 +590,7 @@ fn many_cross_nets_stay_on_the_box_bottom_edge() {
 fn explicit_sheets_and_groups_mix_keep_contiguous_pages() {
     let mut specs = vec![Spec::root(2)];
     for sheet in ["S1", "S2", "S3"] {
-        for _ in 0..8 {
+        for _ in 0..SHEET_PARTS {
             specs.push(Spec::sheet(sheet, 2));
         }
     }
@@ -630,11 +621,28 @@ fn a_requested_a4_page_is_a_floor() {
 }
 
 #[test]
+fn a_requested_a4_page_grows_for_a_many_sheet_root() {
+    let mut board = grouped("a4many", 25);
+    board.schematic_paper = Some(SchematicPaper::A4);
+    let out = export(&board);
+    assert!(
+        out.root.contains("(paper \"A1\")"),
+        "24 boxes need A1; A4 is a floor, not a cap: {}",
+        out.root
+            .lines()
+            .find(|l| l.contains("(paper"))
+            .unwrap_or("no paper")
+    );
+    let (_, width, height) = paper(&out.root);
+    assert_boxes_fit(&sheet_blocks(&out.root), width, height);
+}
+
+#[test]
 fn non_ascii_names_that_sanitise_alike_are_disambiguated() {
     let names = ["电路板电源", "电路板地线", "Z"];
     let mut specs = Vec::new();
     for name in names {
-        for _ in 0..8 {
+        for _ in 0..SHEET_PARTS {
             specs.push(Spec::sheet(name, 2));
         }
     }
@@ -653,11 +661,11 @@ fn non_ascii_names_that_sanitise_alike_are_disambiguated() {
 }
 
 #[test]
-fn a_very_long_name_is_sanitized_into_a_real_file() {
-    let long = "x".repeat(120);
+fn a_long_sheet_name_is_kept_in_a_real_file_name() {
+    let long = "x".repeat(LONG_NAME_LEN);
     let mut specs = Vec::new();
     for name in [long.as_str(), "Z"] {
-        for _ in 0..8 {
+        for _ in 0..SHEET_PARTS {
             specs.push(Spec::sheet(name, 2));
         }
     }
@@ -668,7 +676,11 @@ fn a_very_long_name_is_sanitized_into_a_real_file() {
     for file in &files {
         assert!(out.dir.join(file).exists(), "{file} was not written");
     }
-    assert!(files.iter().any(|file| file.contains(&"x".repeat(120))));
+    assert!(
+        files
+            .iter()
+            .any(|file| file.contains(&"x".repeat(LONG_NAME_LEN)))
+    );
 }
 
 #[test]
@@ -689,4 +701,103 @@ fn an_empty_group_does_not_take_a_page() {
             .any(|file| file.contains("Empty")),
         "an empty group got a file"
     );
+}
+
+/// Once the rows no longer fit A0, the root page has to grow past the
+/// ladder. It keeps A0 as the wrap width and the height becomes a custom
+/// page; everything still fits and pages stay in reading order.
+#[test]
+fn past_a0_the_root_page_grows_past_the_ladder() {
+    let board = grouped("pages101", 101);
+    let out = export(&board);
+    let (name, width, height) = paper(&out.root);
+    assert_eq!(name, "User", "past A0 the root page is custom");
+    assert!(height > SheetSize::A0.dims_mm().1, "the page did not grow");
+    let pages = pages(&out.root);
+    assert_eq!(pages, (2..=101).collect::<Vec<_>>(), "pages: {pages:?}");
+    let boxes = sheet_blocks(&out.root);
+    assert_eq!(boxes.len(), 100);
+    assert_boxes_fit(&boxes, width, height);
+    assert_boxes_do_not_overlap(&boxes);
+    assert_pages_follow_reading_order(&boxes, &pages);
+}
+
+#[test]
+fn kicad_reads_twelve_pages_in_page_order_and_erc_is_clean() {
+    let kicad = std::process::Command::new("kicad-cli")
+        .arg("version")
+        .output();
+    if !kicad.is_ok_and(|out| out.status.success()) {
+        eprintln!("kicad-cli not installed; skipping the rendered page-order check");
+        return;
+    }
+    if std::process::Command::new("pdftotext")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("pdftotext not installed; skipping the rendered page-order check");
+        return;
+    }
+
+    let board = grouped("pages12", 12);
+    let out = export(&board);
+    let pdf = out.dir.join("order.pdf");
+    let status = std::process::Command::new("kicad-cli")
+        .args(["sch", "export", "pdf", "-o"])
+        .arg(&pdf)
+        .arg(&out.root_path)
+        .output()
+        .expect("kicad-cli runs");
+    assert!(
+        status.status.success(),
+        "kicad-cli could not export the PDF"
+    );
+
+    let text = std::process::Command::new("pdftotext")
+        .arg("-layout")
+        .arg(&pdf)
+        .arg("-")
+        .output()
+        .expect("pdftotext runs");
+    let text = String::from_utf8_lossy(&text.stdout);
+    let pages: Vec<&str> = text
+        .split('\u{0c}')
+        .filter(|page| page.contains("Sheet: /"))
+        .collect();
+    assert_eq!(pages.len(), 12, "the PDF has the wrong number of pages");
+    for (index, page) in pages.iter().enumerate() {
+        let sheet = if index == 0 {
+            "/".to_string()
+        } else {
+            format!("/G{index:02}/")
+        };
+        assert!(
+            page.contains(&format!("Sheet: {sheet}")),
+            "PDF page {} is not {sheet}:\n{page}",
+            index + 1
+        );
+        assert!(
+            page.contains(&format!("Id: {}/12", index + 1)),
+            "PDF page {} does not carry Id: {}/12:\n{page}",
+            index + 1,
+            index + 1
+        );
+    }
+
+    let erc = synth_kicad::run_kicad_erc(&out.root_path);
+    match erc.evidence.reason {
+        Some(synth_diagnostics::UnknownReason::NotInstalled) => {
+            eprintln!("kicad-cli not installed; skipping the ERC half");
+        }
+        Some(_) => panic!(
+            "ERC produced no usable evidence: {}",
+            erc.evidence.summary_line()
+        ),
+        None => assert!(
+            erc.errors().next().is_none(),
+            "twelve-sheet ERC errors: {:?}",
+            erc.errors().collect::<Vec<_>>()
+        ),
+    }
 }
