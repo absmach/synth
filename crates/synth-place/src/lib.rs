@@ -5146,50 +5146,58 @@ fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionRe
             // which the placer reduces to the refdes. The report must not
             // claim the hint was honoured when the part's centre landed
             // outside that halo, or when the anchor never got placed.
-            let near_honoured = hint.near.as_ref().is_none_or(|anchor| {
-                // `U1.dvdd` anchors the part `U1`; the pin is honoured by the
-                // pad-aware target, not by the halo.
-                let refdes = anchor.split_once('.').map_or(anchor.as_str(), |(r, _)| r);
-                // Match the anchor the way `resolve_hint_target` does: it
-                // lowercases both names, so a hint that names `u1` (or a
-                // pin `u1.vcc`) anchors the placed part `U1`. A case-sensitive
-                // comparison here would report such a honoured hard hint as
-                // relaxed even though the placer kept it inside the halo.
-                placement
-                    .components
-                    .iter()
-                    .find(|p| {
-                        board
-                            .component(p.id)
-                            .is_some_and(|c| c.refdes.eq_ignore_ascii_case(refdes))
-                    })
-                    .is_some_and(|anchor_placed| {
-                        let Some(anchor) = board
-                            .components
-                            .iter()
-                            .find(|c| c.refdes.eq_ignore_ascii_case(refdes))
-                        else {
-                            return false;
-                        };
-                        let (offset_mm, (width_mm, height_mm)) = anchor.part.as_ref().map_or_else(
-                            || ((0.0, 0.0), fallback_courtyard(&anchor.kind)),
-                            synth_layout::pcb_courtyard_geometry_for_part,
-                        );
-                        let courtyard = courtyard_rect_for_placement(
-                            anchor_placed,
-                            width_mm,
-                            height_mm,
-                            Some(offset_mm),
-                            0,
-                        );
-                        let margin = mm_to_nm(8.0);
-                        let halo = Rect::new(
-                            Point::new(courtyard.min.x_nm - margin, courtyard.min.y_nm - margin),
-                            Point::new(courtyard.max.x_nm + margin, courtyard.max.y_nm + margin),
-                        );
-                        halo.contains(placed_comp.center)
-                    })
-            });
+            let near_honoured = hint.priority != synth_ir::PlacementPriority::Hard
+                || hint.near.as_ref().is_none_or(|anchor| {
+                    // `U1.dvdd` anchors the part `U1`; the pin is honoured by the
+                    // pad-aware target, not by the halo.
+                    let refdes = anchor.split_once('.').map_or(anchor.as_str(), |(r, _)| r);
+                    // Match the anchor the way `resolve_hint_target` does: it
+                    // lowercases both names, so a hint that names `u1` (or a
+                    // pin `u1.vcc`) anchors the placed part `U1`. A case-sensitive
+                    // comparison here would report such a honoured hard hint as
+                    // relaxed even though the placer kept it inside the halo.
+                    placement
+                        .components
+                        .iter()
+                        .find(|p| {
+                            board
+                                .component(p.id)
+                                .is_some_and(|c| c.refdes.eq_ignore_ascii_case(refdes))
+                        })
+                        .is_some_and(|anchor_placed| {
+                            let Some(anchor) = board
+                                .components
+                                .iter()
+                                .find(|c| c.refdes.eq_ignore_ascii_case(refdes))
+                            else {
+                                return false;
+                            };
+                            let (offset_mm, (width_mm, height_mm)) =
+                                anchor.part.as_ref().map_or_else(
+                                    || ((0.0, 0.0), fallback_courtyard(&anchor.kind)),
+                                    synth_layout::pcb_courtyard_geometry_for_part,
+                                );
+                            let courtyard = courtyard_rect_for_placement(
+                                anchor_placed,
+                                width_mm,
+                                height_mm,
+                                Some(offset_mm),
+                                0,
+                            );
+                            let margin = mm_to_nm(8.0);
+                            let halo = Rect::new(
+                                Point::new(
+                                    courtyard.min.x_nm - margin,
+                                    courtyard.min.y_nm - margin,
+                                ),
+                                Point::new(
+                                    courtyard.max.x_nm + margin,
+                                    courtyard.max.y_nm + margin,
+                                ),
+                            );
+                            halo.contains(placed_comp.center)
+                        })
+                });
 
             let status = if let Some(req_region) = &hint.region {
                 let is_honoured = match req_region {
@@ -9215,6 +9223,34 @@ board "near" {
         // centre-to-centre distance test would have called the hint
         // relaxed on exactly the placement it must accept.
         let report = near_report("U1", (35.0, 25.0));
+        let outcome = report
+            .hints
+            .iter()
+            .find(|h| h.component == "C1")
+            .expect("C1");
+        assert_eq!(outcome.status, HintStatus::Honoured, "{report:?}");
+    }
+
+    #[test]
+    fn a_soft_near_hint_is_not_reported_as_fallback_when_it_is_far() {
+        let mut board = near_report_board();
+        let c1_id = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "C1")
+            .expect("C1")
+            .id;
+        board
+            .components
+            .iter_mut()
+            .find(|c| c.id == c1_id)
+            .expect("C1")
+            .placement_hint = Some(synth_ir::PlacementConstraint {
+            near: Some("U1".to_string()),
+            priority: synth_ir::PlacementPriority::Soft,
+            ..synth_ir::PlacementConstraint::default()
+        });
+        let report = hint_satisfaction(&board, &hand_near_placement(&board, (45.0, 25.0)));
         let outcome = report
             .hints
             .iter()

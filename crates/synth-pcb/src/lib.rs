@@ -129,6 +129,18 @@ fn distances(
     dist
 }
 
+/// Whether `p` lies on the closed segment `a`-`b`, exactly.
+fn point_lies_on_segment(p: (i64, i64), a: (i64, i64), b: (i64, i64)) -> bool {
+    let (bx, by) = (i128::from(b.0 - a.0), i128::from(b.1 - a.1));
+    let (px, py) = (i128::from(p.0 - a.0), i128::from(p.1 - a.1));
+    if bx * py - by * px != 0 {
+        return false;
+    }
+    let dot = px * bx + py * by;
+    let len2 = bx * bx + by * by;
+    (0..=len2).contains(&dot)
+}
+
 /// The longest distance Dijkstra from `start` finds, in nm.
 fn longest_from(graph: &CopperGraph, start: (i64, i64)) -> i64 {
     distances(graph, start).into_values().max().unwrap_or(0)
@@ -172,14 +184,39 @@ impl Routing {
     #[allow(clippy::cast_precision_loss)]
     pub fn length_for_net(&self, net: NetId) -> i64 {
         let mut graph: CopperGraph = std::collections::BTreeMap::new();
-        for segment in self.segments.iter().filter(|s| s.net == net) {
+        let segments: Vec<_> = self.segments.iter().filter(|s| s.net == net).collect();
+        // Every endpoint can be a T-junction on another segment. Without
+        // splitting there, a branch that meets the middle of a track is a
+        // separate graph component and its length is undercounted.
+        let endpoints: Vec<(i64, i64)> = segments
+            .iter()
+            .flat_map(|s| [(s.start.x_nm, s.start.y_nm), (s.end.x_nm, s.end.y_nm)])
+            .collect();
+        for segment in &segments {
             let a = (segment.start.x_nm, segment.start.y_nm);
             let b = (segment.end.x_nm, segment.end.y_nm);
-            let dx = (b.0 - a.0) as f64;
-            let dy = (b.1 - a.1) as f64;
-            let length = dx.hypot(dy).round() as i64;
-            graph.entry(a).or_default().push((b, length));
-            graph.entry(b).or_default().push((a, length));
+            let mut breaks: Vec<(i64, i64)> = endpoints
+                .iter()
+                .copied()
+                .filter(|p| point_lies_on_segment(*p, a, b))
+                .collect();
+            breaks.sort_by_key(|p| {
+                let dx = p.0 - a.0;
+                let dy = p.1 - a.1;
+                dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+            });
+            breaks.dedup();
+            for pair in breaks.windows(2) {
+                let (from, to) = (pair[0], pair[1]);
+                if from == to {
+                    continue;
+                }
+                let dx = (to.0 - from.0) as f64;
+                let dy = (to.1 - from.1) as f64;
+                let length = dx.hypot(dy).round() as i64;
+                graph.entry(from).or_default().push((to, length));
+                graph.entry(to).or_default().push((from, length));
+            }
         }
         let Some(start) = graph.keys().next().copied() else {
             return 0;
@@ -341,6 +378,34 @@ mod tests {
             ..Routing::default()
         };
         assert_eq!(routing.length_for_net(NetId(1)), 20_000_000);
+    }
+
+    #[test]
+    fn a_branch_meeting_a_track_mid_span_splits_the_track() {
+        // A 10 mm horizontal track with a 100 mm branch at its midpoint.
+        // The longest path is 5 + 100 mm from an end to the branch tip; the
+        // branch endpoint is not a node of the horizontal segment unless it
+        // is split there.
+        let routing = Routing {
+            segments: vec![
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(5_000_000, 0),
+                    end: Point::new(5_000_000, 100_000_000),
+                    width_nm: 127_000,
+                },
+            ],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 105_000_000);
     }
 
     #[test]
