@@ -108,9 +108,16 @@ def top_level_blocks(text: str):
 
 
 def board_net_codes(text: str) -> dict[str, str]:
-    return {
+    codes = {
         name: code for code, name in re.findall(r'\(net\s+(\d+)\s+"([^"]*)"\)', text)
     }
+    # A board can name a net directly on its pads instead of through the
+    # numeric table — that is how a previous textual merge writes it. The SES
+    # names the net, so keep the name as the identifier in that case rather
+    # than failing with KeyError and losing an otherwise good route.
+    for name in re.findall(r'\(net\s+"([^"]+)"\)', text):
+        codes.setdefault(name, name)
+    return codes
 
 
 def ground_net_codes(text: str) -> set[str]:

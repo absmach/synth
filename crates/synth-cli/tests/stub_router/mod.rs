@@ -80,6 +80,12 @@ pub fn install(out_dir: &Path) -> StubRouter {
     std::fs::create_dir_all(krt_repo.join("py_router")).expect("krt checkout dir");
     std::fs::write(krt_repo.join("py_router").join("route.py"), b"# stub\n")
         .expect("write krt entrypoint");
+    // Capability discovery asks KRT's own manifest for the flags the helper
+    // drives. The stub interpreter delegates this probe to the real Python,
+    // so an empty manifest is a truthful "this checkout supports everything"
+    // for the purposes of a test that supplies its own router.
+    std::fs::write(krt_repo.join("krt_capabilities.py"), b"# stub\n")
+        .expect("write krt capability manifest");
 
     // The stub's directory goes first on the child's PATH, ahead of this
     // process's own PATH.

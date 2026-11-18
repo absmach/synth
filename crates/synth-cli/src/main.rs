@@ -205,10 +205,10 @@ enum Command {
         /// external router; there is no Synth-native route to enable.
         #[arg(long, hide = true)]
         autoroute: bool,
-        /// External router that generates the copper. FreeRouting is the
-        /// managed default; `kicad-routing-tools` requires an installed
-        /// checkout. A missing engine is a capability error, never a
-        /// silent fallback.
+        /// External router that generates the copper. `kicad-routing-tools`
+        /// (default) needs an installed checkout; `freerouting` uses the
+        /// managed JAR and `fastroute` the managed Java-free binary. A
+        /// missing engine is a capability error, never a silent fallback.
         #[arg(long, value_enum, default_value_t = ExternalRouter::KicadRoutingTools)]
         router: ExternalRouter,
         /// FreeRouting JAR. Defaults to tools/freerouting/freerouting-2.4.1.jar.
@@ -218,6 +218,10 @@ enum Command {
         /// tools/jre25/bin/java when present, otherwise `java`.
         #[arg(long, value_name = "JAVA")]
         freerouting_java: Option<PathBuf>,
+        /// FastRoute binary (the Java-free FreeRouting port). Defaults to
+        /// SYNTH_FASTROUTE_BIN or `fastroute` on PATH.
+        #[arg(long, value_name = "BIN")]
+        fastroute_binary: Option<PathBuf>,
         /// KiCadRoutingTools checkout, required with `--router kicad-routing-tools`.
         #[arg(long, value_name = "DIR")]
         kicad_routing_tools_repo: Option<PathBuf>,
@@ -383,6 +387,10 @@ enum Command {
         /// tools/jre25/bin/java when present, otherwise `java`.
         #[arg(long, value_name = "JAVA")]
         freerouting_java: Option<PathBuf>,
+        /// FastRoute binary (the Java-free FreeRouting port). Defaults to
+        /// SYNTH_FASTROUTE_BIN or `fastroute` on PATH.
+        #[arg(long, value_name = "BIN")]
+        fastroute_binary: Option<PathBuf>,
         /// KiCadRoutingTools checkout, required with
         /// `--router kicad-routing-tools`.
         #[arg(long, value_name = "DIR")]
@@ -442,6 +450,10 @@ enum Command {
         /// tools/jre25/bin/java when present, otherwise `java`.
         #[arg(long, value_name = "JAVA")]
         freerouting_java: Option<PathBuf>,
+        /// FastRoute binary (the Java-free FreeRouting port). Defaults to
+        /// SYNTH_FASTROUTE_BIN or `fastroute` on PATH.
+        #[arg(long, value_name = "BIN")]
+        fastroute_binary: Option<PathBuf>,
         /// KiCadRoutingTools checkout, required with
         /// `--router kicad-routing-tools`.
         #[arg(long, value_name = "DIR")]
@@ -850,6 +862,7 @@ enum Format {
 enum ExternalRouter {
     FreeRouting,
     KicadRoutingTools,
+    Fastroute,
 }
 
 impl From<ExternalRouter> for synth_router::RouterEngine {
@@ -857,6 +870,7 @@ impl From<ExternalRouter> for synth_router::RouterEngine {
         match value {
             ExternalRouter::FreeRouting => Self::Freerouting,
             ExternalRouter::KicadRoutingTools => Self::KiCadRoutingTools,
+            ExternalRouter::Fastroute => Self::Fastroute,
         }
     }
 }
@@ -1018,6 +1032,7 @@ fn main() -> ExitCode {
             router,
             freerouting_jar,
             freerouting_java,
+            fastroute_binary,
             kicad_routing_tools_repo,
             kicad_routing_tools_python,
             krt_escalation,
@@ -1053,6 +1068,7 @@ fn main() -> ExitCode {
             router,
             freerouting_jar.as_deref(),
             freerouting_java.as_deref(),
+            fastroute_binary.as_deref(),
             kicad_routing_tools_repo.as_deref(),
             kicad_routing_tools_python.as_deref(),
             krt_escalation,
@@ -1101,6 +1117,7 @@ fn main() -> ExitCode {
             router,
             freerouting_jar,
             freerouting_java,
+            fastroute_binary,
             kicad_routing_tools_repo,
             kicad_routing_tools_python,
             krt_escalation,
@@ -1119,6 +1136,7 @@ fn main() -> ExitCode {
                 router,
                 freerouting_jar.as_deref(),
                 freerouting_java.as_deref(),
+                fastroute_binary.as_deref(),
                 kicad_routing_tools_repo.as_deref(),
                 kicad_routing_tools_python.as_deref(),
                 krt_escalation,
@@ -1138,6 +1156,7 @@ fn main() -> ExitCode {
             router,
             freerouting_jar,
             freerouting_java,
+            fastroute_binary,
             kicad_routing_tools_repo,
             kicad_routing_tools_python,
             krt_escalation,
@@ -1155,6 +1174,7 @@ fn main() -> ExitCode {
                 router,
                 freerouting_jar.as_deref(),
                 freerouting_java.as_deref(),
+                fastroute_binary.as_deref(),
                 kicad_routing_tools_repo.as_deref(),
                 kicad_routing_tools_python.as_deref(),
                 krt_escalation,
@@ -4233,6 +4253,7 @@ fn export_kicad(
     router: ExternalRouter,
     freerouting_jar: Option<&Path>,
     freerouting_java: Option<&Path>,
+    fastroute_binary: Option<&Path>,
     kicad_routing_tools_repo: Option<&Path>,
     kicad_routing_tools_python: Option<&Path>,
     krt_escalation: KrtEscalation,
@@ -4425,6 +4446,7 @@ fn export_kicad(
         router,
         freerouting_jar,
         freerouting_java,
+        fastroute_binary,
         kicad_routing_tools_repo,
         kicad_routing_tools_python,
         krt_escalation,
@@ -5193,6 +5215,7 @@ fn write_verification_report(
 struct RouterOptions {
     freerouting_jar: Option<PathBuf>,
     freerouting_java: Option<PathBuf>,
+    fastroute_binary: Option<PathBuf>,
     kicad_routing_tools_repo: Option<PathBuf>,
     kicad_routing_tools_python: Option<PathBuf>,
     escalation: KrtEscalation,
@@ -5223,6 +5246,7 @@ fn router_options(
     _router: ExternalRouter,
     freerouting_jar: Option<&Path>,
     freerouting_java: Option<&Path>,
+    fastroute_binary: Option<&Path>,
     kicad_routing_tools_repo: Option<&Path>,
     kicad_routing_tools_python: Option<&Path>,
     escalation: KrtEscalation,
@@ -5235,6 +5259,7 @@ fn router_options(
     RouterOptions {
         freerouting_jar: freerouting_jar.map(Path::to_path_buf),
         freerouting_java: freerouting_java.map(Path::to_path_buf),
+        fastroute_binary: fastroute_binary.map(Path::to_path_buf),
         kicad_routing_tools_repo: kicad_routing_tools_repo.map(Path::to_path_buf),
         kicad_routing_tools_python: kicad_routing_tools_python.map(Path::to_path_buf),
         escalation,
@@ -5258,6 +5283,7 @@ fn apply_tool_flags(tools: &mut synth_router::ToolPaths, options: &RouterOptions
     };
     overlay(&mut tools.freerouting_jar, &options.freerouting_jar);
     overlay(&mut tools.freerouting_java, &options.freerouting_java);
+    overlay(&mut tools.fastroute_bin, &options.fastroute_binary);
     overlay(&mut tools.krt_repo, &options.kicad_routing_tools_repo);
     overlay(&mut tools.krt_python, &options.kicad_routing_tools_python);
 }
@@ -5834,6 +5860,18 @@ fn print_route_report(report: &synth_router::RouteReport) {
             "  kicad-cli pcb drc: {} error(s), {} unconnected, {} warning(s)",
             counts.errors, counts.unconnected, counts.warnings
         );
+    }
+    if let Some(quality_path) = &report.artifacts.quality_report {
+        let quality = synth_router::RouteQuality::from_report(report);
+        eprintln!(
+            "  quality: {} (connected {}, drc-clean {}, open nets {}, blocking {})",
+            if quality.passed { "pass" } else { "fail" },
+            quality.fully_connected,
+            quality.drc_clean,
+            quality.open_nets,
+            quality.blocking_reasons.len()
+        );
+        eprintln!("  quality report: {}", quality_path.display());
     }
     // Reported before the router is judged, because it explains a failure the
     // router cannot avoid: a fine-pitch package that cannot take a fab-floor
@@ -6480,6 +6518,7 @@ mod tests {
         let options = RouterOptions {
             freerouting_jar: Some(PathBuf::from("/flag/fr.jar")),
             freerouting_java: None,
+            fastroute_binary: None,
             kicad_routing_tools_repo: None,
             kicad_routing_tools_python: Some(PathBuf::from("/flag/python")),
             escalation: KrtEscalation::Off,
@@ -6537,6 +6576,7 @@ mod tests {
         let options = RouterOptions {
             freerouting_jar: None,
             freerouting_java: None,
+            fastroute_binary: None,
             kicad_routing_tools_repo: None,
             kicad_routing_tools_python: None,
             escalation: KrtEscalation::Off,

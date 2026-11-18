@@ -434,6 +434,9 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
         "wall_clock_secs".to_string(),
         request.limits.wall_clock.as_secs().to_string(),
     );
+    // Discovery ran KRT's own capability manifest before this point, so the
+    // run record can say the checkout was verified rather than merely found.
+    settings.insert("capability_verified".to_string(), "true".to_string());
 
     let provenance = RouterProvenance {
         engine: RouterEngine::KiCadRoutingTools.as_str().to_string(),

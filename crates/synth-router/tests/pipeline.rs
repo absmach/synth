@@ -403,6 +403,10 @@ fn a_clean_route_that_validates_reports_routed() {
 
     assert!(scratch.file("demo.routing.json").is_file());
     assert!(scratch.file("demo.freerouting.log").is_file());
+    assert!(
+        scratch.file("demo.quality.json").is_file(),
+        "the quality verdict is written beside the run record"
+    );
 
     // The run record is the answer every layer reads, so it must say the
     // same thing the returned report says.
@@ -410,6 +414,16 @@ fn a_clean_route_that_validates_reports_routed() {
         .expect("run record parses");
     assert_eq!(reread.state, report.state);
     assert_eq!(reread.state.as_str(), report.state.as_str());
+    let quality_path = reread
+        .artifacts
+        .quality_report
+        .as_ref()
+        .expect("the run record names the quality artifact");
+    assert!(quality_path.is_file(), "{quality_path:?}");
+    let quality: synth_router::RouteQuality =
+        serde_json::from_str(&std::fs::read_to_string(quality_path).expect("quality report reads"))
+            .expect("quality report parses");
+    assert_eq!(quality.passed, report.is_fabrication_ready());
 
     // Whether this reaches `routed` depends on KiCad being installed:
     // an unperformed DRC is review, never a pass.

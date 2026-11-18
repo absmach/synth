@@ -25,6 +25,9 @@ pub struct ToolPaths {
     pub freerouting_jar: Option<PathBuf>,
     /// Java runtime that runs FreeRouting. Environment: `SYNTH_FREEROUTING_JAVA`.
     pub freerouting_java: Option<PathBuf>,
+    /// FastRoute binary, used instead of a JAR + Java runtime.
+    /// Environment: `SYNTH_FASTROUTE_BIN`.
+    pub fastroute_bin: Option<PathBuf>,
     /// Interpreter that runs the FreeRouting helper script.
     /// Environment: `SYNTH_FREEROUTING_PYTHON`.
     pub freerouting_python: Option<PathBuf>,
@@ -62,6 +65,7 @@ impl ToolPaths {
         Self {
             freerouting_jar: path("SYNTH_FREEROUTING_JAR"),
             freerouting_java: path("SYNTH_FREEROUTING_JAVA"),
+            fastroute_bin: path("SYNTH_FASTROUTE_BIN"),
             freerouting_python: path("SYNTH_FREEROUTING_PYTHON"),
             krt_repo: path("KICAD_ROUTING_TOOLS_REPO"),
             krt_python: path("SYNTH_KRT_PYTHON"),
