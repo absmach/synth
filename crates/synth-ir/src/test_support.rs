@@ -79,6 +79,7 @@ pub fn part_with_decoupling(kind: &str, pins: Vec<Pin>, rules: &[(&str, u32)]) -
             max_distance_mm: None,
             to: None,
             through: None,
+            when_supply_over_v: None,
         })
         .collect();
     p

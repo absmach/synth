@@ -3,7 +3,8 @@ kind = "diode"
 description = "5.1V Zener diode, SOD-123"
 kicad_symbol = "Device:D_Zener"
 kicad_footprint = "Diode_SMD:D_SOD-123"
-# MCC, 500 mW, 4.8-5.4 V, SOD-123.
+# MCC BZT52C5V1-TP: 5.1 V nominal zener, 4.8-5.4 V at I_ZT = 5 mA, 500 mW.
+# https://www.mccsemi.com/products/diodes/zener-diodes/BZT52C5V1
 mpn = "BZT52C5V1-TP"
 lcsc_pn = "C78728"
 
@@ -12,10 +13,13 @@ width_mm = 4.2
 height_mm = 1.2
 courtyard_margin_mm = 0.25
 
+# The device's datasheet figures, not the seed template's 5 V / 100 mA:
+# the zener voltage band above, and the continuous current the 500 mW
+# package survives at 5.1 V.
 [operating_conditions]
 min_voltage_v = 4.8
 max_voltage_v = 5.4
-max_current_ma = 100.0
+max_current_ma = 98.0
 
 [[pins]]
 name = "anode"
@@ -27,7 +31,10 @@ name = "cathode"
 number = "1"
 electrical_type = "passive"
 
+
+
 [provenance]
 source = "seed"
-reviewed_by = "synth-seed-review"
-reviewed_at = "2026-11-13"
+datasheet_url = "https://www.mccsemi.com/products/diodes/zener-diodes/BZT52C5V1"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"

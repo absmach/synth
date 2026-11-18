@@ -2124,12 +2124,13 @@ impl Parser {
                     }
                 }
                 TokenKind::Ident(name) if name == "anchor" => {
+                    let span = self.peek().span;
                     self.bump();
-                    if let Some(anchor) = self.expect_string(
+                    if let Some(component) = self.expect_string(
                         "E-SYNTH-PARSE-043",
                         "expected a component refdes after `anchor`",
                     ) {
-                        attrs.push(KeepoutAttr::Anchor(anchor));
+                        attrs.push(KeepoutAttr::Anchor { component, span });
                     }
                 }
                 TokenKind::Ident(name) if name == "at" => {
@@ -2155,12 +2156,17 @@ impl Parser {
                     }
                     attrs.push(KeepoutAttr::Layers(layers));
                 }
+                TokenKind::Ident(word) if word == "allow" => {
+                    if let Some(attr) = self.parse_keepout_allow() {
+                        attrs.push(attr);
+                    }
+                }
                 _ => {
                     self.emit(
                         self.peek().span,
                         "E-SYNTH-PARSE-020",
                         "unexpected attribute inside keepout",
-                        "`radius <value><unit>`",
+                        "`radius <value><unit>`, `anchor \"REFDES\"`, `allow \"NET\", …`",
                         self.describe_current(),
                         None,
                     );
@@ -2177,6 +2183,36 @@ impl Parser {
             attrs,
             span: Span::new(start, end),
         })
+    }
+
+    /// `anchor "U1"` — the component the keepout is centred on.
+    /// `allow "TMDS_D2+", "TMDS_D2-"` — the nets the keepout must let
+    /// through. One or more quoted net names, comma-separated like a
+    /// netclass `layers` list.
+    fn parse_keepout_allow(&mut self) -> Option<KeepoutAttr> {
+        let word = self.peek().span;
+        self.bump(); // consume `allow`
+        let mut nets = Vec::new();
+        while let TokenKind::StringLit(_) = self.peek_kind() {
+            if let Some(net) = self.expect_string("E-SYNTH-PARSE-002", "expected a net name") {
+                nets.push(net);
+            }
+            if matches!(self.peek_kind(), TokenKind::Comma) {
+                self.bump();
+            }
+        }
+        if nets.is_empty() {
+            self.emit(
+                word,
+                "E-SYNTH-PARSE-045",
+                "keepout allow names no net",
+                "`allow \"<net>\", …`",
+                "no quoted net name followed `allow`".to_string(),
+                None,
+            );
+            return None;
+        }
+        Some(KeepoutAttr::Allow { nets, span: word })
     }
 
     /// `module "N" (port: type, …) { param …; <statement>* }`.

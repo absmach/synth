@@ -73,10 +73,10 @@ fn a_cool_part_is_not_warned() {
     );
 }
 
-/// The seeded AMS1117-3.3 declares a realistic worst-case dissipation, so it
-/// trips the rule without any injection: a real board warns.
+/// A regulator with no declared load has no board dissipation to estimate, so
+/// the package rating must not be reported as if it were the design's.
 #[test]
-fn the_seed_ldo_is_flagged_hot() {
+fn the_seed_ldo_is_not_hot_without_a_declared_load() {
     let src = r#"board "hot" {
   layers 2
   component U1: regulator "ams1117_3v3"
@@ -84,7 +84,7 @@ fn the_seed_ldo_is_flagged_hot() {
   component C2: capacitor "c_generic_0805" value "10uF"
   connect U1.vin -> C1.p1
   connect U1.vout -> C2.p1
-  connect C1.p2 -> C2.p2
+  connect U1.gnd -> C1.p2 as "GND"
 }
 "#;
     let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
@@ -93,6 +93,51 @@ fn the_seed_ldo_is_flagged_hot() {
     let ast = parse.ast.as_ref().expect("source must parse");
     let lowered = synth_ir::lower(ast, &registry, "hot.synth");
     let board = lowered.board.as_ref().expect("board must lower");
+    let diags = synth_validate::run_erc(board, "hot.synth");
+    assert!(
+        diags.iter().all(|d| d.code != "W-SYNTH-THERMAL-001"),
+        "{diags:?}"
+    );
+    assert!(
+        diags.iter().any(|d| d.code == "W-SYNTH-THERMAL-002"),
+        "a rail supply with no declared load is an unverified thermal claim: {diags:?}"
+    );
+}
+
+/// With a declared 5 V to 3.3 V drop and a 1 A load, the regulator really does
+/// dissipate about 1.7 W, so the warning follows the board's dissipation.
+#[test]
+fn the_seed_ldo_is_hot_when_its_rail_draws_current() {
+    let src = r#"board "hot" {
+  layers 2
+  component U1: regulator "ams1117_3v3"
+  component U2: mcu "stm32g030f6p6"
+  component C1: capacitor "c_generic_0805" value "10uF"
+  component C2: capacitor "c_generic_0805" value "10uF"
+  power "+5V" 5v { U1.vin }
+  power "+3V3" 3.3v { U1.vout U2.vdd }
+  connect U1.gnd -> C1.p2 as "GND"
+  connect U2.vss -> C1.p2
+  connect U1.vin -> C1.p1
+  connect U1.vout -> C2.p1
+}
+"#;
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("registry must load");
+    let parse = synth_parser::parse(src, "hot.synth".to_string());
+    let ast = parse.ast.as_ref().expect("source must parse");
+    let mut lowered = synth_ir::lower(ast, &registry, "hot.synth");
+    let board = lowered.board.as_mut().expect("board must lower");
+    let load = board
+        .components
+        .iter_mut()
+        .find(|c| c.refdes == "U2")
+        .expect("the load");
+    load.part.as_mut().expect("a part").operating_conditions =
+        Some(synth_registry::OperatingConditions {
+            max_current_ma: Some(1000.0),
+            ..Default::default()
+        });
     let diags = synth_validate::run_erc(board, "hot.synth");
     assert!(
         diags.iter().any(|d| d.code == "W-SYNTH-THERMAL-001"),
