@@ -209,7 +209,7 @@ fn gate_verdict(report: &serde_json::Value) -> String {
 fn source_codes(report: &serde_json::Value) -> Vec<String> {
     report["stages"]["source"]["result"]["diagnostics"]
         .as_array()
-        .map(|d| {
+        .map_or_default(|d| {
             let mut codes: Vec<String> = d
                 .iter()
                 .filter(|x| x["severity"] == "error" || x["severity"] == "fatal")
@@ -219,7 +219,6 @@ fn source_codes(report: &serde_json::Value) -> Vec<String> {
             codes.dedup();
             codes
         })
-        .unwrap_or_default()
 }
 
 /// Artifact hashes for the files that are byte-deterministic, **recorded for
@@ -241,13 +240,12 @@ fn deterministic_artifacts(report: &serde_json::Value) -> BTreeMap<String, Strin
     const STABLE: [&str; 3] = [".kicad_sch", ".kicad_pcb", "bom.csv"];
     report["stages"]["manufacturing"]["artifacts"]
         .as_object()
-        .map(|a| {
+        .map_or_default(|a| {
             a.iter()
                 .filter(|(path, _)| STABLE.iter().any(|s| path.ends_with(s)))
                 .filter_map(|(path, hash)| hash.as_str().map(|h| (path.clone(), h.to_string())))
                 .collect()
         })
-        .unwrap_or_default()
 }
 
 /// Why the manufacturing stage failed.
