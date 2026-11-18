@@ -167,7 +167,7 @@ and the board routed at the defaults. True of every board in this corpus.
 | U7 | TPS22918 | `tps22918_sot23_6` |
 | U4 | HDC1080DMBR | `hdc1080_humidity` |
 | U5 | APDS-9301 | `apds9301_lux` |
-| U6 | 24LC256-I/SN | `24lc256_eeprom` |
+| U6 | 24LC256-I/SN | `24lc256_soic8` |
 | Q1 | Si2301 | `p_mosfet_si2301` |
 | Q2, Q3 | IRLML6244 | `n_mosfet_irlml6244` |
 | D2 | SMAJ15A TVS | `smaj15a_tvs` |

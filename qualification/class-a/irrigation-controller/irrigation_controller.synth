@@ -204,7 +204,7 @@ board "irrigation_controller" {
     group "I2C SENSORS" color "#047857" {
       component U4: sensor    "hdc1080_humidity" value "HDC1080"
       component U5: sensor    "apds9301_lux"     value "APDS-9301"
-      component U6: memory    "24lc256_eeprom"   value "24LC256"
+      component U6: memory    "24lc256_soic8"   value "24LC256"
       component R5: resistor  "r_generic_0603"   value "4k7"
       component R6: resistor  "r_generic_0603"   value "4k7"
       component C12: capacitor "c_generic_0603"  value "100nF"
@@ -239,14 +239,14 @@ board "irrigation_controller" {
     // 0x29, floating at 0x39, high at 0x49. Tied low, so the address is a
     // decision in the source and not whatever the pin picks up.
     connect J1.p2 -> U5.adr_sel
-    connect L1.p2 -> U6.vdd
-    connect J1.p2 -> U6.gnd
+    connect L1.p2 -> U6.vcc
+    connect J1.p2 -> U6.vss
 
     connect U4.vdd -> C12.p1
     connect J1.p2  -> C12.p2
     connect U5.vdd -> C13.p1
     connect J1.p2  -> C13.p2
-    connect U6.vdd -> C14.p1
+    connect U6.vcc -> C14.p1
     connect J1.p2  -> C14.p2
 
     // The EEPROM's address straps and write protect. A0-A2 low puts it at
@@ -421,7 +421,7 @@ board "irrigation_controller" {
     notes "Produced from a prompt via the Synth MCP server." {
       "Registry parts whose metadata or pin maps this corpus corrected are"
       "exercised deliberately: stm32g030 (32 pads, LQFP-32 identity),"
-      "mp2307_buck (exposed pad 9), 24lc256_eeprom (address straps on 1-3,"
+      "mp2307_buck (exposed pad 9), 24lc256_soic8 (address straps on 1-3,"
       "not vdd/gnd/sda/scl), xtal_8mhz (p2 on pad 3, case pads grounded)."
     }
 }

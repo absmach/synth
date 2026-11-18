@@ -48,7 +48,7 @@ board "i2c_sensor_node" {
 
     group "I2C BUS" color "#0a7d4a" {
       component U3: sensor    "bme680_env"
-      component U4: memory    "24lc256_eeprom"
+      component U4: memory    "24lc256_soic8"
       component R2: resistor  "r_generic_0603" value "4.7k"
       component R3: resistor  "r_generic_0603" value "4.7k"
       component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U3" priority: hard } }
@@ -66,10 +66,10 @@ board "i2c_sensor_node" {
     connect U3.csb  -> U1.vout
     connect U3.sdo  -> U1.gnd
 
-    connect U1.vout -> U4.vdd
-    connect U1.gnd  -> U4.gnd
-    connect U4.vdd  -> C6.p1
-    connect U4.gnd  -> C6.p2
+    connect U1.vout -> U4.vcc
+    connect U1.gnd  -> U4.vss
+    connect U4.vcc  -> C6.p1
+    connect U4.vss  -> C6.p2
     // Address 0x50 and write-enabled: all three address straps and WP to GND.
     connect U1.gnd  -> U4.a0
     connect U1.gnd  -> U4.a1

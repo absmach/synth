@@ -496,7 +496,7 @@ board "sdram_memory" {
     // card built from these files reads back whatever the part shipped with —
     // the schema is what a programming step would write, not what is there.
     group "PRESENCE DETECT" color "#7c3aed" {
-      component U3: memory "24lc256_eeprom"
+      component U3: memory "24lc256_soic8"
       component C20: capacitor "c_generic_0603" value "100nF" {
         placement_hint { near: "U3" priority: hard }
       }
@@ -506,30 +506,30 @@ board "sdram_memory" {
         placement_hint { near: "J2" priority: soft }
       }
 
-      connect U3.vdd -> C20.p1 as "V3V3"
-      connect C20.p2 -> U3.gnd as "GND"
+      connect U3.vcc -> C20.p1 as "V3V3"
+      connect C20.p2 -> U3.vss as "GND"
 
       // Address zero and writable: three straps and one more, all to ground.
       // An unstrapped address pin on an I2C device is an address nobody can
       // predict, and an unstrapped write-protect is a module that cannot be
       // programmed.
-      connect U3.a0 -> U3.gnd as "GND"
-      connect U3.a1 -> U3.gnd as "GND"
-      connect U3.a2 -> U3.gnd as "GND"
-      connect U3.wp -> U3.gnd as "GND"
+      connect U3.a0 -> U3.vss as "GND"
+      connect U3.a1 -> U3.vss as "GND"
+      connect U3.a2 -> U3.vss as "GND"
+      connect U3.wp -> U3.vss as "GND"
 
       connect U3.sda -> R3.p1 as "SPD_SDA" class "SPD"
       connect U3.scl -> R4.p1 as "SPD_SCL" class "SPD"
-      connect R3.p2 -> U3.vdd as "V3V3"
-      connect R4.p2 -> U3.vdd as "V3V3"
+      connect R3.p2 -> U3.vcc as "V3V3"
+      connect R4.p2 -> U3.vcc as "V3V3"
 
       connect TP5.p1 -> U3.sda as "SPD_SDA"
       connect TP6.p1 -> U3.scl as "SPD_SCL"
 
       connect D1.io1 -> U3.sda as "SPD_SDA"
       connect D1.io2 -> U3.scl as "SPD_SCL"
-      connect D1.vcc -> U3.vdd as "V3V3"
-      connect D1.gnd -> U3.gnd as "GND"
+      connect D1.vcc -> U3.vcc as "V3V3"
+      connect D1.gnd -> U3.vss as "GND"
     }
 
     // What the module actually draws, rather than what it was estimated to

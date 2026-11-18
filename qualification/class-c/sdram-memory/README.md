@@ -372,7 +372,7 @@ length-matched interface exist.
 | Ref | Part | Registry id |
 | --- | --- | --- |
 | U1, U2 | IS42S16400J, 64 Mbit SDR SDRAM | `is42s16400j_sdram` |
-| U3 | 24LC256, 32 KB I2C EEPROM | `24lc256_eeprom` |
+| U3 | 24LC256, 32 KB I2C EEPROM | `24lc256_soic8` |
 | D1 | PRTR5V0U2X, dual rail clamp | `prtr5v0u2x` |
 | L1 | 600 R ferrite bead, 0603 | `ferrite_bead_0603` |
 | F1 | 500 mA resettable fuse | `polyfuse` |
