@@ -4745,6 +4745,8 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
+            no_connects: Vec::new(),
             name: "revision_board".to_string(),
             layers: 2,
             outline: None,
