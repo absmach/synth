@@ -107,6 +107,10 @@ def top_level_blocks(text: str):
                 start = None
 
 
+def block_name(block: str) -> str:
+    return block[1:].lstrip().split(None, 1)[0]
+
+
 def board_net_codes(text: str) -> dict[str, str]:
     codes = {
         name: code for code, name in re.findall(r'\(net\s+(\d+)\s+"([^"]*)"\)', text)
@@ -192,7 +196,7 @@ def main() -> int:
     kept = []
     insert_at = None
     for start, end, block in spans:
-        first = block.lstrip()[1:].lstrip().split(None, 1)[0]
+        first = block_name(block)
         if first == "segment":
             continue
         if first == "via":
@@ -208,14 +212,21 @@ def main() -> int:
     rebuilt = []
     cursor = 0
     for start, end, block in spans:
-        if block.lstrip()[1:].lstrip().split(None, 1)[0] in {"segment", "via"}:
+        if block_name(block) in {"segment", "via"}:
             rebuilt.append(board[cursor:start])
             cursor = end
     rebuilt.append(board[cursor:])
     without_routes = "".join(rebuilt)
-    insert_at = without_routes.find("\n\t(zone")
-    if insert_at < 0:
-        insert_at = without_routes.rfind(")")
+    # The first zone-looking text can sit inside a footprint; only a child of
+    # the board root is a real zone.
+    insert_at = next(
+        (
+            start
+            for start, _end, block in top_level_blocks(without_routes)
+            if block_name(block) == "zone"
+        ),
+        without_routes.rfind(")"),
+    )
     result = (
         without_routes[:insert_at]
         + "\n"

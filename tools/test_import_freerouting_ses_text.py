@@ -9,8 +9,12 @@ import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("import_freerouting_ses_text.py")
+sys.path.insert(0, str(SCRIPT.parent))
+import import_freerouting_ses_text as importer  # noqa: E402
 
 BOARD = '(kicad_pcb\n\t(net 0 "")\n\t(net 1 "A")\n\t(net 2 "B")\n)\n'
+
+ZONE = '(zone (net 0) (layer "F.Cu") (polygon (pts (xy 0 0) (xy 1 0) (xy 1 1))))'
 
 SES = """(session board.ses
   (routes
@@ -60,6 +64,10 @@ class NameOnlyNets(unittest.TestCase):
         self.assertIn('(net "B")', text)
 
 
+def items(node, name):
+    return [x for x in node[1:] if isinstance(x, list) and x and x[0] == name]
+
+
 class DeterministicUuids(unittest.TestCase):
     def test_two_runs_are_byte_identical(self):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
@@ -73,6 +81,47 @@ class DeterministicUuids(unittest.TestCase):
         uuids = re.findall(r'\(uuid "([^"]+)"\)', text)
         self.assertEqual(len(uuids), 4)
         self.assertEqual(len(set(uuids)), 4)
+
+
+class InsertionPoint(unittest.TestCase):
+    """Imported routes must be children of the board root, not of a footprint."""
+
+    def merge(self, board: str):
+        with tempfile.TemporaryDirectory() as directory:
+            text = run_importer(Path(directory), "out.kicad_pcb", board)
+        return text, importer.parse(text)
+
+    def assert_at_board_level(self, root) -> None:
+        self.assertEqual(root[0], "kicad_pcb")
+        self.assertEqual(len(items(root, "segment")), 3)
+        self.assertEqual(len(items(root, "via")), 1)
+
+    def test_zone_inside_footprint(self):
+        board = (
+            '(kicad_pcb\n\t(net 0 "")\n\t(net 1 "A")\n\t(net 2 "B")\n'
+            '\t(footprint "U1"\n\t\t(layer "F.Cu")\n'
+            '\t\t(property "Description" "a ) ( zone")\n'
+            f"\t\t{ZONE}\n\t)\n)\n"
+        )
+        _text, root = self.merge(board)
+        self.assert_at_board_level(root)
+        self.assertEqual(len(items(root, "footprint")), 1)
+        self.assertEqual(len(items(items(root, "footprint")[0], "zone")), 1)
+
+    def test_top_level_zone(self):
+        board = (
+            '(kicad_pcb\n\t(net 0 "")\n\t(net 1 "A")\n\t(net 2 "B")\n'
+            f"\t{ZONE}\n)\n"
+        )
+        _text, root = self.merge(board)
+        self.assert_at_board_level(root)
+        order = [x[0] for x in root[1:] if isinstance(x, list)]
+        self.assertEqual(order.count("zone"), 1)
+        self.assertLess(order.index("segment"), order.index("zone"))
+
+    def test_no_zone(self):
+        _text, root = self.merge(BOARD)
+        self.assert_at_board_level(root)
 
 
 if __name__ == "__main__":
