@@ -861,10 +861,9 @@ enum Format {
 /// The external router an operator selected.
 ///
 /// KiCadRoutingTools is the default; FreeRouting is the managed alternative
-/// and therefore always an explicit choice. The workspace's own router is
-/// not a variant: it is the fallback a route takes when the selected
-/// external engine is not installed, and the run record names it when it
-/// ran.
+/// and therefore always an explicit choice. There is no third variant, and no
+/// built-in router: a missing engine is a capability error, never a silent
+/// fallback to something else.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum ExternalRouter {
     FreeRouting,
@@ -882,56 +881,6 @@ impl From<ExternalRouter> for synth_router::RouterEngine {
     }
 }
 
-/// Which router a DRC route runs, and who chose it.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-enum DrcRouter {
-    /// An external engine, named by the `--router` flag or the environment.
-    External(ExternalRouter),
-    /// The workspace's own deterministic router, run directly.
-    Internal,
-}
-
-/// The value of `SYNTH_QUALIFY_ROUTER`, the qualification matrix's router pin.
-fn qualify_router_value() -> Option<String> {
-    std::env::var("SYNTH_QUALIFY_ROUTER")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-/// Resolve which router a DRC route uses, and whether it may fall back.
-///
-/// `SYNTH_QUALIFY_ROUTER` pins the engine a qualification run records, and a
-/// pin takes precedence over both the flag default and the fallback: a pinned
-/// run gets the pinned engine or an honest `router_unavailable`, never copper
-/// from an engine its record does not name. Unset, the selected external
-/// engine runs, and when it is not installed the route falls back to the
-/// workspace's own deterministic router, so a machine with no routing engine
-/// installed still gets a real DRC verdict (issue #95) instead of an
-/// unavailable check on every board.
-///
-/// The second return value is whether the run may fall back: true only when
-/// nothing pinned an engine.
-fn select_drc_router(cli: ExternalRouter, qualify: Option<&str>) -> (DrcRouter, bool) {
-    let Some(value) = qualify else {
-        return (DrcRouter::External(cli), true);
-    };
-    let Some(engine) = synth_router::RouterEngine::parse(value) else {
-        warn!(
-            "SYNTH_QUALIFY_ROUTER={value} names no router (kicad-routing-tools, \
-             freerouting or internal); the pin is ignored"
-        );
-        return (DrcRouter::External(cli), true);
-    };
-    let router = match engine {
-        synth_router::RouterEngine::Internal => DrcRouter::Internal,
-        synth_router::RouterEngine::Freerouting => DrcRouter::External(ExternalRouter::FreeRouting),
-        synth_router::RouterEngine::KiCadRoutingTools => {
-            DrcRouter::External(ExternalRouter::KicadRoutingTools)
-        }
-    };
-    (router, false)
-}
 impl ExternalRouter {
     fn as_str(self) -> &'static str {
         synth_router::RouterEngine::from(self).as_str()
@@ -1707,11 +1656,7 @@ fn check(
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
-        // The stage routes the board itself now — with the selected external
-        // engine, or with the workspace's own router when no engine is
-        // installed — and then runs `kicad-cli pcb drc`, so its budget is
-        // the export's budget, not a parse-and-print one.
-        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 120)?;
+        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
         (
             serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
                 .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
@@ -3991,40 +3936,7 @@ fn route_design(
     let sidecars = synth_kicad::Sidecars::resolve_for(input);
     let result = synth_kicad::export_with_sidecars(board, &out_dir, &sidecars)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
-
-    // The qualification pin wins over the flag; an unpinned run may fall
-    // back to the workspace's own router when the selected engine cannot
-    // run, so the board gets a real DRC verdict either way.
-    let (router, fallback) = select_drc_router(engine, qualify_router_value().as_deref());
-    let report = match router {
-        DrcRouter::Internal => route_internally(board, &sidecars, &result, options)?,
-        DrcRouter::External(engine) => {
-            let external = route_externally(
-                board,
-                &result,
-                input,
-                engine,
-                options,
-                best_of,
-                &[],
-                fallback,
-            )?;
-            if fallback && external.state == synth_router::RouteState::RouterUnavailable {
-                match route_internally(board, &sidecars, &result, options) {
-                    Ok(internal) => internal,
-                    Err(reason) => {
-                        warn!(
-                            "the workspace's own router could not run either: {reason}; \
-                             the selected engine's report stands"
-                        );
-                        external
-                    }
-                }
-            } else {
-                external
-            }
-        }
-    };
+    let report = route_externally(board, &result, input, engine, options, best_of, &[])?;
 
     // Signal/power-integrity on the delivered copper, so `synth route` and
     // `synth drc` see the same findings the export gate does instead of only
@@ -4635,9 +4547,7 @@ fn export_kicad(
 
     // Copper is generated by the external router, never by Synth. The
     // export above is the un-routed baseline; this run reads it, routes it,
-    // and installs the result only if it passes independent validation. The
-    // manufacturing package never falls back to the internal router: a
-    // fabricable package carries copper from a validated external route.
+    // and installs the result only if it passes independent validation.
     let routing = route_externally(
         board,
         &result,
@@ -4646,7 +4556,6 @@ fn export_kicad(
         &options,
         best_of,
         &chosen_order,
-        false,
     )?;
 
     // Signal integrity and power integrity on the routed copper. The rules
@@ -5470,7 +5379,6 @@ fn build_route_request(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
-    request.use_board_layers(board.layers);
     // After the floor, so the capability is read from the profile this board
     // actually names.
     //
@@ -5854,11 +5762,6 @@ fn pcb_layer(name: &str) -> synth_geometry::Layer {
 /// The returned report is the same document every other surface reads, so
 /// the router identity and terminal state the CLI prints cannot drift from
 /// what the run record says.
-///
-/// `fallback` says the caller will route with the workspace's own router if
-/// this engine is unavailable, so an unavailable engine is announced as the
-/// handover it is instead of as the end of the run.
-#[allow(clippy::too_many_arguments)]
 fn route_externally(
     board: &synth_ir::Board,
     result: &synth_kicad::ExportResult,
@@ -5867,7 +5770,6 @@ fn route_externally(
     options: &RouterOptions,
     best_of: bool,
     routing_order: &[String],
-    fallback: bool,
 ) -> anyhow::Result<synth_router::RouteReport> {
     let mut request = build_route_request(board, result, engine.into(), options, &[])?;
     // Hardest-net order: an explicit order (the placement loop's winner) wins;
@@ -5929,20 +5831,12 @@ fn route_externally(
     // look deliverable.
     if !report.is_fabrication_ready() {
         if report.state == synth_router::RouteState::RouterUnavailable {
-            if fallback {
-                info!(
-                    "{} is not available; routing {} with the workspace's own router instead",
-                    engine.as_str(),
-                    request.router_input_path().display(),
-                );
-            } else {
-                error!(
-                    "{} is not available; the exported board at {} is the \
-                     un-routed baseline and is preserved for review.",
-                    engine.as_str(),
-                    request.baseline_path().display()
-                );
-            }
+            error!(
+                "{} is not available; the exported board at {} is the \
+                 un-routed baseline and is preserved for review.",
+                engine.as_str(),
+                request.baseline_path().display()
+            );
         } else if report
             .failure
             .as_ref()
@@ -5971,90 +5865,6 @@ fn route_externally(
             );
         }
         info!("(design: {})", input.display());
-    }
-    Ok(report)
-}
-
-/// Route the board with the workspace's own deterministic router.
-///
-/// The fallback `synth drc` and `synth route` take when the selected
-/// external engine is not installed (issue #95): the maze router in
-/// `synth-route` runs against the export's own placement, the copper is
-/// delivered through the export boundary, and the candidate goes through
-/// the same mandatory repair and independent validation an external
-/// engine's candidate gets. A run with no routing engine installed therefore
-/// still ends in a real verdict — `Routed`, `ReviewRequired` or
-/// `ValidationFailed` — instead of `router_unavailable`, and the report
-/// names the internal engine so the copper's provenance is never ambiguous.
-fn route_internally(
-    board: &synth_ir::Board,
-    sidecars: &synth_kicad::Sidecars,
-    result: &synth_kicad::ExportResult,
-    options: &RouterOptions,
-) -> anyhow::Result<synth_router::RouteReport> {
-    let began = std::time::Instant::now();
-    // The same placement selection the export used, so every route lands on
-    // a pad the exported board actually has.
-    let placement = synth_kicad::placement_for_export(board, sidecars)
-        .map_err(|e| anyhow::anyhow!("the internal router could not place the board: {e}"))?;
-    let routing = synth_route::route(board, &placement);
-
-    let request = build_route_request(
-        board,
-        result,
-        synth_router::RouterEngine::Internal,
-        options,
-        &[],
-    )?;
-    // The copper is delivered as a full export — footprints, stackup, zones
-    // and rules identical to the baseline's, only the copper different — into
-    // its own directory, then copied to the candidate path the validation
-    // pipeline stages and installs.
-    let candidate_dir = result
-        .out_dir
-        .join(synth_router::RouterEngine::Internal.artifact_tag());
-    let _ = std::fs::remove_dir_all(&candidate_dir);
-    let routed =
-        synth_kicad::export_with_sidecars_and_routing(board, &candidate_dir, sidecars, &routing)
-            .map_err(|e| anyhow::anyhow!("the internal router's export failed: {e}"))?;
-    std::fs::copy(&routed.pcb_path, request.candidate_path())
-        .map_err(|e| anyhow::anyhow!("could not stage the internal route: {e}"))?;
-
-    let mut statistics = synth_router::RouteStatistics::empty();
-    if let Ok(text) = std::fs::read_to_string(request.candidate_path())
-        && let Ok(routed_board) = synth_drc::pcb_read::PcbBoard::parse(&text)
-    {
-        synth_router::kicad_routing_tools::refresh_counts(&mut statistics, &routed_board);
-    }
-    let candidate = synth_router::freerouting::Candidate {
-        candidate_path: request.candidate_path(),
-        artifacts: synth_router::RouteArtifacts {
-            baseline: request.baseline_path(),
-            candidate: Some(request.candidate_path()),
-            delivered: Some(request.board_path.clone()),
-            ..synth_router::RouteArtifacts::default()
-        }
-        .resolved(),
-        provenance: synth_router::RouterProvenance {
-            engine: synth_router::RouterEngine::Internal.as_str().to_string(),
-            engine_version: Some(env!("CARGO_PKG_VERSION").to_string()),
-            profile: request.profile_name.clone(),
-            command: vec!["synth-route".to_string(), board.name.clone()],
-            input_hash: request.input_hash.clone(),
-            duration_ms: began.elapsed().as_millis() as u64,
-            ..synth_router::RouterProvenance::default()
-        },
-        statistics,
-    };
-    let mut report = synth_router::finalize_candidate(&request, None, candidate);
-    // A property of the design and the process, not of the attempt, so it is
-    // reported whatever the run did.
-    report.escape = synth_router::escape::analyse_baseline(&request);
-    if let Err(error) = report.write_to(&request.report_path()) {
-        warn!(
-            "internal routing run record could not be written to {}: {error}",
-            request.report_path().display()
-        );
     }
     Ok(report)
 }
@@ -7094,52 +6904,5 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
         assert!(findings[0].is_blocking());
-    }
-
-    #[test]
-    fn an_unpinned_run_falls_back_to_the_internal_router() {
-        // Issue #95: a machine with no routing engine installed must still
-        // get a real DRC verdict, so the unpinned selection allows the
-        // fallback.
-        let (router, fallback) = select_drc_router(ExternalRouter::KicadRoutingTools, None);
-        assert_eq!(
-            router,
-            DrcRouter::External(ExternalRouter::KicadRoutingTools)
-        );
-        assert!(fallback);
-        // A pin of `internal` selects the workspace's router directly.
-        let (router, fallback) =
-            select_drc_router(ExternalRouter::KicadRoutingTools, Some("internal"));
-        assert_eq!(router, DrcRouter::Internal);
-        assert!(!fallback);
-    }
-
-    #[test]
-    fn a_pinned_engine_takes_precedence_and_may_not_fall_back() {
-        // #95: the qualification pin decides, and a pinned run gets the
-        // pinned engine or an honest "unavailable" — never copper from a
-        // different engine than the record names. This is why the run with
-        // `SYNTH_QUALIFY_ROUTER=kicad-routing-tools` reports `unknown` on a
-        // machine with no router installed, by design.
-        let (router, fallback) =
-            select_drc_router(ExternalRouter::FreeRouting, Some("kicad-routing-tools"));
-        assert_eq!(
-            router,
-            DrcRouter::External(ExternalRouter::KicadRoutingTools),
-            "the pin outranks the flag"
-        );
-        assert!(!fallback);
-
-        let (router, fallback) =
-            select_drc_router(ExternalRouter::KicadRoutingTools, Some("freerouting"));
-        assert_eq!(router, DrcRouter::External(ExternalRouter::FreeRouting));
-        assert!(!fallback);
-    }
-
-    #[test]
-    fn an_unrecognised_pin_is_ignored_with_the_default_behaviour() {
-        let (router, fallback) = select_drc_router(ExternalRouter::FreeRouting, Some("krt-jar"));
-        assert_eq!(router, DrcRouter::External(ExternalRouter::FreeRouting));
-        assert!(fallback, "an ignored pin does not disable the fallback");
     }
 }

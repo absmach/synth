@@ -207,25 +207,7 @@ pub fn export_with_sidecars_and_routing_order(
     routing_order: Option<&[String]>,
 ) -> Result<ExportResult, ExportError> {
     let _ = routing_order;
-    export_inner(board, out_dir, sidecars, None, None)
-}
-
-/// Export with a caller-supplied copper set.
-///
-/// The internal-routing fallback uses this: it routes the board with the
-/// workspace's own router and delivers the copper through the same export
-/// boundary, so the routed candidate carries the same footprints, stackup
-/// and rules the un-routed baseline does — only the copper differs.
-///
-/// # Errors
-/// Same as [`export`].
-pub fn export_with_sidecars_and_routing(
-    board: &Board,
-    out_dir: &Path,
-    sidecars: &Sidecars,
-    routing: &synth_pcb::Routing,
-) -> Result<ExportResult, ExportError> {
-    export_inner(board, out_dir, sidecars, None, Some(routing))
+    export_inner(board, out_dir, sidecars, None)
 }
 
 /// Export using a caller-supplied placement instead of choosing one.
@@ -243,7 +225,7 @@ pub fn export_with_placement(
     sidecars: &Sidecars,
     placement: &synth_place::Placement,
 ) -> Result<ExportResult, ExportError> {
-    export_inner(board, out_dir, sidecars, Some(placement), None)
+    export_inner(board, out_dir, sidecars, Some(placement))
 }
 
 /// The placement [`export_with_sidecars`] would choose, without exporting.
@@ -284,7 +266,6 @@ fn export_inner(
     out_dir: &Path,
     sidecars: &Sidecars,
     placement_override: Option<&synth_place::Placement>,
-    routing: Option<&synth_pcb::Routing>,
 ) -> Result<ExportResult, ExportError> {
     std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
         path: out_dir.to_path_buf(),
@@ -514,15 +495,10 @@ fn export_inner(
     let outline: &[synth_layout::sidecar::SidecarPoint] = placement_sidecar
         .as_ref()
         .map_or(&[], |sidecar| sidecar.outline.as_slice());
-    // Copper the caller supplied when it has some (the internal-routing
-    // fallback delivers its routes through this same export boundary); an
-    // empty set is the normal un-routed export.
-    let empty_routing = synth_pcb::Routing::default();
-    let copper = routing.unwrap_or(&empty_routing);
     let pcb_text = pcb::build_pcb(
         board,
         &placement,
-        copper,
+        &synth_pcb::Routing::default(),
         &project_namespace,
         &label_overrides,
         &fixed_vias,
