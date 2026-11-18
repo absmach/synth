@@ -172,9 +172,7 @@ part shipped with.
 The dice are the only parts here that dissipate anything, and a host that
 cannot read the card's temperature cannot throttle it. An NTC in a divider is
 what an SDR-era module did; it is deliberately not a digital sensor on the
-presence detect bus, because the registry's TMP117 cannot have its address
-strapped and a sensor whose address is decided by a floating pin is not a
-measurement.
+presence detect bus, so that bus carries only the EEPROM a host expects there.
 
 **Reading it.** `THERM` is the junction of R6 (10 kOhm to the rail) and R5
 (the NTC to ground), so
@@ -364,7 +362,7 @@ length-matched interface exist.
 | Ref | Part | Registry id |
 | --- | --- | --- |
 | U1, U2 | IS42S16400J, 64 Mbit SDR SDRAM | `is42s16400j_sdram` |
-| U3 | 24LC256, 32 KB I2C EEPROM | `24lc256_eeprom` |
+| U3 | 24LC256, 32 KB I2C EEPROM | `24lc256_soic8` |
 | D1 | PRTR5V0U2X, dual rail clamp | `prtr5v0u2x` |
 | L1 | 600 R ferrite bead, 0603 | `ferrite_bead_0603` |
 | F1 | 500 mA resettable fuse | `polyfuse` |
