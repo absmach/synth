@@ -95,10 +95,7 @@ impl RouterEngine {
     /// All external engines, in the order capability discovery reports them.
     ///
     /// The default engine leads, so a caller reading the first entry gets the
-    /// engine an unconfigured run would use. [`Self::Internal`] is excluded:
-    /// a best-of portfolio compares engines against each other, and the
-    /// internal router is a fallback for "no engine is installed", not a
-    /// competitor.
+    /// engine an unconfigured run would use.
     #[must_use]
     pub fn all() -> [Self; 3] {
         [Self::KiCadRoutingTools, Self::Freerouting, Self::Fastroute]
