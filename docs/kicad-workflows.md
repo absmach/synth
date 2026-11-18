@@ -240,9 +240,25 @@ synth export-kicad board.synth --out output/board --router free-routing
 
 Synth runs KRT in conservative production-review mode by default: it uses `--escalation board --strict-sizes`, keeps vias 0.1 mm away from same-net SMD pads and paste openings, and runs KRT's independent connectivity checker. Synth still writes the routed board when routing is incomplete, but returns exit status 1 and labels the result review-only. KRT's own report is written next to the board as `<name>.krt-stats.json`.
 
+Before a route starts, Synth asks KRT's own `krt_capabilities.py --require` for the modules and flags its helper drives. A checkout that exists but is on the wrong branch, is missing a stage, or does not support a flag is reported as `router_unavailable` with the exact gaps named, rather than routing green against an engine that cannot do what the run record claims. This also means the checkout must be a complete KRT install (KRT 0.23.0 or newer), not just a directory containing `py_router/route.py`.
+
+The independent verdict is also written as a compact quality report at `<name>.quality.json`, beside the run record. Its `passed` field is true only when all pads of every net share one copper island, `kicad-cli pcb drc` ran with zero errors and zero unconnected items, topology matches the exported baseline, and no required check was unavailable. The counts alongside it come from the delivered board and KRT's checker, never from the engine's own summary.
+
 Use `--krt-escalation fab` only when the selected fabrication process has been explicitly approved to relax the board's declared rules. Use `--krt-allow-via-in-pad` only when filled-and-capped via-in-pad is part of the fabrication specification. The production gate rejects open connection groups, delivered dimensions below the board floor, and unapproved via-in-pad sites. `--krt-fab-tier standard|advanced|auto` and `--krt-fab-overrides FILE` expose KRT's fabrication capability floor when a manufacturer-specific override is needed.
 
 On a routed board, each approved via-in-pad site is listed under `routing.fabrication_notes` in `release.json` and printed as a `fabrication note:` line, so the order can carry the filled-and-capped requirement. A board that is not routed gets no such note.
+
+#### FastRoute (Java-free FreeRouting)
+
+[FastRoute](https://github.com/parisxmas/fastroute) is a Rust port of FreeRouting speaking the same Specctra DSN→SES contract, so Synth reuses the same export, clean-netlist, import, and independent validation path. It is a separate optional GPLv3 binary — Synth invokes it, never links or vendors it, and the Apache-2.0 core stays unaffected.
+
+```text
+synth route board.synth --router fastroute \
+  --fastroute-binary /path/to/fastroute \
+  --freerouting-python /usr/bin/python3   # the interpreter that can import pcbnew
+```
+
+`SYNTH_FASTROUTE_BIN` replaces the flag. The pass/thread limits are shared with FreeRouting; FastRoute-specific switches come from `SYNTH_FASTROUTE_PARITY`, `SYNTH_FASTROUTE_ENHANCEMENTS=0`, and `SYNTH_FASTROUTE_MULTI_START=N`. Capability discovery checks `fastroute --version`, and both the quality report and the run record name the exact binary revision. `--best-of` considers KiCadRoutingTools, FreeRouting, and FastRoute and keeps the attempt that passes independent validation with the best cost — never the engine's own claim.
 
 KRT may adapt to fabrication floors and may write project DRC settings; review those changes explicitly rather than treating a zero-unconnected result as automatic production approval.
 

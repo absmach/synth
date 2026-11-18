@@ -231,9 +231,11 @@ def looks_like_a_routing_run(argv) -> bool:
     """Whether these arguments are a router invocation rather than a probe.
 
     A routing run names a helper script and then a board to read and a board
-    to write. Everything else — `-c`, `-m`, `-V`, or nothing at all — is the
-    interpreter being used as an interpreter.
+    to write. Everything else — `-c`, `-m`, `-V`, a capability manifest probe,
+    or nothing at all — is the interpreter being used as an interpreter.
     """
+    if any(arg.endswith("krt_capabilities.py") for arg in argv):
+        return False
     positional = []
     index = 0
     while index < len(argv):

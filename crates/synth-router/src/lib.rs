@@ -54,6 +54,7 @@ pub mod kicad_routing_tools;
 pub mod label_vias;
 pub mod outcomes;
 pub mod process;
+pub mod quality;
 pub mod result;
 pub mod search_budget;
 pub mod tools;
@@ -66,10 +67,11 @@ use tracing::{debug, info, warn};
 
 pub use capability::{RouterCapability, discover};
 pub use contract::{
-    FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
-    RouteRequest, RouterEngine, RouterLimits,
+    FabricationPolicy, FastrouteOptions, FreeroutingOptions, KiCadRoutingToolsOptions,
+    KrtEscalation, NetLayers, RouteRequest, RouterEngine, RouterLimits,
 };
 pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
+pub use quality::RouteQuality;
 pub use result::{
     PortfolioRank, RouteReport, RouteState, RouteStatistics, RouterProvenance, ValidationSummary,
 };
@@ -155,7 +157,7 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     let _guard = match process::RunGuard::acquire(request.candidate_path().display().to_string()) {
         Ok(guard) => guard,
         Err(detail) => {
-            let report = RouteReport::failed(
+            let mut report = RouteReport::failed(
                 request,
                 &None,
                 failure::RouterFailure::for_stage(
@@ -165,7 +167,7 @@ fn route_once(request: &RouteRequest) -> RouteReport {
                     detail,
                 ),
             );
-            write_report(&report, request);
+            write_report(&mut report, request);
             return report;
         }
     };
@@ -176,7 +178,7 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     if let Err(failure) = request.preserve_baseline() {
         let mut report = RouteReport::failed(request, &None, failure);
         report.escape = escape::analyse_baseline(request);
-        write_report(&report, request);
+        write_report(&mut report, request);
         return report;
     }
 
@@ -184,13 +186,14 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     if let Some(failure) = capability.failure() {
         let mut report = RouteReport::unavailable(request, &Some(capability.clone()), failure);
         report.escape = escape::analyse_baseline(request);
-        write_report(&report, request);
+        write_report(&mut report, request);
         return report;
     }
 
     let run = match request.engine {
         RouterEngine::Freerouting => freerouting::route(request),
         RouterEngine::KiCadRoutingTools => kicad_routing_tools::route(request),
+        RouterEngine::Fastroute => freerouting::route_engine(request, RouterEngine::Fastroute),
     };
 
     let mut report = match run {
@@ -200,7 +203,7 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     // A property of the design and the process, not of the attempt, so it is
     // reported whatever the run did — including when the engine was missing.
     report.escape = escape::analyse_baseline(request);
-    write_report(&report, request);
+    write_report(&mut report, request);
     report
 }
 
@@ -222,11 +225,28 @@ fn route_once(request: &RouteRequest) -> RouteReport {
 /// engines that are present instead of failing.
 #[must_use]
 pub fn route_best_of(base: &RouteRequest, engines: &[RouterEngine]) -> Portfolio {
+    // Preserve the exported board once, before any engine can overwrite the
+    // delivery path. Each attempt below copies from this stable source. Doing
+    // it per engine from `board_path` made the second engine route the first
+    // engine's installed copper: a portfolio then compared different boards
+    // and the Specctra import failed on nets the winner had renamed.
+    let stable_board = base.baseline_path();
+    if !stable_board.is_file()
+        && let Err(failure) = base.preserve_baseline()
+    {
+        let report = RouteReport::failed(base, &None, failure);
+        return Portfolio {
+            winner: base.engine,
+            attempts: vec![report],
+        };
+    }
+
     let mut attempts = Vec::with_capacity(engines.len());
     for engine in engines {
         let mut request = base.clone();
         request.engine = *engine;
         request.out_dir = base.out_dir.join(engine.artifact_tag());
+        request.board_path = stable_board.clone();
         attempts.push(route(&request));
     }
 
@@ -297,7 +317,20 @@ pub fn sanitize_stem(name: &str) -> String {
 /// different outcome: the caller still gets the in-memory verdict, and the
 /// problem surfaces as a warning. Losing the verdict would be the worse
 /// failure.
-fn write_report(report: &RouteReport, request: &RouteRequest) {
+fn write_report(report: &mut RouteReport, request: &RouteRequest) {
+    // The quality verdict is derived from the independent validation, not
+    // from the engine, so it is written from the same report the run record
+    // describes. Write it before the run record so the record can point at
+    // the artifact that actually landed.
+    let quality_path = request.quality_report_path();
+    let quality = crate::quality::RouteQuality::from_report(report);
+    match crate::write_artifact(&quality_path, &quality) {
+        Ok(()) => report.artifacts.quality_report = Some(quality_path),
+        Err(error) => warn!(
+            "route quality report could not be written to {}: {error}",
+            quality_path.display()
+        ),
+    }
     if let Err(error) = report.write_to(&request.report_path()) {
         warn!(
             "routing run record could not be written to {}: {error}",

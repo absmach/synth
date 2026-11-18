@@ -16,10 +16,11 @@ use crate::failure::RouterFailure;
 
 /// Which external engine generates the copper.
 ///
-/// FreeRouting is the default because it is the bundled, managed path.
-/// KiCadRoutingTools must be selected explicitly because it is an external
-/// checkout with its own Python environment. There is no third variant and
-/// no built-in fallback: if the selected engine cannot run, the run fails
+/// FreeRouting is the managed JAR path, FastRoute the managed Java-free
+/// binary with the same DSN→SES contract, and KiCadRoutingTools an external
+/// checkout with its own Python environment. KiCadRoutingTools is the
+/// default because it is the one the setup script installs. There is no
+/// built-in fallback: if the selected engine cannot run, the run fails
 /// (see [`crate::RouterFailure`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -31,6 +32,10 @@ pub enum RouterEngine {
     #[default]
     #[serde(rename = "kicad-routing-tools", alias = "kicadroutingtools")]
     KiCadRoutingTools,
+    /// FastRoute, a Java-free Rust port of FreeRouting speaking the same
+    /// Specctra DSN→SES contract. Driven as an optional external binary.
+    #[serde(rename = "fastroute", alias = "fast-route")]
+    Fastroute,
 }
 
 impl RouterEngine {
@@ -40,6 +45,7 @@ impl RouterEngine {
         match self {
             Self::Freerouting => "freerouting",
             Self::KiCadRoutingTools => "kicad-routing-tools",
+            Self::Fastroute => "fastroute",
         }
     }
 
@@ -53,6 +59,7 @@ impl RouterEngine {
         match value.trim().to_ascii_lowercase().as_str() {
             "freerouting" | "free-routing" => Some(Self::Freerouting),
             "kicad-routing-tools" | "kicadroutingtools" | "krt" => Some(Self::KiCadRoutingTools),
+            "fastroute" | "fast-route" | "fast_route" => Some(Self::Fastroute),
             _ => None,
         }
     }
@@ -67,6 +74,7 @@ impl RouterEngine {
         match self {
             Self::Freerouting => "freerouting",
             Self::KiCadRoutingTools => "kicadroutingtools",
+            Self::Fastroute => "fastroute",
         }
     }
 
@@ -75,8 +83,8 @@ impl RouterEngine {
     /// The default engine leads, so a caller reading the first entry gets the
     /// engine an unconfigured run would use.
     #[must_use]
-    pub fn all() -> [Self; 2] {
-        [Self::KiCadRoutingTools, Self::Freerouting]
+    pub fn all() -> [Self; 3] {
+        [Self::KiCadRoutingTools, Self::Freerouting, Self::Fastroute]
     }
 }
 
@@ -178,6 +186,37 @@ impl Default for FreeroutingOptions {
         Self {
             clean_netlist: true,
             retain_session: true,
+        }
+    }
+}
+
+/// FastRoute-specific knobs.
+///
+/// FastRoute shares FreeRouting's DSN→SES round trip and its pass/thread
+/// limits, so only the flags that change which algorithm runs live here.
+/// Keeping them separate stops a FreeRouting or KRT flag from reaching an
+/// engine that would silently ignore it while the run record claimed it
+/// had been applied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FastrouteOptions {
+    /// Byte-identical Freerouting behaviour (deterministic, slower).
+    pub parity: bool,
+    /// FastRoute's bug fixes and routing improvements (on by default).
+    pub enhancements: bool,
+    /// Extra shuffled-order starts when connections remain unrouted.
+    pub multi_start: Option<u32>,
+}
+
+impl Default for FastrouteOptions {
+    fn default() -> Self {
+        Self {
+            parity: std::env::var_os("SYNTH_FASTROUTE_PARITY").is_some(),
+            enhancements: std::env::var("SYNTH_FASTROUTE_ENHANCEMENTS")
+                .ok()
+                .is_none_or(|value| !matches!(value.as_str(), "0" | "false" | "no")),
+            multi_start: std::env::var("SYNTH_FASTROUTE_MULTI_START")
+                .ok()
+                .and_then(|value| value.parse().ok()),
         }
     }
 }
@@ -484,6 +523,8 @@ pub struct RouteRequest {
     pub engine: RouterEngine,
     pub limits: RouterLimits,
     pub freerouting: FreeroutingOptions,
+    #[serde(default)]
+    pub fastroute: FastrouteOptions,
     pub kicad_routing_tools: KiCadRoutingToolsOptions,
     /// Fabrication policy applied during independent validation.
     pub policy: FabricationPolicy,
@@ -614,6 +655,12 @@ impl RouteRequest {
         self.out_dir.join(format!("{}.routing.json", self.stem))
     }
 
+    /// Compact quality verdict: connected, DRC-clean, and with what counts.
+    #[must_use]
+    pub fn quality_report_path(&self) -> PathBuf {
+        self.out_dir.join(format!("{}.quality.json", self.stem))
+    }
+
     /// Independent connectivity findings.
     #[must_use]
     pub fn connectivity_report_path(&self) -> PathBuf {
@@ -728,6 +775,7 @@ impl RouteRequest {
             engine,
             limits: RouterLimits::default(),
             freerouting: FreeroutingOptions::default(),
+            fastroute: FastrouteOptions::default(),
             kicad_routing_tools: KiCadRoutingToolsOptions::default(),
             escapes: Vec::new(),
             escapes_off: Vec::new(),
@@ -882,6 +930,25 @@ mod tests {
             RouterEngine::parse(" freerouting "),
             Some(RouterEngine::Freerouting)
         );
+        assert_eq!(
+            RouterEngine::parse("fast-route"),
+            Some(RouterEngine::Fastroute)
+        );
+        assert_eq!(
+            RouterEngine::parse("FASTROUTE"),
+            Some(RouterEngine::Fastroute)
+        );
+    }
+
+    #[test]
+    fn every_engine_has_a_distinct_identifier_and_artifact_tag() {
+        let mut identifiers = std::collections::BTreeSet::new();
+        let mut tags = std::collections::BTreeSet::new();
+        for engine in RouterEngine::all() {
+            assert!(identifiers.insert(engine.as_str()));
+            assert!(tags.insert(engine.artifact_tag()));
+        }
+        assert_eq!(RouterEngine::all().len(), 3);
     }
 
     #[test]

@@ -523,8 +523,15 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("input_board")
     parser.add_argument("output_board")
-    parser.add_argument("--jar", required=True)
+    # Two ways to launch the same Specctra engine: FreeRouting's JAR through
+    # a JVM, or a FastRoute binary directly. Exactly one must be supplied;
+    # requiring --jar made the shared round trip impossible to reuse.
+    parser.add_argument("--jar")
     parser.add_argument("--java", default="java")
+    parser.add_argument("--binary", help="FastRoute binary instead of a JAR + Java")
+    parser.add_argument("--fastroute-parity", action="store_true")
+    parser.add_argument("--fastroute-no-enhancements", action="store_true")
+    parser.add_argument("--fastroute-multi-start", type=int)
     # Dense RP2350 boards often improve through the mid-30s before the
     # router's stagnation guard stops.  Keep the default bounded while
     # allowing explicit overrides for more difficult boards.
@@ -563,6 +570,9 @@ def main() -> int:
         help="delete FreeRouting's scratch data directory when finished",
     )
     args = parser.parse_args()
+    if bool(args.jar) == bool(args.binary):
+        parser.error("supply exactly one of --jar (FreeRouting) or --binary (FastRoute)")
+    engine = "fastroute" if args.binary else "freerouting"
 
     def write_report(**fields: object) -> None:
         """Record the engine's own account of the run.
@@ -604,11 +614,32 @@ def main() -> int:
         # settings alive and restore them after import so the routed board is
         # checked with the same Power/RF constraints as the exported board.
         if not pcbnew.ExportSpecctraDSN(export_board, dsn):
-            write_report(router="freerouting", error="dsn_export_failed")
+            write_report(router=engine, error="dsn_export_failed")
             raise SystemExit("KiCad Specctra DSN export failed")
 
-        completed = subprocess.run(
-            [
+        if args.binary:
+            command = [
+                args.binary,
+                "-de",
+                dsn,
+                "-do",
+                ses,
+                "-mp",
+                str(args.passes),
+                "-mt",
+                str(args.threads),
+            ]
+            # FastRoute's own algorithm switches. They are absent from the
+            # FreeRouting path so a flag for one engine never leaks into the
+            # other's command line.
+            if args.fastroute_parity:
+                command.append("--parity")
+            if args.fastroute_no_enhancements:
+                command.append("--no-enhancements")
+            if args.fastroute_multi_start:
+                command.append(f"--multi-start={args.fastroute_multi_start}")
+        else:
+            command = [
                 args.java,
                 "-Djava.awt.headless=true",
                 "-jar",
@@ -622,17 +653,15 @@ def main() -> int:
                 "-mt",
                 str(args.threads),
                 "--user_data_path=" + data,
-            ],
-            capture_output=True,
-            text=True,
-        )
+            ]
+        completed = subprocess.run(command, capture_output=True, text=True)
         if completed.returncode != 0:
             write_report(
-                router="freerouting",
-                jar=str(args.jar),
-                java_version=completed.stderr.strip()[:200] or None,
+                router=engine,
+                jar=str(args.jar) if args.jar else None,
+                java_version=completed.stderr.strip()[:200] or None if args.jar else None,
                 exit_code=completed.returncode,
-                notes=["freerouting exited non-zero"],
+                notes=[f"{engine} exited non-zero"],
             )
             sys.stderr.write(completed.stdout)
             sys.stderr.write(completed.stderr)
@@ -653,9 +682,9 @@ def main() -> int:
 
         if args.no_import:
             write_report(
-                router="freerouting",
-                jar=str(args.jar),
-                java_version=java_version(args.java),
+                router=engine,
+                jar=str(args.jar) if args.jar else None,
+                java_version=java_version(args.java) if args.jar else None,
                 passes=args.passes,
                 threads=args.threads,
                 ses_path=ses,

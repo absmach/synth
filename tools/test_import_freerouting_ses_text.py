@@ -30,11 +30,11 @@ SES = """(session board.ses
 """
 
 
-def run_importer(directory: Path, name: str) -> str:
+def run_importer(directory: Path, name: str, board_text: str = BOARD) -> str:
     board = directory / "board.kicad_pcb"
     ses = directory / "board.ses"
     out = directory / name
-    board.write_text(BOARD)
+    board.write_text(board_text)
     ses.write_text(SES)
     subprocess.run(
         [sys.executable, str(SCRIPT), str(board), str(ses), str(out)],
@@ -42,6 +42,22 @@ def run_importer(directory: Path, name: str) -> str:
         capture_output=True,
     )
     return out.read_text()
+
+
+class NameOnlyNets(unittest.TestCase):
+    def test_a_board_without_a_numeric_net_table_still_imports(self):
+        # A previous textual merge, or a portfolio run whose baseline came
+        # from a routed board, names nets on pads directly. The SES names the
+        # same nets; the importer must resolve them instead of failing.
+        board = (
+            '(kicad_pcb\n\t(footprint "X:Y"\n'
+            '\t\t(pad "1" smd circle (at 0 0) (size 1 1) (net "A"))\n'
+            '\t\t(pad "2" smd circle (at 2 0) (size 1 1) (net "B"))\n\t)\n)\n'
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            text = run_importer(Path(directory), "out.kicad_pcb", board)
+        self.assertIn('(net "A")', text)
+        self.assertIn('(net "B")', text)
 
 
 class DeterministicUuids(unittest.TestCase):

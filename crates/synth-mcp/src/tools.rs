@@ -154,7 +154,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path": { "type": "string", "description": "Optional path to .synth source file on disk" },
                     "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar" },
                     "allow_placement_warnings": { "type": "boolean", "description": "Route despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
-                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout) or \"freerouting\" (managed)" },
+                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout), \"freerouting\" (managed JAR) or \"fastroute\" (managed Java-free binary)" },
                     "freerouting_jar": { "type": "string", "description": "Path to the FreeRouting JAR" },
                     "freerouting_java": { "type": "string", "description": "Java executable for FreeRouting" },
                     "kicad_routing_tools_repo": { "type": "string", "description": "KiCadRoutingTools checkout directory" },
@@ -238,7 +238,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
                     "place_route_budget_secs": { "type": "integer", "minimum": 0, "description": "Wall-clock budget in seconds for place_route_iterate (0 or absent: 900). Every routing run is capped at what is left, a share for the final route is kept back, and the result's placement_search says how many candidates were routed and whether the budget cut the search short. A router_timeout_secs under 30 starts no candidate run (a run that short cannot finish), only the final route. A whole number of seconds; anything else is refused." },
                     "place_route_iterate": { "type": "boolean", "description": "Choose the placement by routing each candidate and keeping the one that routes best, instead of the export path's route-free estimate. Opt-in: costs one extra route per candidate, and falls back to the normal choice when there is one candidate or the engine is unavailable." },
-                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout) or \"freerouting\" (managed)" },
+                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout), \"freerouting\" (managed JAR) or \"fastroute\" (managed Java-free binary)" },
                     "freerouting_jar": { "type": "string", "description": "Path to the FreeRouting JAR" },
                     "freerouting_java": { "type": "string", "description": "Java executable for FreeRouting" },
                     "kicad_routing_tools_repo": { "type": "string", "description": "KiCadRoutingTools checkout directory" },
@@ -1399,7 +1399,7 @@ fn resolve_router(args: &Value) -> Result<synth_router::RouterEngine, String> {
         .unwrap_or_else(|| synth_router::RouterEngine::default().as_str());
     synth_router::RouterEngine::parse(requested).ok_or_else(|| {
         format!(
-            "unknown router `{requested}`; expected `freerouting` or `kicad-routing-tools`. \
+            "unknown router `{requested}`; expected `freerouting`, `fastroute` or `kicad-routing-tools`. \
              Call synth_router_capabilities to see which engines are installed."
         )
     })
