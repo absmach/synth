@@ -13,8 +13,7 @@
 //! - **Independent of the router.** A DRC engine that shares
 //!   state with the producer can't catch the producer's bugs.
 //!   The DRC code path rebuilds every check from scratch
-//!   against the IR shapes — same approach as
-//!   `synth_route::drc`, just with manufacturer-profile rules.
+//!   against the IR shapes, using manufacturer-profile rules.
 //! - **Machine-readable diagnostics.** Each violation carries a
 //!   stable `E-SYNTH-DRC-*` code (slice 5 catalogue) and a
 //!   polygon location so the browser preview can highlight the
@@ -38,8 +37,8 @@
 //!   `E-SYNTH-DRC-007`: every segment must clear every
 //!   component's courtyard and every foreign pad, checked via
 //!   continuous rectangle geometry recomputed from `Board` +
-//!   `Placement` — deliberately not sharing `synth_route`'s
-//!   grid, so a bug in the grid can't hide from both. Landed
+//!   `Placement` — deliberately not sharing any
+//!   router's grid, so a bug in that grid can't hide from both. Landed
 //!   from a prior-art scan of pcbflow/cuflow, which verify
 //!   clearance via an independent geometric method (polygon
 //!   buffering) rather than trusting the same code path that
@@ -576,13 +575,13 @@ mod tests {
         // whatever quality the router happens to produce.
         let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
-        let mut routing = synth_route::route(&board, &placement);
+        let mut routing = Routing::default();
 
         let comp = placement
             .components
             .first()
             .expect("at least one component");
-        routing.segments.push(synth_route::Segment {
+        routing.segments.push(synth_pcb::Segment {
             net: NetId(999_999),
             layer: synth_geometry::Layer::Top,
             start: comp.center,
@@ -631,7 +630,7 @@ mod tests {
     fn report_is_deterministic() {
         let board = load_board("../../examples/sensor_logger/sensor_logger.synth");
         let placement = synth_place::place(&board).expect("place");
-        let routing = synth_route::route(&board, &placement);
+        let routing = Routing::default();
         let profile = ManufacturerProfile::jlc_standard();
         let a = check(&board, &placement, &routing, &profile);
         let b = check(&board, &placement, &routing, &profile);
@@ -646,7 +645,7 @@ mod tests {
         assert_eq!(profile.source, synth_geometry::StackupSource::Declared);
 
         let placement = synth_place::place(&board).expect("place");
-        let routing = synth_route::route(&board, &placement);
+        let routing = Routing::default();
         let fab = ManufacturerProfile::jlc_standard();
         let plain = check(&board, &placement, &routing, &fab);
         let with_stackup = check_with_stackup(&board, &placement, &routing, &fab, &profile);
@@ -969,7 +968,7 @@ mod tests {
     fn iot_sensor_board_drc() {
         let board = load_board("../../fixtures/designs/iot_sensor_board.synth");
         let placement = synth_place::place(&board).expect("place");
-        let routing = synth_route::route(&board, &placement);
+        let routing = Routing::default();
         let profile = ManufacturerProfile::jlc_standard();
         let report = check(&board, &placement, &routing, &profile);
         for v in &report.violations {
@@ -1016,7 +1015,7 @@ mod tests {
     fn env_logger_drc() {
         let board = load_board("../../examples/env_logger/env_logger.synth");
         let placement = synth_place::place(&board).expect("place");
-        let routing = synth_route::route(&board, &placement);
+        let routing = Routing::default();
         let profile = ManufacturerProfile::jlc_standard();
         let report = check(&board, &placement, &routing, &profile);
         for v in &report.violations {

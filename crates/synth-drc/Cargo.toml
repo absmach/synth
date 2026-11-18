@@ -27,6 +27,3 @@ rayon = { workspace = true }
 
 [dev-dependencies]
 synth-parser = { workspace = true }
-# The native maze router survives only for the migration and benchmark
-# tests in this crate; nothing in the production DRC path invokes it.
-synth-route = { workspace = true }

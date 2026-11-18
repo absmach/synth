@@ -997,7 +997,7 @@ mod tests {
     use super::*;
     use synth_geometry::{Layer, mm_to_nm};
     use synth_ir::NetId;
-    use synth_route::{Routing, Segment, Via};
+    use synth_pcb::{Routing, Segment, Via};
 
     fn jlc() -> ManufacturerProfile {
         ManufacturerProfile::jlc_standard()
