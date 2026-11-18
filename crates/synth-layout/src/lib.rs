@@ -1056,24 +1056,59 @@ fn layout_with_overrides_and_power(
             route_and_label(board, &mut layout);
         }
         cells = place_regions_in_floorplan(board, &mut layout);
+        // The cut cells are bigger than the content that asked for them.
+        // Spread each region's parts over its cell before the boxes are
+        // drawn, and route again because the parts moved.
+        if let Some(cells) = &cells {
+            for _ in 0..SPREAD_ROUNDS {
+                spread_content_to_cells(board, &mut layout, cells);
+                route_and_label(board, &mut layout);
+            }
+        }
     }
     annotate_groups(board, &mut layout);
     place_connector_legends(board, &mut layout);
-    place_design_notes(board, &mut layout);
-    if !pinned && cells.is_none() {
-        shift_into_margin(board, &mut layout);
+    // The region boxes tile the page: set them to their floorplan cells
+    // before the notes are placed, so each note strip sits at the bottom of
+    // its cell. Without a floorplan the boxes only know their content, so
+    // notes grow them first and they are tiled to their neighbours after.
+    let stretched = cells
+        .as_ref()
+        .is_some_and(|cells| stretch_to_cells(&mut layout.group_boxes, cells));
+    if stretched {
+        place_design_notes(board, &mut layout, true);
+    } else {
+        place_design_notes(board, &mut layout, false);
+        if !pinned && cells.is_none() {
+            shift_into_margin(board, &mut layout);
+        }
+        tile_boxes_to_content(board, &mut layout);
     }
-    // Region boxes hug their content: `annotate_groups` sized each one from
-    // the parts it holds, so a region keeps that size wherever the floorplan
-    // placed it. Stretching them to their cells is what left a 275 mm clamp
-    // grid inside a 570 mm box.
     center_captions(board, &mut layout);
     resolve_text_overlaps(board, &mut layout);
     grow_sheet_to_fit(board, &mut layout);
     compact_sheet_to_fit(board, &mut layout);
     settle_sheet_size(board, &mut layout);
+    extend_boxes_to_frame_bottom(&mut layout);
     clamp_annotations_to_sheet(&mut layout);
     layout
+}
+
+/// Stretch the region boxes to meet their neighbours, for a layout that has no
+/// floorplan.
+fn tile_boxes_to_content(board: &Board, layout: &mut Layout) {
+    let mut fixed = ungrouped_blocks(board, layout);
+    // A mechanical region keeps the size its content gave it: it stops the
+    // boxes beside it like an ungrouped block does, but does not stretch.
+    let mechanical = mechanical_groups(board);
+    let (rigid, mut flexible): (Vec<GroupBox>, Vec<GroupBox>) =
+        std::mem::take(&mut layout.group_boxes)
+            .into_iter()
+            .partition(|b| mechanical.contains(b.group.as_str()));
+    fixed.extend(rigid.iter().map(|b| (b.min_mm, b.max_mm)));
+    tile_group_boxes(&mut flexible, &fixed, GROUP_TILE_GAP);
+    layout.group_boxes = flexible;
+    layout.group_boxes.extend(rigid);
 }
 
 /// Pull any caption that overhangs the right edge back onto the page.
@@ -1359,12 +1394,87 @@ fn separate_group_boxes(board: &Board, layout: &mut Layout) -> bool {
     }
     !moved.is_empty()
 }
+/// Stretch each group box right and down until it meets its neighbour, so the
+/// boxes tile the rectangle they span instead of floating apart.
+///
+/// A box keeps its top-left corner, which is where its caption sits. It grows
+/// right to just short of the nearest box beside it, or to the right edge of
+/// all the boxes when nothing is there, then down the same way. Boxes never
+/// end up overlapping.
+fn tile_group_boxes(boxes: &mut [GroupBox], fixed: &[Rect], gap: f64) {
+    if boxes.len() < 2 && fixed.is_empty() {
+        return;
+    }
+    let right_edge = boxes.iter().map(|b| b.max_mm.0).fold(f64::MIN, f64::max);
+    let bottom_edge = boxes.iter().map(|b| b.max_mm.1).fold(f64::MIN, f64::max);
+    // Every rectangle on the sheet: the boxes first, then the fixed blocks
+    // (the parts of regions that have no box), which stop a box but never
+    // grow themselves.
+    let rects = |boxes: &[GroupBox]| -> Vec<Rect> {
+        boxes
+            .iter()
+            .map(|b| (b.min_mm, b.max_mm))
+            .chain(fixed.iter().copied())
+            .collect()
+    };
+    let overlap =
+        |a: &Rect, b: &Rect| a.0.0 < b.1.0 && b.0.0 < a.1.0 && a.0.1 < b.1.1 && b.0.1 < a.1.1;
+    let beside = |a: &Rect, b: &Rect| {
+        // `b` starts at or past `a`'s right edge and shares some of its rows.
+        b.0.0 >= a.1.0 && b.0.1 < a.1.1 && a.0.1 < b.1.1
+    };
+    let below = |a: &Rect, b: &Rect| {
+        // `b` starts at or past `a`'s bottom edge and shares some of its columns.
+        b.0.1 >= a.1.1 && b.0.0 < a.1.0 && a.0.0 < b.1.0
+    };
+    // A box that already overlaps another rectangle is left as it is: growing
+    // it would only make the overlap worse.
+    let all = rects(boxes);
+    let settled: Vec<bool> = (0..boxes.len())
+        .map(|i| {
+            all.iter()
+                .enumerate()
+                .any(|(j, other)| i != j && overlap(&all[i], other))
+        })
+        .collect();
+    let grow_right: Vec<f64> = (0..boxes.len())
+        .map(|i| {
+            all.iter()
+                .filter(|b| beside(&all[i], b))
+                .map(|b| b.0.0 - gap)
+                .fold(right_edge, f64::min)
+        })
+        .collect();
+    for ((b, edge), keep) in boxes.iter_mut().zip(grow_right).zip(&settled) {
+        if !keep {
+            b.max_mm.0 = b.max_mm.0.max(edge);
+        }
+    }
+    let all = rects(boxes);
+    let grow_down: Vec<f64> = (0..boxes.len())
+        .map(|i| {
+            all.iter()
+                .filter(|b| below(&all[i], b))
+                .map(|b| b.0.1 - gap)
+                .fold(bottom_edge, f64::min)
+        })
+        .collect();
+    for ((b, edge), keep) in boxes.iter_mut().zip(grow_down).zip(&settled) {
+        if !keep {
+            b.max_mm.1 = b.max_mm.1.max(edge);
+        }
+    }
+}
+
 /// A rectangle as `(min, max)` corners in sheet millimetres.
 type Rect = ((f64, f64), (f64, f64));
 
 /// Rounds of [`place_regions_in_floorplan`]: moving a region re-routes its
 /// wires and labels, which can change the box it needs.
 const FLOORPLAN_ROUNDS: usize = 3;
+/// Rounds of [`spread_content_to_cells`]: spreading moves parts, which
+/// re-routes their labels, which changes what the region draws.
+const SPREAD_ROUNDS: usize = 2;
 /// Room (mm) a floorplan cell keeps beyond its region's box, so the region can
 /// be moved by whole grid steps without leaving the cell.
 const FLOORPLAN_GRID_SLACK: f64 = GRID_MM;
@@ -1399,6 +1509,20 @@ fn page_frame(size: SheetSize) -> Rect {
     )
 }
 
+/// Stretch the regions on the bottom row down to the sheet frame, so the page
+/// has no empty strip under them. A region that reaches over the title block
+/// stays above it.
+fn extend_boxes_to_frame_bottom(layout: &mut Layout) {
+    let sheet = layout.sheet_size.dims_mm();
+    let (block_x, block_y) = title_block_origin(sheet);
+    for box_ in &mut layout.group_boxes {
+        let on_the_bottom_row = (box_.max_mm.1 - block_y).abs() < GROUP_TILE_GAP;
+        if on_the_bottom_row && box_.max_mm.0 <= block_x + GROUP_TILE_GAP {
+            box_.max_mm.1 = sheet.1 - SHEET_BORDER_MM;
+        }
+    }
+}
+
 /// One way to cut a set of regions into two: which regions go first, how the
 /// sides sit, and which shape of each side it uses.
 #[derive(Clone, Copy)]
@@ -1427,18 +1551,21 @@ const FLOORPLAN_FULL_SEARCH_REGIONS: usize = 10;
 const FLOORPLAN_MAX_REGIONS: usize = 64;
 
 /// Cut the first of `frames` that can hold them into one cell per region, every
-/// cut running the full width or height of the cell it cuts, and pack the
-/// cells from the frame's top-left corner with `gap` between neighbours.
-/// `sizes` are the least `(width, height)` each cell may have, in reading
-/// order; the cells come back in the same order, never smaller than their
-/// size, with the index of the frame cut. `None` when no frame holds a cut
-/// tree.
+/// cut running the full width or height of the cell it cuts, so the cells tile
+/// the frame and neighbours are `gap` apart. `sizes` are the least `(width,
+/// height)` each cell may have, in reading order; the cells come back in the
+/// same order, never smaller than their size, with the index of the frame cut.
+/// `None` when no frame holds a cut tree.
 ///
 /// Of the cut trees that fit, the one with the smallest bounding area is taken
 /// (aspect ratio closest to the frame's on a tie, then the cut that keeps the
-/// earlier regions together). A cell is exactly the size its regions need:
-/// spare page room stays outside the packed cells instead of being shared
-/// between them.
+/// earlier regions together); room left over is shared down the tree in
+/// proportion to the content area on each side.
+///
+/// Cut trees are searched, rather than splitting the total area once in
+/// half: one area split strands a tall region beside a short one, and the
+/// space under the short one is lost. A cut tree can pair regions of
+/// matching width or height so that room is used.
 ///
 /// Cut trees are searched, rather than splitting the total area once in
 /// half: one area split strands a tall region beside a short one, and the
@@ -1520,41 +1647,30 @@ fn slicing_floorplan(
             .0;
         Some((which, *frame, root))
     })?;
+    let content = |set: u64| -> f64 {
+        (0..n)
+            .filter(|i| (set >> i) & 1 == 1)
+            .map(|i| sizes[i].0 * sizes[i].1)
+            .sum()
+    };
     let mut cells = vec![frame; n];
     let mut pending = vec![(all, root, frame)];
     while let Some((set, index, rect)) = pending.pop() {
         let shape = shapes[&set][index];
         let Some(cut) = shape.cut else {
-            cells[set.trailing_zeros() as usize] = (
-                (rect.0.0, rect.0.1),
-                (rect.0.0 + shape.w, rect.0.1 + shape.h),
-            );
+            cells[set.trailing_zeros() as usize] = rect;
             continue;
         };
         let second_set = set ^ cut.first_set;
         let first = shapes[&cut.first_set][cut.first];
-        let second = shapes[&second_set][cut.second];
-        // Every cell is exactly the size its regions need, packed from the
-        // frame's top-left. Handing each side a share of the frame's spare
-        // room only spreads the regions apart: the page is already the
-        // smallest one that holds the cut.
-        let (x0, y0) = rect.0;
+        let first_share = content(cut.first_set) / content(set);
+        let ((x0, y0), (x1, y1)) = rect;
         let (first_rect, second_rect) = if cut.side_by_side {
-            (
-                ((x0, y0), (x0 + first.w, y0 + first.h)),
-                (
-                    (x0 + first.w + gap, y0),
-                    (x0 + first.w + gap + second.w, y0 + second.h),
-                ),
-            )
+            let edge = x0 + first.w + (x1 - x0 - shape.w).max(0.0) * first_share;
+            (((x0, y0), (edge, y1)), ((edge + gap, y0), (x1, y1)))
         } else {
-            (
-                ((x0, y0), (x0 + first.w, y0 + first.h)),
-                (
-                    (x0, y0 + first.h + gap),
-                    (x0 + second.w, y0 + first.h + gap + second.h),
-                ),
-            )
+            let edge = y0 + first.h + (y1 - y0 - shape.h).max(0.0) * first_share;
+            (((x0, y0), (x1, edge)), ((x0, edge + gap), (x1, y1)))
         };
         pending.push((cut.first_set, cut.first, first_rect));
         pending.push((second_set, cut.second, second_rect));
@@ -1762,6 +1878,97 @@ fn apply_shifts(
         placement.center_mm.0 += dx;
         placement.center_mm.1 += dy;
     }
+}
+
+/// Spread each region's parts over the inner area of its floorplan cell.
+///
+/// The floorplan sizes a cell from the region's natural box plus a share of
+/// the page's spare room, so the cell is bigger than the content that asked
+/// for it. Leaving the content packed at the cell's top-left is what made the
+/// old tiled page look empty. Scaling the region's placements to the cell's
+/// inner rectangle gives a one-column region even vertical spacing, and a
+/// repeated-cell bank an even column/row gap, without re-deciding the grid.
+/// The note strip's height is reserved at the cell bottom before scaling.
+fn spread_content_to_cells(board: &Board, layout: &mut Layout, cells: &HashMap<String, Rect>) {
+    let bounds = group_bounds(board, layout);
+    let mechanical = mechanical_groups(board);
+    for (group, min_x, max_x, min_y, max_y) in bounds {
+        let Some(&(cell_min, cell_max)) = cells.get(&group) else {
+            continue;
+        };
+        let notes: f64 = board
+            .notes
+            .iter()
+            .filter(|n| n.group.as_deref() == Some(group.as_str()))
+            .map(note_strip_height)
+            .sum();
+        // Keep one grid step of clearance inside the cell: routing can put a
+        // label slightly past the content bounds measured before the scale,
+        // and the box still has to fit its cell.
+        let inset = FLOORPLAN_GRID_SLACK;
+        let left = cell_min.0 + GROUP_CONTENT_PAD + inset;
+        let right = (cell_max.0 - GROUP_CONTENT_PAD - inset).max(left);
+        let top = cell_min.1 + GROUP_TITLE_BAND_MM + inset;
+        let bottom = (cell_max.1 - GROUP_CONTENT_PAD - notes - inset).max(top);
+        let (width, height) = (max_x - min_x, max_y - min_y);
+        // A very small region in a large cell would otherwise pull connected
+        // parts past the router's label span, turning an intra-region wire
+        // into per-pin labels. Spread up to one label span, not past it.
+        // A mechanical region has no nets to keep routable, so it takes the
+        // whole cell.
+        let (max_w, max_h) = if mechanical.contains(group.as_str()) {
+            (f64::INFINITY, f64::INFINITY)
+        } else {
+            (
+                if width < LABEL_SPAN_THRESHOLD_MM {
+                    LABEL_SPAN_THRESHOLD_MM
+                } else {
+                    f64::INFINITY
+                },
+                if height < LABEL_SPAN_THRESHOLD_MM {
+                    LABEL_SPAN_THRESHOLD_MM
+                } else {
+                    f64::INFINITY
+                },
+            )
+        };
+        let sx = if width > 0.0 {
+            ((right - left) / width).min(max_w / width)
+        } else {
+            1.0
+        };
+        let sy = if height > 0.0 {
+            ((bottom - top) / height).min(max_h / height)
+        } else {
+            1.0
+        };
+        for placement in &mut layout.components {
+            if effective_group(board, placement.id) == Some(group.as_str()) {
+                placement.center_mm.0 = left + (placement.center_mm.0 - min_x) * sx;
+                placement.center_mm.1 = top + (placement.center_mm.1 - min_y) * sy;
+            }
+        }
+    }
+}
+
+/// Set every region box to its floorplan cell. False, with the boxes left as
+/// they were, when a box does not fit inside its cell.
+fn stretch_to_cells(boxes: &mut [GroupBox], cells: &HashMap<String, Rect>) -> bool {
+    let fits = boxes.len() == cells.len()
+        && boxes.iter().all(|b| {
+            cells
+                .get(&b.group)
+                .is_some_and(|cell| rect_within(&(b.min_mm, b.max_mm), cell))
+        });
+    if fits {
+        for b in boxes.iter_mut() {
+            if let Some(&(min, max)) = cells.get(&b.group) {
+                b.min_mm = min;
+                b.max_mm = max;
+            }
+        }
+    }
+    fits
 }
 
 /// The parts that belong to no group, with what they draw past their bodies,
@@ -2240,38 +2447,68 @@ fn place_connector_legends(board: &Board, layout: &mut Layout) {
 ///
 /// A note inside a `group` sits in a strip at the bottom *inside*
 /// that group's outline box (reference mechanism 3: intent lives
-/// where the sub-circuit is drawn); the box grows to fit. Top-level
+/// where the sub-circuit is drawn). When the box has already been set
+/// to its floorplan cell, the reserved strip is filled upward from the
+/// cell bottom; otherwise the box grows downward to fit. Top-level
 /// notes stack at the bottom-left below all content. Each block is
 /// its title (caption size) plus one run per line. Runs before
 /// `grow_sheet_to_fit` so notes near an edge grow the page, and
 /// before `clamp_annotations_to_sheet` so wide lines slide on-page
 /// like captions.
-fn place_design_notes(board: &Board, layout: &mut Layout) {
+fn place_design_notes(board: &Board, layout: &mut Layout, bottom_anchor: bool) {
     if board.notes.is_empty() {
         return;
+    }
+    // With the boxes already set to their floorplan cells, the cell has
+    // reserved the note strip at its bottom: stack the notes upward from the
+    // box bottom instead of growing the box.
+    let mut bottom_cursor: HashMap<&str, f64> = HashMap::new();
+    if bottom_anchor {
+        for note in &board.notes {
+            let Some(group) = note.group.as_deref() else {
+                continue;
+            };
+            let Some(box_) = layout.group_boxes.iter().find(|b| b.group == group) else {
+                continue;
+            };
+            let total: f64 = board
+                .notes
+                .iter()
+                .filter(|n| n.group.as_deref() == Some(group))
+                .map(note_strip_height)
+                .sum();
+            bottom_cursor.entry(group).or_insert(box_.max_mm.1 - total);
+        }
     }
     let mut board_cursor = content_bottom(board, layout) + BELOW_GAP;
     for note in &board.notes {
         if let Some(group) = note.group.as_deref() {
-            // Index — not a reference: the box grows as notes land.
+            // Index — not a reference: the box may grow as notes land.
             let Some(box_idx) = layout.group_boxes.iter().position(|b| b.group == group) else {
                 let y = board_cursor;
                 board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
                 push_note_runs(layout, note, PAGE_MARGIN, y);
                 continue;
             };
-            // Strip below the current box bottom edge, inside the
-            // grown box: title first, lines beneath it. The box already
-            // holds the power symbols and net labels hanging below the
-            // parts, so the strip starts below them.
             let x = layout.group_boxes[box_idx].min_mm.0 + GROUP_BOX_PAD;
             let note_w = note_text_width(note);
-            let strip_top = layout.group_boxes[box_idx].max_mm.1;
-            let title_y = strip_top + NOTE_STRIP_GAP + NOTE_TITLE_SIZE;
-            push_note_runs(layout, note, x, title_y);
-            layout.group_boxes[box_idx].max_mm.1 = strip_top + note_strip_height(note);
-            let right = &mut layout.group_boxes[box_idx].max_mm.0;
-            *right = right.max(x + note_w + GROUP_BOX_PAD);
+            if bottom_anchor {
+                let strip_top = bottom_cursor[group];
+                let title_y = strip_top + NOTE_STRIP_GAP + NOTE_TITLE_SIZE;
+                push_note_runs(layout, note, x, title_y);
+                *bottom_cursor.get_mut(group).expect("a cursor") += note_strip_height(note);
+            } else {
+                // Strip below the current box bottom edge, inside the
+                // grown box: title first, lines beneath it. The box already
+                // holds the power symbols and net labels hanging below the
+                // parts, so the strip starts below them.
+                let strip_top = layout.group_boxes[box_idx].max_mm.1;
+                let title_y = strip_top + NOTE_STRIP_GAP + NOTE_TITLE_SIZE;
+                push_note_runs(layout, note, x, title_y);
+                layout.group_boxes[box_idx].max_mm.1 = strip_top + note_strip_height(note);
+                let right = &mut layout.group_boxes[box_idx].max_mm.0;
+                *right = right.max(x + note_w + GROUP_BOX_PAD);
+            }
         } else {
             let y = board_cursor;
             board_cursor += NOTE_TITLE_GAP + note.lines.len() as f64 * NOTE_LINE_PITCH;
@@ -10071,6 +10308,7 @@ mod documentation_tests {
             (box_.max_mm.1 - box_.min_mm.1) - content_h > 12.0 * NOTE_LINE_PITCH,
             "the box is not taller than its content by the note strip"
         );
+        let mut last = f64::NEG_INFINITY;
         for line in &lines {
             let y = layout
                 .annotations
@@ -10080,7 +10318,13 @@ mod documentation_tests {
                 .at_mm
                 .1;
             assert!(y < box_.max_mm.1, "{line} hangs below the box");
+            last = last.max(y);
         }
+        assert!(
+            (box_.max_mm.1 - last - GROUP_BOX_PAD).abs() < 0.5,
+            "the last note line is {} mm above the cell bottom",
+            box_.max_mm.1 - last
+        );
     }
 
     #[test]
@@ -10185,6 +10429,56 @@ mod documentation_tests {
     }
 
     #[test]
+    fn a_tiled_clamp_bank_covers_its_page() {
+        let b = clamp_bank_board();
+        let layout = layout(&b);
+        let (w, h) = layout.sheet_size.dims_mm();
+        assert!(w <= 420.0 && h <= 297.0, "page {w} x {h} is larger than A3");
+        let frame = page_frame(layout.sheet_size);
+        let to_fill = area(&frame) - title_block_area(&layout);
+        let covered: f64 = layout
+            .group_boxes
+            .iter()
+            .map(|b| area(&(b.min_mm, b.max_mm)))
+            .sum();
+        assert!(
+            covered >= 0.95 * to_fill,
+            "the boxes cover {covered:.0} of the {to_fill:.0} tiled frame"
+        );
+    }
+
+    #[test]
+    fn a_repeated_cell_grid_reads_column_major() {
+        let b = clamp_bank_board();
+        let layout = layout(&b);
+        // The pair anchors for this synthetic bank are the even ids. Cells
+        // fill a column top-to-bottom before the next column starts.
+        let mut by_x: Vec<(f64, f64, u32)> = layout
+            .components
+            .iter()
+            .filter(|p| p.id.0 % 2 == 0 && p.id.0 > 0 && p.id.0 < 25)
+            .map(|p| (p.center_mm.0, p.center_mm.1, p.id.0))
+            .collect();
+        by_x.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+        let mut cols: Vec<Vec<u32>> = Vec::new();
+        let mut current_x = f64::INFINITY;
+        for (x, _, id) in by_x {
+            if (x - current_x).abs() > 1.0 {
+                cols.push(Vec::new());
+                current_x = x;
+            }
+            cols.last_mut().expect("a column").push(id);
+        }
+        assert!(cols.len() >= 2);
+        for col in cols {
+            assert!(
+                col.windows(2).all(|w| w[0] < w[1]),
+                "a column reads {col:?}, not top-to-bottom in order"
+            );
+        }
+    }
+
+    #[test]
     fn a_clamp_bank_and_its_connector_fit_a3() {
         let b = clamp_bank_board();
         let layout = layout(&b);
@@ -10196,7 +10490,7 @@ mod documentation_tests {
         let grid: Vec<(f64, f64)> = layout
             .components
             .iter()
-            .filter(|p| p.id.0 % 2 == 1 && p.id.0 < 25)
+            .filter(|p| p.id.0 % 2 == 0 && p.id.0 > 0 && p.id.0 < 25)
             .map(|p| {
                 (
                     (p.center_mm.0 * 100.0).round() / 100.0,
@@ -10454,28 +10748,7 @@ mod documentation_tests {
     }
 
     #[test]
-    fn a_region_box_hugs_the_content_it_holds() {
-        let b = resistor_groups(&FOUR_REGIONS, 0);
-        let layout = layout(&b);
-        let expected = region_boxes(&b, &layout);
-        assert_eq!(expected.len(), 4);
-        for (group, ((want_min_x, want_min_y), (want_max_x, want_max_y))) in expected {
-            let got = box_of(&layout, &group);
-            assert!(
-                (got.min_mm.0 - want_min_x).abs() < 1e-6
-                    && (got.min_mm.1 - want_min_y).abs() < 1e-6
-                    && (got.max_mm.0 - want_max_x).abs() < 1e-6
-                    && (got.max_mm.1 - want_max_y).abs() < 1e-6,
-                "{group}: box {:?}-{:?} is not content + pad/title band \
-                 ({want_min_x:.1},{want_min_y:.1})-({want_max_x:.1},{want_max_y:.1})",
-                got.min_mm,
-                got.max_mm
-            );
-        }
-    }
-
-    #[test]
-    fn regions_of_different_sizes_fit_the_sheet_frame_without_stretching() {
+    fn regions_of_different_sizes_fill_the_sheet_frame() {
         let layout = layout(&resistor_groups(&FOUR_REGIONS, 0));
         let frame = page_frame(layout.sheet_size);
         let boxes: Vec<Rect> = layout
@@ -10484,21 +10757,20 @@ mod documentation_tests {
             .map(|b| (b.min_mm, b.max_mm))
             .collect();
         assert_eq!(boxes.len(), 4);
-        let hull = bounds(&boxes);
-        assert!(
-            hull.0.0 >= frame.0.0 - 1e-6
-                && hull.0.1 >= frame.0.1 - 1e-6
-                && hull.1.0 <= frame.1.0 + 1e-6
-                && hull.1.1 <= frame.1.1 + 1e-6,
-            "the boxes do not fit the frame"
-        );
-        // Stretching them to their page cells would cover the frame; hugging
-        // content leaves the page's unused area outside the boxes.
+        let covered: f64 = boxes.iter().map(area).sum();
         let to_fill = area(&frame) - title_block_area(&layout);
+        // A region over the title block's left edge stops above the block, which
+        // leaves the strip beside it empty.
         assert!(
-            boxes_area(&layout) < 0.9 * to_fill,
-            "the boxes were stretched over the frame again"
+            covered >= 0.9 * to_fill,
+            "boxes cover {covered} of the {to_fill} the frame leaves the regions"
         );
+        let hull = bounds(&boxes);
+        assert!((hull.0.0 - frame.0.0).abs() < 1e-6 && (hull.1.0 - frame.1.0).abs() < 1e-6);
+        // The bottom row runs on down beside the title block to the frame.
+        let sheet_bottom = layout.sheet_size.dims_mm().1 - SHEET_BORDER_MM;
+        assert!((hull.0.1 - frame.0.1).abs() < 1e-6);
+        assert!(hull.1.1 >= frame.1.1 - 1e-6 && hull.1.1 <= sheet_bottom + 1e-6);
     }
 
     #[test]
@@ -10533,22 +10805,74 @@ mod documentation_tests {
     }
 
     #[test]
-    fn region_content_stays_under_the_title_band_at_the_top_left_of_its_cell() {
-        let b = resistor_groups(&FOUR_REGIONS, 0);
+    fn a_repeated_cell_grid_fills_its_cell() {
+        let b = clamp_bank_board();
         let layout = layout(&b);
-        for (group, min_x, _, min_y, _) in group_bounds(&b, &layout) {
-            let cell = box_of(&layout, &group);
-            let left = min_x - cell.min_mm.0;
-            let top = min_y - cell.min_mm.1;
-            assert!(
-                (GROUP_CONTENT_PAD - 1e-6..GROUP_CONTENT_PAD + GRID_MM).contains(&left),
-                "{group}: content starts {left} mm from the left edge"
-            );
-            assert!(
-                (GROUP_TITLE_BAND_MM - 1e-6..GROUP_TITLE_BAND_MM + GRID_MM).contains(&top),
-                "{group}: content starts {top} mm under the top edge"
-            );
-        }
+        let box_ = box_of(&layout, "CLAMPS");
+        let (min_x, max_x, min_y, max_y) = group_bounds(&b, &layout)
+            .into_iter()
+            .find(|(group, ..)| group == "CLAMPS")
+            .map(|(_, min_x, max_x, min_y, max_y)| (min_x, max_x, min_y, max_y))
+            .expect("the clamps");
+        // A bottom-row box can be extended down beside the title block; the
+        // cell proper ends at the block's top.
+        let block_y = title_block_origin(layout.sheet_size.dims_mm()).1;
+        let bottom = box_.max_mm.1.min(block_y);
+        let cell_area = (box_.max_mm.0 - box_.min_mm.0) * (bottom - box_.min_mm.1);
+        let fill = (max_x - min_x) * (max_y - min_y) / cell_area;
+        assert!(
+            fill >= 0.7,
+            "the clamp grid fills {:.0}% of its cell: content {:.0} x {:.0} in {:.0} x {:.0}",
+            fill * 100.0,
+            max_x - min_x,
+            max_y - min_y,
+            box_.max_mm.0 - box_.min_mm.0,
+            bottom - box_.min_mm.1
+        );
+        assert!(
+            (min_x - (box_.min_mm.0 + GROUP_CONTENT_PAD + FLOORPLAN_GRID_SLACK)).abs()
+                <= FLOORPLAN_GRID_SLACK
+                && (min_y - (box_.min_mm.1 + GROUP_TITLE_BAND_MM + FLOORPLAN_GRID_SLACK)).abs()
+                    <= FLOORPLAN_GRID_SLACK,
+            "the grid does not start at the cell's title band/pad"
+        );
+        // The twelve pairs form a 6 x 2 grid with an even column gap.
+        let mut xs: Vec<f64> = layout
+            .components
+            .iter()
+            .filter(|p| p.id.0 % 2 == 0 && p.id.0 > 0 && p.id.0 < 25)
+            .map(|p| p.center_mm.0)
+            .collect();
+        xs.sort_by(f64::total_cmp);
+        xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+        let (cols, rows, row_counts) = grid_shape(
+            &layout
+                .components
+                .iter()
+                .filter(|p| p.id.0 % 2 == 0 && p.id.0 > 0 && p.id.0 < 25)
+                .map(|p| {
+                    (
+                        (p.center_mm.0 * 100.0).round() / 100.0,
+                        (p.center_mm.1 * 100.0).round() / 100.0,
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+        assert!(
+            cols * rows == 12 && row_counts.iter().all(|&n| n == cols),
+            "the bank is a {cols} x {rows} grid with rows {row_counts:?}"
+        );
+        assert!(
+            matches!(cols, 3 | 4 | 6),
+            "a {cols}-column grid is not balanced"
+        );
+        let gaps: Vec<f64> = xs.windows(2).map(|w| w[1] - w[0]).collect();
+        let widest = gaps.iter().copied().fold(f64::MIN, f64::max);
+        let narrowest = gaps.iter().copied().fold(f64::MAX, f64::min);
+        assert!(
+            widest - narrowest < 1.0,
+            "column gaps {gaps:?} are not even"
+        );
     }
 
     #[test]
@@ -10565,16 +10889,16 @@ mod documentation_tests {
         let (w, h) = layout.sheet_size.dims_mm();
         assert!(w > 297.0 && h > 210.0, "{:?}", layout.sheet_size);
         let frame = sheet_frame(&layout);
-        for b in &layout.group_boxes {
-            assert!(
-                b.min_mm.0 >= frame.0.0 - 1e-6
-                    && b.min_mm.1 >= frame.0.1 - 1e-6
-                    && b.max_mm.0 <= frame.1.0 + 1e-6
-                    && b.max_mm.1 <= frame.1.1 + 1e-6,
-                "{} leaves the page frame",
-                b.group
-            );
-        }
+        let covered: f64 = layout
+            .group_boxes
+            .iter()
+            .map(|b| area(&(b.min_mm, b.max_mm)))
+            .sum();
+        let to_fill = area(&frame) - title_block_area(&layout);
+        assert!(
+            covered >= 0.9 * to_fill,
+            "boxes cover {covered} of the {to_fill} the frame leaves the regions"
+        );
     }
 
     #[test]
@@ -10624,19 +10948,12 @@ mod documentation_tests {
             "the stray part has no box: {:?}",
             layout.group_boxes
         );
-        // The stray part is placed by the same floorplan as the declared
-        // groups, and every box stays inside the page.
-        let frame = page_frame(layout.sheet_size);
-        for b in &layout.group_boxes {
-            assert!(
-                b.min_mm.0 >= frame.0.0 - 1e-6
-                    && b.min_mm.1 >= frame.0.1 - 1e-6
-                    && b.max_mm.0 <= frame.1.0 + 1e-6
-                    && b.max_mm.1 <= frame.1.1 + 1e-6,
-                "{} leaves the page frame",
-                b.group
-            );
-        }
+        // The boxes are cut from the frame, as they are when every part is in a
+        // region, not packed to their content and left loose.
+        assert!(
+            boxes_area(&layout) >= 0.9 * area(&page_frame(layout.sheet_size)),
+            "the boxes do not fill the frame"
+        );
     }
 
     #[test]
@@ -11051,14 +11368,21 @@ mod slicing_floorplan_tests {
     }
 
     #[test]
-    fn the_cells_are_packed_from_the_frames_top_left_corner() {
+    fn the_cells_and_the_lines_between_them_fill_the_frame() {
         let cells = cut_one_frame(&SIZES, FRAME, GAP).expect("fits");
+        let covered: f64 = cells.iter().map(|c| width(c) * height(c)).sum();
+        let frame = width(&FRAME) * height(&FRAME);
+        // What is left is the strips between neighbours, one gap wide.
+        assert!(covered <= frame && covered > frame - 4.0 * GAP * 200.0);
         let hull = bounds(&cells);
-        assert!((hull.0.0 - FRAME.0.0).abs() < 1e-9);
-        assert!((hull.0.1 - FRAME.0.1).abs() < 1e-9);
-        // Spare page room stays outside the packed cells, so the hull is
-        // smaller than the frame rather than spread apart to meet it.
-        assert!(hull.1.0 <= FRAME.1.0 + 1e-9 && hull.1.1 <= FRAME.1.1 + 1e-9);
+        for edge in [
+            hull.0.0 - FRAME.0.0,
+            hull.0.1 - FRAME.0.1,
+            FRAME.1.0 - hull.1.0,
+            FRAME.1.1 - hull.1.1,
+        ] {
+            assert!(edge.abs() < 1e-9, "a frame edge is not met: {edge}");
+        }
     }
 
     #[test]
@@ -11070,8 +11394,7 @@ mod slicing_floorplan_tests {
         let cells = cut_one_frame(&sizes, FRAME, GAP).expect("fits");
         assert!((cells[0].1.0 - cells[1].1.0).abs() < 1e-9);
         assert!((cells[2].0.0 - cells[0].1.0 - GAP).abs() < 1e-9);
-        assert!((height(&cells[2]) - 90.0).abs() < 1e-9);
-        assert!((cells[2].0.1 - FRAME.0.1).abs() < 1e-9);
+        assert!((height(&cells[2]) - height(&FRAME)).abs() < 1e-9);
     }
 
     #[test]
@@ -11126,9 +11449,20 @@ mod slicing_floorplan_tests {
     }
 
     #[test]
-    fn a_single_region_takes_its_own_size_at_the_frames_top_left() {
+    fn a_single_region_takes_the_whole_frame() {
         let cells = cut_one_frame(&[(10.0, 10.0)], FRAME, GAP).expect("fits");
-        assert_eq!(cells, vec![(FRAME.0, (FRAME.0.0 + 10.0, FRAME.0.1 + 10.0))]);
+        assert_eq!(cells, vec![FRAME]);
+    }
+
+    #[test]
+    fn extra_room_is_shared_in_proportion_to_content() {
+        let sizes = [(20.0, 100.0), (60.0, 100.0)];
+        let wide = ((0.0, 0.0), (300.0, 100.0));
+        let cells = cut_one_frame(&sizes, wide, GAP).expect("fits");
+        let extra = 300.0 - 80.0 - GAP;
+        // The second holds three times the content of the first.
+        assert!((width(&cells[0]) - (20.0 + extra / 4.0)).abs() < 1e-9);
+        assert!((width(&cells[1]) - (60.0 + extra * 3.0 / 4.0)).abs() < 1e-9);
     }
 
     #[test]

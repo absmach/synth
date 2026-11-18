@@ -192,13 +192,17 @@ fn compact_designs_stay_on_a4() {
     );
 }
 
-/// The issue's check on a real design with several regions: every region box
-/// hugs the content it holds and fits inside the page, and no two boxes
-/// overlap. Stretching them to the page is the bug this guards against.
+/// The issue's check on a real design with several regions: the region boxes
+/// fill the page frame and neighbours that share an edge sit no more than one
+/// grid step apart. The other examples have fewer than three regions, where
+/// the fill is covered by the unit tests instead.
 #[test]
-fn real_design_regions_hug_their_content_and_fit_the_page() {
+fn real_design_regions_fill_the_page_frame() {
+    // The frame the boxes are cut for: inside the 20 mm margin and above the
+    // 34 mm title block plus its 6.35 mm text margin.
     const MARGIN: f64 = 20.0;
     const TITLE_BAND: f64 = 34.0 + 6.35;
+    const GRID_MM: f64 = 2.54;
     let board = board_for("examples/env_logger/env_logger.synth");
     let layout = synth_layout::layout(&board);
     let boxes = &layout.group_boxes;
@@ -211,12 +215,8 @@ fn real_design_regions_hug_their_content_and_fit_the_page() {
         .map(|b| (b.max_mm.0 - b.min_mm.0) * (b.max_mm.1 - b.min_mm.1))
         .sum();
     assert!(
-        covered < 0.9 * frame_area,
-        "boxes cover {covered:.0} of the {frame_area:.0} mm2 frame: they were stretched"
-    );
-    assert!(
-        covered > 0.2 * frame_area,
-        "boxes cover only {covered:.0} of the {frame_area:.0} mm2 frame"
+        covered >= 0.95 * frame_area,
+        "boxes cover {covered:.0} of the {frame_area:.0} mm2 frame"
     );
 
     // Of the boxes beside (or below) one that share part of its edge, the
@@ -237,10 +237,9 @@ fn real_design_regions_hug_their_content_and_fit_the_page() {
             .min_by(f64::total_cmp);
         for gap in right.into_iter().chain(below) {
             assert!(
-                gap >= 0.0,
-                "{} overlaps a neighbour by {:.2} mm",
-                a.group,
-                -gap
+                gap <= GRID_MM,
+                "{} has a neighbour {gap:.2} mm away",
+                a.group
             );
         }
     }
