@@ -1,0 +1,75 @@
+id = "tps22918_sot23_6"
+kind = "regulator"
+description = "TI TPS22918 1 V to 5.5 V, 2 A load switch with controlled slew rate and quick output discharge, SOT-23-6 (DBV). Pinout per datasheet SLVSD76: 1 VIN, 2 GND, 3 ON, 4 CT, 5 QOD, 6 VOUT. KiCad has no TPS22918 symbol; TPS22917DBV has the identical six-pin map (VIN, GND, ON, CT, QOD, VOUT), so it stands in for the symbol only; the footprint and pin numbers are the TPS22918 DBV."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "TPS22918DBVR"
+lcsc_pn = "C131941"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23-6"
+kicad_symbol = "Power_Management:TPS22917DBV"
+
+[[pins]]
+name = "vin"
+number = "1"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "on"
+number = "3"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "ct"
+number = "4"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "qod"
+number = "5"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "vout"
+number = "6"
+electrical_type = "power_output"
+capabilities = []
+required = true
+
+[operating_conditions]
+min_voltage_v = 1.0
+max_voltage_v = 5.5
+max_current_ma = 2000.0
+
+[footprint_dimensions]
+width_mm = 4.1
+height_mm = 3.4
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tps22918.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
+
+[[required_decoupling]]
+net = "vin"
+value = "1uf"
+count = 1

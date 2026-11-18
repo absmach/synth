@@ -15,12 +15,12 @@
 use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
-    DiffPairStmt, EndpointAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr,
-    KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst,
-    NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
-    PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt,
-    SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst,
-    StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
+    DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
+    KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
+    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, OutlineStmt, ParamDeclAst,
+    PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst,
+    RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
+    StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -33,6 +33,9 @@ pub struct ParseResult {
     pub ast: Option<ProgramAst>,
     pub diagnostics: Vec<Diagnostic>,
 }
+
+/// The values `edge_rate` accepts inside a netclass.
+const EDGE_RATES: [&str; 3] = ["slow", "medium", "fast"];
 
 impl std::fmt::Debug for ParseResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -302,6 +305,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<StatementAst> {
         match self.peek_kind() {
             TokenKind::KwLayers => self.parse_layers().map(StatementAst::Layers),
+            TokenKind::KwOutline => self.parse_outline().map(StatementAst::Outline),
             TokenKind::KwManufacturer => self.parse_manufacturer().map(StatementAst::Manufacturer),
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
@@ -403,6 +407,56 @@ impl Parser {
             count: u32::try_from(n).unwrap(),
             span: Span::new(start, end),
         })
+    }
+
+    /// `outline <width> x <height>` — a fixed board rectangle whose
+    /// bottom-left corner is the board origin.
+    fn parse_outline(&mut self) -> Option<OutlineStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `outline`
+        let width = self.expect_value()?;
+        let width = self.outline_dimension(width, "width")?;
+        if !matches!(self.peek_kind(), TokenKind::Ident(name) if name == "x") {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-041",
+                "expected `x` between the outline width and height",
+                "`x`, e.g. `outline 60mm x 30mm`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let height = self.expect_value()?;
+        let height = self.outline_dimension(height, "height")?;
+        let end = self.last_offset();
+        Some(OutlineStmt {
+            width,
+            height,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Reject a non-positive outline dimension where it was written; the
+    /// unit itself is checked during lowering.
+    fn outline_dimension(&mut self, value: ValueWithUnit, side: &str) -> Option<ValueWithUnit> {
+        if value.literal.parse::<f64>().is_ok_and(|v| v > 0.0) {
+            return Some(value);
+        }
+        self.emit(
+            value.span,
+            "E-SYNTH-PARSE-042",
+            "outline dimension must be positive",
+            "a positive length, e.g. `60mm`",
+            format!(
+                "`{}{}` as the outline {side}",
+                value.literal,
+                value.unit.as_str()
+            ),
+            None,
+        );
+        None
     }
 
     fn parse_manufacturer(&mut self) -> Option<ManufacturerStmt> {
@@ -542,6 +596,7 @@ impl Parser {
         let mut properties: BTreeMap<String, String> = BTreeMap::new();
         let mut dnp = false;
         let mut placement_hint = None;
+        let mut escape = None;
         loop {
             if self.parse_component_attribute(&mut value, &mut properties, &mut dnp) {
                 continue;
@@ -549,6 +604,9 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::KwPlacementHint => {
                     placement_hint = self.parse_placement_hint();
+                }
+                TokenKind::Ident(name) if name == "escape" => {
+                    escape = self.parse_escape();
                 }
                 TokenKind::LBrace => {
                     self.bump(); // consume `{`
@@ -558,6 +616,9 @@ impl Parser {
                             TokenKind::RBrace | TokenKind::Eof => break,
                             TokenKind::KwPlacementHint => {
                                 placement_hint = self.parse_placement_hint();
+                            }
+                            TokenKind::Ident(name) if name == "escape" => {
+                                escape = self.parse_escape();
                             }
                             _ => {
                                 if !self.parse_component_attribute(
@@ -569,8 +630,8 @@ impl Parser {
                                         self.peek().span,
                                         "E-SYNTH-PARSE-029",
                                         "unexpected keyword inside component body",
-                                        "`placement_hint`, `tolerance`, `voltage`, `power_rating`, \
-                                         `dielectric`, or `dnp`",
+                                        "`placement_hint`, `escape`, `tolerance`, `voltage`, \
+                                         `power_rating`, `dielectric`, or `dnp`",
                                         self.describe_current(),
                                         None,
                                     );
@@ -595,6 +656,95 @@ impl Parser {
             dnp,
             properties,
             placement_hint,
+            escape,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `escape { method underpad  layers "In1.Cu", "In2.Cu" }`, or
+    /// `escape { off }`.
+    ///
+    /// Attribute names are taken as identifiers rather than reserved
+    /// keywords, so a design already using `escape`, `method` or `off` as a
+    /// name keeps parsing — the same treatment `current`, `plane` and
+    /// `color` get inside a netclass.
+    fn parse_escape(&mut self) -> Option<EscapeAst> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `escape`
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open escape body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump(); // consume `{`
+
+        let mut method = None;
+        let mut layers = Vec::new();
+        let mut off = false;
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Ident(name) if name == "method" => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    method = self.expect_ident(
+                        "E-SYNTH-PARSE-040",
+                        "expected an escape method (`channel` or `underpad`)",
+                    );
+                }
+                // `layers` is a reserved keyword — `layers 4` declares the
+                // board's copper count — so it arrives as KwLayers, not as an
+                // identifier like `method` and `off` do.
+                TokenKind::KwLayers => {
+                    self.bump();
+                    if matches!(self.peek_kind(), TokenKind::Colon) {
+                        self.bump();
+                    }
+                    while let TokenKind::StringLit(_) = self.peek_kind() {
+                        if let Some(layer) =
+                            self.expect_string("E-SYNTH-PARSE-040", "expected a copper layer name")
+                        {
+                            layers.push(layer);
+                        }
+                        if matches!(self.peek_kind(), TokenKind::Comma) {
+                            self.bump();
+                        }
+                    }
+                }
+                TokenKind::Ident(name) if name == "off" => {
+                    self.bump();
+                    off = true;
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-040",
+                        "unexpected attribute inside escape",
+                        "`method <channel|underpad>`, `layers \"<layer>\", …`, or `off`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(EscapeAst {
+            method,
+            layers,
+            off,
             span: Span::new(start, end),
         })
     }
@@ -655,6 +805,22 @@ impl Parser {
                 "expected a quoted value after the field keyword",
             ) {
                 properties.insert(field.to_string(), s);
+            }
+            return true;
+        }
+        // Per-instance sourcing. Plain identifiers, not reserved words, so a
+        // design that already uses `mpn` as a name keeps parsing. Stored
+        // lowercase, which never collides with the capitalised KiCad fields.
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && (name == "lcsc_pn" || name == "mpn")
+        {
+            let key = name.clone();
+            self.bump();
+            if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected a quoted value after the field keyword",
+            ) {
+                properties.insert(key, s);
             }
             return true;
         }
@@ -827,7 +993,7 @@ impl Parser {
         let mut additional = Vec::new();
         while matches!(self.peek_kind(), TokenKind::Comma) {
             self.bump(); // consume `,`
-                         // Allow a trailing comma before `as` / `class` / EOL.
+            // Allow a trailing comma before `as` / `class` / EOL.
             if matches!(
                 self.peek_kind(),
                 TokenKind::KwAs | TokenKind::KwClass | TokenKind::RBrace | TokenKind::Eof
@@ -1004,7 +1170,7 @@ impl Parser {
         while !self.at_eof() {
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Comma | TokenKind::KwClass | TokenKind::Ident(_) => {
-                    return
+                    return;
                 }
                 _ => {
                     self.bump();
@@ -1107,7 +1273,7 @@ impl Parser {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::KwDnp => {
                     self.bump(); // consume `dnp`
-                                 // One or more refdes until the body closes.
+                    // One or more refdes until the body closes.
                     while let TokenKind::Ident(_) = self.peek_kind() {
                         if let Some(refdes) =
                             self.expect_ident("E-SYNTH-PARSE-010", "expected component refdes")
@@ -1177,9 +1343,9 @@ impl Parser {
     fn parse_diff_pair(&mut self) -> Option<DiffPairStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `diff_pair`
-                     // Legs reference named nets, so accept both bare idents
-                     // (`diff_pair USB_DP USB_DN`) and quoted names
-                     // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
+        // Legs reference named nets, so accept both bare idents
+        // (`diff_pair USB_DP USB_DN`) and quoted names
+        // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
         let pos = self.expect_net_ref("expected positive net identifier")?;
         let neg = self.expect_net_ref("expected negative net identifier")?;
         if !matches!(self.peek_kind(), TokenKind::LBrace) {
@@ -1247,6 +1413,34 @@ impl Parser {
             attrs,
             span: Span::new(start, end),
         })
+    }
+
+    /// The layer list after a netclass's `layers`, `None` when it names none
+    /// (having reported that).
+    fn parse_netclass_layers(&mut self) -> Option<NetclassAttr> {
+        let mut layers = Vec::new();
+        while let TokenKind::StringLit(_) = self.peek_kind() {
+            if let Some(layer) =
+                self.expect_string("E-SYNTH-PARSE-019", "expected a copper layer name")
+            {
+                layers.push(layer);
+            }
+            if matches!(self.peek_kind(), TokenKind::Comma) {
+                self.bump();
+            }
+        }
+        if layers.is_empty() {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-019",
+                "netclass layers names no layer",
+                "`layers \"<layer>\", …`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        Some(NetclassAttr::Layers { layers })
     }
 
     /// One attribute inside a `netclass { … }` body.
@@ -1321,6 +1515,30 @@ impl Parser {
                     return Some(NetclassAttr::ViaDrill(v));
                 }
             }
+            // The signal's edge rate, which decides whether a missing ground
+            // return via is an advisory or holds the board back. Contextual,
+            // like `current` and `plane`, so the words keep working as names.
+            TokenKind::Ident(name) if name == "edge_rate" => {
+                self.bump();
+                let span = self.peek().span;
+                match self.expect_ident("E-SYNTH-PARSE-028", "expected `edge_rate` value") {
+                    Some(rate) if EDGE_RATES.contains(&rate.to_ascii_lowercase().as_str()) => {
+                        return Some(NetclassAttr::EdgeRate {
+                            rate: rate.to_ascii_lowercase(),
+                            span,
+                        });
+                    }
+                    Some(rate) => self.emit(
+                        span,
+                        "E-SYNTH-PARSE-019",
+                        "unexpected value for `edge_rate` inside netclass",
+                        "`slow`, `medium` or `fast`",
+                        format!("`{rate}`"),
+                        None,
+                    ),
+                    None => {}
+                }
+            }
             TokenKind::Ident(name) if name == "color" => {
                 self.bump();
                 if let Some(hex) = self.expect_string(
@@ -1330,12 +1548,18 @@ impl Parser {
                     return Some(NetclassAttr::Color(hex));
                 }
             }
+            // `layers` is the reserved keyword `layers 4` uses, as inside
+            // `escape { … }`, and takes the same quoted, comma-separated list.
+            TokenKind::KwLayers => {
+                self.bump();
+                return self.parse_netclass_layers();
+            }
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-019",
                     "unexpected attribute inside netclass",
-                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `plane`, or `color \"#rrggbb\"`",
+                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `edge_rate slow|medium|fast`, `layers \"<layer>\", …`, `plane`, or `color \"#rrggbb\"`",
                     self.describe_current(),
                     None,
                 );
@@ -1899,6 +2123,38 @@ impl Parser {
                         attrs.push(KeepoutAttr::Radius(v));
                     }
                 }
+                TokenKind::Ident(name) if name == "anchor" => {
+                    self.bump();
+                    if let Some(anchor) = self.expect_string(
+                        "E-SYNTH-PARSE-043",
+                        "expected a component refdes after `anchor`",
+                    ) {
+                        attrs.push(KeepoutAttr::Anchor(anchor));
+                    }
+                }
+                TokenKind::Ident(name) if name == "at" => {
+                    self.bump();
+                    let Some(x) = self.expect_value() else {
+                        continue;
+                    };
+                    let Some(y) = self.expect_value() else {
+                        continue;
+                    };
+                    attrs.push(KeepoutAttr::At { x, y });
+                }
+                TokenKind::KwLayers => {
+                    self.bump();
+                    let mut layers = Vec::new();
+                    while let Some(layer) = self.expect_string_optional() {
+                        layers.push(layer);
+                        if matches!(self.peek_kind(), TokenKind::Comma) {
+                            self.bump();
+                        } else {
+                            break;
+                        }
+                    }
+                    attrs.push(KeepoutAttr::Layers(layers));
+                }
                 _ => {
                     self.emit(
                         self.peek().span,
@@ -2428,6 +2684,17 @@ impl Parser {
         }
     }
 
+    fn expect_string_optional(&mut self) -> Option<String> {
+        if let TokenKind::StringLit(_) = self.peek_kind() {
+            let TokenKind::StringLit(s) = self.bump().kind.clone() else {
+                unreachable!()
+            };
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     fn expect_value(&mut self) -> Option<ValueWithUnit> {
         let tok_span = self.peek().span;
         if let TokenKind::Value { literal, unit } = self.peek_kind() {
@@ -2460,6 +2727,7 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::RBrace
                 | TokenKind::KwLayers
+                | TokenKind::KwOutline
                 | TokenKind::KwManufacturer
                 | TokenKind::KwComponent
                 | TokenKind::KwConnect
@@ -2503,6 +2771,7 @@ impl Parser {
             TokenKind::KwBoard => "`board`".to_string(),
             TokenKind::KwImport => "`import`".to_string(),
             TokenKind::KwLayers => "`layers`".to_string(),
+            TokenKind::KwOutline => "`outline`".to_string(),
             TokenKind::KwManufacturer => "`manufacturer`".to_string(),
             TokenKind::KwRevision => "`revision`".to_string(),
             TokenKind::KwCompany => "`company`".to_string(),
@@ -2899,6 +3168,29 @@ mod tests {
     }
 
     #[test]
+    fn parse_component_instance_sourcing() {
+        let res = parse(
+            lex(
+                r#"board "b" { component R1: resistor "r_generic_0603" value "1k" lcsc_pn "C110776" mpn "RT0603BRD071KL" }"#,
+            ),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Component(c) = &ast.board.statements[0] else {
+            panic!("Expected component statement")
+        };
+        assert_eq!(
+            c.properties.get("lcsc_pn").map(String::as_str),
+            Some("C110776")
+        );
+        assert_eq!(
+            c.properties.get("mpn").map(String::as_str),
+            Some("RT0603BRD071KL")
+        );
+    }
+
+    #[test]
     fn parse_component_unit_literal_value() {
         // Phase D4 (syntax half): `value 10kohm` / `value 100nF`
         // normalise to the display string, and units are
@@ -3036,10 +3328,72 @@ mod tests {
             .as_ref()
             .expect("named hint attached");
         assert!(hint.component.is_none());
-        assert!(hint
-            .attrs
-            .iter()
-            .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right")));
+        assert!(
+            hint.attrs
+                .iter()
+                .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right"))
+        );
+    }
+
+    #[test]
+    fn parse_outline_statement() {
+        let res = parse(
+            lex(r#"board "b" { outline 60mm x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.expect("outline parses");
+        let StatementAst::Outline(outline) = &ast.board.statements[0] else {
+            panic!("expected an outline statement")
+        };
+        assert_eq!(outline.width.literal, "60");
+        assert_eq!(outline.width.unit, synth_ast::Unit::Mm);
+        assert_eq!(outline.height.literal, "30");
+    }
+
+    #[test]
+    fn outline_requires_an_x_between_the_dimensions() {
+        let res = parse(
+            lex(r#"board "b" { outline 60mm 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-041"),
+            "{:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn outline_dimensions_need_a_unit() {
+        let res = parse(
+            lex(r#"board "b" { outline 60 x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-026"),
+            "{:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_zero_outline_dimension_is_rejected() {
+        let res = parse(
+            lex(r#"board "b" { outline 0mm x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-042"),
+            "{:?}",
+            res.diagnostics
+        );
     }
 
     #[test]
@@ -3325,6 +3679,132 @@ mod tests {
             n.attrs.iter().any(|a| matches!(a, NetclassAttr::Plane)),
             "plane attr must parse: {:?}",
             n.attrs
+        );
+    }
+
+    #[test]
+    fn parse_netclass_edge_rate_medium() {
+        let src = r#"board "b" {
+            netclass "SDRAM" {
+                edge_rate medium
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let StatementAst::Netclass(class) = &ast.board.statements[0] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            class
+                .attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::EdgeRate { rate, .. } if rate == "medium")),
+            "edge_rate medium must parse: {:?}",
+            class.attrs
+        );
+    }
+
+    #[test]
+    fn parse_netclass_edge_rate_attribute() {
+        // Contextual, not a keyword: the words must keep working as names.
+        let src = r#"board "b" {
+            netclass "I2C" {
+                edge_rate slow
+            }
+            netclass "SPI" {
+                edge_rate fast
+            }
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics.is_empty(),
+            "Diagnostics should be empty: {:?}",
+            res.diagnostics
+        );
+        let ast = res.ast.unwrap();
+        let StatementAst::Netclass(slow) = &ast.board.statements[0] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            slow.attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::EdgeRate { rate, .. } if rate == "slow")),
+            "edge_rate attr must parse: {:?}",
+            slow.attrs
+        );
+        let StatementAst::Netclass(fast) = &ast.board.statements[1] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            fast.attrs
+                .iter()
+                .any(|a| matches!(a, NetclassAttr::EdgeRate { rate, .. } if rate == "fast")),
+            "edge_rate attr must parse: {:?}",
+            fast.attrs
+        );
+    }
+
+    #[test]
+    fn parse_netclass_layers_attribute() {
+        let src = r#"board "b" {
+            netclass "ETH" {
+                impedance 50ohm
+                layers "F.Cu", "B.Cu"
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.unwrap();
+        let StatementAst::Netclass(n) = &ast.board.statements[0] else {
+            panic!("Expected netclass statement")
+        };
+        assert!(
+            n.attrs.iter().any(|a| matches!(
+                a,
+                NetclassAttr::Layers { layers } if layers == &["F.Cu".to_string(), "B.Cu".to_string()]
+            )),
+            "layers attr must parse: {:?}",
+            n.attrs
+        );
+    }
+
+    #[test]
+    fn an_unknown_edge_rate_is_rejected() {
+        let src = r#"board "b" {
+            netclass "I2C" {
+                edge_rate sometimes
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-019"),
+            "an unknown edge rate must be rejected: {:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn parse_netclass_layers_without_a_layer_is_an_error() {
+        let src = r#"board "b" {
+            netclass "ETH" {
+                layers
+            }
+        }"#;
+        let res = parse(lex(src), "test.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-019"),
+            "{:?}",
+            res.diagnostics
         );
     }
 

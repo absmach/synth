@@ -114,7 +114,7 @@ pub fn run_kicad_erc(sch_path: &Path) -> NativeErcOutcome {
                 )
                 .with_version(version.clone())
                 .with_stderr(&run.stderr),
-            }
+            };
         }
     };
 
@@ -237,9 +237,11 @@ mod tests {
     fn a_clean_report_parses_to_no_violations() {
         let json: serde_json::Value =
             serde_json::from_str(r#"{"kicad_version": "10.0.1", "sheets": []}"#).unwrap();
-        assert!(parse_erc_report(&json)
-            .expect("recognized report")
-            .is_empty());
+        assert!(
+            parse_erc_report(&json)
+                .expect("recognized report")
+                .is_empty()
+        );
     }
 
     #[test]

@@ -39,7 +39,7 @@ use synth_ir::{Board, ComponentId, NetId};
 
 use crate::kicad_lib_loader::PhysicalPin;
 use crate::route::{natural_rotation_offset, pin_terminal_xy, snap_grid_127};
-use crate::{ComponentPlacement, Rotation, POWER_STUB_LEN};
+use crate::{ComponentPlacement, POWER_STUB_LEN, Rotation};
 
 /// Which rail family a physical power pin belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -124,6 +124,10 @@ pub struct PowerDriver {
     pub anchor_pin_name: String,
     /// Center (mm) of the anchor component's placement.
     pub anchor_center: (f64, f64),
+    /// Terminal `(x, y, dx, dy)` of the anchor pin on the sheet, set when the
+    /// anchor is drawn from a generated symbol: there is no stock symbol to
+    /// read it from.
+    pub anchor_terminal: Option<(f64, f64, f64, f64)>,
 }
 
 /// Result of reconciling one component's symbol pin set against the
@@ -264,48 +268,77 @@ pub fn undriven_power_nets<S: ::std::hash::BuildHasher>(
             }
             // Symbol-level driver check (only supplements; registry is
             // authoritative for whether power inputs exist).
-            if let Some(lib_id) = part.kicad_symbol.as_deref() {
-                if let Some(physical) = crate::kicad_lib_loader::physical_pins(lib_id)
+            if let Some(lib_id) = part.kicad_symbol.as_deref()
+                && let Some(physical) = crate::kicad_lib_loader::physical_pins(lib_id)
                     .and_then(|pins| pins.into_iter().find(|p| p.number == pin.number.0))
-                {
-                    if physical.electrical_type == "power_out"
-                        || physical.electrical_type == "power_output"
-                    {
-                        has_symbol_power_output = true;
-                    }
-                }
+                && (physical.electrical_type == "power_out"
+                    || physical.electrical_type == "power_output")
+            {
+                has_symbol_power_output = true;
             }
         }
         if has_power_input && !has_registry_power_output && !has_symbol_power_output {
             // Pick the first power-input endpoint with a placement as
-            // the anchor for the flag's stub.
+            // the anchor for the flag's stub. A pin of a part with a stock
+            // symbol is preferred; a generated symbol is the fallback, so a
+            // board whose only power pins sit on generated symbols is still
+            // driven.
             let mut anchor = None;
-            for endpoint in &net.endpoints {
-                let Some(component) = board.component(endpoint.component) else {
-                    continue;
-                };
-                let Some(part) = component.part.as_ref() else {
-                    continue;
-                };
-                let Some(pin) = part.pins.get(endpoint.pin.0 as usize) else {
-                    continue;
-                };
-                if pin.electrical_type != synth_registry::ElectricalType::PowerInput
-                    && pin.electrical_type != synth_registry::ElectricalType::GroundReference
-                {
-                    continue;
+            for generated in [false, true] {
+                if anchor.is_some() {
+                    break;
                 }
-                let Some(placement) = placements.get(&endpoint.component) else {
-                    continue;
-                };
-                anchor = Some(PowerDriver {
-                    net: net.id,
-                    anchor_component: endpoint.component,
-                    anchor_pin_number: pin.number.0.clone(),
-                    anchor_pin_name: pin.name.clone(),
-                    anchor_center: placement.center_mm,
-                });
-                break;
+                for endpoint in &net.endpoints {
+                    let Some(component) = board.component(endpoint.component) else {
+                        continue;
+                    };
+                    let Some(part) = component.part.as_ref() else {
+                        continue;
+                    };
+                    let Some(pin) = part.pins.get(endpoint.pin.0 as usize) else {
+                        continue;
+                    };
+                    if pin.electrical_type != synth_registry::ElectricalType::PowerInput
+                        && pin.electrical_type != synth_registry::ElectricalType::GroundReference
+                    {
+                        continue;
+                    }
+                    // The flag's stub starts at the pin's terminal. A stock
+                    // symbol gives it from its library file; a generated
+                    // one from the body Synth draws.
+                    if part.kicad_symbol.is_none() != generated {
+                        continue;
+                    }
+                    let Some(placement) = placements.get(&endpoint.component) else {
+                        continue;
+                    };
+                    let anchor_terminal = if generated {
+                        let by_id: std::collections::HashMap<
+                            ComponentId,
+                            &crate::ComponentPlacement,
+                        > = placements.iter().map(|(id, p)| (*id, *p)).collect();
+                        let Some(terminal) = crate::route::pin_terminal_xy(
+                            board,
+                            endpoint.component,
+                            endpoint.pin,
+                            &by_id,
+                        ) else {
+                            continue;
+                        };
+                        Some(terminal)
+                    } else {
+                        None
+                    };
+                    anchor = Some(PowerDriver {
+                        net: net.id,
+                        anchor_component: endpoint.component,
+                        anchor_pin_number: pin.number.0.clone(),
+                        anchor_pin_name: pin.name.clone(),
+                        anchor_center: placement.center_mm,
+                        anchor_terminal,
+                    });
+                    break;
+                }
             }
             if let Some(anchor) = anchor {
                 out.push(anchor);
@@ -328,17 +361,17 @@ fn pick_rail_net(board: &Board, candidates: &[NetId], pin_name: &str) -> Option<
     }
     let want = normalize_rail_name(pin_name);
     for id in candidates {
-        if let Some(net) = board.net(*id) {
-            if normalize_rail_name(&net.name) == want {
-                return Some(*id);
-            }
+        if let Some(net) = board.net(*id)
+            && normalize_rail_name(&net.name) == want
+        {
+            return Some(*id);
         }
     }
     for id in candidates {
-        if let Some(net) = board.net(*id) {
-            if net.voltage.is_some() {
-                return Some(*id);
-            }
+        if let Some(net) = board.net(*id)
+            && net.voltage.is_some()
+        {
+            return Some(*id);
         }
     }
     candidates.first().copied()
@@ -458,22 +491,20 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
             pin.electrical_type.as_str(),
             "power_in" | "power_input" | "passive"
         );
-        if is_connectable_power {
-            if let Some(family) = RailFamily::for_pin(&pin.electrical_type, &pin.name) {
-                if let Some(candidates) = rail_nets.get(&family) {
-                    if let Some(net) = pick_rail_net(board, candidates, &pin.name) {
-                        out.power_legs.push(PowerLeg {
-                            component: component.id,
-                            pin_number: pin.number.clone(),
-                            pin_name: pin.name.clone(),
-                            electrical_type: pin.electrical_type.clone(),
-                            net,
-                            family,
-                        });
-                        continue;
-                    }
-                }
-            }
+        if is_connectable_power
+            && let Some(family) = RailFamily::for_pin(&pin.electrical_type, &pin.name)
+            && let Some(candidates) = rail_nets.get(&family)
+            && let Some(net) = pick_rail_net(board, candidates, &pin.name)
+        {
+            out.power_legs.push(PowerLeg {
+                component: component.id,
+                pin_number: pin.number.clone(),
+                pin_name: pin.name.clone(),
+                electrical_type: pin.electrical_type.clone(),
+                net,
+                family,
+            });
+            continue;
         }
         out.no_connects.push(NoConnectPin {
             component: component.id,
@@ -513,8 +544,13 @@ pub fn physical_terminal(
     // which KiCad reports as dangling-wire/off-grid warnings.
     let cx = snap_grid_127(center.0);
     let cy = snap_grid_127(center.1);
+    // A multi-unit symbol draws its units as a stack, and the pin belongs to one
+    // of them. The stack does not rotate, so the unit's slot is added in sheet
+    // space after the pin is rotated, as the router does for wire ends, or a
+    // marker lands on the pin of unit 1 that shares its coordinates.
+    let (_, unit_dy) = crate::kicad_lib_loader::pin_unit_offset(lib_id, pin_number);
     let term_x = snap_grid_127(cx + rot_x);
-    let term_y = snap_grid_127(cy - rot_y);
+    let term_y = snap_grid_127(cy - rot_y + unit_dy);
     // KiCad's pin `angle` points INWARD; the sheet is y-down, so the
     // outward stub direction is (-cos θ, +sin θ) with θ = pin_angle +
     // total_deg — mirroring `crate::route::pin_terminal_xy`.
@@ -589,4 +625,72 @@ pub fn no_connect_position(
     let (x, y, _dx, _dy) =
         pin_terminal_xy(board, component.id, synth_ir::PinId(pin_idx), placements)?;
     Some((snap_grid_127(x), snap_grid_127(y)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A multi-unit symbol draws its units as a stack, so the terminal of a pin of
+    /// unit 2 sits one unit pitch below where its unit-local coordinates put it.
+    /// The no-connect marker and the fanned power legs use this terminal, and a
+    /// marker left at the unit-local spot lands on a pin of unit 1 instead.
+    #[test]
+    fn a_pin_of_a_later_unit_is_shifted_by_its_units_slot() {
+        let lib = "Amplifier_Operational:LM358";
+        // Skipped when KiCad's bundled libraries are not installed.
+        let Some(positions) = crate::kicad_lib_loader::pin_positions(lib) else {
+            return;
+        };
+        let (_, local_y, _) = positions["7"];
+        let center = (100.0, 100.0);
+        let (_, y1, _, _) = physical_terminal(lib, "1", center, 0.0).expect("pin 1");
+        let (_, y7, _, _) = physical_terminal(lib, "7", center, 0.0).expect("pin 7");
+        let (_, local_y1, _) = positions["1"];
+        let unshifted = snap_grid_127(100.0 - local_y);
+        assert!(
+            (y7 - unshifted - crate::kicad_lib_loader::unit_offset_mm(lib, 2).1).abs() < 0.2,
+            "pin 7 (unit 2) should sit one unit pitch below {unshifted}, found {y7}"
+        );
+        assert!(
+            (y1 - snap_grid_127(100.0 - local_y1)).abs() < 1e-9,
+            "pin 1 (unit 1) is not shifted"
+        );
+    }
+
+    /// The unit stack does not rotate with the symbol: a unit 2 pin sits the same
+    /// slot below its rotated position whatever the placement turn, so the
+    /// terminal of pin 7 differs from pin 7 of the same symbol drawn as one unit
+    /// by the slot in Y alone, at every quarter turn.
+    #[test]
+    fn a_later_units_slot_is_added_in_sheet_space_at_every_turn() {
+        let lib = "Amplifier_Operational:LM358";
+        // Skipped when KiCad's bundled libraries are not installed.
+        if crate::kicad_lib_loader::pin_positions(lib).is_none() {
+            return;
+        }
+        let slot = crate::kicad_lib_loader::unit_offset_mm(lib, 2).1;
+        let center = (100.0, 100.0);
+        for deg in [0.0, 90.0, 180.0, 270.0] {
+            let (x, y, _, _) = physical_terminal(lib, "7", center, deg).expect("pin 7");
+            let (rx, ry) = rotated_local(lib, "7", center, deg);
+            assert!(
+                (x - rx).abs() < 0.2 && (y - ry - slot).abs() < 0.2,
+                "at {deg} degrees pin 7 should sit {slot} mm below its rotated spot \
+                 ({rx}, {ry}), found ({x}, {y})"
+            );
+        }
+    }
+
+    /// Where the pin of a symbol lands when the symbol turns by `deg`, with no
+    /// unit stack: the reference the stack's slot is measured from.
+    fn rotated_local(lib: &str, pin: &str, center: (f64, f64), deg: f64) -> (f64, f64) {
+        let positions = crate::kicad_lib_loader::pin_positions(lib).expect("library");
+        let (px, py, _) = positions[pin];
+        let rad = deg.to_radians();
+        (
+            snap_grid_127(snap_grid_127(center.0) + px * rad.cos() - py * rad.sin()),
+            snap_grid_127(snap_grid_127(center.1) - (px * rad.sin() + py * rad.cos())),
+        )
+    }
 }

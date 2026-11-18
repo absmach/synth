@@ -70,6 +70,28 @@ pub fn part_to_toml(part: &Part, header: &[&str]) -> String {
         if let Some(v) = c.max_current_ma {
             let _ = writeln!(out, "max_current_ma = {v}");
         }
+        if let Some(v) = c.power_budget {
+            let _ = writeln!(out, "power_budget = {v}");
+        }
+        for (key, value) in [
+            ("breakdown_voltage_v", c.breakdown_voltage_v),
+            ("breakdown_voltage_min_v", c.breakdown_voltage_min_v),
+            ("breakdown_voltage_max_v", c.breakdown_voltage_max_v),
+            ("breakdown_test_current_ma", c.breakdown_test_current_ma),
+        ] {
+            if let Some(v) = value {
+                let _ = writeln!(out, "{key} = {v}");
+            }
+        }
+        if let Some(v) = c.forward_voltage_v {
+            let _ = writeln!(out, "forward_voltage_v = {v}");
+        }
+        if let Some(v) = c.forward_current_ma {
+            let _ = writeln!(out, "forward_current_ma = {v}");
+        }
+    }
+    if let Some(spice) = part.spice.as_ref() {
+        write_spice(&mut out, spice);
     }
     for pin in &part.pins {
         write_pin(&mut out, pin);
@@ -103,6 +125,25 @@ pub fn part_to_toml(part: &Part, header: &[&str]) -> String {
     // existing.
     let _ = writeln!(out, "reviewed_by = \"\"");
     out
+}
+
+fn write_spice(out: &mut String, spice: &crate::SpiceModel) {
+    let _ = writeln!(out);
+    let _ = writeln!(out, "[spice]");
+    let _ = writeln!(out, "file = {}", quoted(&spice.file));
+    let _ = writeln!(out, "subckt = {}", quoted(&spice.subckt));
+    let pins: Vec<String> = spice.pin_order.iter().map(|pin| quoted(pin)).collect();
+    let _ = writeln!(out, "pin_order = [{}]", pins.join(", "));
+    if let Some(dialect) = spice.dialect {
+        let _ = writeln!(out, "dialect = {}", quoted(dialect.name()));
+    }
+    if !spice.params.is_empty() {
+        let _ = writeln!(out);
+        let _ = writeln!(out, "[spice.params]");
+        for (name, value) in &spice.params {
+            let _ = writeln!(out, "{name} = {}", quoted(value));
+        }
+    }
 }
 
 fn write_pin(out: &mut String, pin: &Pin) {
@@ -223,7 +264,9 @@ impl PinCapability {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Lifecycle, Part, PartId, PinNumber};
+    use crate::{
+        Lifecycle, OperatingConditions, Part, PartId, PinNumber, SpiceDialect, SpiceModel,
+    };
 
     fn sample() -> Part {
         Part {
@@ -242,21 +285,32 @@ mod tests {
                 electrical_type: ElectricalType::PowerInput,
                 capabilities: vec![PinCapability::Gpio],
                 required: true,
+                footprint_only: false,
                 unit: None,
                 voltage_max_v: Some(3.6),
                 voltage_min_v: Some(1.8),
                 voltage_nominal_v: Some(3.3),
+                drive: None,
             }],
             required_decoupling: vec![crate::RequiredDecoupling {
                 net: "vdd".into(),
                 value: "100nf".into(),
                 count: 2,
                 max_distance_mm: Some(5.0),
+                to: None,
+                through: None,
             }],
             kicad_symbol: Some("Lib:Sym".into()),
             kicad_footprint: Some("Lib:Fp".into()),
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: Some(SpiceModel {
+                file: "spice/demo.lib".into(),
+                subckt: "demo".into(),
+                pin_order: vec!["vin".into(), "gnd".into(), "vout".into()],
+                params: [("rout".to_string(), "100m".to_string())].into(),
+                dialect: Some(SpiceDialect::Lt),
+            }),
             provenance: None,
         }
     }
@@ -280,6 +334,7 @@ mod tests {
         assert_eq!(back.pins[0].capabilities, part.pins[0].capabilities);
         assert!(back.pins[0].required);
         assert_eq!(back.required_decoupling.len(), 1);
+        assert_eq!(back.spice, part.spice);
     }
 
     #[test]
@@ -297,6 +352,24 @@ mod tests {
         let text = part_to_toml(&sample(), &[]);
         assert!(text.contains("source = \"generated\""), "{text}");
         assert!(text.contains("reviewed_by = \"\""), "{text}");
+    }
+
+    #[test]
+    fn power_budget_survives_overlay_round_trip() {
+        let mut part = sample();
+        part.operating_conditions = Some(OperatingConditions {
+            power_budget: Some(false),
+            ..Default::default()
+        });
+        let text = part_to_toml(&part, &[]);
+        assert!(text.contains("power_budget = false"), "{text}");
+        let back: Part = toml::from_str(&text).expect("emitted TOML must parse");
+        assert_eq!(
+            back.operating_conditions
+                .as_ref()
+                .and_then(|c| c.power_budget),
+            Some(false)
+        );
     }
 
     #[test]

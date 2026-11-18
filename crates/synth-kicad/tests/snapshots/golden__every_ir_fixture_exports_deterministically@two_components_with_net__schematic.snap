@@ -1534,7 +1534,7 @@ expression: schematic
 		)
 		(property
 			"Datasheet"
-			""
+			"https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf"
 			(at 48.26 68.58 0)
 			(effects
 				(font
@@ -1556,7 +1556,7 @@ expression: schematic
 		)
 		(property
 			"LCSC"
-			"C14663"
+			"C42411118"
 			(at 48.26 68.58 0)
 			(effects
 				(font
@@ -1641,18 +1641,30 @@ expression: schematic
 	(wire
 		(pts
 			(xy 73.66 30.48)
-			(xy 99.06 30.48)
+			(xy 96.52 48.26)
 		)
 		(stroke
 			(width 0)
 			(type default)
 			(color 0 158 115 1)
 		)
-		(uuid "448968cc-7e2e-5b29-966b-5789bf118279")
+		(uuid "f1d7ffe2-6916-5b39-8dee-d2f0dfada6e0")
 	)
 	(wire
 		(pts
-			(xy 99.06 30.48)
+			(xy 96.52 48.26)
+			(xy 96.52 60.96)
+		)
+		(stroke
+			(width 0)
+			(type default)
+			(color 0 158 115 1)
+		)
+		(uuid "fdf7f17f-4dce-50bb-b322-fb161d062af4")
+	)
+	(wire
+		(pts
+			(xy 96.52 60.96)
 			(xy 99.06 60.96)
 		)
 		(stroke
@@ -1660,7 +1672,7 @@ expression: schematic
 			(type default)
 			(color 0 158 115 1)
 		)
-		(uuid "67410956-c4c8-5cd2-b4df-0fb747d72f17")
+		(uuid "c3a1a23c-6463-50fe-ad18-20a99b5e6b8c")
 	)
 	(wire
 		(pts

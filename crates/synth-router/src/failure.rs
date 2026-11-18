@@ -97,6 +97,13 @@ pub enum RouterFailureReason {
     NoOutput,
     /// The candidate failed independent validation.
     ValidationFailed,
+    /// The engine cannot honour a constraint the request carries.
+    ///
+    /// Distinct from a rejection: the engine did not try and fail, it was
+    /// never asked, because honouring the request would need support it
+    /// does not have. Reporting it as a plain failure would invite a retry
+    /// that cannot succeed; this says the request and the engine disagree.
+    Unsupported,
     /// A file could not be read or written.
     Io,
 }
@@ -119,6 +126,7 @@ impl RouterFailureReason {
             Self::MalformedOutput => "malformed_output",
             Self::NoOutput => "no_output",
             Self::ValidationFailed => "validation_failed",
+            Self::Unsupported => "unsupported",
             Self::Io => "io",
         }
     }
@@ -259,6 +267,10 @@ fn default_remediation(engine: RouterEngine, reason: RouterFailureReason) -> Str
         RouterFailureReason::JavaMissing => {
             "install a Java runtime (17+) or pass --freerouting-java".to_string()
         }
+        RouterFailureReason::Unsupported => {
+            "route this board with KiCadRoutingTools, which honours netclass layer pins, or              remove the `layers` constraint from the class"
+                .to_string()
+        }
         RouterFailureReason::CheckoutMissing => {
             "pass --kicad-routing-tools-repo pointing at a checkout that contains \
              py_router/route.py"
@@ -338,6 +350,7 @@ mod tests {
             RouterFailureReason::MalformedOutput,
             RouterFailureReason::NoOutput,
             RouterFailureReason::ValidationFailed,
+            RouterFailureReason::Unsupported,
             RouterFailureReason::Io,
         ];
         let mut seen = std::collections::BTreeSet::new();
@@ -365,6 +378,9 @@ mod tests {
             RouterFailureReason::Crashed,
             RouterFailureReason::NoOutput,
             RouterFailureReason::ValidationFailed,
+            // The engine is installed and could run; it just cannot honour
+            // this request. That is not an install problem.
+            RouterFailureReason::Unsupported,
         ] {
             assert!(
                 !reason.is_unavailable(),
@@ -390,6 +406,7 @@ mod tests {
                 RouterFailureReason::MalformedOutput,
                 RouterFailureReason::NoOutput,
                 RouterFailureReason::ValidationFailed,
+                RouterFailureReason::Unsupported,
                 RouterFailureReason::Io,
             ] {
                 let failure =

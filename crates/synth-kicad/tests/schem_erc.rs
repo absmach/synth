@@ -17,6 +17,7 @@ use synth_registry::{Lifecycle, Part, PartId, Pin, PinNumber, RequiredDecoupling
 
 fn empty_board() -> Board {
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
@@ -117,10 +118,12 @@ fn part(kind: &str) -> Part {
                 electrical_type: synth_registry::ElectricalType::Passive,
                 capabilities: Vec::new(),
                 required: false,
+                footprint_only: false,
                 unit: None,
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             },
             Pin {
                 name: "2".to_string(),
@@ -128,10 +131,12 @@ fn part(kind: &str) -> Part {
                 electrical_type: synth_registry::ElectricalType::Passive,
                 capabilities: Vec::new(),
                 required: false,
+                footprint_only: false,
                 unit: None,
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             },
         ],
         required_decoupling: Vec::new(),
@@ -140,6 +145,7 @@ fn part(kind: &str) -> Part {
         footprint_dimensions: None,
         operating_conditions: None,
         provenance: None,
+        spice: None,
     }
 }
 
@@ -211,11 +217,14 @@ fn decoupling_board() -> Board {
         value: "100n".to_string(),
         count: 1,
         max_distance_mm: None,
+        to: None,
+        through: None,
     }];
     let mut cap_part = part("capacitor");
     cap_part.required_decoupling = Vec::new();
 
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
@@ -235,6 +244,7 @@ fn decoupling_board() -> Board {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: None,
                 sheet: None,
                 source_span: Span::new(0, 0),
@@ -248,6 +258,7 @@ fn decoupling_board() -> Board {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: None,
                 sheet: None,
                 source_span: Span::new(0, 0),
@@ -300,10 +311,12 @@ fn schem_003_fires_on_cap_far_from_ic() {
     let violations = rule(check(&layout, &board), "E-SYNTH-SCHEM-003");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-003");
-    assert!(violations[0]
-        .entities
-        .iter()
-        .any(|e| matches!(e, EntityRef::Component { id } if id == "U1")));
+    assert!(
+        violations[0]
+            .entities
+            .iter()
+            .any(|e| matches!(e, EntityRef::Component { id } if id == "U1"))
+    );
 }
 
 #[test]

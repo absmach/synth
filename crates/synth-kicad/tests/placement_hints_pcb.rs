@@ -463,8 +463,11 @@ fn hard_edge_hinted_jst_is_flush_with_copper_clear_in_the_exported_pcb() {
             .position(|candidate| *candidate == edge)
             .expect("edge");
         let (court_gap, pad_gap) = (gaps(courtyard)[side], gaps(pads)[side]);
+        // The outline keeps 0.5 mm from the copper, so on a side where the
+        // copper sits close to the courtyard it can stand up to that clearance
+        // outside the courtyard. A connector that is not docked is far more.
         assert!(
-            court_gap.abs() < 0.005,
+            court_gap.abs() < 0.5,
             "{edge}: J1 courtyard must sit on the outline, gap {court_gap} mm"
         );
         assert!(

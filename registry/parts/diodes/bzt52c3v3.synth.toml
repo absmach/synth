@@ -1,0 +1,44 @@
+id = "bzt52c3v3"
+kind = "diode"
+description = "BZT52C3V3 3.3 V +/-5 % 500 mW zener diode, SOD-123 (clamp for the ADC sample lines). Vz 3.1 to 3.5 V (nominal 3.3 V) at Izt 5 mA; check against the Diodes Inc. datasheet. No LCSC number asserted."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "BZT52C3V3"
+kicad_footprint = "Diode_SMD:D_SOD-123"
+kicad_symbol = "Device:D_Zener"
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[operating_conditions]
+max_current_ma = 150.0
+max_power_mw = 500
+breakdown_voltage_v = 3.3
+breakdown_voltage_min_v = 3.1
+breakdown_voltage_max_v = 3.5
+breakdown_test_current_ma = 5.0
+
+[footprint_dimensions]
+width_mm = 4.7
+height_mm = 2.3
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
+datasheet_url = "https://www.diodes.com/assets/Datasheets/ds18004.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"

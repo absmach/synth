@@ -36,7 +36,7 @@ use std::collections::HashMap;
 
 use synth_ast::{
     ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, EndpointRefKind, KeepoutAttr,
-    KeepoutStmt, NetclassStmt, ProgramAst, SchematicOverflowAst, SchematicPaperAst,
+    KeepoutStmt, NetclassStmt, OutlineStmt, ProgramAst, SchematicOverflowAst, SchematicPaperAst,
     StackupLayerAst, StackupStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
@@ -45,9 +45,9 @@ use synth_diagnostics::{
 use synth_registry::{Part, PinCapability, Registry};
 
 use crate::board::{
-    Board, Component, ComponentId, Couple, DiffPair, Keepout, Net, NetClass, NetEndpoint, NetId,
-    Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
-    SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
+    Board, BoardOutline, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net,
+    NetClass, NetEndpoint, NetId, Note, PinId, PlacementEdge, PlacementRegion, PlacementSide,
+    ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -161,6 +161,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
     let mut stackup: Option<Stackup> = None;
+    let mut outline: Option<BoardOutline> = None;
     let mut netclasses: Vec<NetClass> = Vec::new();
     // Declared `group` regions with their header attributes (Phase D1),
     // in first-declaration order.
@@ -223,7 +224,13 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Component(c) => {
                 let comp = ctx.lower_component(c, registry, components.len(), group, sheet);
                 if refdes_index.contains_key(&comp.refdes) {
-                    ctx.emit_duplicate_refdes(&comp.refdes, comp.source_span);
+                    // Name both declarations: the validator's own finding sits
+                    // on this second one, so this one sits on the first.
+                    let first = components
+                        .iter()
+                        .find(|c| c.refdes == comp.refdes)
+                        .map_or(comp.source_span, |c| c.source_span);
+                    ctx.emit_duplicate_refdes(&comp.refdes, first, comp.source_span);
                 } else {
                     refdes_index.insert(comp.refdes.clone(), comp.id);
                 }
@@ -247,6 +254,20 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             }
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
             StatementAst::Stackup(st) => stackup = Some(ctx.lower_stackup(st)),
+            StatementAst::Outline(st) => {
+                // A board can declare one exact outline. A second `outline`
+                // is an error, not a silent replacement, and a first outline
+                // survives a later one that fails its unit check: a bad
+                // literal must not undo the size the board already declared.
+                let lowered = ctx.lower_outline(st);
+                if let Some(new) = lowered {
+                    if let Some(first) = &outline {
+                        ctx.emit_duplicate_outline(first.source_span, st.span);
+                    } else {
+                        outline = Some(new);
+                    }
+                }
+            }
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
                 if !groups.iter().any(|existing| existing.name == g.name) {
@@ -288,6 +309,80 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // refdes can be checked against the final component set.
     let variants = ctx.lower_variants(&root_statements, &refdes_index);
 
+    anchor_reset_buttons(&mut components, &nets);
+
+    // `escape { layers … }` against the copper the board actually has.
+    //
+    // After the walk rather than in `lower_escape`, because the layer count
+    // is a statement like any other and a board may declare it after the
+    // component that names a layer. An unknown name has to fail here: left
+    // alone it reaches the engine and the fanout fails at route time, which
+    // fails the route late and as an escape failure rather than as the typo
+    // it is — the late failure the unknown-method check exists to prevent.
+    let copper = copper_layer_names(layers);
+    for component in &components {
+        let Some(escape) = component.escape.as_ref() else {
+            continue;
+        };
+        for layer in &escape.layers {
+            if copper.iter().any(|known| known == layer) {
+                continue;
+            }
+            ctx.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-PROCESS-005",
+                    Severity::Error,
+                    "escape layer is not on this board",
+                )
+                .location(Location::from_span(
+                    ctx.file.to_string(),
+                    escape.source_span,
+                ))
+                .expected(format!(
+                    "one of: {}",
+                    copper
+                        .iter()
+                        .map(|l| format!("`{l}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .found(format!("`{layer}`"))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-005")
+                .build(),
+            );
+        }
+    }
+
+    // `netclass { layers … }` against the same copper, for the same reason: a
+    // name the board does not have would reach the router and the DRC rule
+    // as a layer nothing can route on, and every member net would fail.
+    for class in &netclasses {
+        for layer in &class.layers {
+            if copper.iter().any(|known| known == layer) {
+                continue;
+            }
+            ctx.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-NETCLASS-001",
+                    Severity::Error,
+                    "netclass layer is not on this board",
+                )
+                .location(Location::from_span(ctx.file.to_string(), class.source_span))
+                .expected(format!(
+                    "one of: {}",
+                    copper
+                        .iter()
+                        .map(|l| format!("`{l}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .found(format!("`{layer}` in netclass `{}`", class.name))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-NETCLASS-001")
+                .build(),
+            );
+        }
+    }
+
     let board = Board {
         legends,
         schematic_paper,
@@ -303,6 +398,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         notes,
         keepouts,
         stackup,
+        outline,
         netclasses,
         buses,
         modules,
@@ -316,6 +412,119 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         board: Some(board),
         diagnostics: ctx.diagnostics,
     }
+}
+
+/// Anchor each reset or boot button beside the MCU it controls.
+///
+/// A button on a reset or boot pin is a short, noise-sensitive line, and a
+/// person puts it next to the chip. Left to the author it tends to be hinted
+/// only softly, against a neighbouring resistor — which is itself hinted softly
+/// against another — and the chain gives the placer nothing to hold it to: on
+/// the irrigation controller the reset button ended up across the board.
+///
+/// The MCU is found from declared pin roles, not names: a pin carrying
+/// [`PinCapability::Reset`] or [`PinCapability::BootMode`] on the same net as
+/// one of the switch's pins, or one resistor away from it, which is how a
+/// debounced reset is wired. The switch then gets a `near` hint on that MCU.
+///
+/// Only a hint the author wrote is corrected. A soft one is a preference, and a
+/// chain of them (button near a resistor, that near another) anchors nothing to
+/// the chip, so it is replaced with a hard `near` on the MCU; whatever else it
+/// said (a region, an edge) is kept. A hard hint stands. A button with no hint
+/// at all is left to the placer: anchoring those was measured and moves
+/// routability both ways, breaking `env_logger` when hard and `sensor_logger`
+/// when soft, so it is not done on a guess.
+fn anchor_reset_buttons(components: &mut [Component], nets: &[Net]) {
+    use synth_registry::PinCapability;
+
+    let is_control_pin = |component: &Component, pin: PinId| -> bool {
+        component.part.as_ref().is_some_and(|part| {
+            part.pins.get(pin.0 as usize).is_some_and(|p| {
+                p.capabilities
+                    .iter()
+                    .any(|c| matches!(c, PinCapability::Reset | PinCapability::BootMode))
+            })
+        })
+    };
+    let find_mcu = |components: &[Component], net: &Net, skip: ComponentId| -> Option<usize> {
+        net.endpoints.iter().find_map(|e| {
+            let index = components.iter().position(|c| c.id == e.component)?;
+            (e.component != skip
+                && matches!(components[index].kind.as_str(), "mcu" | "processor")
+                && is_control_pin(&components[index], e.pin))
+            .then_some(index)
+        })
+    };
+
+    let mut anchors: Vec<(usize, String)> = Vec::new();
+    for (switch_index, switch) in components.iter().enumerate() {
+        if switch.kind != "switch" {
+            continue;
+        }
+        let mut found: Option<usize> = None;
+        'nets: for net in nets
+            .iter()
+            .filter(|n| n.endpoints.iter().any(|e| e.component == switch.id))
+        {
+            if let Some(mcu) = find_mcu(components, net, switch.id) {
+                found = Some(mcu);
+                break 'nets;
+            }
+            // One series resistor away: the other side of a two-pin resistor
+            // sharing this net.
+            for endpoint in &net.endpoints {
+                let Some(resistor) = components.iter().find(|c| c.id == endpoint.component) else {
+                    continue;
+                };
+                if resistor.kind != "resistor" || resistor.id == switch.id {
+                    continue;
+                }
+                for other in nets
+                    .iter()
+                    .filter(|n| n.id != net.id)
+                    .filter(|n| n.endpoints.iter().any(|e| e.component == resistor.id))
+                {
+                    if let Some(mcu) = find_mcu(components, other, resistor.id) {
+                        found = Some(mcu);
+                        break 'nets;
+                    }
+                }
+            }
+        }
+        if let Some(mcu) = found {
+            anchors.push((switch_index, components[mcu].refdes.clone()));
+        }
+    }
+
+    for (index, mcu_refdes) in anchors {
+        // Only a hint the author wrote. A button with none is left where the
+        // placer puts it: anchoring those was measured and moves routability
+        // both ways (hard broke env_logger, soft broke sensor_logger).
+        let Some(hint) = components[index].placement_hint.as_mut() else {
+            continue;
+        };
+        if hint.priority == crate::PlacementPriority::Hard {
+            continue;
+        }
+        hint.near = Some(mcu_refdes);
+        hint.priority = crate::PlacementPriority::Hard;
+    }
+}
+
+/// Copper layer names a board of `count` layers has, outer first.
+///
+/// KiCad's own naming: the two outer layers always exist, and the inner ones
+/// are numbered from the top. A count below two has no copper to name.
+fn copper_layer_names(count: u32) -> Vec<String> {
+    if count < 2 {
+        return Vec::new();
+    }
+    let mut names = vec!["F.Cu".to_string()];
+    for inner in 1..count.saturating_sub(1) {
+        names.push(format!("In{inner}.Cu"));
+    }
+    names.push("B.Cu".to_string());
+    names
 }
 
 struct LowerCtx<'a> {
@@ -340,7 +549,16 @@ impl<'a> LowerCtx<'a> {
         sheet: Option<&str>,
     ) -> Component {
         let part_id = decl.part.as_deref().unwrap_or("");
-        let part = registry.lookup(part_id).cloned();
+        let mut part = registry.lookup(part_id).cloned();
+        // Per-instance sourcing overrides the (shared) registry part's.
+        if let Some(part) = part.as_mut() {
+            if let Some(v) = decl.properties.get("lcsc_pn") {
+                part.lcsc_pn = Some(v.clone());
+            }
+            if let Some(v) = decl.properties.get("mpn") {
+                part.mpn = Some(v.clone());
+            }
+        }
 
         if part.is_none() {
             let mut b = DiagnosticBuilder::new("E-SYNTH-COMP-001", Severity::Error, "unknown part")
@@ -393,6 +611,7 @@ impl<'a> LowerCtx<'a> {
             .placement_hint
             .as_ref()
             .map(|h| self.lower_placement_hint(h));
+        let escape = decl.escape.as_ref().map(|e| self.lower_escape(e));
 
         Component {
             id: ComponentId(next_index as u32),
@@ -403,6 +622,7 @@ impl<'a> LowerCtx<'a> {
             dnp: decl.dnp,
             properties: decl.properties.clone(),
             placement_hint,
+            escape,
             group: group.map(str::to_string),
             sheet: sheet.map(str::to_string),
             source_span: decl.span,
@@ -551,6 +771,8 @@ impl<'a> LowerCtx<'a> {
         let mut plane = false;
         let mut max_length: Option<Length> = None;
         let mut max_skew: Option<Length> = None;
+        let mut edge_rate: Option<EdgeRate> = None;
+        let mut layers: Vec<String> = Vec::new();
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -586,6 +808,16 @@ impl<'a> LowerCtx<'a> {
                     Ok(l) => max_skew = Some(l),
                     Err(e) => self.emit_unit_error(&e, "netclass max_skew"),
                 },
+                // The parser accepts only `slow`/`fast`, so this is a
+                // belt-and-braces fallback to the unknown (fast) default.
+                NetclassAttr::EdgeRate { rate, .. } => edge_rate = EdgeRate::parse(rate),
+                NetclassAttr::Layers { layers: names } => {
+                    for name in names {
+                        if !layers.contains(name) {
+                            layers.push(name.clone());
+                        }
+                    }
+                }
                 NetclassAttr::Color(hex) => match parse_hex_color(hex) {
                     Some(rgb) => color = Some(rgb),
                     None => self.diagnostics.push(
@@ -623,6 +855,8 @@ impl<'a> LowerCtx<'a> {
             plane,
             max_length,
             max_skew,
+            edge_rate,
+            layers,
             source_span: n.span,
         }
     }
@@ -775,6 +1009,30 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// Lower a declared board rectangle. A dimension with the wrong unit is
+    /// reported here; the parser already rejected a non-positive literal.
+    fn lower_outline(&mut self, st: &OutlineStmt) -> Option<BoardOutline> {
+        let width = match Length::try_from(&st.width) {
+            Ok(width) => width,
+            Err(e) => {
+                self.emit_unit_error(&e, "outline width");
+                return None;
+            }
+        };
+        let height = match Length::try_from(&st.height) {
+            Ok(height) => height,
+            Err(e) => {
+                self.emit_unit_error(&e, "outline height");
+                return None;
+            }
+        };
+        Some(BoardOutline {
+            width,
+            height,
+            source_span: st.span,
+        })
+    }
+
     fn lower_stackup(&mut self, st: &StackupStmt) -> Stackup {
         let mut layers = Vec::new();
         for layer in &st.layers {
@@ -829,17 +1087,36 @@ impl<'a> LowerCtx<'a> {
 
     fn lower_keepout(&mut self, k: &KeepoutStmt) -> Keepout {
         let mut radius: Option<Length> = None;
+        let mut anchor: Option<String> = None;
+        let mut at: Option<(Length, Length)> = None;
+        let mut layers: Vec<String> = Vec::new();
         for attr in &k.attrs {
-            if let KeepoutAttr::Radius(v) = attr {
-                match Length::try_from(v) {
+            match attr {
+                KeepoutAttr::Radius(v) => match Length::try_from(v) {
                     Ok(l) => radius = Some(l),
                     Err(e) => self.emit_unit_error(&e, "keepout radius"),
+                },
+                KeepoutAttr::Anchor(name) => anchor = Some(name.clone()),
+                KeepoutAttr::At { x, y } => {
+                    let x = Length::try_from(x);
+                    let y = Length::try_from(y);
+                    match (x, y) {
+                        (Ok(x), Ok(y)) => at = Some((x, y)),
+                        (Err(e), _) | (_, Err(e)) => self.emit_unit_error(&e, "keepout at"),
+                    }
                 }
+                KeepoutAttr::Layers(names) => layers.extend(names.iter().cloned()),
+                // Non-exhaustive: a future keepout attribute is ignored here
+                // until lowering learns what it means.
+                _ => {}
             }
         }
         Keepout {
             name: k.name.clone(),
             radius,
+            anchor,
+            at,
+            layers,
             source_span: k.span,
         }
     }
@@ -991,10 +1268,10 @@ impl<'a> LowerCtx<'a> {
             // one of the two fires.
             let mut functions: Vec<PinCapability> = Vec::new();
             for (n, _) in &distinct_names {
-                if let Some(f) = PinCapability::from_net_name(n) {
-                    if !functions.contains(&f) {
-                        functions.push(f);
-                    }
+                if let Some(f) = PinCapability::from_net_name(n)
+                    && !functions.contains(&f)
+                {
+                    functions.push(f);
                 }
             }
             if functions.len() > 1 {
@@ -1422,19 +1699,89 @@ impl<'a> LowerCtx<'a> {
         })
     }
 
-    fn emit_duplicate_refdes(&mut self, refdes: &str, span: synth_diagnostics::Span) {
+    /// A second `outline` statement on the board. The first one stands; the
+    /// duplicate is reported so the design fixes its size instead of the
+    /// later statement silently winning (E-SYNTH-BOARD-003).
+    fn emit_duplicate_outline(
+        &mut self,
+        first: synth_diagnostics::Span,
+        again: synth_diagnostics::Span,
+    ) {
+        self.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-BOARD-003",
+                Severity::Error,
+                "duplicate outline statement",
+            )
+            .location(Location::from_span(self.file.to_string(), first))
+            .expected("a board declares one `outline` statement at most")
+            .found(format!(
+                "a second `outline` at bytes {}..{}; the first one stands",
+                again.byte_start, again.byte_end
+            ))
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-BOARD-003")
+            .build(),
+        );
+    }
+
+    fn emit_duplicate_refdes(
+        &mut self,
+        refdes: &str,
+        first: synth_diagnostics::Span,
+        again: synth_diagnostics::Span,
+    ) {
         self.diagnostics.push(
             DiagnosticBuilder::new(
                 "E-SYNTH-NAME-001",
                 Severity::Error,
                 "duplicate component refdes",
             )
-            .location(Location::from_span(self.file.to_string(), span))
+            .location(Location::from_span(self.file.to_string(), first))
             .expected("each refdes used at most once in a board")
-            .found(format!("`{refdes}` declared more than once"))
+            .found(format!(
+                "`{refdes}` declared more than once; declared again at bytes {}..{}",
+                again.byte_start, again.byte_end
+            ))
             .explanation_url("synth.docs/diagnostics/E-SYNTH-NAME-001")
             .build(),
         );
+    }
+
+    /// Lower a component's `escape { … }` block.
+    ///
+    /// An unknown method is an error rather than a silent fallback: a board
+    /// asking for an engine this build does not have is not a board that
+    /// asked for the default one.
+    fn lower_escape(&mut self, ast: &synth_ast::EscapeAst) -> crate::board::EscapeIntent {
+        let method = ast.method.as_ref().and_then(|name| {
+            let resolved = crate::board::EscapeMethod::from_source(name);
+            if resolved.is_none() {
+                let known = crate::board::EscapeMethod::ALL
+                    .iter()
+                    .map(|m| format!("`{}`", m.as_source()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-PROCESS-004",
+                        Severity::Error,
+                        "unknown escape method",
+                    )
+                    .location(Location::from_span(self.file.to_string(), ast.span))
+                    .expected(format!("one of: {known}"))
+                    .found(format!("`{name}`"))
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-PROCESS-004")
+                    .build(),
+                );
+            }
+            resolved
+        });
+        crate::board::EscapeIntent {
+            method,
+            layers: ast.layers.clone(),
+            off: ast.off,
+            source_span: ast.span,
+        }
     }
 
     /// A `requires` naming a process this build does not know about.
@@ -2139,10 +2486,12 @@ mod tests {
             let back: Net = serde_json::from_str(&serde_json::to_string(net).unwrap()).unwrap();
             assert_eq!(&back, net, "{} must round-trip", net.name);
         }
-        assert!(board
-            .nets
-            .iter()
-            .any(|n| n.name == "net_7" && !n.auto_named));
+        assert!(
+            board
+                .nets
+                .iter()
+                .any(|n| n.name == "net_7" && !n.auto_named)
+        );
     }
 
     #[test]
@@ -2408,9 +2757,11 @@ mod tests {
                 requires via_in_pad
             }"#,
         );
-        assert!(board
-            .required_processes
-            .contains(&ProcessRequirement::ViaInPad));
+        assert!(
+            board
+                .required_processes
+                .contains(&ProcessRequirement::ViaInPad)
+        );
     }
 
     /// A board that says nothing must not read as a board that asked, which
@@ -2465,5 +2816,74 @@ mod tests {
             diagnostic.expected
         );
         assert!(result.board.is_none_or(|b| b.required_processes.is_empty()));
+    }
+
+    // ----- reset and boot buttons ------------------------------------------
+
+    /// A debounced reset: the button is one series resistor away from NRST, which
+    /// is how the irrigation controller wired it. `hint` is spliced into the
+    /// button's declaration.
+    fn reset_board(hint: &str) -> Board {
+        lower_ok(&format!(
+            r#"board "b" {{
+                component U1: mcu "stm32g030"
+                component R1: resistor "r_generic_0603" value "100"
+                component SW1: switch "spst_tactile" {hint}
+                component SW2: switch "spst_tactile" {{ placement_hint {{ near: R1 priority: soft }} }}
+                connect U1.nrst -> R1.p1
+                connect R1.p2 -> SW1.p1
+                connect SW1.p2 -> U1.vss
+                connect U1.pa2 -> SW2.p1
+                connect SW2.p2 -> U1.vss
+            }}"#
+        ))
+    }
+
+    fn hint_of<'a>(
+        board: &'a Board,
+        refdes: &str,
+    ) -> Option<&'a crate::board::PlacementConstraint> {
+        board
+            .components
+            .iter()
+            .find(|c| c.refdes == refdes)
+            .and_then(|c| c.placement_hint.as_ref())
+    }
+
+    /// A button the author gave no hint is left to the placer. Anchoring those
+    /// was measured and moves routability both ways.
+    #[test]
+    fn a_reset_button_with_no_hint_is_left_alone() {
+        let board = reset_board("");
+        assert!(hint_of(&board, "SW1").is_none());
+    }
+
+    /// A soft hint against a neighbouring resistor is a preference, and a chain
+    /// of them anchors nothing to the chip. It is replaced with a hard hint on
+    /// the MCU, and what else it said is kept.
+    #[test]
+    fn a_soft_hint_does_not_keep_a_reset_button_from_its_mcu() {
+        let board = reset_board("{ placement_hint { near: R1 region: top_left priority: soft } }");
+        let hint = hint_of(&board, "SW1").expect("SW1 is anchored");
+        assert_eq!(hint.near.as_deref(), Some("U1"));
+        assert_eq!(hint.priority, PlacementPriority::Hard);
+        assert_eq!(hint.region, Some(PlacementRegion::TopLeft));
+    }
+
+    /// An author's hard hint stands.
+    #[test]
+    fn an_authored_hard_hint_on_a_reset_button_is_kept() {
+        let board = reset_board("{ placement_hint { near: R1 priority: hard } }");
+        let hint = hint_of(&board, "SW1").expect("SW1 has a hint");
+        assert_eq!(hint.near.as_deref(), Some("R1"));
+    }
+
+    /// A button on an ordinary GPIO is not a reset button.
+    #[test]
+    fn a_button_on_a_gpio_is_left_alone() {
+        let board = reset_board("");
+        let hint = hint_of(&board, "SW2").expect("SW2 keeps its hint");
+        assert_eq!(hint.near.as_deref(), Some("R1"));
+        assert_eq!(hint.priority, PlacementPriority::Soft);
     }
 }

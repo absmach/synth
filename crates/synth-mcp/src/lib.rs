@@ -10,10 +10,11 @@
 
 pub mod audit;
 pub mod cloud_endpoint;
+mod findings;
 pub mod server;
 pub mod tools;
 
 pub use audit::{AuditEvent, AuditLogger};
 pub use cloud_endpoint::{CloudMcpServer, RateLimiter};
-pub use server::{handle_jsonrpc_request, run_sse_server, run_stdio_server, SERVER_INSTRUCTIONS};
-pub use tools::{call_tool, list_tools, McpToolInfo};
+pub use server::{SERVER_INSTRUCTIONS, handle_jsonrpc_request, run_sse_server, run_stdio_server};
+pub use tools::{McpToolInfo, call_tool, list_tools, set_test_ngspice};

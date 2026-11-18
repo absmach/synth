@@ -38,13 +38,13 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, Rotation};
+use synth_geometry::{Layer, Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, ComponentId, Stackup, StackupLayer};
 use synth_pcb::{Routing, Segment};
 use synth_place::{ComponentPlacement, Placement};
 use uuid::Uuid;
 
-use crate::sexp::{num, pair, str_pair, Sexp};
+use crate::sexp::{Sexp, num, pair, str_pair};
 use crate::silk_labels;
 use crate::uuid_v5::derive_entity_uuid;
 
@@ -74,15 +74,50 @@ pub struct PlaneFanoutError {
     pub detail: String,
 }
 
+/// A declared keepout the export cannot honour. The keepout is named, so a
+/// board with several can tell them apart.
+#[derive(Debug)]
+pub struct KeepoutExportError {
+    /// The declared keepout name.
+    pub name: String,
+    /// A human-readable explanation: which anchor or layer failed, and what
+    /// the valid choices are.
+    pub detail: String,
+}
+
+/// Why `build_pcb` refused to produce a board.
+#[derive(Debug)]
+pub enum PcbBuildError {
+    /// A power-plane pad could not be fanned out.
+    PlaneFanout(PlaneFanoutError),
+    /// A declared keepout anchors to nothing, or names an unknown layer.
+    Keepout(KeepoutExportError),
+}
+
+impl From<PlaneFanoutError> for PcbBuildError {
+    fn from(error: PlaneFanoutError) -> Self {
+        Self::PlaneFanout(error)
+    }
+}
+
+impl From<KeepoutExportError> for PcbBuildError {
+    fn from(error: KeepoutExportError) -> Self {
+        Self::Keepout(error)
+    }
+}
+
 /// `label_overrides` is the design's say over reference labels, by designator,
 /// from the placement sidecar.
+#[allow(clippy::implicit_hasher)]
 pub fn build_pcb(
     board: &Board,
     placement: &Placement,
     routing: &Routing,
     project: &Uuid,
     label_overrides: &HashMap<String, synth_layout::sidecar::SidecarLabel>,
-) -> Result<Sexp, PlaneFanoutError> {
+    fixed_vias: &[synth_layout::sidecar::SidecarVia],
+    outline: &[synth_layout::sidecar::SidecarPoint],
+) -> Result<Sexp, PcbBuildError> {
     let placements_by_id: HashMap<ComponentId, &ComponentPlacement> =
         placement.components.iter().map(|p| (p.id, p)).collect();
 
@@ -107,7 +142,13 @@ pub fn build_pcb(
         ),
         Sexp::list("paper", vec![Sexp::str(paper_for(placement))]),
         build_layers(board.layers),
-        build_setup_with(board.stackup.as_ref()),
+        build_setup_with(
+            board.stackup.as_ref(),
+            &synth_drc::ManufacturerProfile::for_layers(
+                board.manufacturer.as_deref().unwrap_or_default(),
+                board.layers,
+            ),
+        ),
         // Net 0 = unconnected (KiCad convention). Real nets get
         // ids 1..N in IR declaration order — same ordering KiCad
         // uses when it generates from an imported netlist.
@@ -121,10 +162,9 @@ pub fn build_pcb(
     }
     children.extend(build_netclasses(&net_table, board));
 
-    // Edge.Cuts board outline. Four gr_line segments tracing
-    // `placement.board_outline`. Slice 1B uses an axis-aligned
-    // rectangle; later slices accept user-defined outlines.
-    children.extend(build_edge_cuts(placement, project));
+    // Edge.Cuts board outline. A sidecar outline replaces the fitted
+    // rectangle, so a non-rectangular board is part of the design source.
+    children.extend(build_edge_cuts(placement, outline, project));
 
     // Footprint instances. Components with a real `kicad_footprint`
     // reference it directly; components without one (e.g. a brand-new
@@ -138,6 +178,7 @@ pub fn build_pcb(
         &label_parts(board, &placements_by_id),
         placement.board_outline,
         &label_overrides_by_id(board, label_overrides),
+        &via_copper(routing),
     );
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -180,6 +221,34 @@ pub fn build_pcb(
     }
     for (idx, via) in routing.vias.iter().enumerate() {
         children.push(build_via(via, idx, &net_id_lookup, project));
+    }
+    for (idx, via) in fixed_vias.iter().enumerate() {
+        let Some((pcb_net, _)) = net_table.iter().find(|(_, name)| *name == via.net) else {
+            return Err(PlaneFanoutError {
+                net: via.net.clone(),
+                detail: format!(
+                    "the placement sidecar fixes a via at ({}, {}) mm on a net the board does not have",
+                    via.x, via.y
+                ),
+            }
+            .into());
+        };
+        children.push(build_ground_stitch_via(
+            mm_to_nm(via.x),
+            mm_to_nm(via.y),
+            *pcb_net,
+            project,
+            // Past every stitch via the exporter itself places, so the uuids stay distinct.
+            FIXED_VIA_UUID_BASE + idx,
+            stitch_via_size(
+                board,
+                board
+                    .nets
+                    .iter()
+                    .find(|n| n.name == via.net)
+                    .and_then(|n| n.netclass.as_deref()),
+            ),
+        ));
     }
 
     // Ground Plane Copper Flood Zone: Inject continuous GND copper zones on F.Cu, B.Cu, and inner layers
@@ -229,7 +298,7 @@ pub fn build_pcb(
     let has_power_plane = board.netclasses.iter().any(|class| class.plane);
     let (gnd_layers, power_layers): (Vec<&'static str>, Vec<&'static str>) =
         if has_power_plane && board.layers >= 4 {
-            (vec!["F.Cu", "B.Cu"], inner_plane_layers(board.layers))
+            (vec!["F.Cu", "B.Cu"], power_plane_layers(board))
         } else {
             (ground_plane_layers(board.layers), Vec::new())
         };
@@ -259,8 +328,29 @@ pub fn build_pcb(
         // through vias so the planes form one physical ground network. The
         // external routers preserve these source vias while replacing their
         // own routed segments and vias.
-        if board.layers >= 4 && plane_index == 0 {
-            let outline = placement.board_outline;
+        // Each ground fences only the corners inside its own pour region: a corner via
+        // in another split ground's half is a dangling island of the wrong net.
+        if board.layers >= 4 {
+            // The source fence follows the delivered outline, not the placer's
+            // fitted rectangle: a sidecar notch moves the edge inward and
+            // would leave these vias on (or outside) Edge.Cuts.
+            let outline_points = outline;
+            let fence_outline = if outline_points.len() >= 3 {
+                let (mut min_x, mut min_y) = (i64::MAX, i64::MAX);
+                let (mut max_x, mut max_y) = (i64::MIN, i64::MIN);
+                for point in outline_points {
+                    let x = mm_to_nm(point.x);
+                    let y = mm_to_nm(point.y);
+                    min_x = min_x.min(x);
+                    min_y = min_y.min(y);
+                    max_x = max_x.max(x);
+                    max_y = max_y.max(y);
+                }
+                synth_geometry::Rect::new(Point::new(min_x, min_y), Point::new(max_x, max_y))
+            } else {
+                placement.board_outline
+            };
+            let outline = fence_outline;
             let inset = mm_to_nm(1.5);
             let holes: Vec<(Point, i64)> = board
                 .components
@@ -277,22 +367,33 @@ pub fn build_pcb(
                     Some((centre, mm_to_nm(width_mm / 2.0)))
                 })
                 .collect();
-            // Left corners slide right and right corners slide left.
-            let points = [
-                (outline.min.x_nm + inset, outline.min.y_nm + inset, 1),
-                (outline.max.x_nm - inset, outline.min.y_nm + inset, -1),
-                (outline.max.x_nm - inset, outline.max.y_nm - inset, -1),
-                (outline.min.x_nm + inset, outline.max.y_nm - inset, 1),
-            ];
-            for (stitch_index, (x_nm, y_nm, inward)) in points.into_iter().enumerate() {
-                let Point { x_nm, y_nm } =
-                    clear_of_mounting_holes(Point::new(x_nm, y_nm), inward, &holes);
+            for (stitch_index, point) in ground_fence_points(outline, inset, &holes)
+                .into_iter()
+                .enumerate()
+            {
+                if region
+                    .as_deref()
+                    .is_some_and(|polygon| !convex_contains(polygon, point))
+                {
+                    continue;
+                }
+                if !outline_points.is_empty() && !custom_outline_contains(outline_points, point) {
+                    continue;
+                }
                 children.push(build_ground_stitch_via(
-                    x_nm,
-                    y_nm,
+                    point.x_nm,
+                    point.y_nm,
                     *pcb_net,
                     project,
                     plane_index * 4 + stitch_index,
+                    stitch_via_size(
+                        board,
+                        board
+                            .nets
+                            .iter()
+                            .find(|n| n.name == *net_name)
+                            .and_then(|n| n.netclass.as_deref()),
+                    ),
                 ));
             }
         }
@@ -316,12 +417,104 @@ pub fn build_pcb(
         else {
             continue;
         };
-        children.push(build_mounting_hole_keepout(
+        children.push(build_round_keepout(
             placed.center,
-            mm_to_nm(width_mm / 2.0),
+            mm_to_nm(width_mm / 2.0) + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
             &ground_plane_layers(board.layers),
             project,
-            &component.refdes,
+            &format!("{} screw head", component.refdes),
+            &format!("mounting-hole-keepout {}", component.refdes),
+        ));
+    }
+
+    // A declared keepout becomes a real rule area. `anchor` names a part,
+    // `at` gives an explicit coordinate, and `layers` limits the copper. An
+    // `anchor` that names no part is an error: the keepout would otherwise
+    // land at the board centre while the design says it rings a component,
+    // and a rule area in the wrong place is worse than none. A layer name
+    // the board does not have is an error too: dropping it silently widens
+    // the keepout onto layers the design excluded.
+    for (index, keepout) in board.keepouts.iter().enumerate() {
+        let Some(radius) = keepout.radius else {
+            continue;
+        };
+        let anchor = if let Some((x, y)) = keepout.at {
+            Point::new(mm_to_nm(x.to_mm()), mm_to_nm(y.to_mm()))
+        } else if let Some(wanted) = keepout.anchor.as_deref() {
+            let found = board
+                .components
+                .iter()
+                .find(|component| {
+                    component.refdes.eq_ignore_ascii_case(wanted)
+                        || component.kind.eq_ignore_ascii_case(wanted)
+                })
+                .and_then(|component| placements_by_id.get(&component.id));
+            let Some(found) = found else {
+                return Err(KeepoutExportError {
+                    name: keepout.name.clone(),
+                    detail: format!(
+                        "the keepout's anchor `{wanted}` names no component; \
+                         name the refdes or kind of the part it must ring, or \
+                         give it an `at x y` coordinate"
+                    ),
+                }
+                .into());
+            };
+            found.center
+        } else {
+            // No anchor attribute: the name is matched to a part and then the
+            // board centre is used, as before.
+            let wanted = &keepout.name;
+            board
+                .components
+                .iter()
+                .find(|component| {
+                    component.refdes.eq_ignore_ascii_case(wanted)
+                        || component.kind.eq_ignore_ascii_case(wanted)
+                })
+                .and_then(|component| placements_by_id.get(&component.id))
+                .map_or_else(
+                    || {
+                        Point::new(
+                            i64::midpoint(
+                                placement.board_outline.min.x_nm,
+                                placement.board_outline.max.x_nm,
+                            ),
+                            i64::midpoint(
+                                placement.board_outline.min.y_nm,
+                                placement.board_outline.max.y_nm,
+                            ),
+                        )
+                    },
+                    |placed| placed.center,
+                )
+        };
+        let all_layers = ground_plane_layers(board.layers);
+        let mut layers: Vec<&str> = Vec::with_capacity(keepout.layers.len());
+        for name in &keepout.layers {
+            let Some(layer) = all_layers.iter().find(|layer| *layer == name).copied() else {
+                return Err(KeepoutExportError {
+                    name: keepout.name.clone(),
+                    detail: format!(
+                        "the keepout names layer `{name}`, which the board does \
+                         not have; its copper layers are {}",
+                        all_layers.join(", ")
+                    ),
+                }
+                .into());
+            };
+            layers.push(layer);
+        }
+        if layers.is_empty() {
+            layers = all_layers;
+        }
+        children.push(build_round_keepout(
+            anchor,
+            radius.0,
+            &layers,
+            project,
+            &format!("{} keepout", keepout.name),
+            &format!("keepout {index} {}", keepout.name),
         ));
     }
 
@@ -337,12 +530,39 @@ pub fn build_pcb(
     // Every pad on the board, so a generated stitching via can be kept clear of
     // one: a via dropped on another net's pad is a short. Computed once, and
     // only when a plane is actually going to be emitted.
-    let mut obstacles: Vec<(synth_geometry::Point, i64)> =
-        if board.netclasses.iter().any(|class| class.plane) && !power_layers.is_empty() {
-            all_pad_obstacles(board, placement)
-        } else {
-            Vec::new()
-        };
+    let plane_wanted = board.netclasses.iter().any(|class| class.plane) && !power_layers.is_empty();
+    let pad_rects = if plane_wanted {
+        all_pad_rects(board, placement)
+    } else {
+        Vec::new()
+    };
+    let mut placed_vias: Vec<(synth_geometry::Point, i64)> = Vec::new();
+    // Whether a stitching via may go *in* a pad rather than beside it.
+    //
+    // Both halves, because a board cannot approve its own fabrication: it has
+    // to have declared `requires via_in_pad`, and the tier it named has to
+    // offer the process. ERC already refuses the required-but-not-offered
+    // combination with E-SYNTH-PROCESS-002, so reaching here with both true is
+    // the only way the permission is live.
+    //
+    // Without this an interior supply ball on a fine-pitch array cannot be
+    // stitched at all: its neighbours are a pitch away on every side, and a
+    // beside-pad via needs more clearance than that leaves. The export failed
+    // and told the user to "allow via-in-pad explicitly", which nothing could
+    // do — the CLI's flag is a router option and never reached here.
+    let process = synth_drc::ManufacturerProfile::from_name(
+        board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+    );
+    let via_in_pad_allowed = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad)
+        && process.via_in_pad;
+    // The via is the process's own: its drill at least the minimum and its pad
+    // the drill plus two minimum annular rings.
+    let plane_via = PlaneVia::for_process(&process);
+    // The land of a via filled and capped in a pad, where the process offers one
+    // and a component declares the under-pad escape that makes it legal.
+    let pad_via = PlaneVia::for_via_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -396,44 +616,93 @@ pub fn build_pcb(
                     None,
                 ));
             }
-            for (pad, origin, layer) in plane_pad_targets(board, placement, net) {
-                let Some(via) = plane_via_offset(pad, origin, placement.board_outline, &obstacles)
-                else {
-                    return Err(PlaneFanoutError {
-                        net: net.name.clone(),
-                        detail: format!(
-                            "no legal stitching-via position beside the pad at ({:.2}, {:.2}) mm \
-                             on {layer:?}: every candidate is outside the board or within \
-                             clearance of another pad or via. Move the part, widen the board, or \
-                             allow via-in-pad explicitly.",
-                            nm_to_mm(pad.x_nm),
-                            nm_to_mm(pad.y_nm),
-                        ),
-                    });
+            for target in plane_pad_targets(board, placement, net) {
+                let (pad, layer) = (target.centre, target.layer);
+                let beside = plane_via_offset(
+                    pad,
+                    target.origin,
+                    placement.board_outline,
+                    &PlaneCopper {
+                        pads: &pad_rects,
+                        vias: &placed_vias,
+                    },
+                    &plane_via,
+                );
+                let in_pad_rules = InPadRules {
+                    pads: &pad_rects,
+                    vias: &placed_vias,
+                    clearance_nm: process.min_copper_clearance_nm,
+                    drill_to_copper_nm: process.min_drill_to_copper_nm,
                 };
-                obstacles.push((via, PLANE_VIA_RADIUS_NM));
+                // The plane via goes in the pad first, where it fits. Only a
+                // component that declares `escape { method underpad }` may take
+                // the smaller filled and capped via, the one the DRC exempts from
+                // the plain ring; a pad anywhere else that cannot hold the plane
+                // via is refused.
+                let (chosen, land) = match beside {
+                    Some(at) => (Ok(at), plane_via),
+                    None if via_in_pad_allowed => {
+                        match plane_via_in_pad(&target, &plane_via, &in_pad_rules) {
+                            Ok(at) => (Ok(at), plane_via),
+                            Err(refusal) => match pad_via {
+                                Some(small) if target.underpad => {
+                                    (plane_via_in_pad(&target, &small, &in_pad_rules), small)
+                                }
+                                _ => (Err(refusal), plane_via),
+                            },
+                        }
+                    }
+                    None => (Err(ViaRefusal::NoRoomBesidePad), plane_via),
+                };
+                let via = match chosen {
+                    Ok(at) => at,
+                    Err(refusal) => {
+                        return Err(PlaneFanoutError {
+                            net: net.name.clone(),
+                            detail: plane_via_refusal(
+                                &refusal,
+                                pad,
+                                layer,
+                                &ViaAttempt {
+                                    via: land,
+                                    filled_and_capped: target.underpad && pad_via == Some(land),
+                                    offered: pad_via.filter(|_| !target.underpad),
+                                },
+                            ),
+                        }
+                        .into());
+                    }
+                };
+                let used = land;
+                placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
+                    &used,
                     pcb_net,
                     project,
                     plane_via_index,
                 ));
                 plane_via_index += 1;
-                children.push(build_segment(
-                    &Segment {
-                        net: net.id,
-                        layer,
-                        start: pad,
-                        end: via,
-                        width_nm: PLANE_STUB_WIDTH_NM,
-                    },
-                    plane_stub_index,
-                    &net_id_lookup,
-                    project,
-                    board.layers,
-                ));
-                plane_stub_index += 1;
+                // A via in the pad needs no fanout stub: the two are the same
+                // point, and a zero-length segment is not a track. Only an
+                // offset via is reached by one.
+                if via != pad {
+                    children.push(build_segment(
+                        &Segment {
+                            net: net.id,
+                            layer,
+                            start: pad,
+                            end: via,
+                            width_nm: PLANE_STUB_WIDTH_NM,
+                        },
+                        plane_stub_index,
+                        &net_id_lookup,
+                        project,
+                        board.layers,
+                    ));
+                    plane_stub_index += 1;
+                }
             }
         }
     }
@@ -459,7 +728,54 @@ fn inner_plane_layers(layer_count: u32) -> Vec<&'static str> {
     }
 }
 
+/// Inner layers a declared rail may flood. A package that declares its escape
+/// layers keeps them for signals, and if the declared rails would consume every
+/// remaining inner layer, one is left for BGA escape rather than making a board
+/// that cannot be routed.
+fn power_plane_layers(board: &Board) -> Vec<&'static str> {
+    let reserved: std::collections::BTreeSet<&str> = board
+        .components
+        .iter()
+        .filter_map(|component| component.escape.as_ref())
+        .filter(|escape| !escape.off)
+        .flat_map(|escape| escape.layers.iter().map(String::as_str))
+        .collect();
+    let mut free: Vec<&'static str> = inner_plane_layers(board.layers)
+        .into_iter()
+        .filter(|layer| !reserved.contains(layer))
+        .collect();
+    let rails = board
+        .netclasses
+        .iter()
+        .filter(|class| class.plane)
+        .count()
+        .max(1);
+    // A package that declared no escape layers does not need a spare signal
+    // layer, and the old allocation is preserved exactly. When one did, leave
+    // a layer for it only if every rail still gets one of its own.
+    let escape_declared = !reserved.is_empty();
+    if escape_declared && free.len() > rails && free.len() > 1 {
+        free.pop();
+    }
+    free
+}
+
 /// Emit a single `(via ...)` block.
+/// The copper of every routed via as a box, so a reference label can keep off it.
+fn via_copper(routing: &Routing) -> Vec<Rect> {
+    routing
+        .vias
+        .iter()
+        .map(|via| {
+            let half = via.pad_diameter_nm / 2;
+            Rect::new(
+                Point::new(via.at.x_nm - half, via.at.y_nm - half),
+                Point::new(via.at.x_nm + half, via.at.y_nm + half),
+            )
+        })
+        .collect()
+}
+
 fn build_via(
     via: &synth_pcb::Via,
     idx: usize,
@@ -484,8 +800,35 @@ fn build_via(
     )
 }
 
-/// Board-space targets for a declared power plane: one
-/// `(pad centre, footprint origin, pad layer)` per pad the net connects.
+/// The pads of a part as the exported board has them: the real footprint's when
+/// the part names a KiCad footprint the library can supply, the exporter's
+/// synthesized pads otherwise. Sizing a stitching via against the synthesized
+/// strip of a BGA would judge it against pads that are not on the board.
+fn part_pads(
+    part: &synth_registry::Part,
+) -> Option<Vec<synth_layout::kicad_footprint_loader::Pad>> {
+    part.kicad_footprint
+        .as_deref()
+        .and_then(synth_layout::kicad_footprint_loader::pads)
+        .filter(|pads| !pads.is_empty())
+        .or_else(|| synth_layout::kicad_footprint_loader::synth_part_pads(part))
+}
+
+/// One pad a power plane must be stitched to.
+struct PlanePad {
+    centre: synth_geometry::Point,
+    origin: synth_geometry::Point,
+    layer: Layer,
+    /// Width and height of the pad's copper in board axes, in nanometres.
+    size_nm: (i64, i64),
+    /// Whether the pad's component declares `escape { method underpad }`: the
+    /// only place the filled and capped via, sized to the process's land, is
+    /// allowed.
+    underpad: bool,
+}
+
+/// Board-space targets for a declared power plane: one [`PlanePad`] per pad the
+/// net connects.
 ///
 /// The plane is on the inner layers while its pads are on the outer copper, so
 /// each pad needs a via through the plane, reached by a short stub. This
@@ -493,11 +836,7 @@ fn build_via(
 /// footprint: the pad's local offset, rotated by the placement and translated
 /// by the footprint origin.
 #[allow(clippy::similar_names)] // dx_nm/dy_nm are the natural names for an axis pair
-fn plane_pad_targets(
-    board: &Board,
-    placement: &Placement,
-    net: &synth_ir::Net,
-) -> Vec<(synth_geometry::Point, synth_geometry::Point, Layer)> {
+fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) -> Vec<PlanePad> {
     let mut out = Vec::new();
     for endpoint in &net.endpoints {
         let Some(component) = board.component(endpoint.component) else {
@@ -516,7 +855,7 @@ fn plane_pad_targets(
         let Some(pin) = part.pins.get(endpoint.pin.0 as usize) else {
             continue;
         };
-        let Some(pads) = synth_layout::kicad_footprint_loader::synth_part_pads(part) else {
+        let Some(pads) = part_pads(part) else {
             continue;
         };
         let origin = synth_place::footprint_origin(Some(part), placed);
@@ -528,14 +867,91 @@ fn plane_pad_targets(
                 .rotation
                 .rotate_offset(mm_to_nm(pad.center_mm.0), mm_to_nm(pad.center_mm.1));
             let center = synth_geometry::Point::new(origin.x_nm + dx_nm, origin.y_nm + dy_nm);
-            out.push((center, origin, placed.layer));
+            let (w_nm, h_nm) = (mm_to_nm(pad.size_mm.0), mm_to_nm(pad.size_mm.1));
+            out.push(PlanePad {
+                centre: center,
+                origin,
+                layer: placed.layer,
+                underpad: component.escape.as_ref().is_some_and(|escape| {
+                    !escape.off && escape.method == Some(synth_ir::EscapeMethod::Underpad)
+                }),
+                size_nm: if placed.rotation.swaps_extents() {
+                    (h_nm, w_nm)
+                } else {
+                    (w_nm, h_nm)
+                },
+            });
         }
     }
     out
 }
 
-/// Stitching-via pad radius in nanometres (a 0.6 mm via).
+/// Stitching-via pad radius in nanometres (a 0.6 mm via): the least the
+/// exporter uses, raised by [`PlaneVia::for_process`] when a process needs a
+/// wider ring.
 const PLANE_VIA_RADIUS_NM: i64 = 300_000;
+
+/// Drill of a stitching via in nanometres, at least the process's floor.
+const PLANE_VIA_DRILL_NM: i64 = 300_000;
+
+/// The via a plane stitching uses, from the manufacturer's own limits: the
+/// drill is at least the process minimum and the pad is at least the drill
+/// plus two minimum annular rings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PlaneVia {
+    pad_radius_nm: i64,
+    drill_nm: i64,
+}
+
+impl PlaneVia {
+    fn for_process(profile: &synth_drc::ManufacturerProfile) -> Self {
+        let drill_nm = PLANE_VIA_DRILL_NM.max(profile.min_drill_diameter_nm);
+        let ring_pad_nm = drill_nm + 2 * profile.min_annular_ring_nm;
+        Self {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM.max((ring_pad_nm + 1) / 2),
+            drill_nm,
+        }
+    }
+}
+
+impl PlaneVia {
+    /// The via a plane stitching uses when it is filled and capped in a pad: the
+    /// process's own minimum drill (not the exporter's wider default) with the
+    /// land the process gives for it, `via_in_pad_land_nm`, the one the DRC judges
+    /// it by. `None` where the process offers no such land, so the plane via is
+    /// the only via there is.
+    fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        profile.via_in_pad_land_nm().map(|land_nm| Self {
+            pad_radius_nm: (land_nm + 1) / 2,
+            drill_nm: profile.min_drill_diameter_nm,
+        })
+    }
+}
+
+/// The via a pad was tried with, for the refusal that names it.
+struct ViaAttempt {
+    via: PlaneVia,
+    /// Whether it is the process's filled and capped via, whose land is the drill
+    /// plus the allowance, and not the plane via's two annular rings.
+    filled_and_capped: bool,
+    /// The filled and capped via the process offers, where the pad's component
+    /// does not declare the escape that would take it.
+    offered: Option<PlaneVia>,
+}
+
+/// Why no stitching via could be placed for a pad.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ViaRefusal {
+    /// Every position beside the pad is outside the board or within clearance of
+    /// another pad or via, and the board did not declare via-in-pad.
+    NoRoomBesidePad,
+    /// Via-in-pad is permitted, but the pad is too small to hold the via's
+    /// annulus: the via would be wider than the copper it is meant to sit in.
+    PadTooSmall { pad_nm: (i64, i64), via_nm: i64 },
+    /// Via-in-pad is permitted and the via fits, but the copper of a neighbouring
+    /// pad or via is too close to it or to its drilled hole.
+    Crowded,
+}
 
 /// Fabrication copper clearance, in nanometres, used to keep a generated via
 /// legal against the nearest pad or other via.
@@ -545,12 +961,67 @@ const PLANE_VIA_FAB_CLEARANCE_NM: i64 = 200_000;
 /// nanometres (via radius plus the fabrication edge clearance).
 const PLANE_EDGE_MARGIN_NM: i64 = 1_000_000;
 
-/// Every copper pad on the board as `(centre, circumscribed radius)`, in board
-/// space. Used to keep a generated plane stitching via off a neighbouring pad:
-/// a via dropped onto another net's pad is a short, and the exporter has to
-/// avoid it rather than rely on the router's DRC to catch it later.
+/// The error text for a pad no stitching via could be placed for, naming the
+/// pad and what would let it through.
+fn plane_via_refusal(
+    refusal: &ViaRefusal,
+    pad: synth_geometry::Point,
+    layer: Layer,
+    attempt: &ViaAttempt,
+) -> String {
+    let via = attempt.via;
+    let at = format!(
+        "the pad at ({:.2}, {:.2}) mm on {layer:?}",
+        nm_to_mm(pad.x_nm),
+        nm_to_mm(pad.y_nm)
+    );
+    match refusal {
+        ViaRefusal::NoRoomBesidePad => format!(
+            "no legal stitching-via position beside {at}: every candidate is outside the board or \
+             within clearance of another pad or via. Move the part, widen the board, or declare \
+             `requires via_in_pad` on a manufacturer that offers it, which lets the via go in the pad."
+        ),
+        ViaRefusal::PadTooSmall { pad_nm, via_nm } => {
+            let ring = if attempt.filled_and_capped {
+                "the process's via-in-pad land allowance"
+            } else {
+                "two annular rings"
+            };
+            let advice = match attempt.offered {
+                Some(small) => format!(
+                    "Declare `escape {{ method underpad }}` on the component, which takes the process's \
+                     {:.2} mm filled and capped via, or use a larger pad or another way to reach the plane.",
+                    nm_to_mm(2 * small.pad_radius_nm)
+                ),
+                None => {
+                    "Use a manufacturer tier with a finer drill, a larger pad, or another way to \
+                         reach the plane."
+                        .to_string()
+                }
+            };
+            format!(
+                "{at} is {:.2} x {:.2} mm and a stitching via needs a {:.2} mm pad (a {:.2} mm drill plus \
+                 {ring}) inside it, so via-in-pad cannot hold it on this process. {advice}",
+                nm_to_mm(pad_nm.0),
+                nm_to_mm(pad_nm.1),
+                nm_to_mm(*via_nm),
+                nm_to_mm(via.drill_nm),
+            )
+        }
+        ViaRefusal::Crowded => format!(
+            "{at} can hold the stitching via, but copper of a neighbouring pad or via is within \
+             the process's clearance of the via or of its hole. Move the part or widen the pitch."
+        ),
+    }
+}
+
+/// Every copper pad on the board as `(centre, half width, half height)` in board
+/// axes, in nanometres. A via beside a pad, and a via in one, are both judged
+/// against the pads' real shapes: a circle round a rectangular pad over-reports
+/// the copper along its diagonal, and made an ordinary pair of capacitors
+/// unstitchable.
 #[allow(clippy::similar_names)] // dx_nm/dy_nm are the natural names for an axis pair
-fn all_pad_obstacles(board: &Board, placement: &Placement) -> Vec<(synth_geometry::Point, i64)> {
+fn all_pad_rects(board: &Board, placement: &Placement) -> Vec<(synth_geometry::Point, (i64, i64))> {
     let mut out = Vec::new();
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
@@ -563,7 +1034,7 @@ fn all_pad_obstacles(board: &Board, placement: &Placement) -> Vec<(synth_geometr
         else {
             continue;
         };
-        let Some(pads) = synth_layout::kicad_footprint_loader::synth_part_pads(part) else {
+        let Some(pads) = part_pads(part) else {
             continue;
         };
         let origin = synth_place::footprint_origin(Some(part), placed);
@@ -571,52 +1042,99 @@ fn all_pad_obstacles(board: &Board, placement: &Placement) -> Vec<(synth_geometr
             let (dx_nm, dy_nm) = placed
                 .rotation
                 .rotate_offset(mm_to_nm(pad.center_mm.0), mm_to_nm(pad.center_mm.1));
-            let (w_mm, h_mm) = pad.size_mm;
-            let radius_nm = mm_to_nm(((w_mm / 2.0).powi(2) + (h_mm / 2.0).powi(2)).sqrt());
+            let (w_nm, h_nm) = (mm_to_nm(pad.size_mm.0), mm_to_nm(pad.size_mm.1));
+            let half = if placed.rotation.swaps_extents() {
+                (h_nm / 2, w_nm / 2)
+            } else {
+                (w_nm / 2, h_nm / 2)
+            };
             out.push((
                 synth_geometry::Point::new(origin.x_nm + dx_nm, origin.y_nm + dy_nm),
-                radius_nm,
+                half,
             ));
         }
     }
     out
 }
 
-/// Squared distance from the segment `a`–`b` to the point `p`, in nanometres
-/// squared.
-///
-/// Used to test a whole fanout stub against an obstacle, not only its endpoint:
-/// the minimum distance from the segment to the obstacle centre is what a
-/// clearance check needs.
-fn segment_clearance_nm_sq(
-    a: synth_geometry::Point,
-    b: synth_geometry::Point,
+/// Distance in nanometres from `p` to the axis-aligned rectangle centred on
+/// `centre` with half sizes `half`, zero inside it.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn point_to_rect_nm(
     p: synth_geometry::Point,
-) -> i64 {
-    let abx = b.x_nm - a.x_nm;
-    let aby = b.y_nm - a.y_nm;
-    let apx = p.x_nm - a.x_nm;
-    let apy = p.y_nm - a.y_nm;
-    let denom = abx * abx + aby * aby;
-    let (cx, cy) = if denom == 0 {
-        (a.x_nm, a.y_nm)
-    } else {
-        // Integer projection: t is clamped to [0, denom], so the closest point
-        // stays on the segment. i128 avoids the i64 overflow of t * ab.
-        let t = (apx * abx + apy * aby).clamp(0, denom);
-        let tx = (i128::from(t) * i128::from(abx)) / i128::from(denom);
-        let ty = (i128::from(t) * i128::from(aby)) / i128::from(denom);
-        (
-            a.x_nm + i64::try_from(tx).unwrap_or(0),
-            a.y_nm + i64::try_from(ty).unwrap_or(0),
-        )
-    };
-    let dx = p.x_nm - cx;
-    let dy = p.y_nm - cy;
-    dx * dx + dy * dy
+    centre: synth_geometry::Point,
+    half: (i64, i64),
+) -> f64 {
+    let dx = ((p.x_nm - centre.x_nm).abs() - half.0).max(0) as f64;
+    let dy = ((p.y_nm - centre.y_nm).abs() - half.1).max(0) as f64;
+    dx.hypot(dy)
 }
 
-/// Where a power pad's stitching via goes.
+/// Distance in nanometres from the segment `a`–`b` to the axis-aligned
+/// rectangle centred on `centre` with half sizes `half`; zero when they touch.
+/// Exact: the segment is clipped to the rectangle, and otherwise the nearest
+/// approach is at an end of the segment or at a corner of the rectangle.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn segment_to_rect_nm(
+    a: synth_geometry::Point,
+    b: synth_geometry::Point,
+    centre: synth_geometry::Point,
+    half: (i64, i64),
+) -> f64 {
+    let (a, b) = (
+        ((a.x_nm - centre.x_nm) as f64, (a.y_nm - centre.y_nm) as f64),
+        ((b.x_nm - centre.x_nm) as f64, (b.y_nm - centre.y_nm) as f64),
+    );
+    let (hx, hy) = (half.0 as f64, half.1 as f64);
+    // Liang-Barsky clip of the segment to the rectangle.
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let (mut t0, mut t1) = (0.0_f64, 1.0_f64);
+    let mut clipped = true;
+    for (p, q) in [
+        (-dx, a.0 + hx),
+        (dx, hx - a.0),
+        (-dy, a.1 + hy),
+        (dy, hy - a.1),
+    ] {
+        if p.abs() < 1e-9 {
+            if q < 0.0 {
+                clipped = false;
+                break;
+            }
+        } else {
+            let r = q / p;
+            if p < 0.0 {
+                t0 = t0.max(r);
+            } else {
+                t1 = t1.min(r);
+            }
+            if t0 > t1 {
+                clipped = false;
+                break;
+            }
+        }
+    }
+    if clipped {
+        return 0.0;
+    }
+    let to_rect = |p: (f64, f64)| (p.0.abs() - hx).max(0.0).hypot((p.1.abs() - hy).max(0.0));
+    let to_segment = |c: (f64, f64)| {
+        let len2 = dx * dx + dy * dy;
+        let t = if len2 == 0.0 {
+            0.0
+        } else {
+            (((c.0 - a.0) * dx + (c.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+        };
+        (c.0 - (a.0 + t * dx)).hypot(c.1 - (a.1 + t * dy))
+    };
+    [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)]
+        .iter()
+        .map(|&c| to_segment(c))
+        .chain([to_rect(a), to_rect(b)])
+        .fold(f64::MAX, f64::min)
+}
+
+/// Where a power pad's stitching via goes, beside the pad.
 ///
 /// The preferred spot is [`PLANE_VIA_OFFSET_NM`] from the pad, away from the
 /// footprint origin along the dominant axis so the direction is stable, and the
@@ -624,14 +1142,18 @@ fn segment_clearance_nm_sq(
 /// via-in-pad. That preference is only a first choice: 1 mm along one axis can
 /// land outside Edge.Cuts or on a neighbouring pad, so candidate positions are
 /// tried (four axes, three distances) and the first that stays inside the board
-/// and clear of every pad and already-placed via is used. `None` when no side
-/// location is legal — a pad boxed in on every side — so the caller can stop
-/// rather than silently fall back to via-in-pad.
+/// and clear of every pad and already-placed via is used.
+///
+/// `None` when no side location is legal: a pad boxed in on every side. What
+/// happens then is [`plane_via_in_pad`]'s business, and only on a board that
+/// declared the process.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
 fn plane_via_offset(
     pad: synth_geometry::Point,
     origin: synth_geometry::Point,
     outline: synth_geometry::Rect,
-    obstacles: &[(synth_geometry::Point, i64)],
+    copper: &PlaneCopper<'_>,
+    via: &PlaneVia,
 ) -> Option<synth_geometry::Point> {
     let inset = PLANE_EDGE_MARGIN_NM;
     let usable = synth_geometry::Rect::new(
@@ -656,44 +1178,125 @@ fn plane_via_offset(
     // The whole fanout stub is checked, not only the via endpoint: a stub from
     // the pad to a nearby candidate can cut across another pad even when the via
     // itself is clear. The stub body is held to its own half-width, the via at
-    // its end to the via radius.
+    // its end to the via radius, each against the pads' real rectangles.
     let stub_half_nm = PLANE_STUB_WIDTH_NM / 2;
-    let clear_of_obstacles = |candidate: synth_geometry::Point| -> bool {
-        obstacles
-            .iter()
-            .filter(|(centre, _)| *centre != pad)
-            .all(|(centre, radius_nm)| {
-                let seg_need = stub_half_nm + PLANE_VIA_FAB_CLEARANCE_NM + radius_nm;
-                let via_need = PLANE_VIA_RADIUS_NM + PLANE_VIA_FAB_CLEARANCE_NM + radius_nm;
-                let vdx = candidate.x_nm - centre.x_nm;
-                let vdy = candidate.y_nm - centre.y_nm;
-                segment_clearance_nm_sq(pad, candidate, *centre) >= seg_need * seg_need
-                    && vdx * vdx + vdy * vdy >= via_need * via_need
-            })
+    let clear_of_copper = |candidate: synth_geometry::Point| -> bool {
+        let pads_clear =
+            copper
+                .pads
+                .iter()
+                .filter(|(centre, _)| *centre != pad)
+                .all(|(centre, half)| {
+                    segment_to_rect_nm(pad, candidate, *centre, *half)
+                        >= (stub_half_nm + PLANE_VIA_FAB_CLEARANCE_NM) as f64
+                        && point_to_rect_nm(candidate, *centre, *half)
+                            >= (via.pad_radius_nm + PLANE_VIA_FAB_CLEARANCE_NM) as f64
+                });
+        let vias_clear = copper.vias.iter().all(|(other, radius)| {
+            let (vx, vy) = (
+                (candidate.x_nm - other.x_nm) as f64,
+                (candidate.y_nm - other.y_nm) as f64,
+            );
+            vx.hypot(vy) >= (via.pad_radius_nm + PLANE_VIA_FAB_CLEARANCE_NM + radius) as f64
+        });
+        pads_clear && vias_clear
     };
     for distance in distances {
         for (ux, uy) in axes {
             let candidate =
                 synth_geometry::Point::new(pad.x_nm + ux * distance, pad.y_nm + uy * distance);
-            if usable.contains(candidate) && clear_of_obstacles(candidate) {
+            if usable.contains(candidate) && clear_of_copper(candidate) {
                 return Some(candidate);
             }
         }
     }
-    // Boxed in on every side: report it rather than quietly place a via-in-pad.
     None
+}
+
+/// The pads (by real rectangle) and the stitching vias a new via has to keep
+/// clear of.
+struct PlaneCopper<'a> {
+    pads: &'a [PadRect],
+    vias: &'a [(synth_geometry::Point, i64)],
+}
+
+/// A pad's centre and half sizes in board axes, in nanometres.
+type PadRect = (synth_geometry::Point, (i64, i64));
+
+/// The copper a via in a pad has to keep clear of: every other pad's real
+/// shape, every via already placed, and the process's limits.
+struct InPadRules<'a> {
+    pads: &'a [PadRect],
+    vias: &'a [(synth_geometry::Point, i64)],
+    /// Least copper-to-copper clearance of the process.
+    clearance_nm: i64,
+    /// Least clearance from a drilled hole's edge to another net's copper.
+    drill_to_copper_nm: i64,
+}
+
+/// Puts the stitching via in the pad it stitches, for a pad no position beside
+/// it suits, if the pad can hold it.
+///
+/// A board that declared via-in-pad is allowed the process, not told that every
+/// pad suits it: the via's annulus (its drill plus the process's via-in-pad land
+/// allowance)
+/// has to fit inside the pad's copper, or the via would be wider than the pad it
+/// is meant to sit in; the pads and vias round it must stay the process's
+/// clearance from the via's copper and its hole's edge from their copper. A pad
+/// that fails is reported with the reason, so the caller can tell the user what
+/// to change.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn plane_via_in_pad(
+    pad: &PlanePad,
+    via: &PlaneVia,
+    rules: &InPadRules<'_>,
+) -> Result<synth_geometry::Point, ViaRefusal> {
+    let via_nm = 2 * via.pad_radius_nm;
+    if pad.size_nm.0.min(pad.size_nm.1) < via_nm {
+        return Err(ViaRefusal::PadTooSmall {
+            pad_nm: pad.size_nm,
+            via_nm,
+        });
+    }
+    let at = pad.centre;
+    let clear_of_pads =
+        rules
+            .pads
+            .iter()
+            .filter(|(centre, _)| *centre != at)
+            .all(|(centre, half)| {
+                let gap = point_to_rect_nm(at, *centre, *half);
+                gap >= (via.pad_radius_nm + rules.clearance_nm) as f64
+                    && gap >= (via.drill_nm / 2 + rules.drill_to_copper_nm) as f64
+            });
+    let clear_of_vias = rules.vias.iter().all(|(other, radius)| {
+        let (dx, dy) = ((at.x_nm - other.x_nm) as f64, (at.y_nm - other.y_nm) as f64);
+        dx.hypot(dy) >= (via.pad_radius_nm + radius + rules.clearance_nm) as f64
+    });
+    if clear_of_pads && clear_of_vias {
+        Ok(at)
+    } else {
+        Err(ViaRefusal::Crowded)
+    }
 }
 
 /// A through via beside a power pad, joining the outer pad (through the fanout
 /// stub) to the inner power plane.
-fn build_plane_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize) -> Sexp {
+fn build_plane_via(
+    x_nm: i64,
+    y_nm: i64,
+    via: &PlaneVia,
+    pcb_net: u32,
+    project: &Uuid,
+    idx: usize,
+) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "plane-via", &idx.to_string());
     Sexp::list(
         "via",
         vec![
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(GROUND_VIA_RADIUS_MM * 2.0)]),
-            Sexp::list("drill", vec![num(0.3)]),
+            Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
+            Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
             Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),
@@ -714,15 +1317,16 @@ const GROUND_VIA_RADIUS_MM: f64 = 0.3;
 /// every copper layer that refuses tracks, vias and pour, as wide as the hole
 /// plus `MOUNTING_HOLE_KEEPOUT_MM`. Pads stay allowed, so the hole's own part
 /// is not flagged. `layers` are the board's copper layers.
-fn build_mounting_hole_keepout(
+fn build_round_keepout(
     centre: Point,
-    radius_nm: i64,
+    reach_nm: i64,
     layers: &[&str],
     project: &Uuid,
-    refdes: &str,
+    name: &str,
+    uuid_key: &str,
 ) -> Sexp {
     const SIDES: u32 = 24;
-    let reach = nm_to_mm(radius_nm) + MOUNTING_HOLE_KEEPOUT_MM;
+    let reach = nm_to_mm(reach_nm);
     let points = (0..SIDES)
         .map(|k| {
             let angle = std::f64::consts::TAU * f64::from(k) / f64::from(SIDES);
@@ -735,7 +1339,7 @@ fn build_mounting_hole_keepout(
             )
         })
         .collect();
-    let zone_uuid = derive_entity_uuid(project, "mounting-hole-keepout", refdes);
+    let zone_uuid = derive_entity_uuid(project, "keepout-zone", uuid_key);
     Sexp::list(
         "zone",
         vec![
@@ -746,7 +1350,7 @@ fn build_mounting_hole_keepout(
                 layers.iter().map(|layer| Sexp::str(*layer)).collect(),
             ),
             str_pair("uuid", zone_uuid.to_string()),
-            str_pair("name", format!("{refdes} screw head")),
+            str_pair("name", name.to_string()),
             Sexp::list("hatch", vec![Sexp::atom("edge"), num(0.5)]),
             Sexp::list(
                 "keepout",
@@ -763,8 +1367,47 @@ fn build_mounting_hole_keepout(
     )
 }
 
-/// Slide a corner fence via along the board edge, toward the inside (`inward`
-/// is +1 for a left-hand corner and -1 for a right-hand one), until it is out of
+/// The through vias that stitch the ground planes into one network: one at
+/// the midpoint of the top edge and one at the midpoint of the bottom edge,
+/// inset 1.5 mm.
+///
+/// They used to sit at the four corners, where a via lands beside a corner
+/// mounting hole and reads as a second hole in the 3D view. A midpoint is far
+/// from every corner, and one through via already ties every ground copper
+/// layer, so two points keep the planes connected. A midpoint that still
+/// lands in a mounting hole's keepout slides along its edge, away from the
+/// nearest hole, and never leaves the board.
+fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> [Point; 2] {
+    let mid_x = outline.min.x_nm + (outline.max.x_nm - outline.min.x_nm) / 2;
+    // Slide away from the hole nearest the midpoint, not always to the right.
+    let inward = holes
+        .iter()
+        .min_by_key(|(centre, _)| (centre.x_nm - mid_x).abs())
+        .map_or(1, |(centre, _)| if centre.x_nm < mid_x { 1 } else { -1 });
+    let clamp_x = |point: Point| {
+        Point::new(
+            point
+                .x_nm
+                .clamp(outline.min.x_nm + inset_nm, outline.max.x_nm - inset_nm),
+            point.y_nm,
+        )
+    };
+    [
+        clamp_x(clear_of_mounting_holes(
+            Point::new(mid_x, outline.min.y_nm + inset_nm),
+            inward,
+            holes,
+        )),
+        clamp_x(clear_of_mounting_holes(
+            Point::new(mid_x, outline.max.y_nm - inset_nm),
+            inward,
+            holes,
+        )),
+    ]
+}
+
+/// Slide a fence via along a horizontal board edge, toward the inside (`inward`
+/// is +1 toward increasing x and -1 toward decreasing x), until it is out of
 /// every mounting hole's zone: the hole's radius plus the keepout. A via that is
 /// already clear is returned as it is. `holes` are `(centre, radius)`.
 fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> Point {
@@ -784,14 +1427,53 @@ fn clear_of_mounting_holes(via: Point, inward: i64, holes: &[(Point, i64)]) -> P
     via
 }
 
-fn build_ground_stitch_via(x_nm: i64, y_nm: i64, pcb_net: u32, project: &Uuid, idx: usize) -> Sexp {
+/// Uuid index of the first sidecar-fixed via, clear of the stitch vias the exporter derives.
+const FIXED_VIA_UUID_BASE: usize = 1_000_000;
+
+/// The via a generated ground stitch uses: the board's `Default` net class when
+/// it declares one, otherwise the 0.6 / 0.3 mm every class falls back to, so a
+/// board that asks for a 0.2 mm drill gets it on the stitching vias too.
+fn stitch_via_size(board: &Board, class_name: Option<&str>) -> (f64, f64) {
+    let name = class_name.unwrap_or("Default");
+    board
+        .netclasses
+        .iter()
+        .find(|class| class.name == name)
+        .or_else(|| {
+            board
+                .netclasses
+                .iter()
+                .find(|class| class.name == "Default")
+        })
+        .map_or(
+            (
+                synth_ir::NetClass::DEFAULT_VIA_DIAMETER.to_mm(),
+                synth_ir::NetClass::DEFAULT_VIA_DRILL.to_mm(),
+            ),
+            |class| {
+                (
+                    class.effective_via_diameter().to_mm(),
+                    class.effective_via_drill().to_mm(),
+                )
+            },
+        )
+}
+
+fn build_ground_stitch_via(
+    x_nm: i64,
+    y_nm: i64,
+    pcb_net: u32,
+    project: &Uuid,
+    idx: usize,
+    (via_size_mm, via_drill_mm): (f64, f64),
+) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "ground-stitch-via", &idx.to_string());
     Sexp::list(
         "via",
         vec![
             Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(0.6)]),
-            Sexp::list("drill", vec![num(0.3)]),
+            Sexp::list("size", vec![num(via_size_mm)]),
+            Sexp::list("drill", vec![num(via_drill_mm)]),
             Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
             Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
             str_pair("uuid", via_uuid.to_string()),
@@ -861,8 +1543,8 @@ fn ground_zone_region(
             return Some(board_polygon);
         }
         let mid = synth_geometry::Point::new(
-            (mine.x_nm + theirs.x_nm) / 2,
-            (mine.y_nm + theirs.y_nm) / 2,
+            i64::midpoint(mine.x_nm, theirs.x_nm),
+            i64::midpoint(mine.y_nm, theirs.y_nm),
         );
         return Some(clip_half_plane(&board_polygon, mid, d));
     }
@@ -871,7 +1553,7 @@ fn ground_zone_region(
     let net = board.net(net_id)?;
     let centres: Vec<synth_geometry::Point> = plane_pad_targets(board, placement, net)
         .into_iter()
-        .map(|(centre, _, _)| centre)
+        .map(|target| target.centre)
         .collect();
     if centres.len() < 2 {
         return Some(board_polygon);
@@ -913,13 +1595,43 @@ fn net_centroid(
         return None;
     }
     let (mut sx, mut sy) = (0_i64, 0_i64);
-    for (centre, _, _) in &centres {
-        sx += centre.x_nm;
-        sy += centre.y_nm;
+    for target in &centres {
+        sx += target.centre.x_nm;
+        sy += target.centre.y_nm;
     }
     #[allow(clippy::cast_possible_wrap)] // a board has far fewer pads than i64::MAX
     let count = centres.len() as i64;
     Some(synth_geometry::Point::new(sx / count, sy / count))
+}
+
+/// Whether `point` lies inside (or on) a convex polygon of either winding.
+fn convex_contains(polygon: &[synth_geometry::Point], point: synth_geometry::Point) -> bool {
+    let (mut pos, mut neg) = (false, false);
+    for i in 0..polygon.len() {
+        let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        let cross = i128::from(b.x_nm - a.x_nm) * i128::from(point.y_nm - a.y_nm)
+            - i128::from(b.y_nm - a.y_nm) * i128::from(point.x_nm - a.x_nm);
+        pos |= cross > 0;
+        neg |= cross < 0;
+    }
+    !(pos && neg)
+}
+
+/// Whether `point` lies inside the closed sidecar outline, including a notch.
+fn custom_outline_contains(points: &[synth_layout::sidecar::SidecarPoint], point: Point) -> bool {
+    let x = nm_to_mm(point.x_nm);
+    let y = nm_to_mm(point.y_nm);
+    let mut inside = false;
+    let mut j = points.len().saturating_sub(1);
+    for i in 0..points.len() {
+        let (xi, yi) = (points[i].x, points[i].y);
+        let (xj, yj) = (points[j].x, points[j].y);
+        if (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 /// Sutherland–Hodgman clip of a convex polygon by the half-plane
@@ -1032,6 +1744,10 @@ fn build_zone(
                     Sexp::atom("yes"),
                     Sexp::list("thermal_gap", vec![num(0.2)]),
                     Sexp::list("thermal_bridge_width", vec![num(0.25)]),
+                    // A pour can be cut into islands by traces and keepouts;
+                    // an island touches no pad, so keeping it only adds copper
+                    // that KiCad reports as an unconnected zone.
+                    Sexp::list("island_removal_mode", vec![Sexp::atom("0")]),
                 ],
             ),
             Sexp::list("polygon", vec![Sexp::list("pts", pts)]),
@@ -1253,16 +1969,42 @@ fn layer(id: i32, name: &str, kind: &str, alias: Option<&str>) -> Sexp {
 }
 
 /// Minimum `(setup ...)` block KiCad 10 will accept. Default trace
-/// widths and clearances; later slices read these from a
-/// manufacturer profile (plan §9.4).
-fn build_setup() -> Sexp {
+/// widths and clearances; the via minima come from the manufacturer profile.
+///
+/// `via_min_size` was a fixed 0.60 mm while the project file, the router and
+/// Synth's own check all worked to the profile's 0.56 mm (a 0.30 mm drill and a
+/// 0.13 mm ring each side). `kicad-cli` applies the board file's figure, so
+/// every via the router placed at the legal 0.56 mm was reported as an error
+/// and the board was refused.
+fn build_setup(profile: &synth_drc::ManufacturerProfile) -> Sexp {
+    let via_min_size =
+        synth_geometry::nm_to_mm(profile.min_drill_diameter_nm + 2 * profile.min_annular_ring_nm);
+    let via_min_drill = synth_geometry::nm_to_mm(profile.min_drill_diameter_nm);
     Sexp::list(
         "setup",
         vec![
             Sexp::list("last_trace_width", vec![num(0.127)]),
             Sexp::list("trace_clearance", vec![num(0.127)]),
-            Sexp::list("pad_to_mask_clearance", vec![num(0.0)]),
-            Sexp::list("solder_mask_min_width", vec![num(0.0)]),
+            // JLCPCB's standard process prints a 0.10 mm minimum mask
+            // opening and asks for 0.05 mm expansion, so a zero here made
+            // every exported board warn in its DFM pass. Other tiers keep
+            // their conservative zero until their own figures are sourced.
+            Sexp::list(
+                "pad_to_mask_clearance",
+                vec![num(if profile.name.contains("jlc") {
+                    0.05
+                } else {
+                    0.0
+                })],
+            ),
+            Sexp::list(
+                "solder_mask_min_width",
+                vec![num(if profile.name.contains("jlc") {
+                    0.1
+                } else {
+                    0.0
+                })],
+            ),
             Sexp::list(
                 "allow_soldermask_bridges_in_footprints",
                 vec![Sexp::atom("yes")],
@@ -1273,15 +2015,15 @@ fn build_setup() -> Sexp {
             // 0.127 mm is the default profile's copper clearance; the
             // router enforces this same value when choosing grid moves.
             Sexp::list("clearance_min", vec![num(0.127)]),
-            Sexp::list("via_min_size", vec![num(0.60)]),
-            Sexp::list("via_min_drill", vec![num(0.30)]),
+            Sexp::list("via_min_size", vec![num(via_min_size)]),
+            Sexp::list("via_min_drill", vec![num(via_min_drill)]),
         ],
     )
 }
 
 /// [`build_setup`], with the declared stackup (if any) as its first entry.
-fn build_setup_with(stackup: Option<&Stackup>) -> Sexp {
-    let mut setup = build_setup();
+fn build_setup_with(stackup: Option<&Stackup>, profile: &synth_drc::ManufacturerProfile) -> Sexp {
+    let mut setup = build_setup(profile);
     if let (Some(stackup), Sexp::List { children, .. }) = (stackup, &mut setup) {
         children.insert(0, build_stackup(stackup));
     }
@@ -1410,8 +2152,9 @@ fn declared_trace_width_mm(class: &synth_ir::NetClass, board: &Board) -> f64 {
         return width.to_mm();
     }
     if let Some(current) = class.current {
-        let profile = synth_drc::ManufacturerProfile::from_name(
+        let profile = synth_drc::ManufacturerProfile::for_layers(
             board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+            board.layers,
         );
         let delta_t_c =
             f64::from(i32::try_from(profile.ampacity_delta_t_milli_c).unwrap_or(10_000)) / 1000.0;
@@ -1475,6 +2218,13 @@ fn derived_controlled_geometry(board: &Board) -> Vec<(synth_ir::NetId, DerivedGe
         })
         .flatten()
         .collect()
+}
+
+/// The clearance a net class takes when the author declared none: the board's
+/// manufacturer minimum, from the profile the project file and the router
+/// resolve, so the classes written here say what the project file says.
+fn default_class_clearance_mm(board: &Board) -> f64 {
+    synth_geometry::nm_to_mm(crate::export::manufacturer_profile(board).min_copper_clearance_nm)
 }
 
 fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
@@ -1549,13 +2299,12 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         if let Some(class) = board
             .net(synth_ir::NetId(ir_net_idx))
             .and_then(|n| n.netclass.as_deref())
+            && let Some(group) = declared.iter_mut().find(|g| g.name == class)
         {
-            if let Some(group) = declared.iter_mut().find(|g| g.name == class) {
-                group.nets.push(name.clone());
-                continue;
-            }
-            // Undeclared join on a hand-built board: heuristic fallback.
+            group.nets.push(name.clone());
+            continue;
         }
+        // Undeclared join on a hand-built board: heuristic fallback.
         // Primary: topological inference via power domain map (works with opaque net names).
         // Fallback: name-based heuristic (works for boards with semantic names but missing pins).
         let is_power_net = domain_map
@@ -1589,7 +2338,7 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
         let mut default_args = vec![
             Sexp::str("Default"),
             Sexp::str("Default net class"),
-            Sexp::list("clearance", vec![num(0.127)]),
+            Sexp::list("clearance", vec![num(default_class_clearance_mm(board))]),
             Sexp::list("trace_width", vec![num(0.127)]),
             Sexp::list("via_dia", vec![num(0.60)]),
             Sexp::list("via_drill", vec![num(0.30)]),
@@ -1625,7 +2374,10 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     // same merge as Default above.
     if !power_nets.is_empty() && !declared.iter().any(|g| g.name == "Power") {
         let power_width = if is_rp2350_board { 0.127 } else { 0.50 };
-        let power_clearance = if is_rp2350_board { 0.127 } else { 0.2 };
+        // The project file writes this class at the manufacturer minimum, which
+        // is what the router honours. A larger value here is the one KiCad's
+        // DRC enforces, so copper the router placed legally is reported.
+        let power_clearance = default_class_clearance_mm(board);
         let mut power_args = vec![
             Sexp::str("Power"),
             Sexp::str("Power delivery network"),
@@ -1676,7 +2428,42 @@ fn build_netclasses(net_table: &[(u32, String)], board: &Board) -> Vec<Sexp> {
     classes
 }
 
-fn build_edge_cuts(placement: &Placement, project: &Uuid) -> Vec<Sexp> {
+fn build_edge_cuts(
+    placement: &Placement,
+    outline: &[synth_layout::sidecar::SidecarPoint],
+    project: &Uuid,
+) -> Vec<Sexp> {
+    let line = |start: (f64, f64), end: (f64, f64), tag: &str, segment: usize| {
+        let line_uuid = derive_entity_uuid(project, "edge_cut", &format!("{tag}/{segment}"));
+        Sexp::list(
+            "gr_line",
+            vec![
+                Sexp::list("start", vec![num(start.0), num(start.1)]),
+                Sexp::list("end", vec![num(end.0), num(end.1)]),
+                Sexp::list(
+                    "stroke",
+                    vec![
+                        Sexp::list("width", vec![num(EDGE_CUT_WIDTH_MM)]),
+                        Sexp::list("type", vec![Sexp::atom("solid")]),
+                    ],
+                ),
+                Sexp::list("layer", vec![Sexp::str("Edge.Cuts")]),
+                str_pair("uuid", line_uuid.to_string()),
+            ],
+        )
+    };
+
+    if outline.len() >= 3 {
+        return outline
+            .iter()
+            .enumerate()
+            .map(|(i, start)| {
+                let end = &outline[(i + 1) % outline.len()];
+                line((start.x, start.y), (end.x, end.y), "outline", i)
+            })
+            .collect();
+    }
+
     let r = placement.board_outline;
     let min_x = nm_to_mm(r.min.x_nm);
     let min_y = nm_to_mm(r.min.y_nm);
@@ -1690,25 +2477,8 @@ fn build_edge_cuts(placement: &Placement, project: &Uuid) -> Vec<Sexp> {
     ];
     corners
         .iter()
-        .map(|(start, end, tag)| {
-            let line_uuid = derive_entity_uuid(project, "edge_cut", tag);
-            Sexp::list(
-                "gr_line",
-                vec![
-                    Sexp::list("start", vec![num(start.0), num(start.1)]),
-                    Sexp::list("end", vec![num(end.0), num(end.1)]),
-                    Sexp::list(
-                        "stroke",
-                        vec![
-                            Sexp::list("width", vec![num(EDGE_CUT_WIDTH_MM)]),
-                            Sexp::list("type", vec![Sexp::atom("solid")]),
-                        ],
-                    ),
-                    Sexp::list("layer", vec![Sexp::str("Edge.Cuts")]),
-                    str_pair("uuid", line_uuid.to_string()),
-                ],
-            )
-        })
+        .enumerate()
+        .map(|(i, (start, end, tag))| line(*start, *end, tag, i))
         .collect()
 }
 
@@ -1939,10 +2709,10 @@ fn build_footprint_instance(
     };
     let assignment_property = |name: &str, value: &str, uuid: &Uuid| {
         let mut property = doc_property(name, uuid);
-        if let Sexp::List { children, .. } = &mut property {
-            if let Some(Sexp::Str(current)) = children.get_mut(1) {
-                *current = value.to_string();
-            }
+        if let Sexp::List { children, .. } = &mut property
+            && let Some(Sexp::Str(current)) = children.get_mut(1)
+        {
+            *current = value.to_string();
         }
         property
     };
@@ -1964,7 +2734,16 @@ fn build_footprint_instance(
         "effects",
         vec![Sexp::list(
             "font",
-            vec![Sexp::list("size", vec![num(1.0), num(1.0)])],
+            vec![
+                Sexp::list(
+                    "size",
+                    vec![
+                        num(silk_labels::LABEL_FONT_MM),
+                        num(silk_labels::LABEL_FONT_MM),
+                    ],
+                ),
+                Sexp::list("thickness", vec![num(silk_labels::LABEL_STROKE_MM)]),
+            ],
         )],
     ));
 
@@ -2034,7 +2813,15 @@ fn build_footprint_instance(
         let body = strip_footprint_head(body);
         let body = add_footprint_angle_to_pads(&body, pad_angle);
         let body_with_nets = inject_pad_nets(&body, component.id, pad_net_lookup);
-        let body_with_nets = ensure_body_uuids(&body_with_nets, project, lib_id);
+        // `lib_id` alone is shared by every instance of the same footprint,
+        // so two mounting holes would mint the same pad UUIDs and confuse
+        // KiCad's DRC item identity. Scope the derivation to the instance.
+        let body_with_nets = ensure_body_uuids(
+            &body_with_nets,
+            project,
+            &format!("{lib_id}@{}", component.refdes),
+            &component.refdes,
+        );
         let has_model = body_with_nets.contains("(model ");
         children.push(Sexp::Raw(body_with_nets));
         has_model
@@ -2090,10 +2877,8 @@ fn build_footprint_instance(
     // directory in the project's fp-lib-table (see `export_with_sidecars`) so the
     // reference resolves without a spurious "library not found" warning.
     children.insert(0, Sexp::str(lib_id));
-    if !has_model {
-        if let Some(model_sexp) = build_3d_model_sexp(lib_id) {
-            children.push(model_sexp);
-        }
+    if !has_model && let Some(model_sexp) = build_3d_model_sexp(lib_id) {
+        children.push(model_sexp);
     }
 
     Sexp::list("footprint", children)
@@ -2206,27 +2991,29 @@ const BODY_UUID_HEADS: &[&str] = &[
     "fp_curve",
 ];
 
-/// Fill in deterministic UUIDs for inlined footprint-body blocks that
-/// lack them (stock-library drawing primitives, pads and properties
-/// predate mandatory UUIDs).
+/// Fill in deterministic, per-instance UUIDs for inlined footprint-body
+/// blocks.
 ///
 /// Without this, KiCad's `--save-board` DRC gate assigns a fresh random v4
 /// UUID to every such block on each export, so two exports of the same
-/// board differ and the plan §6.2 byte-identical guarantee breaks. UUIDs
-/// are v5 over `(project, "fp_body:{lib_id}:{kind}:{key}#{n}")`, hence
-/// stable across runs, thread counts, and machines. Blocks that already
-/// carry `(uuid ...)` are left untouched.
-fn ensure_body_uuids(body: &str, project: &Uuid, lib_id: &str) -> String {
+/// board differ and the plan §6.2 byte-identical guarantee breaks. KiCad
+/// also keys board items by UUID, so the stock ids that KiCad 10 footprints
+/// ship with must not be shared by two placed instances: its DRC would then
+/// attribute a collision to the wrong footprint. UUIDs are v5 over
+/// `(project, "fp_body:{instance}:{lib_id}:{kind}:{key}#{n}")`, hence
+/// stable across runs, thread counts, and machines, and unique per instance.
+fn ensure_body_uuids(body: &str, project: &Uuid, lib_id: &str, instance: &str) -> String {
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
-    ensure_level(body, project, lib_id, "", &mut seen, false)
+    ensure_level(body, project, lib_id, instance, "", &mut seen, false)
 }
 
 /// One level of [`ensure_body_uuids`]: walk the top-level blocks of `text`,
-/// add deterministic UUIDs where missing, and recurse into each block's
-/// children (footprint `fp_text` nests a `(point ...)` designator lock that
-/// KiCad fills the same way). `path` is the `/`-joined ancestor chain so
-/// nested names cannot collide with top-level ones; `seen` counts each
-/// full path for duplicate siblings.
+/// set a deterministic UUID on every whitelisted block (replacing a stock
+/// library one), and recurse into each block's children (footprint
+/// `fp_text` nests a `(point ...)` designator lock that KiCad fills the same
+/// way). `path` is the `/`-joined ancestor chain so nested names cannot
+/// collide with top-level ones; `seen` counts each full path for duplicate
+/// siblings.
 ///
 /// Nested levels only ever gain UUIDs on `point`: pad-nested `(property
 /// pad_prop_mechanical)` must stay exactly as the stock library ships it —
@@ -2235,6 +3022,7 @@ fn ensure_level(
     text: &str,
     project: &Uuid,
     lib_id: &str,
+    instance: &str,
     path: &str,
     seen: &mut std::collections::HashMap<String, usize>,
     nested: bool,
@@ -2274,17 +3062,15 @@ fn ensure_level(
         // suppress the parent's own UUID.
         let whitelisted =
             (!nested && BODY_UUID_HEADS.contains(&head)) || NESTED_UUID_HEADS.contains(&head);
-        if whitelisted && !has_direct_uuid(&block) {
+        if whitelisted {
             let counter = seen.entry(full_path.clone()).or_insert(0);
             let uuid = derive_entity_uuid(
                 project,
                 "fp_body",
-                &format!("{lib_id}:{full_path}#{counter}"),
+                &format!("{instance}:{lib_id}:{full_path}#{counter}"),
             );
             *counter += 1;
-            block.pop();
-            let _ = write!(block, " (uuid \"{uuid}\")");
-            block.push(')');
+            block = set_direct_uuid(block, &uuid.to_string());
         }
         // Recurse into children: everything between the `(head ...args`
         // opener and the final `)`. Leaf blocks (no inner `(`) come back
@@ -2294,6 +3080,7 @@ fn ensure_level(
                 &block[range.clone()],
                 project,
                 lib_id,
+                instance,
                 &full_path,
                 seen,
                 true,
@@ -2309,14 +3096,25 @@ fn ensure_level(
     out
 }
 
-/// True when `block`'s direct children include a `(uuid ...)` node.
-/// (A plain substring search would false-positive on a *nested* UUID, e.g.
-/// an fp_text whose `point` child already has one while it does not.)
-fn has_direct_uuid(block: &str) -> bool {
-    let Some(range) = inner_range(block) else {
-        return false;
-    };
-    let inner = &block[range];
+/// Set the value of the block's direct `(uuid "...")` child, adding one
+/// when the block has none. The stock library ids are replaced so two
+/// instances of the same footprint do not share item UUIDs.
+fn set_direct_uuid(mut block: String, uuid: &str) -> String {
+    if let Some((start, end)) = direct_uuid_span(&block) {
+        block.replace_range(start..end, &format!("\"{uuid}\""));
+        return block;
+    }
+    block.pop();
+    let _ = write!(block, " (uuid \"{uuid}\")");
+    block.push(')');
+    block
+}
+
+/// Byte range of the string literal inside `block`'s direct `(uuid ...)`
+/// child, if it has one.
+fn direct_uuid_span(block: &str) -> Option<(usize, usize)> {
+    let range = inner_range(block)?;
+    let inner = &block[range.clone()];
     let bytes = inner.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
@@ -2328,19 +3126,19 @@ fn has_direct_uuid(block: &str) -> bool {
             i += 1;
             continue;
         }
-        let Some(end) = matching_close_quoted(inner, i + 1) else {
-            return false;
-        };
+        let end = matching_close_quoted(inner, i + 1)?;
         let head = inner[i + 1..=end]
             .split(|c: char| c.is_ascii_whitespace() || c == '(' || c == ')')
             .next()
             .unwrap_or("");
         if head == "uuid" {
-            return true;
+            let q1 = i + inner[i..].find('"')?;
+            let q2 = skip_string(bytes, q1);
+            return Some((range.start + q1, range.start + q2));
         }
         i = end + 1;
     }
-    false
+    None
 }
 
 /// Byte index just past the string literal opening at `i` (which must be
@@ -2696,7 +3494,14 @@ mod tests {
         let (centre, radius) = hole(3.5, 3.45, 1.6);
         let layers = ground_plane_layers(4);
 
-        let zone = build_mounting_hole_keepout(centre, radius, &layers, &project, "H1");
+        let zone = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H1 screw head",
+            "mounting-hole-keepout H1",
+        );
         let text = zone.to_string_pretty();
 
         for expected in [
@@ -2732,8 +3537,22 @@ mod tests {
         let project = Uuid::nil();
         let (centre, radius) = hole(47.0, 3.45, 1.6);
         let layers = ground_plane_layers(4);
-        let a = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
-        let b = build_mounting_hole_keepout(centre, radius, &layers, &project, "H2");
+        let a = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H2 screw head",
+            "mounting-hole-keepout H2",
+        );
+        let b = build_round_keepout(
+            centre,
+            radius + mm_to_nm(MOUNTING_HOLE_KEEPOUT_MM),
+            &layers,
+            &project,
+            "H2 screw head",
+            "mounting-hole-keepout H2",
+        );
         assert_eq!(a.to_string_pretty(), b.to_string_pretty());
     }
 
@@ -2773,6 +3592,31 @@ mod tests {
     }
 
     #[test]
+    fn the_ground_fence_sits_at_edge_midpoints_not_corners() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[]);
+        assert_eq!(points[0], Point::new(mm_to_nm(30.0), mm_to_nm(1.5)));
+        assert_eq!(points[1], Point::new(mm_to_nm(30.0), mm_to_nm(28.5)));
+    }
+
+    #[test]
+    fn a_midpoint_fence_via_slides_off_a_mounting_hole() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let hole = hole(30.0, 0.0, 1.25);
+        let points = ground_fence_points(outline, mm_to_nm(1.5), &[hole]);
+        assert_ne!(points[0].x_nm, mm_to_nm(30.0), "{:?}", points[0]);
+        assert!(
+            points[0].x_nm >= outline.min.x_nm + mm_to_nm(1.5)
+                && points[0].x_nm <= outline.max.x_nm - mm_to_nm(1.5),
+            "the slide stays on the board: {:?}",
+            points[0]
+        );
+        assert_eq!(points[0].y_nm, mm_to_nm(1.5));
+    }
+
+    #[test]
     fn a_via_clear_of_every_hole_stays_where_it_is() {
         let corner = Point::new(mm_to_nm(1.5), mm_to_nm(1.5));
         assert_eq!(clear_of_mounting_holes(corner, 1, &[]), corner);
@@ -2793,11 +3637,24 @@ mod tests {
         // A small pad 0.4 mm along +x. The +x via endpoint at 1 mm is clear of
         // it on its own, but the stub from the pad to that endpoint runs
         // straight through it.
-        let blocker = (Point::new(400_000, 0), 50_000);
-        let obstacles = vec![(pad, 50_000), blocker];
-        let via = plane_via_offset(pad, origin, outline, &obstacles)
+        let pads = vec![
+            (pad, (50_000, 50_000)),
+            (Point::new(400_000, 0), (50_000, 50_000)),
+        ];
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        let via = plane_via_offset(pad, origin, outline, &copper, &default_via())
             .expect("an off-axis candidate is legal");
         assert_eq!(via, Point::new(0, PLANE_VIA_OFFSET_NM));
+    }
+
+    fn default_via() -> PlaneVia {
+        PlaneVia {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM,
+            drill_nm: PLANE_VIA_DRILL_NM,
+        }
     }
 
     fn part_from_toml(id: &str, dims: &str) -> synth_registry::Part {
@@ -2880,10 +3737,12 @@ mod tests {
                     electrical_type: ElectricalType::PowerInput,
                     capabilities: vec![],
                     required: true,
+                    footprint_only: false,
                     unit: None,
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "gnd".into(),
@@ -2891,10 +3750,12 @@ mod tests {
                     electrical_type: ElectricalType::PowerInput,
                     capabilities: vec![],
                     required: true,
+                    footprint_only: false,
                     unit: None,
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: vec![],
@@ -2905,6 +3766,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -2924,22 +3786,53 @@ mod tests {
     /// every uuid-bearing footprint-body block must carry a deterministic
     /// UUID before KiCad sees the file, or the gate fills random v4 UUIDs
     /// and re-exports stop being byte-identical (plan §6.2).
+    ///
+    /// KiCad 10's stock footprints ship their own child UUIDs, and inlining
+    /// the body verbatim made every instance of a part share them. KiCad
+    /// keys board items by UUID, so its DRC attributed silk/pad collisions
+    /// to the wrong footprint. Each instance must get its own ids.
     #[test]
-    fn inlined_body_blocks_carry_deterministic_uuids() {
-        let body = "(property \"Datasheet\" \"\" (at 0 0 0) (layer \"F.Fab\") (hide yes) (effects (font (size 1.27 1.27)))) (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\")) (fp_line (start 0 0) (end 1 1) (stroke (width 0.1)) (layer \"F.SilkS\")) (fp_text user \"REF\" (at 0 0) (layer \"F.SilkS\") (effects (font (size 1 1))) (point (at 0 0) (size 1) (layer \"F.SilkS\")))";
+    fn inlined_body_blocks_carry_unique_deterministic_uuids() {
+        let body = "(property \"Datasheet\" \"\" (at 0 0 0) (layer \"F.Fab\") (hide yes) (effects (font (size 1.27 1.27)))) (pad \"1\" smd rect (at 0 0) (size 1 1) (layers \"F.Cu\") (uuid \"11111111-1111-5111-8111-111111111111\")) (fp_line (start 0 0) (end 1 1) (stroke (width 0.1)) (layer \"F.SilkS\")) (fp_text user \"REF\" (at 0 0) (layer \"F.SilkS\") (effects (font (size 1 1))) (point (at 0 0) (size 1) (layer \"F.SilkS\")))";
+        let uuids = |s: &str| -> Vec<String> {
+            s.match_indices("(uuid \"")
+                .map(|(i, _)| {
+                    let rest = &s[i + "(uuid \"".len()..];
+                    rest[..rest.find('"').unwrap()].to_string()
+                })
+                .collect()
+        };
         let project = Uuid::nil();
-        let once = super::ensure_body_uuids(body, &project, "lib:part");
+        let r1 = super::ensure_body_uuids(body, &project, "lib:part", "R1");
+        let r2 = super::ensure_body_uuids(body, &project, "lib:part", "R2");
         assert_eq!(
-            once.matches("(uuid \"").count(),
+            r1.matches("(uuid \"").count(),
             5,
-            "one uuid per block: {once}"
+            "one uuid per block: {r1}"
         );
-        // Idempotent and deterministic: a second pass changes nothing, and
-        // pre-uuid'd blocks are preserved verbatim.
-        let twice = super::ensure_body_uuids(&once, &project, "lib:part");
-        assert_eq!(once, twice, "uuid pass must be idempotent");
-        let again = super::ensure_body_uuids(body, &project, "lib:part");
-        assert_eq!(once, again, "uuid pass must be deterministic");
+        let ids: std::collections::HashSet<String> = uuids(&r1).into_iter().collect();
+        assert_eq!(ids.len(), 5, "duplicate ids in one instance: {r1}");
+        assert!(
+            !ids.contains("11111111-1111-5111-8111-111111111111"),
+            "the stock library uuid survived: {r1}"
+        );
+        assert_ne!(r1, r2, "two instances share body uuids");
+        assert_eq!(uuids(&r2).len(), 5);
+        assert!(
+            uuids(&r1).iter().all(|id| !uuids(&r2).contains(id)),
+            "instances share a uuid"
+        );
+        // Idempotent and deterministic for the same instance.
+        assert_eq!(
+            r1,
+            super::ensure_body_uuids(&r1, &project, "lib:part", "R1"),
+            "uuid pass must be idempotent"
+        );
+        assert_eq!(
+            r1,
+            super::ensure_body_uuids(body, &project, "lib:part", "R1"),
+            "uuid pass must be deterministic"
+        );
     }
 
     #[test]
@@ -2954,6 +3847,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3008,6 +3902,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3066,6 +3961,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -3202,15 +4098,39 @@ mod tests {
         assert_eq!(fixed_6(-500_000), "-0.5");
     }
 
+    /// The board file's own minimum via has to be the profile's, because
+    /// `kicad-cli` applies it, and the router places vias down to that figure.
+    #[test]
+    fn the_via_minimum_is_the_profiles_not_a_fixed_figure() {
+        let jlc = build_setup(&synth_drc::ManufacturerProfile::jlc_standard()).to_string_pretty();
+        assert!(jlc.contains("(via_min_size 0.46)"), "{jlc}");
+        assert!(jlc.contains("(via_min_drill 0.2)"), "{jlc}");
+        let pcbway =
+            build_setup(&synth_drc::ManufacturerProfile::pcbway_standard()).to_string_pretty();
+        assert!(pcbway.contains("(via_min_size 0.6)"), "{pcbway}");
+    }
+
+    /// A zero mask expansion/minimum makes every exported board warn in its
+    /// JLCPCB DFM pass; the standard process prints 0.10 mm and expands 0.05 mm.
+    #[test]
+    fn the_solder_mask_settings_clear_the_process_minimum() {
+        let setup = build_setup(&synth_drc::ManufacturerProfile::jlc_standard()).to_string_pretty();
+        assert!(setup.contains("(pad_to_mask_clearance 0.05)"), "{setup}");
+        assert!(setup.contains("(solder_mask_min_width 0.1)"), "{setup}");
+    }
+
     #[test]
     fn without_a_stackup_setup_and_thickness_are_the_legacy_ones() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
         assert_eq!(
-            build_setup_with(None).to_string_pretty(),
-            build_setup().to_string_pretty()
+            build_setup_with(None, &profile).to_string_pretty(),
+            build_setup(&profile).to_string_pretty()
         );
-        assert!(!build_setup_with(None)
-            .to_string_pretty()
-            .contains("stackup"));
+        assert!(
+            !build_setup_with(None, &profile)
+                .to_string_pretty()
+                .contains("stackup")
+        );
         assert_eq!(
             board_thickness(None).to_string_pretty().trim(),
             DEFAULT_THICKNESS_MM.to_string()
@@ -3219,7 +4139,7 @@ mod tests {
 
     #[test]
     fn netclass_is_top_level_outside_setup() {
-        let setup_sexp = build_setup();
+        let setup_sexp = build_setup(&synth_drc::ManufacturerProfile::jlc_standard());
         let setup_str = setup_sexp.to_string_pretty();
         assert!(
             !setup_str.contains("netclass"),
@@ -3233,6 +4153,7 @@ mod tests {
         // Build a minimal Board whose nets have semantic names so the power-domain
         // engine classifies them correctly (GND → Ground, VCC → Rail via name heuristic).
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -3310,12 +4231,62 @@ mod tests {
         assert!(nc_str.contains("(add_net \"VCC\")"));
         assert!(nc_str.contains("(add_net \"GND\")"));
         assert!(nc_str.contains("(add_net \"MAIN_ANT\")"));
+        // The router reads the project file, where an undeclared class is at the
+        // manufacturer minimum. The board's own classes must say the same.
+        assert_eq!(nc_str.matches("(clearance 0.127)").count(), 2, "{nc_str}");
+        assert!(!nc_str.contains("(clearance 0.2)"), "{nc_str}");
+    }
+
+    /// The Default and Power classes take the clearance of the board's
+    /// manufacturer, the figure the project file and the router work to, not a
+    /// fixed 0.127 mm: PCBWay's minimum is 0.15 mm and OSH Park's 0.125 mm.
+    #[test]
+    fn inferred_classes_take_the_manufacturers_clearance() {
+        let net = |id: u32, name: &str| synth_ir::Net {
+            id: synth_ir::NetId(id),
+            name: name.to_string(),
+            auto_named: false,
+            endpoints: vec![],
+            netclass: None,
+            voltage: None,
+        };
+        let net_table = vec![
+            (1_u32, "VCC".to_string()),
+            (2_u32, "GND".to_string()),
+            (3_u32, "SIG1".to_string()),
+        ];
+        for (manufacturer, expected) in [
+            (None, "(clearance 0.127)"),
+            (Some("jlcpcb"), "(clearance 0.127)"),
+            (Some("pcbway"), "(clearance 0.15)"),
+            (Some("oshpark"), "(clearance 0.125)"),
+        ] {
+            let mut board = plain_test_board();
+            board.manufacturer = manufacturer.map(str::to_string);
+            board.nets = vec![net(0, "VCC"), net(1, "GND"), net(2, "SIG1")];
+            let classes = build_netclasses(&net_table, &board)
+                .iter()
+                .map(crate::sexp::Sexp::to_string_pretty)
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(classes.contains("\"Power\""), "{manufacturer:?}: {classes}");
+            assert_eq!(
+                classes.matches(expected).count(),
+                2,
+                "{manufacturer:?}: Default and Power both take {expected}\n{classes}"
+            );
+            assert!(
+                !classes.contains("(clearance 0.2)"),
+                "{manufacturer:?}: no class falls back to 0.2 mm\n{classes}"
+            );
+        }
     }
 
     #[test]
     fn declared_netclass_emitted_with_joined_nets() {
         use synth_ir::Length;
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -3360,6 +4331,8 @@ mod tests {
                 plane: false,
                 max_length: None,
                 max_skew: None,
+                edge_rate: None,
+                layers: Vec::new(),
                 source_span: Span::new(0, 0),
             }],
             buses: vec![],
@@ -3398,6 +4371,7 @@ mod tests {
     /// on what the classes declare.
     fn plain_test_board() -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -3444,12 +4418,14 @@ mod tests {
             clearance: Some(Length::from_mm(0.2)),
             max_length: None,
             max_skew: None,
+            edge_rate: None,
             via_diameter: Some(Length::from_mm(0.45)),
             via_drill: Some(Length::from_mm(0.2)),
             color: None,
             impedance: None,
             current: None,
             plane: false,
+            layers: Vec::new(),
             source_span: Span::new(0, 0),
         }];
 
@@ -3475,8 +4451,74 @@ mod tests {
     }
 
     #[test]
+    fn a_sidecar_via_is_written_on_its_net_before_routing() {
+        let mut board = plain_test_board();
+        board.nets = vec![synth_ir::Net {
+            id: synth_ir::NetId(0),
+            name: "GND".to_string(),
+            auto_named: false,
+            endpoints: vec![],
+            netclass: None,
+            voltage: None,
+        }];
+        let placement = Placement {
+            board_outline: synth_geometry::Rect::from_center_half_extents(
+                Point::new(0, 0),
+                mm_to_nm(25.0),
+                mm_to_nm(25.0),
+            ),
+            components: vec![],
+        };
+        let vias = [synth_layout::sidecar::SidecarVia {
+            x: 3.5,
+            y: -4.25,
+            net: "GND".into(),
+        }];
+        let text = build_pcb(
+            &board,
+            &placement,
+            &Routing::default(),
+            &Uuid::nil(),
+            &HashMap::new(),
+            &vias,
+            &[],
+        )
+        .expect("export")
+        .to_string_pretty();
+        let start = text
+            .match_indices("(via")
+            .map(|(at, _)| at)
+            .find(|at| text[at + 4..].starts_with(char::is_whitespace))
+            .expect("a via is written");
+        let via = &text[start..];
+        assert!(via.contains("(at 3.5 -4.25)"), "{via}");
+        assert!(via.contains("(net 1)"), "{via}");
+
+        let unknown = [synth_layout::sidecar::SidecarVia {
+            x: 0.0,
+            y: 0.0,
+            net: "NOPE".into(),
+        }];
+        let error = build_pcb(
+            &board,
+            &placement,
+            &Routing::default(),
+            &Uuid::nil(),
+            &HashMap::new(),
+            &unknown,
+            &[],
+        )
+        .expect_err("an unknown net is refused");
+        assert!(
+            matches!(error, PcbBuildError::PlaneFanout(ref e) if e.net == "NOPE"),
+            "{error:?}"
+        );
+    }
+
+    #[test]
     fn test_kicad_cli_roundtrip_valid_board() {
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -3516,8 +4558,16 @@ mod tests {
             pad_escape_rejections: 0,
         };
         let project = Uuid::nil();
-        let pcb_sexp = build_pcb(&board, &placement, &routing, &project, &HashMap::new())
-            .expect("plane fanout");
+        let pcb_sexp = build_pcb(
+            &board,
+            &placement,
+            &routing,
+            &project,
+            &HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("plane fanout");
         let pcb_str = pcb_sexp.to_string_pretty();
 
         let tmp_path =
@@ -3536,5 +4586,271 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod plane_via_in_pad_tests {
+    use super::{
+        InPadRules, Layer, PLANE_VIA_DRILL_NM, PLANE_VIA_RADIUS_NM, PadRect, PlaneCopper, PlanePad,
+        PlaneVia, ViaRefusal, plane_via_in_pad, plane_via_offset,
+    };
+    use synth_geometry::{Point, Rect};
+
+    const PITCH_NM: i64 = 800_000;
+
+    fn via() -> PlaneVia {
+        PlaneVia {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM,
+            drill_nm: PLANE_VIA_DRILL_NM,
+        }
+    }
+
+    fn pad_at(size_nm: i64) -> PlanePad {
+        PlanePad {
+            centre: Point::new(50_000_000, 50_000_000),
+            origin: Point::new(47_000_000, 47_000_000),
+            layer: Layer::Top,
+            size_nm: (size_nm, size_nm),
+            underpad: true,
+        }
+    }
+
+    fn outline() -> Rect {
+        Rect::new(Point::new(0, 0), Point::new(100_000_000, 100_000_000))
+    }
+
+    /// The eight neighbours of a pad on the 0.8 mm grid this whole problem comes
+    /// from, as rectangles of the given size.
+    fn ring(pad: Point, size_nm: i64) -> Vec<PadRect> {
+        [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (-1, -1),
+            (1, -1),
+            (-1, 1),
+        ]
+        .iter()
+        .map(|(dx, dy)| {
+            (
+                Point::new(pad.x_nm + dx * PITCH_NM, pad.y_nm + dy * PITCH_NM),
+                (size_nm / 2, size_nm / 2),
+            )
+        })
+        .collect()
+    }
+
+    fn rules<'a>(pads: &'a [(Point, (i64, i64))], vias: &'a [(Point, i64)]) -> InPadRules<'a> {
+        InPadRules {
+            pads,
+            vias,
+            clearance_nm: 127_000,
+            drill_to_copper_nm: 200_000,
+        }
+    }
+
+    /// A pad ringed by neighbours on all four sides, close enough that no
+    /// offset candidate clears them: an interior supply ball on a fine-pitch
+    /// array. A beside-pad via needs more room than that leaves.
+    #[test]
+    fn a_boxed_in_pad_has_no_position_beside_it() {
+        let pad = pad_at(700_000);
+        let pads = ring(pad.centre, 700_000);
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        assert_eq!(
+            plane_via_offset(pad.centre, pad.origin, outline(), &copper, &via()),
+            None
+        );
+    }
+
+    /// A pad that can hold the via takes it, with the neighbours clear of its
+    /// copper and its hole.
+    #[test]
+    fn a_pad_that_holds_the_via_takes_it() {
+        let pad = pad_at(700_000);
+        let rects = ring(pad.centre, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&rects, &[])),
+            Ok(pad.centre),
+            "a 0.7 mm pad holds a 0.6 mm via"
+        );
+    }
+
+    /// The 0.35 mm pads of a 0.8 mm BGA are narrower than the 0.6 mm via the
+    /// process needs: the annulus does not fit in the pad, so the pad is
+    /// reported, not quietly given a via wider than itself.
+    #[test]
+    fn a_pad_narrower_than_the_via_is_reported_with_both_sizes() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&rects, &[])),
+            Err(ViaRefusal::PadTooSmall {
+                pad_nm: (350_000, 350_000),
+                via_nm: 600_000
+            })
+        );
+    }
+
+    /// JLCPCB's via-in-pad guide gives the minimum land as the drill plus
+    /// 0.15 mm. On the tier with the 0.2 mm drill that is 0.35 mm, which a
+    /// 0.35 mm ball pad of a 0.8 mm BGA holds, so the supply ball takes its
+    /// plane via in the pad instead of being refused for a land sized by two
+    /// annular rings around a wider drill.
+    #[test]
+    fn a_ball_pad_takes_the_via_in_pad_land_of_the_fine_drill_tier() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
+        assert_eq!(in_pad.drill_nm, 200_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Ok(pad.centre)
+        );
+    }
+
+    /// A process whose minimum drill is 0.3 mm needs a 0.45 mm land: the same
+    /// ball pad is still refused, with both sizes in the report. The
+    /// relaxation is the manufacturer's formula, not a licence for any via in
+    /// any pad.
+    #[test]
+    fn a_ball_pad_is_still_refused_where_the_tier_drill_needs_a_wider_land() {
+        let pad = pad_at(350_000);
+        let rects = ring(pad.centre, 350_000);
+        let mut tier = synth_drc::ManufacturerProfile::jlc_filled_via();
+        tier.min_drill_diameter_nm = 300_000;
+        let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
+        assert_eq!(
+            plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
+            Err(ViaRefusal::PadTooSmall {
+                pad_nm: (350_000, 350_000),
+                via_nm: 450_000
+            })
+        );
+    }
+
+    /// A process that allows via-in-pad but gives no land for it, a custom profile
+    /// that omits the allowance, has no filled and capped via: the plane via is the
+    /// only one, and the DRC would judge any smaller via by the plain ring.
+    #[test]
+    fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
+        let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
+        tier.via_in_pad_land_extra_nm = 0;
+        assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
+    }
+
+    /// A rectangular pad is as wide as its narrow side.
+    #[test]
+    fn a_long_thin_pad_is_judged_by_its_narrow_side() {
+        let mut pad = pad_at(700_000);
+        pad.size_nm = (3_000_000, 400_000);
+        assert!(matches!(
+            plane_via_in_pad(&pad, &via(), &rules(&[], &[])),
+            Err(ViaRefusal::PadTooSmall { .. })
+        ));
+    }
+
+    /// A pad of another net close enough that the via's copper is inside the
+    /// process's clearance of it is a refusal, whatever the pad's own size.
+    #[test]
+    fn a_neighbour_within_clearance_of_the_via_is_refused() {
+        let pad = pad_at(700_000);
+        // 0.45 mm from the via's edge is plenty; 0.05 mm is not.
+        let near = vec![(
+            Point::new(
+                pad.centre.x_nm + 300_000 + 50_000 + 200_000,
+                pad.centre.y_nm,
+            ),
+            (200_000, 200_000),
+        )];
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&near, &[])),
+            Err(ViaRefusal::Crowded)
+        );
+    }
+
+    /// An earlier stitching via counts as copper too.
+    #[test]
+    fn an_earlier_via_too_close_is_refused() {
+        let pad = pad_at(700_000);
+        let vias = vec![(
+            Point::new(pad.centre.x_nm + 700_000, pad.centre.y_nm),
+            PLANE_VIA_RADIUS_NM,
+        )];
+        assert_eq!(
+            plane_via_in_pad(&pad, &via(), &rules(&[], &vias)),
+            Err(ViaRefusal::Crowded),
+            "two 0.6 mm vias 0.7 mm apart are 0.1 mm clear, under the 0.127 mm rule"
+        );
+    }
+
+    /// The permission is a fallback, not a preference: a pad with room beside
+    /// it still gets an offset via.
+    #[test]
+    fn a_pad_with_room_still_gets_an_offset_via() {
+        let pad = pad_at(700_000);
+        let copper = PlaneCopper {
+            pads: &[],
+            vias: &[],
+        };
+        let beside = plane_via_offset(pad.centre, pad.origin, outline(), &copper, &via())
+            .expect("a position");
+        assert_ne!(
+            beside, pad.centre,
+            "an uncrowded pad does not need via-in-pad"
+        );
+    }
+
+    /// The pads of an ordinary capacitor, judged as rectangles, leave room for
+    /// a via beside them.
+    #[test]
+    fn a_pad_pair_of_two_ordinary_capacitors_is_still_stitched_beside_the_pads() {
+        // Two 0603 pads of one capacitor, 1.65 mm apart and 0.8 x 0.95 mm each:
+        // the pads of the board a declared plane is wired to in the export tests.
+        // Circles round them left no legal spot; their rectangles leave one.
+        let pad = Point::new(1_230_000, 2_000_000);
+        let origin = Point::new(2_055_000, 2_000_000);
+        let pads: Vec<PadRect> = vec![
+            (pad, (400_000, 475_000)),
+            (Point::new(2_880_000, 2_000_000), (400_000, 475_000)),
+        ];
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        let outline = Rect::new(Point::new(0, 0), Point::new(20_000_000, 20_000_000));
+        let via_at = plane_via_offset(pad, origin, outline, &copper, &via());
+        assert!(via_at.is_some(), "a legal spot exists beside the pad");
+    }
+
+    /// The via follows the manufacturer's limits, not a fixed 0.6 / 0.3 mm.
+    #[test]
+    fn the_via_is_drawn_from_the_process_limits() {
+        let mut profile = synth_drc::ManufacturerProfile::jlc_standard();
+        assert_eq!(
+            PlaneVia::for_process(&profile),
+            PlaneVia {
+                pad_radius_nm: 300_000,
+                drill_nm: 300_000
+            }
+        );
+        // A process with a coarser drill and a wider ring needs a bigger via.
+        profile.min_drill_diameter_nm = 400_000;
+        profile.min_annular_ring_nm = 200_000;
+        assert_eq!(
+            PlaneVia::for_process(&profile),
+            PlaneVia {
+                pad_radius_nm: 400_000,
+                drill_nm: 400_000
+            }
+        );
     }
 }

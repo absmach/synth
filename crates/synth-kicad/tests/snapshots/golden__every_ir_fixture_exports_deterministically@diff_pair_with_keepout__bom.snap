@@ -2,4 +2,4 @@
 source: crates/synth-kicad/tests/golden.rs
 expression: bom
 ---
-refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn
+refdes,value,kind,description,kicad_symbol,kicad_footprint,lcsc_pn,mpn,dielectric,voltage,tolerance,power

@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use synth_geometry::{nm_to_mm, Layer};
+use synth_geometry::{Layer, nm_to_mm};
 use synth_ir::Board;
 use synth_place::Placement;
 

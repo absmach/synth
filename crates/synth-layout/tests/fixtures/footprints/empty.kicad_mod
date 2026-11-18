@@ -1,0 +1,6 @@
+(footprint "Empty"
+	(version 20240108)
+	(generator "synth-test")
+	(layer "F.Cu")
+	(fp_text reference "REF**" (at 0 0) (layer "F.SilkS"))
+)

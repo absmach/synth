@@ -1,0 +1,101 @@
+{
+  "schema_version": "synth.release.v1",
+  "tool_version": "synth-cli 0.1.1",
+  "input": "qualification/class-b/buck/buck.synth",
+  "fab_requested": true,
+  "production_status": "production",
+  "release_ready": true,
+  "gate_scope": "production_status and release_ready cover only Synth's routing and export gates: override flags, route validation and signal integrity. They are not a fabrication approval, a qualification result or a component review.",
+  "reviewer_state": [
+    {
+      "part_id": "c_electrolytic_smd_8x10",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "c_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "c_generic_1206",
+      "reviewed": false
+    },
+    {
+      "part_id": "jst_b2b_xh_a_2pin",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "jst_b4b_xh_a_4pin",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "l_bourns_srn6045ta_6r8m",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "lmr38010",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-29",
+      "reviewed": true
+    },
+    {
+      "part_id": "ltst_c190kgkt",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-29",
+      "reviewed": true
+    },
+    {
+      "part_id": "mf_msmf110_33x",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "mounting_hole_m2_5",
+      "reviewed": false
+    },
+    {
+      "part_id": "r_generic_0603",
+      "reviewed": false
+    },
+    {
+      "part_id": "smbj30a",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    },
+    {
+      "part_id": "ss36",
+      "reviewed_by": "Steve Munene",
+      "reviewed_at": "2026-10-28",
+      "reviewed": true
+    }
+  ],
+  "routing": {
+    "engine": "freerouting",
+    "engine_version": "freerouting-2.4.1.jar",
+    "state": "routed",
+    "input_hash": "21ab61af2653af929d81f239895b75d0cc9bcbe4a1bb2a31258c347184d48302",
+    "run_record": "out/buck/buck.routing.json",
+    "fabrication_notes": [
+      "via at (32.400, 14.800) mm U1.9: via-in-pad, order with filled and capped vias",
+      "via at (32.400, 16.000) mm U1.9: via-in-pad, order with filled and capped vias",
+      "via at (32.400, 17.200) mm U1.9: via-in-pad, order with filled and capped vias",
+      "via at (33.600, 14.800) mm U1.9: via-in-pad, order with filled and capped vias",
+      "via at (33.600, 16.000) mm U1.9: via-in-pad, order with filled and capped vias",
+      "via at (33.600, 17.200) mm U1.9: via-in-pad, order with filled and capped vias"
+    ]
+  },
+  "signal_integrity": {
+    "blocking": 0,
+    "warnings": 0,
+    "findings": []
+  }
+}

@@ -19,12 +19,12 @@
 
 use std::collections::BTreeMap;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, StackupProfile};
+use synth_geometry::{Layer, Point, StackupProfile, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, Length, Net, NetId};
 use synth_pcb::{Routing, Segment};
 
-use crate::profile::ManufacturerProfile;
 use crate::Violation;
+use crate::profile::ManufacturerProfile;
 
 /// IPC-2221 external-layer ampacity: the width a trace needs to carry
 /// `current_ua` with a `delta_t_c` rise over `thickness_nm` copper.
@@ -338,11 +338,7 @@ pub fn check_diff_pair_skew(board: &Board, routing: &Routing) -> Vec<Violation> 
 type CoupledRun = (i64, i64, Segment, Segment, Layer);
 
 fn min_max(a: i64, b: i64) -> (i64, i64) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 /// Edge (crosstalk) coupling between two axis-aligned segments that run
@@ -359,12 +355,12 @@ fn parallel_run(a: &Segment, b: &Segment, coupling_nm: i64) -> Option<(i64, i64)
     let both_horizontal = a.start.y_nm == a.end.y_nm && b.start.y_nm == b.end.y_nm;
     let both_vertical = a.start.x_nm == a.end.x_nm && b.start.x_nm == b.end.x_nm;
     let (gap, overlap) = if both_horizontal {
-        let gap = (a.start.y_nm - b.start.y_nm).abs() - (a.width_nm + b.width_nm) / 2;
+        let gap = (a.start.y_nm - b.start.y_nm).abs() - i64::midpoint(a.width_nm, b.width_nm);
         let (a_lo, a_hi) = min_max(a.start.x_nm, a.end.x_nm);
         let (b_lo, b_hi) = min_max(b.start.x_nm, b.end.x_nm);
         (gap, a_hi.min(b_hi) - a_lo.max(b_lo))
     } else if both_vertical {
-        let gap = (a.start.x_nm - b.start.x_nm).abs() - (a.width_nm + b.width_nm) / 2;
+        let gap = (a.start.x_nm - b.start.x_nm).abs() - i64::midpoint(a.width_nm, b.width_nm);
         let (a_lo, a_hi) = min_max(a.start.y_nm, a.end.y_nm);
         let (b_lo, b_hi) = min_max(b.start.y_nm, b.end.y_nm);
         (gap, a_hi.min(b_hi) - a_lo.max(b_lo))
@@ -446,6 +442,21 @@ pub fn check_edge_coupling(
         .collect()
 }
 
+/// Copper clearance assumed between a signal via and the ground via beside it,
+/// for the least distance at which the two can sit.
+pub const RETURN_VIA_CLEARANCE_NM: i64 = 200_000;
+
+/// The window around a signal via in which W-SYNTH-DRC-016 looks for a ground
+/// return via, along either axis: the stackup's thickest dielectric, never
+/// smaller than the least distance at which a ground via can sit beside the
+/// signal via, its pad width plus the copper clearance. A stackup with a thin
+/// prepreg would otherwise leave a window that holds a ground via only in a
+/// corner, however much room the board has.
+#[must_use]
+pub fn return_via_window_nm(stackup_reach_nm: i64, via_pad_nm: i64) -> i64 {
+    stackup_reach_nm.max(via_pad_nm + RETURN_VIA_CLEARANCE_NM)
+}
+
 /// Return-path via check. Code: `W-SYNTH-DRC-016` — a **warning**.
 ///
 /// A via that takes a signal to another layer needs a ground return via close
@@ -464,18 +475,8 @@ pub fn check_return_path_vias(
     routing: &Routing,
     stackup: &StackupProfile,
 ) -> Vec<Violation> {
-    let domains = synth_ir::infer_power_domains(board);
-    // Topology first, then the name/pin heuristic the exporter uses for plane
-    // detection: the registry types ground pins `power_input`, not
-    // `ground_reference`, so the domain map alone misses most grounds.
-    let is_ground = |net_id: NetId| {
-        board.net(net_id).is_some_and(|net| {
-            domains
-                .get(net_id)
-                .is_some_and(synth_ir::PowerDomainKind::is_ground)
-                || net_name_or_pin_is_ground(board, net)
-        })
-    };
+    let ground = ground_net_ids(board);
+    let is_ground = |net_id: NetId| ground.contains(&net_id);
     if !board.nets.iter().any(|net| is_ground(net.id)) {
         // No ground net at all: the discontinuity is the missing plane, which
         // is the design's, not this via's.
@@ -493,11 +494,24 @@ pub fn check_return_path_vias(
         .map(|layer| layer.dielectric_height.0)
         .max()
         .unwrap_or_else(|| mm_to_nm(1.6));
+    let via_pad_nm = routing
+        .vias
+        .iter()
+        .map(|via| via.pad_diameter_nm)
+        .max()
+        .unwrap_or_else(|| mm_to_nm(0.6));
+    let radius_nm = return_via_window_nm(radius_nm, via_pad_nm);
+    let medium = medium_net_ids(board);
     let mut out = Vec::new();
     for via in &routing.vias {
         if is_ground(via.net) {
             continue;
         }
+        let radius_nm = if medium.contains(&via.net) {
+            radius_nm.max(MEDIUM_EDGE_WINDOW_NM)
+        } else {
+            radius_nm
+        };
         let has_return = ground_vias.iter().any(|ground| {
             (ground.x_nm - via.at.x_nm).abs() <= radius_nm
                 && (ground.y_nm - via.at.y_nm).abs() <= radius_nm
@@ -524,22 +538,251 @@ pub fn check_return_path_vias(
     out
 }
 
+/// The nets the return-path check treats as ground: by topology first, then by
+/// the name or pin-name heuristic the exporter uses for plane detection. The
+/// registry types ground pins `power_input`, not `ground_reference`, so the
+/// domain map alone misses most grounds.
+fn ground_net_ids(board: &Board) -> std::collections::BTreeSet<NetId> {
+    let domains = synth_ir::infer_power_domains(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| {
+            domains
+                .get(net.id)
+                .is_some_and(synth_ir::PowerDomainKind::is_ground)
+                || net_name_or_pin_is_ground(board, net)
+        })
+        .map(|net| net.id)
+        .collect()
+}
+
+/// Names of the nets the return-path check treats as ground, for a repair pass
+/// that sees only the board file. A net called `POWER_RETURN` is ground here
+/// when its pins are, though its name says nothing.
+#[must_use]
+pub fn ground_net_names(board: &Board) -> Vec<String> {
+    let ground = ground_net_ids(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| ground.contains(&net.id))
+        .map(|net| net.name.clone())
+        .collect()
+}
+
 /// Whether a net is ground by name (`gnd`, `vss`, `0v`) or by the name of a
 /// connected pin. Mirrors the exporter's plane-net classifier, so a return via
 /// is judged against the same ground the planes are built from.
 pub(crate) fn net_name_or_pin_is_ground(board: &Board, net: &Net) -> bool {
-    fn named(text: &str) -> bool {
-        let text = text.to_ascii_lowercase();
-        text.contains("gnd") || text.contains("vss") || text == "0v"
-    }
-    named(&net.name)
+    is_ground_name(&net.name)
         || net.endpoints.iter().any(|endpoint| {
             board
                 .component(endpoint.component)
                 .and_then(|component| component.part.as_ref())
                 .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
-                .is_some_and(|pin| named(&pin.name))
+                .is_some_and(|pin| is_ground_name(&pin.name))
         })
+}
+
+/// Names of the nets whose layer changes the return-path repair must not leave
+/// without a ground via.
+///
+/// The only evidence that a net changes slowly is the design saying so: a
+/// `netclass` with `edge_rate slow`. Pin types cannot supply it, because a
+/// generic `output` or `bidirectional` pin carries a fast SPI, USB or timer
+/// edge exactly as readily as a slow GPIO, and a net with no class at all is
+/// even less known. So every signal net whose class does not declare a slow
+/// edge is critical, and the unknown case blocks. Ground nets are the return
+/// path themselves and are not signals that need one.
+///
+/// A slow declaration is not an override of the pin evidence: a clock, a
+/// differential pair, an RF or analog net or a switching node on an inductor
+/// stays critical whatever its class says, because those edges are fast by
+/// construction.
+#[must_use]
+pub fn return_path_critical_net_names(board: &Board) -> Vec<String> {
+    let (critical, _) = return_path_net_classes(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| critical.contains(&net.id))
+        .map(|net| net.name.clone())
+        .collect()
+}
+
+/// The least window, in nanometres, in which a net that declares `edge_rate
+/// medium` looks for its ground return via. Edges no faster than 0.3 ns have
+/// their knee at 0.35 / 0.3 ns, about 1.2 GHz; a wavelength there in FR4 of
+/// relative permittivity 4.3 is about 124 mm, and a return via within a twentieth
+/// of it, 6 mm, keeps the loop short against the edge. The stackup's dielectric
+/// still sets the floor: the window is never narrower than a fast net's.
+pub const MEDIUM_EDGE_WINDOW_NM: i64 = 6_000_000;
+
+/// Names of the nets that declare `edge_rate medium` and that nothing else
+/// proves fast. They keep the return-via requirement, and look for the via in
+/// [`MEDIUM_EDGE_WINDOW_NM`].
+#[must_use]
+pub fn return_path_medium_net_names(board: &Board) -> Vec<String> {
+    medium_net_ids(board)
+        .iter()
+        .filter_map(|id| board.net(*id).map(|net| net.name.clone()))
+        .collect()
+}
+
+fn medium_net_ids(board: &Board) -> std::collections::BTreeSet<NetId> {
+    let medium: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Medium))
+        .map(|class| class.name.as_str())
+        .collect();
+    let (_, proven_fast) = return_path_net_classes(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| !proven_fast.contains(&net.id))
+        .filter(|net| {
+            net.netclass
+                .as_deref()
+                .is_some_and(|name| medium.contains(name))
+        })
+        .map(|net| net.id)
+        .collect()
+}
+
+/// The nets held to a return via, and among them the ones the design's pins
+/// prove fast.
+fn return_path_net_classes(
+    board: &Board,
+) -> (
+    std::collections::BTreeSet<NetId>,
+    std::collections::BTreeSet<NetId>,
+) {
+    use synth_registry::{ElectricalType, PinCapability};
+    let mut proven_fast: std::collections::BTreeSet<NetId> = std::collections::BTreeSet::new();
+    let slow: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Slow))
+        .map(|class| class.name.as_str())
+        .collect();
+    // Ground is the return path itself, not a signal that needs one. It is
+    // found by topology and pin name, not by the net's name: `POWER_RETURN`
+    // says nothing.
+    let ground = ground_net_ids(board);
+    // A differential pin or pair is fast unless the net's class says otherwise in as
+    // many words: `edge_rate medium` is a declared edge time of at least 0.3 ns, which
+    // the design answers for, so it stands in for what the differential pin or pair
+    // implies. A clock, RF or analog pin, a crystal or a switching node is physical
+    // evidence of a fast edge, and no declaration replaces it.
+    let medium: std::collections::BTreeSet<&str> = board
+        .netclasses
+        .iter()
+        .filter(|class| class.edge_rate == Some(synth_ir::EdgeRate::Medium))
+        .map(|class| class.name.as_str())
+        .collect();
+    let mut critical: std::collections::BTreeSet<NetId> = board
+        .nets
+        .iter()
+        .filter(|net| !ground.contains(&net.id))
+        .filter(|net| {
+            net.netclass
+                .as_deref()
+                .is_none_or(|name| !slow.contains(name))
+        })
+        .map(|net| net.id)
+        .collect();
+    for net in &board.nets {
+        let pin_of = |endpoint: &synth_ir::NetEndpoint| {
+            board
+                .component(endpoint.component)
+                .and_then(|component| component.part.as_ref())
+                .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
+        };
+        // A pin that declares itself a switch node marks its net, whatever else
+        // sits on it.
+        let switch_pin = net.endpoints.iter().any(|endpoint| {
+            pin_of(endpoint)
+                .is_some_and(|pin| pin.capabilities.contains(&PinCapability::SwitchNode))
+        });
+        // An inductor marks its net as a switching node, except on its filtered
+        // side: the net the output capacitors hold to ground carries the ripple
+        // current of the inductor as a rail, not a fast edge, and the node the
+        // regulator switches is the other one.
+        let on_inductor = net.endpoints.iter().any(|endpoint| {
+            board
+                .component(endpoint.component)
+                .is_some_and(|component| component.kind == "inductor")
+        });
+        let filtered_rail = on_inductor
+            && !switch_pin
+            && net.endpoints.iter().any(|endpoint| {
+                board
+                    .component(endpoint.component)
+                    .is_some_and(|component| component.kind == "capacitor")
+                    && board.nets.iter().any(|other| {
+                        other.id != net.id
+                            && ground.contains(&other.id)
+                            && other
+                                .endpoints
+                                .iter()
+                                .any(|e| e.component == endpoint.component)
+                    })
+            });
+        let declared_medium = net
+            .netclass
+            .as_deref()
+            .is_some_and(|name| medium.contains(name));
+        let rides_fast = switch_pin
+            || (on_inductor && !filtered_rail)
+            || net.endpoints.iter().any(|endpoint| {
+                let Some(component) = board.component(endpoint.component) else {
+                    return false;
+                };
+                let crystal = component.kind == "crystal";
+                pin_of(endpoint).is_some_and(|pin| match pin.electrical_type {
+                    ElectricalType::DifferentialPositive | ElectricalType::DifferentialNegative => {
+                        !declared_medium
+                    }
+                    ElectricalType::Clock | ElectricalType::Rf | ElectricalType::Analog => true,
+                    // A bare crystal's terminals are passive, and the
+                    // oscillator pins they meet are often typed plain input
+                    // and output, so the crystal itself marks the net.
+                    ElectricalType::Passive => crystal,
+                    _ => false,
+                })
+            });
+        if rides_fast {
+            critical.insert(net.id);
+            proven_fast.insert(net.id);
+        }
+    }
+    for pair in &board.diff_pairs {
+        for (_, leg) in board.diff_pair_legs(pair) {
+            if let Some(net) = leg {
+                critical.insert(net.id);
+                let declared_medium = net
+                    .netclass
+                    .as_deref()
+                    .is_some_and(|name| medium.contains(name));
+                if !declared_medium {
+                    proven_fast.insert(net.id);
+                }
+            }
+        }
+    }
+    (critical, proven_fast)
+}
+
+/// Whether a net or pin name is a ground: it contains `gnd` or `vss`, or is
+/// `0v`, in any case. The one rule the return-path check, the exporter's plane
+/// classifier and the router's ground-via passes share, so `VSSA` and `VSS_IO`
+/// are ground to all of them.
+#[must_use]
+pub fn is_ground_name(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    text.contains("gnd") || text.contains("vss") || text == "0v"
 }
 
 /// Copper resistivity, ohm-metres.
@@ -709,6 +952,93 @@ pub fn check_group_skew(board: &Board, routing: &Routing) -> Vec<Violation> {
         });
     }
     violations
+}
+
+/// Layer-pin check. Code: `E-SYNTH-DRC-023`.
+///
+/// A net whose `netclass` declares `layers` must be routed only on those
+/// layers. The export states the pin as a KiCad custom rule and the router is
+/// asked to honour it, but neither is evidence: this reads the copper. A
+/// controlled-impedance pair pinned to the outer layer its width was derived
+/// for and routed on an inner one is the case it exists for, so it blocks.
+///
+/// A via on a class with two or more layers is how the net changes between
+/// them, which its segments already show. A class held to one layer has no
+/// layer to change to, and a through via puts copper on every layer, so any
+/// via on such a net is a violation of its own, whatever the segments say.
+#[must_use]
+pub fn check_layer_pins(board: &Board, routing: &Routing) -> Vec<Violation> {
+    let mut violations = Vec::new();
+    for class in &board.netclasses {
+        if class.layers.is_empty() {
+            continue;
+        }
+        for net in member_nets(board, class) {
+            if class.layers.len() == 1 {
+                violations.extend(single_layer_vias(routing, net, class));
+            }
+            let off: Vec<&Segment> = routing
+                .segments
+                .iter()
+                .filter(|s| s.net == net.id)
+                .filter(|s| !class.layers.iter().any(|layer| layer == s.layer.name()))
+                .collect();
+            let Some(first) = off.first() else {
+                continue;
+            };
+            let mut used: Vec<&str> = off.iter().map(|s| s.layer.name()).collect();
+            used.sort_unstable();
+            used.dedup();
+            violations.push(Violation {
+                code: "E-SYNTH-DRC-023".to_string(),
+                message: format!(
+                    "net `{}` is routed on {}, but netclass `{}` allows only {}",
+                    net.name,
+                    used.join(", "),
+                    class.name,
+                    class.layers.join(", "),
+                ),
+                witness: off.iter().flat_map(|s| [s.start, s.end]).collect(),
+                nets: vec![net.id],
+                components: Vec::new(),
+                pos_mm: Some((nm_to_mm(first.start.x_nm), nm_to_mm(first.start.y_nm))),
+                suggested_override: None,
+            });
+        }
+    }
+    violations
+}
+
+/// The `E-SYNTH-DRC-023` finding for vias on a net whose class allows one
+/// layer, or `None` when it has none.
+fn single_layer_vias(
+    routing: &Routing,
+    net: &Net,
+    class: &synth_ir::NetClass,
+) -> Option<Violation> {
+    let vias: Vec<Point> = routing
+        .vias
+        .iter()
+        .filter(|v| v.net == net.id)
+        .map(|v| v.at)
+        .collect();
+    let first = *vias.first()?;
+    Some(Violation {
+        code: "E-SYNTH-DRC-023".to_string(),
+        message: format!(
+            "net `{}` has {} via(s), but netclass `{}` allows only {}; a through via \
+             puts copper on every layer",
+            net.name,
+            vias.len(),
+            class.name,
+            class.layers.join(", "),
+        ),
+        witness: vias,
+        nets: vec![net.id],
+        components: Vec::new(),
+        pos_mm: Some((nm_to_mm(first.x_nm), nm_to_mm(first.y_nm))),
+        suggested_override: None,
+    })
 }
 
 /// Current a single via is assumed to carry, in amps (a 0.3 mm drill at a

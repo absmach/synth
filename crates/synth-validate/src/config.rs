@@ -68,6 +68,30 @@ pub struct ErcConfig {
     /// `E-SYNTH-ESD-001`: require ESD/reverse-polarity protection on
     /// external connector nets.
     pub require_connector_protection: bool,
+    /// `E-SYNTH-PROCESS-002`: an operator has taken responsibility for
+    /// via-in-pad on a tier that does not offer it.
+    ///
+    /// This is `--krt-allow-via-in-pad`, and it has to arrive here rather
+    /// than only at the router. ERC runs first, so without it the override
+    /// was unreachable: a board declaring `requires via_in_pad` against an
+    /// incapable profile failed this rule and the export stopped long before
+    /// anything consulted the operator's decision.
+    ///
+    /// **Not readable from the config file.** The flag means an operator has
+    /// taken responsibility for one panel, which is a decision a person makes
+    /// per run and not a property of the design. As an ordinary deserialized
+    /// field it was neither: `synth check` auto-discovers
+    /// `<design>.synth.erc.toml`, so a design could carry
+    /// `via_in_pad_override = true` and silence `E-SYNTH-PROCESS-002` on
+    /// every run, with no flag and no one's name against it.
+    ///
+    /// `skip` keeps it out of the file's shape entirely, and because the
+    /// struct denies unknown fields a sidecar that sets it is *rejected*
+    /// rather than ignored. An author who writes it gets told it is not
+    /// theirs to set, instead of believing an override is in force that is
+    /// not.
+    #[serde(skip)]
+    pub via_in_pad_override: bool,
     /// `E-SYNTH-CAP-001`: fraction of a Class-II ceramic capacitor's
     /// rated voltage above which DC-bias derating is warned about.
     pub ceramic_dc_bias_threshold: f64,
@@ -121,6 +145,9 @@ impl Default for ErcConfig {
             power_budget_headroom_pct: 0.0,
             open_drain_no_pullup: Severity::Warning,
             require_connector_protection: true,
+            // Off by default: the override is an operator taking
+            // responsibility for one panel, never a standing policy.
+            via_in_pad_override: false,
             ceramic_dc_bias_threshold: 0.5,
             schematic: SchematicSettings::default(),
         }
@@ -553,5 +580,52 @@ mod tests {
     #[test]
     fn unknown_schematic_key_is_rejected() {
         assert!(ErcConfig::from_toml_str("[schematic]\nnope = 1\n").is_err());
+    }
+}
+
+#[cfg(test)]
+mod via_in_pad_override_is_not_a_design_setting {
+    use super::ErcConfig;
+
+    /// The operator's override is not the design's to grant.
+    ///
+    /// `--krt-allow-via-in-pad` means a person has taken responsibility for
+    /// one panel. `synth check` auto-discovers `<design>.synth.erc.toml`, so
+    /// while the field deserialized like any other a design could carry
+    /// `via_in_pad_override = true`, silence `E-SYNTH-PROCESS-002` on every
+    /// run, and leave no flag and no name behind it.
+    #[test]
+    fn a_sidecar_that_sets_the_override_is_rejected() {
+        let err = ErcConfig::from_toml_str("via_in_pad_override = true\n")
+            .expect_err("the file may not set the operator's override");
+        assert!(
+            err.contains("via_in_pad_override"),
+            "the error should name the field the author tried to set: {err}"
+        );
+    }
+
+    /// And it is rejected rather than ignored, so an author who writes it is
+    /// told it is not theirs to set instead of believing an override is in
+    /// force that is not. A file that stays out of it still loads.
+    #[test]
+    fn a_sidecar_that_leaves_it_alone_still_loads_and_defaults_off() {
+        let config = ErcConfig::from_toml_str("pullup_margin_v = 0.4\n")
+            .expect("an ordinary config still loads");
+        assert!(
+            !config.via_in_pad_override,
+            "the override defaults off and only the CLI flag turns it on"
+        );
+        assert!((config.pullup_margin_v - 0.4).abs() < f64::EPSILON);
+    }
+
+    /// The flag path still works: the CLI builds the config in code, where
+    /// the field is an ordinary one.
+    #[test]
+    fn the_cli_can_still_set_it_in_code() {
+        let config = ErcConfig {
+            via_in_pad_override: true,
+            ..ErcConfig::default()
+        };
+        assert!(config.via_in_pad_override);
     }
 }

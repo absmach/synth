@@ -28,10 +28,12 @@ fn pin(name: &str, caps: &[PinCapability]) -> RegPin {
         electrical_type: ElectricalType::Bidirectional,
         capabilities: caps.to_vec(),
         required: false,
+        footprint_only: false,
         unit: None,
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
     }
 }
 
@@ -53,6 +55,7 @@ fn part(kind: &str, pins: Vec<RegPin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -66,6 +69,7 @@ fn component(id: u32, refdes: &str, p: Part) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: Span::new(0, 0),
@@ -92,6 +96,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
 
 fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
     synth_ir::Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),

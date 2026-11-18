@@ -1,0 +1,105 @@
+id = "header_1x12"
+kind = "connector"
+description = "1x12 through-hole pin header, 2.54 mm pitch (GPIO); datasheet_url is the product page of the Harwin M20 series, no manufacturer PDF link was verifiable"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+required_decoupling = []
+kicad_symbol = "Connector_Generic:Conn_01x12"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x12_P2.54mm_Vertical"
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p7"
+number = "7"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p8"
+number = "8"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p9"
+number = "9"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p10"
+number = "10"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p11"
+number = "11"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p12"
+number = "12"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 31.48
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://no.rs-online.com/web/p/pcb-headers/6812997"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"

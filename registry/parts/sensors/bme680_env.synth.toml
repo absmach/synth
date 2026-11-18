@@ -67,3 +67,8 @@ electrical_type = "power_input"
 name = "gnd2"
 number = "7"
 electrical_type = "power_input"
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

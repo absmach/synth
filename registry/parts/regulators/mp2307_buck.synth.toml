@@ -1,17 +1,26 @@
 id = "mp2307_buck"
 kind = "regulator"
 description = "MPS MP2307 3A step-down switching regulator, SO-8"
-kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm"
+# `SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.4x3.4mm` does not exist in any KiCad
+# library, so the export fell back to a synthesized bounding box. This is the
+# nearest stock footprint to the MP2307's SOIC8E: same body and pitch, exposed
+# pad 2.41 x 3.3 mm. A reviewer should confirm the pad against the datasheet
+# before this part is promoted past `experimental`.
+kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm"
+# JLCPCB lists it as SOIC-8N-EP.
+mpn = "MP2307DN-LF"
+lcsc_pn = "C18921"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+# Courtyard extent of that footprint.
+width_mm = 7.4
+height_mm = 5.4
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 3.5
-max_voltage_v = 15.0
-max_current_ma = 800.0
+min_voltage_v = 4.75
+max_voltage_v = 23.0
+max_current_ma = 3000.0
 max_power_mw = 500
 thermal_resistance_c_per_w = 50
 
@@ -62,8 +71,43 @@ name = "ss"
 number = "8"
 electrical_type = "passive"
 
+# Pad 9 is the exposed thermal pad, tied to GND on this part. The footprint has
+# it, so the pin map has to declare it: an exposed pad left out of the map is a
+# short waiting to happen.
+[[pins]]
+name = "ep"
+number = "9"
+electrical_type = "power_input"
+# Required, so a board that leaves it floating is an error rather than a pass.
+# On this part the exposed pad is the thermal path and is tied to GND; an
+# untied one is both a thermal failure and a large piece of unconnected copper
+# under the package. E-SYNTH-CONNECT-001 keys off this flag, so without it the
+# pad existed in the map and nothing checked that anything reached it.
+required = true
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.monolithicpower.com/pub/media/document/MP2307_r1.3.pdf"
+reviewed_by = "rodneyosodo"
+reviewed_at = "2026-11-02"
+
 [[required_decoupling]]
 net = "in"
+value = "10uf"
+count = 2
+
+# BS needs 0.01 uF or more from SW (datasheet pin 1 description).
+[[required_decoupling]]
+net = "bs"
+to = "sw"
+value = "10nf"
+count = 1
+
+# The output capacitor sits behind the inductor on SW; the datasheet's typical
+# application uses a 22 uF ceramic.
+[[required_decoupling]]
+net = "sw"
+through = "inductor"
 value = "22uf"
 count = 1
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, BinaryHeap};
+use std::collections::{BTreeSet, BinaryHeap, HashSet};
 use synth_ir::NetId;
 
 const GRID_STEP: f64 = 1.27; // 50 mil KiCad schematic grid step
@@ -68,6 +68,10 @@ pub struct SchematicGrid {
     width_cells: i32,
     height_cells: i32,
     blocked: BTreeSet<(i32, i32)>,
+    /// The blocked cells that only reserve room for a part's Reference and
+    /// Value text. [`Self::find_path`] may cross them when it is relaxed: the
+    /// text moves clear of a wire afterwards, a body cannot.
+    soft: BTreeSet<(i32, i32)>,
     // Tried indexing this by row/column (HashMap<i32, Vec<WireSegment>>)
     // to avoid scanning every segment per A* cell visited; measured
     // *slower* in debug builds (SipHash lookup overhead per cell
@@ -140,6 +144,7 @@ impl SchematicGrid {
             width_cells,
             height_cells,
             blocked: BTreeSet::new(),
+            soft: BTreeSet::new(),
             wire_segments: Vec::new(),
             g_costs: vec![f64::INFINITY; buffer_len],
             came_from: vec![None; buffer_len],
@@ -177,6 +182,22 @@ impl SchematicGrid {
         for gx in min_gx..=max_gx {
             for gy in lo_gy..=hi_gy {
                 self.blocked.insert((gx, gy));
+                self.soft.remove(&(gx, gy));
+            }
+        }
+    }
+
+    /// Block a rectangle that only reserves room for text. A cell that is
+    /// already blocked keeps its kind.
+    #[allow(clippy::similar_names)]
+    pub fn mark_soft_rect(&mut self, min_x: f64, min_y: f64, max_x: f64, max_y: f64) {
+        let (gx1, gy1) = self.to_grid_pos(min_x, min_y);
+        let (gx2, gy2) = self.to_grid_pos(max_x, max_y);
+        for gx in gx1.min(gx2)..=gx1.max(gx2) {
+            for gy in gy1.min(gy2)..=gy1.max(gy2) {
+                if self.blocked.insert((gx, gy)) {
+                    self.soft.insert((gx, gy));
+                }
             }
         }
     }
@@ -184,6 +205,7 @@ impl SchematicGrid {
     pub fn unmark_pos(&mut self, x: f64, y: f64) {
         let pos = self.to_grid_pos(x, y);
         self.blocked.remove(&pos);
+        self.soft.remove(&pos);
     }
 
     /// Whether the cell covering `(x, y)` is currently blocked.
@@ -271,11 +293,18 @@ impl SchematicGrid {
     }
 
     #[allow(clippy::too_many_lines)]
+    /// A shortest orthogonal path from `start_world` to `target_world`.
+    ///
+    /// `avoid` lists cells the path must not enter (the pin terminals of
+    /// other nets). `relaxed` lets it cross the cells that only reserve room
+    /// for a part's text, never a body.
     pub fn find_path(
         &mut self,
         start_world: (f64, f64),
         target_world: (f64, f64),
         net_id: NetId,
+        relaxed: bool,
+        avoid: &HashSet<(i32, i32)>,
     ) -> Option<Vec<(f64, f64)>> {
         let start = self.to_grid_pos(start_world.0, start_world.1);
         let target = self.to_grid_pos(target_world.0, target_world.1);
@@ -341,7 +370,9 @@ impl SchematicGrid {
                 // Check obstacle collisions (allow start and target cells to be reached)
                 if neighbor_pos != target
                     && neighbor_pos != start
-                    && self.blocked.contains(&neighbor_pos)
+                    && ((self.blocked.contains(&neighbor_pos)
+                        && !(relaxed && self.soft.contains(&neighbor_pos)))
+                        || avoid.contains(&neighbor_pos))
                 {
                     continue;
                 }
@@ -457,14 +488,62 @@ impl SchematicGrid {
         // Sanity check: deduplicate consecutive identical points
         let mut clean: Vec<(f64, f64)> = Vec::new();
         for &pt in &world_pts {
-            if let Some(last) = clean.last() {
-                if (pt.0 - last.0).abs() < 0.01 && (pt.1 - last.1).abs() < 0.01 {
-                    continue;
-                }
+            if let Some(last) = clean.last()
+                && (pt.0 - last.0).abs() < 0.01
+                && (pt.1 - last.1).abs() < 0.01
+            {
+                continue;
             }
             clean.push(pt);
         }
 
         Some(clean)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn grid() -> SchematicGrid {
+        SchematicGrid::new(0.0, 0.0, 60.0, 60.0)
+    }
+
+    #[test]
+    fn a_text_margin_walls_a_pin_in_until_it_is_relaxed() {
+        let mut g = grid();
+        g.mark_soft_rect(10.0, 10.0, 30.0, 30.0);
+        let none = HashSet::new();
+        let route = |g: &mut SchematicGrid, relaxed| {
+            g.find_path((20.0, 20.0), (50.0, 20.0), NetId(0), relaxed, &none)
+        };
+        assert!(route(&mut g, false).is_none());
+        assert!(route(&mut g, true).is_some());
+    }
+
+    #[test]
+    fn a_body_is_never_relaxed() {
+        let mut g = grid();
+        g.mark_soft_rect(10.0, 10.0, 30.0, 30.0);
+        g.mark_obstacle_rect(15.0, 15.0, 25.0, 25.0);
+        let none = HashSet::new();
+        let found = g.find_path((20.0, 20.0), (50.0, 20.0), NetId(0), true, &none);
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn a_path_keeps_off_the_cells_it_is_told_to_avoid() {
+        let mut g = grid();
+        let none = HashSet::new();
+        let straight = g
+            .find_path((10.0, 20.0), (50.0, 20.0), NetId(0), false, &none)
+            .expect("open grid");
+        assert_eq!(straight.len(), 2, "a straight run is two points");
+        let avoid = HashSet::from([g.to_grid_pos(30.0, 20.0)]);
+        let around = g
+            .find_path((10.0, 20.0), (50.0, 20.0), NetId(0), false, &avoid)
+            .expect("a way round");
+        assert!(around.len() > 2, "{around:?}");
     }
 }

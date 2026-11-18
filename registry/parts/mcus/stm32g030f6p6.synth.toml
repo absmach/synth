@@ -1,0 +1,176 @@
+id = "stm32g030f6p6"
+kind = "mcu"
+description = "STMicro STM32G030F6P6 Cortex-M0+ 64 MHz, 32 KB flash, 8 KB RAM, TSSOP-20. Pin map checked against KiCad MCU_ST_STM32G0:STM32G030F6Px"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "STM32G030F6P6"
+kicad_symbol = "MCU_ST_STM32G0:STM32G030F6Px"
+kicad_footprint = "Package_SO:TSSOP-20_4.4x6.5mm_P0.65mm"
+
+[operating_conditions]
+min_voltage_v = 2.0
+max_voltage_v = 3.6
+max_current_ma = 100.0
+
+[[pins]]
+name = "pb7_pb8"
+number = "1"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda", "i2c_scl", "uart_rx"]
+required = false
+
+[[pins]]
+name = "pb9_pc14"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "i2c_sda"]
+required = false
+
+[[pins]]
+name = "pc15"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+required = false
+
+[[pins]]
+name = "vdd"
+number = "4"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "vss"
+number = "5"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "nrst"
+number = "6"
+electrical_type = "input"
+capabilities = ["reset"]
+required = true
+
+[[pins]]
+name = "pa0"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+required = false
+
+[[pins]]
+name = "pa1"
+number = "8"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck"]
+required = false
+
+[[pins]]
+name = "pa2"
+number = "9"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx", "spi_mosi"]
+required = false
+
+[[pins]]
+name = "pa3"
+number = "10"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx"]
+required = false
+
+[[pins]]
+name = "pa4"
+number = "11"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs"]
+required = false
+
+[[pins]]
+name = "pa5"
+number = "12"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck"]
+required = false
+
+[[pins]]
+name = "pa6"
+number = "13"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_miso"]
+required = false
+
+[[pins]]
+name = "pa7"
+number = "14"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_mosi"]
+required = false
+
+[[pins]]
+name = "pa8_pb0_pb1_pb2"
+number = "15"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_cs"]
+required = false
+
+[[pins]]
+name = "pa9_pa11"
+number = "16"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_tx", "i2c_scl", "spi_miso"]
+required = false
+
+[[pins]]
+name = "pa10_pa12"
+number = "17"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "uart_rx", "i2c_sda", "spi_mosi"]
+required = false
+
+[[pins]]
+name = "pa13"
+number = "18"
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
+required = false
+
+[[pins]]
+name = "pa14_pa15"
+number = "19"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "boot_mode", "spi_cs"]
+required = false
+
+[[pins]]
+name = "pb3_pb4_pb5_pb6"
+number = "20"
+electrical_type = "bidirectional"
+capabilities = ["gpio", "spi_sck", "spi_miso", "spi_mosi", "uart_tx", "i2c_scl"]
+required = false
+
+[[required_decoupling]]
+net = "vdd"
+value = "100nf"
+count = 1
+
+[[required_decoupling]]
+net = "vdd"
+value = "4.7uf"
+count = 1
+
+[footprint_dimensions]
+width_mm = 7.7
+height_mm = 7.0
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.st.com/resource/en/datasheet/stm32g030f6.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"

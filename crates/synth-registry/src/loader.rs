@@ -74,12 +74,40 @@ pub enum LoadError {
     },
 
     #[error(
+        "part {path}: kicad_symbol `{kicad_symbol}` disagrees about pad \
+         `{registry_number}`: {detail}. A rail and a signal would meet \
+         on that pad."
+    )]
+    KicadPinRoleMismatch {
+        path: PathBuf,
+        kicad_symbol: String,
+        registry_number: String,
+        detail: String,
+    },
+
+    #[error(
         "part {path}: invalid operating conditions (min_voltage_v {min} > max_voltage_v {max})"
     )]
     InvalidOperatingConditions { path: PathBuf, min: f64, max: f64 },
 
     #[error("part {path}: invalid footprint dimensions ({message})")]
     InvalidFootprintDimensions { path: PathBuf, message: String },
+
+    #[error(
+        "part {path}: required_decoupling names pin `{pin}`, which the part does not have; \
+         a rule on a missing pin is never checked"
+    )]
+    UnknownDecouplingPin { path: PathBuf, pin: String },
+
+    #[error("part {path}: invalid [spice] model ({message})")]
+    InvalidSpiceModel { path: PathBuf, message: String },
+
+    #[error("part {path}: invalid [pins.drive] on pin `{pin}` ({message})")]
+    InvalidPinDrive {
+        path: PathBuf,
+        pin: String,
+        message: String,
+    },
 }
 
 /// Recursively load every `*.synth.toml` file under `root` into a
@@ -179,11 +207,11 @@ fn load_from_sources(sources: &[(PathBuf, String)]) -> Result<Registry, LoadErro
 /// footprint, so it is not an unverified bounding-box fallback.
 fn add_compatibility_aliases(registry: &mut Registry) {
     for (alias, canonical) in [("rp2350a", "rp2350"), ("w25q128_qspi", "w25q128_flash")] {
-        if registry.lookup(alias).is_none() {
-            if let Some(mut part) = registry.lookup(canonical).cloned() {
-                part.id = PartId(alias.to_string());
-                registry.insert(part);
-            }
+        if registry.lookup(alias).is_none()
+            && let Some(mut part) = registry.lookup(canonical).cloned()
+        {
+            part.id = PartId(alias.to_string());
+            registry.insert(part);
         }
     }
 }
@@ -214,32 +242,7 @@ pub struct LoadResult {
 /// `None` when no base directory can be determined (e.g. no `HOME` on a
 /// non-XDG platform).
 pub fn user_registry_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SYNTH_USER_REGISTRY_DIR") {
-        if !dir.is_empty() {
-            return Some(PathBuf::from(dir));
-        }
-    }
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        if !xdg.is_empty() {
-            return Some(
-                PathBuf::from(xdg)
-                    .join("synth")
-                    .join("registry")
-                    .join("parts"),
-            );
-        }
-    }
-    std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .map(|home| {
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("synth")
-                .join("registry")
-                .join("parts")
-        })
+    registry_dir(&env_var, "SYNTH_USER_REGISTRY_DIR", "parts")
 }
 
 /// Resolve the *installed* Tier-1 (shipped) registry directory — the
@@ -253,32 +256,30 @@ pub fn user_registry_dir() -> Option<PathBuf> {
 /// determined.
 #[must_use]
 pub fn shipped_registry_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SYNTH_SHIPPED_REGISTRY_DIR") {
-        if !dir.is_empty() {
-            return Some(PathBuf::from(dir));
-        }
+    registry_dir(&env_var, "SYNTH_SHIPPED_REGISTRY_DIR", "shipped")
+}
+
+/// A non-empty environment variable.
+fn env_var(key: &str) -> Option<String> {
+    std::env::var(key).ok()
+}
+
+/// The registry directory for one tier: `override_key` if set, else
+/// `$XDG_DATA_HOME/synth/registry/<leaf>`, else
+/// `$HOME/.local/share/synth/registry/<leaf>`. `lookup` answers like
+/// [`std::env::var`]; an empty value counts as unset.
+fn registry_dir(
+    lookup: &dyn Fn(&str) -> Option<String>,
+    override_key: &str,
+    leaf: &str,
+) -> Option<PathBuf> {
+    let get = |key: &str| lookup(key).filter(|v| !v.is_empty()).map(PathBuf::from);
+    if let Some(dir) = get(override_key) {
+        return Some(dir);
     }
-    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
-        if !xdg.is_empty() {
-            return Some(
-                PathBuf::from(xdg)
-                    .join("synth")
-                    .join("registry")
-                    .join("shipped"),
-            );
-        }
-    }
-    std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .map(|home| {
-            PathBuf::from(home)
-                .join(".local")
-                .join("share")
-                .join("synth")
-                .join("registry")
-                .join("shipped")
-        })
+    let data = get("XDG_DATA_HOME")
+        .or_else(|| get("HOME").map(|home| home.join(".local").join("share")))?;
+    Some(data.join("synth").join("registry").join(leaf))
 }
 
 /// Materialize the embedded seed registry into `target` (creating
@@ -475,6 +476,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), LoadError> {
     Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     // id must match filename stem (without the `.synth.toml` suffix).
     let expected_id = path
@@ -506,17 +508,20 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
             });
         }
         for &cap in &pin.capabilities {
-            if let Some(required) = cap.required_electrical_type() {
-                if pin.electrical_type != required {
-                    return Err(LoadError::CapabilityElectricalMismatch {
-                        path: path.to_path_buf(),
-                        pin: pin.name.clone(),
-                        capability: cap,
-                        required,
-                        actual: pin.electrical_type,
-                    });
-                }
+            if let Some(required) = cap.required_electrical_type()
+                && pin.electrical_type != required
+            {
+                return Err(LoadError::CapabilityElectricalMismatch {
+                    path: path.to_path_buf(),
+                    pin: pin.name.clone(),
+                    capability: cap,
+                    required,
+                    actual: pin.electrical_type,
+                });
             }
+        }
+        if let Some(drive) = &pin.drive {
+            validate_pin_drive(path, &pin.name, pin.electrical_type, drive)?;
         }
     }
 
@@ -525,10 +530,12 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     // Skipped when KiCad isn't installed locally (CI without KiCad);
     // the schematic exporter then falls back to a synthesized
     // rectangle and there's no real symbol to disagree with.
-    if let Some(lib_id) = part.kicad_symbol.as_deref() {
-        if let Some(kicad_numbers) = crate::kicad_pin_check::kicad_pin_numbers(lib_id) {
-            for pin in &part.pins {
-                if !kicad_numbers.contains(&pin.number.0) {
+    if let Some(lib_id) = part.kicad_symbol.as_deref()
+        && let Some(kicad_numbers) = crate::kicad_pin_check::kicad_pin_numbers(lib_id)
+    {
+        for pin in &part.pins {
+            if pin.footprint_only {
+                if kicad_numbers.contains(&pin.number.0) {
                     return Err(LoadError::KicadPinMismatch {
                         path: path.to_path_buf(),
                         kicad_symbol: lib_id.to_string(),
@@ -536,35 +543,224 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
                         registry_number: pin.number.0.clone(),
                     });
                 }
+                continue;
             }
-        }
-    }
-
-    if let Some(ref dims) = part.footprint_dimensions {
-        if dims.width_mm <= 0.0 || dims.height_mm <= 0.0 {
-            return Err(LoadError::InvalidFootprintDimensions {
-                path: path.to_path_buf(),
-                message: format!(
-                    "width_mm ({}) and height_mm ({}) must be positive",
-                    dims.width_mm, dims.height_mm
-                ),
-            });
-        }
-    }
-
-    if let Some(ref op) = part.operating_conditions {
-        if let (Some(min), Some(max)) = (op.min_voltage_v, op.max_voltage_v) {
-            if min > max {
-                return Err(LoadError::InvalidOperatingConditions {
+            if !kicad_numbers.contains(&pin.number.0) {
+                return Err(LoadError::KicadPinMismatch {
                     path: path.to_path_buf(),
-                    min,
-                    max,
+                    kicad_symbol: lib_id.to_string(),
+                    registry_pin: pin.name.clone(),
+                    registry_number: pin.number.0.clone(),
                 });
             }
         }
     }
 
+    check_kicad_pin_roles(part, path)?;
+
+    if let Some(ref dims) = part.footprint_dimensions
+        && (dims.width_mm <= 0.0 || dims.height_mm <= 0.0)
+    {
+        return Err(LoadError::InvalidFootprintDimensions {
+            path: path.to_path_buf(),
+            message: format!(
+                "width_mm ({}) and height_mm ({}) must be positive",
+                dims.width_mm, dims.height_mm
+            ),
+        });
+    }
+
+    for rule in &part.required_decoupling {
+        for pin in std::iter::once(&rule.net).chain(rule.to.as_ref()) {
+            if part.find_pin(pin).is_none() {
+                return Err(LoadError::UnknownDecouplingPin {
+                    path: path.to_path_buf(),
+                    pin: pin.clone(),
+                });
+            }
+        }
+    }
+
+    if let Some(ref op) = part.operating_conditions
+        && let (Some(min), Some(max)) = (op.min_voltage_v, op.max_voltage_v)
+        && min > max
+    {
+        return Err(LoadError::InvalidOperatingConditions {
+            path: path.to_path_buf(),
+            min,
+            max,
+        });
+    }
+
+    if let Some(ref spice) = part.spice {
+        validate_spice_model(path, spice)?;
+    }
+
     let _ = PartId(part.id.as_str().to_string());
+    Ok(())
+}
+
+/// Role invariant: a registry pin's declared role must not contradict the
+/// KiCad symbol pin carrying the same number.
+///
+/// The pin-number check proves the pad exists; it cannot tell whether it is
+/// the right pad, because a part that numbers its pins 1, 2, 3 in the order
+/// the author listed the signals hits numbers every package has. Five shipped
+/// parts did exactly that, putting a 3.3 V rail on an Ethernet transmit pad
+/// and a reset line on a supply pin. Comparing roles catches that class
+/// without needing to know the part.
+///
+/// Skipped, like the number check, when no symbol library resolves.
+fn check_kicad_pin_roles(part: &Part, path: &Path) -> Result<(), LoadError> {
+    let Some(lib_id) = part.kicad_symbol.as_deref() else {
+        return Ok(());
+    };
+    let Some(kicad_types) = crate::kicad_pin_check::kicad_pin_types(lib_id) else {
+        return Ok(());
+    };
+    let names = crate::kicad_pin_check::kicad_pin_names(lib_id).unwrap_or_default();
+    for pin in &part.pins {
+        let Some(symbol_types) = kicad_types.get(&pin.number.0) else {
+            continue;
+        };
+        if crate::kicad_pin_check::roles_agree(pin.electrical_type, symbol_types) {
+            continue;
+        }
+        let carries = names.get(&pin.number.0).map_or_else(
+            || "an unnamed pin".to_string(),
+            |n| n.iter().cloned().collect::<Vec<_>>().join("/"),
+        );
+        let types = symbol_types.iter().cloned().collect::<Vec<_>>().join("/");
+        return Err(LoadError::KicadPinRoleMismatch {
+            path: path.to_path_buf(),
+            kicad_symbol: lib_id.to_string(),
+            registry_number: pin.number.0.clone(),
+            detail: format!(
+                "the part declares `{}` as {:?}, the symbol carries {} there ({})",
+                pin.name, pin.electrical_type, types, carries
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// A drive block is datasheet data: every number must be usable, and the
+/// reference it came from must be recorded.
+fn validate_pin_drive(
+    path: &Path,
+    pin: &str,
+    electrical_type: crate::ElectricalType,
+    drive: &crate::part::PinDrive,
+) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidPinDrive {
+        path: path.to_path_buf(),
+        pin: pin.to_string(),
+        message,
+    };
+    if !electrical_type.can_output() {
+        return Err(invalid(format!(
+            "`[pins.drive]` requires an output-capable electrical type, not `{electrical_type:?}`"
+        )));
+    }
+    if drive
+        .datasheet_ref
+        .as_deref()
+        .is_none_or(|reference| reference.trim().is_empty())
+    {
+        return Err(invalid(
+            "`datasheet_ref` is required; record the datasheet page or table".to_string(),
+        ));
+    }
+    for (label, value) in [
+        ("high_v", drive.high_v),
+        ("low_v", drive.low_v),
+        ("max_source_ma", drive.max_source_ma),
+        ("max_sink_ma", drive.max_sink_ma),
+    ] {
+        if !value.is_finite() {
+            return Err(invalid(format!("`{label}` must be finite")));
+        }
+    }
+    if drive.high_v < 0.0 {
+        return Err(invalid("`high_v` must not be negative".to_string()));
+    }
+    if drive.low_v < 0.0 {
+        return Err(invalid("`low_v` must not be negative".to_string()));
+    }
+    if drive.high_v <= drive.low_v {
+        return Err(invalid(format!(
+            "`high_v` ({}) must be greater than `low_v` ({})",
+            drive.high_v, drive.low_v
+        )));
+    }
+    for (label, value) in [
+        ("max_source_ma", drive.max_source_ma),
+        ("max_sink_ma", drive.max_sink_ma),
+    ] {
+        if value <= 0.0 {
+            return Err(invalid(format!("`{label}` must be greater than 0")));
+        }
+    }
+    if let Some(resistance) = drive.output_resistance_ohm
+        && (!resistance.is_finite() || resistance <= 0.0)
+    {
+        return Err(invalid(
+            "`output_resistance_ohm` must be a positive finite number".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Shape checks only: whether the model file exists or defines the subcircuit
+/// is checked when a simulation runs, so `validate` and `export` never fail on
+/// a missing model.
+fn validate_spice_model(path: &Path, spice: &crate::part::SpiceModel) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidSpiceModel {
+        path: path.to_path_buf(),
+        message,
+    };
+    if spice.file.trim().is_empty() {
+        return Err(invalid("`file` is empty".to_string()));
+    }
+    if spice.subckt.trim().is_empty() {
+        return Err(invalid("`subckt` is empty".to_string()));
+    }
+    if spice.pin_order.is_empty() {
+        return Err(invalid("`pin_order` is empty".to_string()));
+    }
+    let mut seen = HashSet::new();
+    for pin in &spice.pin_order {
+        if pin.trim().is_empty() {
+            return Err(invalid(
+                "`pin_order` contains an empty pin name".to_string(),
+            ));
+        }
+        if !seen.insert(pin) {
+            return Err(invalid(format!("`pin_order` lists pin `{pin}` twice")));
+        }
+    }
+    for (name, value) in &spice.params {
+        if name.is_empty() {
+            return Err(invalid("`params` contains an empty name".to_string()));
+        }
+        let mut chars = name.chars();
+        let valid_start = chars
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_');
+        if !valid_start || !chars.all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(invalid(format!(
+                "parameter name `{name}` must match `[A-Za-z_][A-Za-z0-9_]*`"
+            )));
+        }
+        if value.trim().is_empty() {
+            return Err(invalid(format!("parameter `{name}` has an empty value")));
+        }
+        if value.chars().any(char::is_whitespace) {
+            return Err(invalid(format!(
+                "parameter `{name}` value `{value}` must not contain whitespace"
+            )));
+        }
+    }
     Ok(())
 }
 
@@ -623,6 +819,105 @@ electrical_type = "passive"
     }
 
     #[test]
+    fn a_footprint_only_pad_may_be_absent_from_the_symbol() {
+        // The exposed-pad case. `Device:R` has pins 1 and 2; pad 3 exists on
+        // no symbol, which is exactly the situation a thermal pad is in.
+        // Declared `footprint_only`, it loads; the pin beside it proves the
+        // flag is doing the work rather than the check having been dropped.
+        if crate::kicad_pin_check::kicad_pin_numbers("Device:R").is_none() {
+            eprintln!("skipping footprint-only test: KiCad symbol library not present");
+            return;
+        }
+        let toml = r#"
+id = "padded_resistor"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "3"
+electrical_type = "passive"
+footprint_only = true
+"#;
+        let registry = load_from_strs(&[("padded_resistor.synth.toml", toml)])
+            .expect("a footprint-only pad must not be checked against the symbol");
+        let part = registry.lookup("padded_resistor").expect("part");
+        let ep = part.find_pin("ep").expect("ep pin");
+        assert!(ep.footprint_only, "the flag must survive the load");
+        assert_eq!(ep.number.0, "3");
+    }
+
+    #[test]
+    fn a_footprint_only_pin_must_not_exist_on_the_symbol() {
+        // The inverse of the exposed-pad case: when the flag is set on a
+        // number the symbol actually carries, the loader must reject it,
+        // otherwise a real symbol pin could be marked footprint-only and
+        // bypass pin validation.
+        if crate::kicad_pin_check::kicad_pin_numbers("Device:R").is_none() {
+            eprintln!("skipping footprint-only guard test: KiCad symbol library not present");
+            return;
+        }
+        // use a number present on the symbol (2), not a duplicate
+        let toml = r#"
+id = "bogus_footprint_only"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "2"
+electrical_type = "passive"
+footprint_only = true
+"#;
+        let err = load_from_strs(&[("bogus_footprint_only.synth.toml", toml)])
+            .expect_err("pad 2 is on the symbol and must not be footprint-only");
+        match err {
+            LoadError::KicadPinMismatch {
+                registry_number, ..
+            } => assert_eq!(registry_number, "2"),
+            other => panic!("expected KicadPinMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_pad_that_is_not_footprint_only_is_still_checked() {
+        // The same part without the flag must still be rejected, or the
+        // mechanism would be a way to silence the check rather than to
+        // describe a pad.
+        if crate::kicad_pin_check::kicad_pin_numbers("Device:R").is_none() {
+            eprintln!("skipping footprint-only control: KiCad symbol library not present");
+            return;
+        }
+        let toml = r#"
+id = "padded_resistor"
+kind = "resistor"
+kicad_symbol = "Device:R"
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+[[pins]]
+name = "ep"
+number = "3"
+electrical_type = "passive"
+"#;
+        let err = load_from_strs(&[("padded_resistor.synth.toml", toml)])
+            .expect_err("pad 3 is on no symbol and claims to be a symbol pin");
+        match err {
+            LoadError::KicadPinMismatch {
+                registry_number, ..
+            } => assert_eq!(registry_number, "3"),
+            other => panic!("expected KicadPinMismatch, got {other:?}"),
+        }
+    }
+
+    #[test]
     #[allow(clippy::similar_names)] // `usb_dp` and `usb_dn` are the actual pin names
     fn rp2350_has_usb_pins_with_correct_electrical_types() {
         let dir = workspace_root().join("registry").join("parts");
@@ -645,6 +940,177 @@ electrical_type = "passive"
     }
 
     #[test]
+    fn rtd_front_end_parts_match_their_datasheet_pinouts() {
+        use crate::ElectricalType::{
+            Analog, Clock, DoNotConnect, GroundReference, Input, Output, PowerInput, PowerOutput,
+        };
+        let dir = workspace_root().join("registry").join("parts");
+        let registry = load_dir(&dir).expect("seed registry must load");
+
+        // TI SBAS660C table 6 (RHB, 32-pin VQFN) and SBOS410I table 6 (D, 8-pin SOIC).
+        let ads = registry.lookup("ads124s08").expect("ads124s08");
+        let ref5025 = registry.lookup("ref5025").expect("ref5025");
+        for part in [ads, ref5025] {
+            assert!(
+                !part.is_unverified(),
+                "{} must be datasheet-verified",
+                part.id
+            );
+            assert!(
+                part.kicad_footprint.is_some(),
+                "{} needs a footprint",
+                part.id
+            );
+        }
+        assert_eq!(ads.pins.len(), 33, "32 pins plus the thermal pad");
+        for (name, number, ty) in [
+            ("aincom", "1", Analog),
+            ("ain0", "7", Analog),
+            ("cs_n", "9", Input),
+            ("dout_drdy", "12", Output),
+            ("clk", "17", Clock),
+            ("dgnd", "14", GroundReference),
+            ("dvdd", "16", PowerInput),
+            ("refout", "23", Analog),
+            ("nc", "25", DoNotConnect),
+            ("avdd", "26", PowerInput),
+            ("avss", "27", GroundReference),
+            ("refp1_ain6", "32", Analog),
+            ("ep", "33", GroundReference),
+        ] {
+            let pin = ads
+                .find_pin(name)
+                .unwrap_or_else(|| panic!("ads124s08 {name}"));
+            assert_eq!(
+                (pin.number.0.as_str(), pin.electrical_type),
+                (number, ty),
+                "{name}"
+            );
+        }
+        assert_eq!(ref5025.pins.len(), 8);
+        for (name, number, ty) in [
+            ("vin", "2", PowerInput),
+            ("temp", "3", Analog),
+            ("gnd", "4", GroundReference),
+            ("vout", "6", PowerOutput),
+            ("nc", "7", DoNotConnect),
+        ] {
+            let pin = ref5025
+                .find_pin(name)
+                .unwrap_or_else(|| panic!("ref5025 {name}"));
+            assert_eq!(
+                (pin.number.0.as_str(), pin.electrical_type),
+                (number, ty),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn ble_node_parts_match_their_datasheet_pinouts() {
+        use crate::ElectricalType::{Bidirectional, Input, Passive, PowerInput, PowerOutput};
+        let dir = workspace_root().join("registry").join("parts");
+        let registry = load_dir(&dir).expect("seed registry must load");
+
+        // Bosch BST-BME280-DS002 table 35 (LGA-8), TI SNVS798Q table 4-2 (SOT-23),
+        // Abracon ABM11W bottom view (pads 2 and 4 GND).
+        let bme = registry.lookup("bme280").expect("bme280");
+        let ldo = registry.lookup("lp5907_3v3").expect("lp5907_3v3");
+        let xtal = registry.lookup("xtal_32mhz_nrf").expect("xtal_32mhz_nrf");
+        for part in [bme, ldo, xtal] {
+            assert!(
+                !part.is_unverified(),
+                "{} must be datasheet-verified",
+                part.id
+            );
+            assert!(
+                part.kicad_footprint.is_some(),
+                "{} needs a footprint",
+                part.id
+            );
+            assert!(
+                part.provenance
+                    .as_ref()
+                    .and_then(|p| p.datasheet_url.as_ref())
+                    .is_some(),
+                "{} needs a datasheet url",
+                part.id
+            );
+        }
+        for (part, expected) in [
+            (
+                bme,
+                vec![
+                    ("gnd_1", "1", PowerInput),
+                    ("csb", "2", Input),
+                    ("sda", "3", Bidirectional),
+                    ("scl", "4", Input),
+                    ("sdo", "5", Input),
+                    ("vddio", "6", PowerInput),
+                    ("gnd_7", "7", PowerInput),
+                    ("vdd", "8", PowerInput),
+                ],
+            ),
+            (
+                ldo,
+                vec![
+                    ("vin", "1", PowerInput),
+                    ("gnd", "2", PowerInput),
+                    ("en", "3", Input),
+                    ("vout", "5", PowerOutput),
+                ],
+            ),
+            (
+                xtal,
+                vec![
+                    ("xtal_a", "1", Passive),
+                    ("gnd_2", "2", Passive),
+                    ("xtal_b", "3", Passive),
+                    ("gnd_4", "4", Passive),
+                ],
+            ),
+        ] {
+            for (name, number, ty) in expected {
+                let pin = part
+                    .find_pin(name)
+                    .unwrap_or_else(|| panic!("{} {name}", part.id));
+                assert_eq!(
+                    (pin.number.0.as_str(), pin.electrical_type),
+                    (number, ty),
+                    "{} {name}",
+                    part.id
+                );
+            }
+        }
+        assert_eq!(bme.pins.len(), 8);
+        assert!(
+            bme.find_pin("sda")
+                .unwrap()
+                .capabilities
+                .contains(&PinCapability::I2cSda)
+        );
+        assert!(
+            bme.find_pin("scl")
+                .unwrap()
+                .capabilities
+                .contains(&PinCapability::I2cScl)
+        );
+        // nRF52840 PS table 64 MHz crystal (HFXO): CL max 12 pF; Nordic BOM: CL 8 pF, C1 = C2 = 12 pF.
+        assert!(
+            ldo.operating_conditions.as_ref().unwrap().max_voltage_v >= Some(5.0),
+            "LDO must take a USB 5 V input"
+        );
+        for pin in ["xtal_a", "xtal_b"] {
+            let rule = xtal
+                .required_decoupling
+                .iter()
+                .find(|r| r.net == pin)
+                .unwrap_or_else(|| panic!("{pin} load capacitor"));
+            assert_eq!((rule.value.as_str(), rule.count), ("12pf", 1), "{pin}");
+        }
+    }
+
+    #[test]
     fn parses_footprint_dimensions_and_operating_conditions() {
         let toml = r#"
 id = "test_ic"
@@ -659,6 +1125,8 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 100.0
+forward_voltage_v = 2.0
+forward_current_ma = 20.0
 
 [[pins]]
 name = "vcc"
@@ -685,6 +1153,8 @@ voltage_max_v = 5.0
         assert_eq!(op.min_voltage_v, Some(1.8));
         assert_eq!(op.max_voltage_v, Some(3.6));
         assert_eq!(op.max_current_ma, Some(100.0));
+        assert_eq!(op.forward_voltage_v, Some(2.0));
+        assert_eq!(op.forward_current_ma, Some(20.0));
 
         let pin_in = part.find_pin("in").unwrap();
         assert_eq!(pin_in.unit.as_deref(), Some("A"));
@@ -809,12 +1279,12 @@ label_side = "inside"
     }
 
     #[test]
-    fn provenance_seed_is_verified_unless_reviewed_by_empty() {
+    fn provenance_without_a_reviewer_is_unverified() {
         let verified = "id = \"v1\"\nkind = \"ic\"\n[[pins]]\nname = \"a\"\nnumber = \"1\"\nelectrical_type = \"input\"\n";
         let reg = load_from_strs(&[("v1.synth.toml", verified)]).unwrap();
         assert!(
-            !reg.lookup("v1").unwrap().is_unverified(),
-            "no provenance = seed = verified"
+            reg.lookup("v1").unwrap().is_unverified(),
+            "no provenance = no reviewer = unverified"
         );
 
         let unverified = "id = \"v2\"\nkind = \"ic\"\n[provenance]\nsource = \"authored\"\nreviewed_by = \"\"\n[[pins]]\nname = \"a\"\nnumber = \"1\"\nelectrical_type = \"input\"\n";
@@ -864,12 +1334,43 @@ label_side = "inside"
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// An environment holding exactly `pairs`.
+    fn env(pairs: &'static [(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
+        move |key| {
+            pairs
+                .iter()
+                .find(|(k, _)| *k == key)
+                .map(|(_, v)| (*v).to_string())
+        }
+    }
+
     #[test]
     fn shipped_registry_dir_respects_env_override() {
-        std::env::set_var("SYNTH_SHIPPED_REGISTRY_DIR", "/tmp/synth_shipped_test");
-        let got = shipped_registry_dir().expect("override honoured");
+        let lookup = env(&[
+            ("SYNTH_SHIPPED_REGISTRY_DIR", "/tmp/synth_shipped_test"),
+            ("XDG_DATA_HOME", "/xdg"),
+        ]);
+        let got = registry_dir(&lookup, "SYNTH_SHIPPED_REGISTRY_DIR", "shipped")
+            .expect("override honoured");
         assert_eq!(got, PathBuf::from("/tmp/synth_shipped_test"));
-        std::env::remove_var("SYNTH_SHIPPED_REGISTRY_DIR");
+    }
+
+    #[test]
+    fn registry_dirs_fall_back_to_xdg_then_home() {
+        let xdg = env(&[("XDG_DATA_HOME", "/xdg"), ("HOME", "/home/u")]);
+        assert_eq!(
+            registry_dir(&xdg, "SYNTH_SHIPPED_REGISTRY_DIR", "shipped"),
+            Some(PathBuf::from("/xdg/synth/registry/shipped"))
+        );
+        let home = env(&[("XDG_DATA_HOME", ""), ("HOME", "/home/u")]);
+        assert_eq!(
+            registry_dir(&home, "SYNTH_USER_REGISTRY_DIR", "parts"),
+            Some(PathBuf::from("/home/u/.local/share/synth/registry/parts"))
+        );
+        assert_eq!(
+            registry_dir(&env(&[]), "SYNTH_USER_REGISTRY_DIR", "parts"),
+            None
+        );
     }
 
     #[test]
@@ -898,9 +1399,258 @@ label_side = "inside"
 
     #[test]
     fn user_registry_dir_respects_env_override() {
-        std::env::set_var("SYNTH_USER_REGISTRY_DIR", "/tmp/synth_user_test");
-        let got = user_registry_dir().expect("override honoured");
+        let lookup = env(&[("SYNTH_USER_REGISTRY_DIR", "/tmp/synth_user_test")]);
+        let got =
+            registry_dir(&lookup, "SYNTH_USER_REGISTRY_DIR", "parts").expect("override honoured");
         assert_eq!(got, PathBuf::from("/tmp/synth_user_test"));
-        std::env::remove_var("SYNTH_USER_REGISTRY_DIR");
+    }
+
+    fn part_with_spice(spice: &str) -> String {
+        format!(
+            "id = \"spicey\"\nkind = \"regulator\"\n\
+             [[pins]]\nname = \"vin\"\nnumber = \"1\"\nelectrical_type = \"power_input\"\n\
+             [[pins]]\nname = \"vout\"\nnumber = \"2\"\nelectrical_type = \"power_output\"\n\
+             [[pins]]\nname = \"gnd\"\nnumber = \"3\"\nelectrical_type = \"power_input\"\n\
+             {spice}"
+        )
+    }
+
+    #[test]
+    fn a_malformed_spice_table_fails_at_load() {
+        let toml = part_with_spice("[spice]\nsubckt = \"spicey\"\npin_order = [\"vin\"]\n");
+        let err =
+            load_from_strs(&[("spicey.synth.toml", &toml)]).expect_err("missing `file` field");
+        assert!(
+            err.to_string().contains("spicey.synth.toml"),
+            "error must name the file: {err}"
+        );
+    }
+
+    /// The model file is resolved only when a simulation runs, so `validate`
+    /// and `export` must not require it to exist.
+    #[test]
+    fn a_spice_model_with_a_missing_file_still_loads() {
+        let toml = part_with_spice(
+            "[spice]\nfile = \"spice/does_not_exist.lib\"\nsubckt = \"spicey\"\n\
+             pin_order = [\"vin\", \"gnd\", \"vout\"]\n\n[spice.params]\nrout = \"100m\"\n",
+        );
+        let reg = load_from_strs(&[("spicey.synth.toml", &toml)]).expect("shape is valid");
+        let spice = reg
+            .lookup("spicey")
+            .expect("spicey")
+            .spice
+            .as_ref()
+            .expect("spice table");
+        assert_eq!(spice.file, "spice/does_not_exist.lib");
+        assert_eq!(spice.params.get("rout").map(String::as_str), Some("100m"));
+    }
+
+    fn drive_part(drive: &str) -> String {
+        format!(
+            "id = \"drive_ic\"\nkind = \"ic\"\n\
+             [[pins]]\nname = \"gpio5\"\nnumber = \"1\"\nelectrical_type = \"bidirectional\"\n\
+             {drive}"
+        )
+    }
+
+    const COMPLETE_DRIVE: &str = "[pins.drive]\nhigh_v = 3.3\nlow_v = 0.0\n\
+         max_source_ma = 4.0\nmax_sink_ma = 4.0\noutput_resistance_ohm = 25.0\n\
+         datasheet_ref = \"Table 5-1\"\n";
+
+    #[test]
+    fn a_pin_drive_without_datasheet_ref_is_a_load_error_naming_the_pin() {
+        let toml = drive_part(
+            "[pins.drive]\nhigh_v = 3.3\nlow_v = 0.0\nmax_source_ma = 4.0\nmax_sink_ma = 4.0\n",
+        );
+        let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+            .expect_err("datasheet_ref is required with drive data");
+        assert!(
+            matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+            "{error:?}"
+        );
+        assert!(
+            error.to_string().contains("gpio5") && error.to_string().contains("datasheet_ref"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_complete_pin_drive_loads_and_preserves_its_values() {
+        let toml = drive_part(COMPLETE_DRIVE);
+        let registry = load_from_strs(&[("drive_ic.synth.toml", &toml)]).expect("valid drive");
+        let drive = registry
+            .lookup("drive_ic")
+            .expect("drive_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .drive
+            .as_ref()
+            .expect("drive block");
+        assert_eq!(drive.high_v, 3.3);
+        assert_eq!(drive.low_v, 0.0);
+        assert_eq!(drive.max_source_ma, 4.0);
+        assert_eq!(drive.max_sink_ma, 4.0);
+        assert_eq!(drive.output_resistance_ohm, Some(25.0));
+        assert_eq!(drive.datasheet_ref.as_deref(), Some("Table 5-1"));
+    }
+
+    #[test]
+    fn a_pin_drive_with_unusable_numbers_is_a_load_error() {
+        for (label, drive) in [
+            (
+                "non-finite high",
+                COMPLETE_DRIVE.replace("high_v = 3.3", "high_v = nan"),
+            ),
+            (
+                "zero source limit",
+                COMPLETE_DRIVE.replace("max_source_ma = 4.0", "max_source_ma = 0.0"),
+            ),
+            (
+                "negative sink limit",
+                COMPLETE_DRIVE.replace("max_sink_ma = 4.0", "max_sink_ma = -1.0"),
+            ),
+            (
+                "zero output resistance",
+                COMPLETE_DRIVE.replace(
+                    "output_resistance_ohm = 25.0",
+                    "output_resistance_ohm = 0.0",
+                ),
+            ),
+        ] {
+            let toml = drive_part(&drive);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
+    }
+
+    fn drive_part_with_type(electrical_type: &str, drive: &str) -> String {
+        drive_part(drive).replace(
+            "electrical_type = \"bidirectional\"",
+            &format!("electrical_type = \"{electrical_type}\""),
+        )
+    }
+
+    /// Only pins that can drive a net may carry datasheet drive data: the
+    /// registry README lists output, three-statable, open-drain and
+    /// bidirectional, never an input or passive terminal.
+    #[test]
+    fn a_pin_drive_requires_an_output_capable_electrical_type() {
+        for electrical_type in ["input", "power_input", "passive", "unclassified"] {
+            let toml = drive_part_with_type(electrical_type, COMPLETE_DRIVE);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("drive on a {electrical_type} pin must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{electrical_type}: {error:?}"
+            );
+            assert!(
+                error.to_string().contains("output-capable"),
+                "{electrical_type}: {error}"
+            );
+        }
+        for electrical_type in [
+            "output",
+            "three_statable",
+            "open_drain_low",
+            "open_drain_high",
+            "bidirectional",
+        ] {
+            let toml = drive_part_with_type(electrical_type, COMPLETE_DRIVE);
+            load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .unwrap_or_else(|error| panic!("drive on a {electrical_type} pin: {error}"));
+        }
+    }
+
+    #[test]
+    fn a_pin_drive_rejects_non_positive_level_order_and_negative_levels() {
+        for (label, drive) in [
+            (
+                "high equal to low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = 3.3"),
+            ),
+            (
+                "high below low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = 5.0"),
+            ),
+            (
+                "negative high",
+                COMPLETE_DRIVE.replace("high_v = 3.3", "high_v = -0.1"),
+            ),
+            (
+                "negative low",
+                COMPLETE_DRIVE.replace("low_v = 0.0", "low_v = -0.1"),
+            ),
+        ] {
+            let toml = drive_part(&drive);
+            let error = load_from_strs(&[("drive_ic.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinDrive { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_spice_model_shapes_are_rejected_at_load() {
+        let cases = [
+            (
+                "empty file",
+                "[spice]\nfile = \"\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n",
+            ),
+            (
+                "empty subckt",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"\"\npin_order = [\"vin\"]\n",
+            ),
+            (
+                "empty pin_order",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = []\n",
+            ),
+            (
+                "empty pin name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\", \"\"]\n",
+            ),
+            (
+                "duplicate pin",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\", \"vin\"]\n",
+            ),
+            (
+                "empty param name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\n\"\" = \"1\"\n",
+            ),
+            (
+                "invalid param name",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\n\"1bad\" = \"1\"\n",
+            ),
+            (
+                "empty param value",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\nrout = \"\"\n",
+            ),
+            (
+                "whitespace in param value",
+                "[spice]\nfile = \"m.lib\"\nsubckt = \"s\"\npin_order = [\"vin\"]\n\
+                 [spice.params]\nrout = \"1 0m\"\n",
+            ),
+        ];
+        for (label, spice) in cases {
+            let toml = part_with_spice(spice);
+            let err = load_from_strs(&[("spicey.synth.toml", &toml)])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                err.to_string().contains("spicey.synth.toml"),
+                "{label}: error must name the file: {err}"
+            );
+            assert!(
+                matches!(err, LoadError::InvalidSpiceModel { .. }),
+                "{label}: expected InvalidSpiceModel, got {err:?}"
+            );
+        }
     }
 }

@@ -54,6 +54,7 @@ struct Fingerprint {
     height: String,
     paths: usize,
     texts: usize,
+    distinct_texts: usize,
 }
 
 /// Drop the render-timestamp `<title>` line so the fingerprint is
@@ -75,6 +76,24 @@ fn svg_attr(svg: &str, attr: &str) -> String {
     })
 }
 
+/// Number of distinct (text, x, y) triples among the plot's `<text>`
+/// elements.
+fn distinct_texts(svg: &str) -> usize {
+    let mut seen = std::collections::BTreeSet::new();
+    for part in svg.split("<text").skip(1) {
+        let Some((tag, rest)) = part.split_once('>') else {
+            continue;
+        };
+        let body = rest.split("</text>").next().unwrap_or_default();
+        seen.insert((
+            body.trim().to_string(),
+            svg_attr(tag, " x"),
+            svg_attr(tag, " y"),
+        ));
+    }
+    seen.len()
+}
+
 fn fingerprint(svg: &str) -> Fingerprint {
     use std::fmt::Write as _;
     let normalised = normalise(svg);
@@ -90,6 +109,7 @@ fn fingerprint(svg: &str) -> Fingerprint {
         height: svg_attr(svg, "height"),
         paths: normalised.matches("<path").count(),
         texts: normalised.matches("<text").count(),
+        distinct_texts: distinct_texts(&normalised),
     }
 }
 
@@ -209,4 +229,24 @@ fn reference_schematics_match_golden_fingerprints() {
         );
     }
     assert!(!live.is_empty(), "no goldens were compared");
+}
+
+/// KiCad plots a symbol a second time when its box overlaps another
+/// symbol's, so the same text can appear twice at one spot. Counting
+/// distinct (text, x, y) sees each plotted name once, so a name that
+/// vanishes changes the count and a redraw does not.
+#[test]
+fn distinct_texts_count_a_redrawn_name_once() {
+    let svg = r#"<svg width="1mm">
+<text x="1.0000" y="2.0000"
+textLength="5" opacity="0">+3V3</text>
+<text x="1.0000" y="2.0000"
+textLength="5" opacity="0">+3V3</text>
+<text x="9.0000" y="2.0000"
+textLength="5" opacity="0">+3V3</text>
+<text x="1.0000" y="2.0000"
+textLength="5" opacity="0">GND</text>
+</svg>"#;
+    assert_eq!(fingerprint(svg).texts, 4);
+    assert_eq!(fingerprint(svg).distinct_texts, 3);
 }

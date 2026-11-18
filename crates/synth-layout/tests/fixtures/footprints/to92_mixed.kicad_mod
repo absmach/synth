@@ -1,0 +1,10 @@
+(footprint "TO-92_mixed"
+	(version 20240108)
+	(generator "synth-test")
+	(layer "F.Cu")
+	(fp_line (start -2 -1.5) (end 2 -1.5) (stroke (width 0.05) (type solid)) (layer "F.CrtYd"))
+	(fp_arc (start -2 -1.5) (mid 0 2) (end 2 -1.5) (stroke (width 0.05) (type solid)) (layer "F.CrtYd"))
+	(pad "1" thru_hole circle (at -1.27 0) (size 1.1 1.1) (drill 0.6) (layers "*.Cu" "*.Mask"))
+	(pad "2" thru_hole circle (at 0 0) (size 1.1 1.1) (drill 0.6) (layers "*.Cu" "*.Mask"))
+	(pad "3" thru_hole circle (at 1.27 0) (size 1.1 1.1) (drill 0.6) (layers "*.Cu" "*.Mask"))
+)

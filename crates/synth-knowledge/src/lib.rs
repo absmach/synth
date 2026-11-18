@@ -105,7 +105,7 @@ impl<'de> Deserialize<'de> for Condition {
                         "ic_without_decoupling",
                         "polarized_cap_ground_on_plus",
                     ],
-                ))
+                ));
             }
         })
     }
@@ -712,10 +712,10 @@ fn resistor_hop(board: &Board, net: &Net) -> Option<Net> {
             if pid == e.pin {
                 continue;
             }
-            if let Some((_, far)) = board.nets_containing(comp.id, pid).next() {
-                if far.id != net.id {
-                    return Some(far.clone());
-                }
+            if let Some((_, far)) = board.nets_containing(comp.id, pid).next()
+                && far.id != net.id
+            {
+                return Some(far.clone());
             }
         }
     }
@@ -846,6 +846,7 @@ fn next_two_free_refdes(board: &Board, a: &str, b: &str) -> (String, String) {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
@@ -991,10 +992,12 @@ mod tests {
             electrical_type: t,
             capabilities: vec![],
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -1016,6 +1019,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -1029,6 +1033,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: synth_diagnostics::Span::new(10, 20),
@@ -1055,6 +1060,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -1332,6 +1338,8 @@ mod tests {
             value: "100n".to_string(),
             count: 1,
             max_distance_mm: None,
+            to: None,
+            through: None,
         }];
         let b = board(
             vec![comp(0, "U1", "mcu", p)],
@@ -1439,9 +1447,10 @@ mod tests {
     #[test]
     fn capacitor_kind_now_maps_to_polarity_template() {
         let kg = kg();
-        assert!(kg
-            .templates_for_kind("capacitor")
-            .iter()
-            .any(|t| t.id == "polarized_cap_miswired"));
+        assert!(
+            kg.templates_for_kind("capacitor")
+                .iter()
+                .any(|t| t.id == "polarized_cap_miswired")
+        );
     }
 }

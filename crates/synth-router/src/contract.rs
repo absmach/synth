@@ -113,7 +113,7 @@ pub struct RouterLimits {
 impl Default for RouterLimits {
     fn default() -> Self {
         Self {
-            wall_clock: Duration::from_secs(20 * 60),
+            wall_clock: Duration::from_mins(20),
             max_output_bytes: 1024 * 1024,
             max_passes: 40,
             max_threads: 4,
@@ -224,6 +224,12 @@ pub struct KiCadRoutingToolsOptions {
     pub same_net_pad_clearance_mm: f64,
     /// Enforce the board's declared minimum track/via sizes strictly.
     pub strict_sizes: bool,
+    /// The engine's net ordering (`mps`, `inside_out`, `original`, `bus`), or
+    /// the engine's own default when absent. Which one routes a board without a
+    /// via in a pad is not predictable, so a failed run is retried with the
+    /// others (see `route`).
+    #[serde(default)]
+    pub ordering: Option<String>,
 }
 
 impl Default for KiCadRoutingToolsOptions {
@@ -234,8 +240,29 @@ impl Default for KiCadRoutingToolsOptions {
             fab_overrides: None,
             same_net_pad_clearance_mm: 0.1,
             strict_sizes: true,
+            ordering: None,
         }
     }
+}
+
+/// One package to escape before the general router sees the board, and how.
+///
+/// Carried by reference designator, which is what the engine takes and what
+/// the design wrote. A request here is not a claim that the package needs an
+/// escape — a design may ask for one on a part the geometry would not have
+/// selected, and that is the point of being able to say so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EscapeRequest {
+    /// Reference designator of the package to escape.
+    pub refdes: String,
+    /// Engine the design asked for, as the engine spells it. `None` leaves
+    /// the choice to the adapter's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// Copper layers the escape may route onto. Empty leaves it to the
+    /// engine, which distributes across whatever the board has.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
 }
 
 /// Fabrication policy decisions that are not derivable from the board.
@@ -262,6 +289,11 @@ pub struct FabricationPolicy {
     /// existed, and absence reads as "not offered".
     #[serde(default)]
     pub process_fills_via_in_pad: bool,
+    /// How far a filled and capped via's land exceeds its drill, in
+    /// nanometres, from the manufacturer profile; `0` where the process does
+    /// not offer via-in-pad.
+    #[serde(default)]
+    pub via_in_pad_land_extra_nm: i64,
     /// Minimum acceptable copper width, in nanometres.
     pub min_track_width_nm: i64,
     /// Minimum acceptable copper clearance between distinct nets, in nm.
@@ -281,6 +313,7 @@ impl Default for FabricationPolicy {
         Self {
             allow_via_in_pad: false,
             process_fills_via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
             min_track_width_nm: 127_000,
             min_clearance_nm: 127_000,
             min_drill_diameter_nm: 300_000,
@@ -302,6 +335,7 @@ impl FabricationPolicy {
         Self {
             allow_via_in_pad: false,
             process_fills_via_in_pad: profile.via_in_pad,
+            via_in_pad_land_extra_nm: profile.via_in_pad_land_extra_nm,
             min_track_width_nm: profile.min_trace_width_nm,
             min_clearance_nm: profile.min_copper_clearance_nm,
             min_drill_diameter_nm: profile.min_drill_diameter_nm,
@@ -370,15 +404,68 @@ impl RouteRequest {
         unmet
     }
 
+    /// Take the per-package escape intent the board declared.
+    ///
+    /// Lives here for the reason [`Self::use_board_process_requirements`]
+    /// does: there are four routing entry points, and an intent honoured by
+    /// one of them is a declaration the other three ignore.
+    pub fn use_board_escapes(&mut self, board: &synth_ir::Board) {
+        self.escapes.clear();
+        self.escapes_off.clear();
+        for component in &board.components {
+            let Some(intent) = &component.escape else {
+                continue;
+            };
+            if intent.off {
+                self.escapes_off.push(component.refdes.clone());
+                continue;
+            }
+            self.escapes.push(EscapeRequest {
+                refdes: component.refdes.clone(),
+                method: intent.method.map(|m| m.as_source().to_string()),
+                layers: intent.layers.clone(),
+            });
+        }
+    }
+
+    /// Take the layer pins the board's netclasses declare.
+    ///
+    /// For the same reason as [`Self::use_board_escapes`]: every routing entry
+    /// point calls this, so no path routes a pinned net wherever it likes.
+    pub fn use_board_layer_pins(&mut self, board: &synth_ir::Board) {
+        self.net_layers = board
+            .nets
+            .iter()
+            .filter_map(|net| {
+                let class = board
+                    .netclasses
+                    .iter()
+                    .find(|c| Some(c.name.as_str()) == net.netclass.as_deref())?;
+                (!class.layers.is_empty()).then(|| NetLayers {
+                    net: net.name.clone(),
+                    layers: class.layers.clone(),
+                })
+            })
+            .collect();
+    }
+
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
     /// Keeps whatever via-in-pad permission was already granted: an operator
     /// override is a promise about the panel, not a profile rule, so it is not
     /// reset here. The *capability* is rebuilt from the new profile, because
     /// that one does describe the process being named.
-    pub fn use_profile_floor(&mut self, manufacturer: &str) {
+    ///
+    /// Resolved against the board's copper count, as every other consumer of
+    /// the profile is: a tier the fabricator does not sell at that count
+    /// gives the conservative floor, so a 2-layer board naming `jlc-advanced`
+    /// is not routed and gated against a 0.2 mm drill nobody will drill.
+    pub fn use_profile_floor(&mut self, manufacturer: &str, layers: u32) {
         let allow_via_in_pad = self.policy.allow_via_in_pad;
-        self.policy = FabricationPolicy::from_profile_name(manufacturer);
+        self.policy = FabricationPolicy::from_profile(&synth_drc::ManufacturerProfile::for_layers(
+            manufacturer,
+            layers,
+        ));
         self.policy.allow_via_in_pad = allow_via_in_pad;
         self.profile_name = manufacturer.to_string();
     }
@@ -400,6 +487,14 @@ pub struct RouteRequest {
     pub kicad_routing_tools: KiCadRoutingToolsOptions,
     /// Fabrication policy applied during independent validation.
     pub policy: FabricationPolicy,
+    /// Packages the design asked to have escaped, and how. Empty means the
+    /// design said nothing, and the dense grid arrays are escaped anyway.
+    #[serde(default)]
+    pub escapes: Vec<EscapeRequest>,
+    /// Packages the design asked to leave unescaped (`escape { off }`),
+    /// which overrides geometric selection.
+    #[serde(default)]
+    pub escapes_off: Vec<String>,
     /// Name of the manufacturing profile the board was exported against,
     /// recorded in provenance.
     pub profile_name: String,
@@ -415,6 +510,48 @@ pub struct RouteRequest {
     /// from it. Empty when there is no advice.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub routing_order: Vec<String>,
+    /// Nets the design's DRC treats as ground by topology or pin name, which a
+    /// board file alone cannot show. The island repair uses them, with the name
+    /// rule, to find the ground pour and the signal vias that need a return.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ground_nets: Vec<String>,
+    /// The nets whose layer changes must keep a ground return via: differential,
+    /// clock, RF, analog and switching nets. `None` holds every signal net to
+    /// it; `Some` lists any other net's missing return via as an advisory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub return_via_critical_nets: Option<Vec<String>>,
+    /// The nets that declare `edge_rate medium` and that nothing else proves fast:
+    /// they keep the return via, and look for it in the wider medium-edge window.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub return_via_medium_nets: Vec<String>,
+    /// Opt-in: a missing fast-edge return via beside a fine-pitch pad row is an
+    /// advisory instead of blocking. Off by default; needs SI-review sign-off.
+    #[serde(default)]
+    pub fine_pitch_return_via_advisory: bool,
+    /// Nets the design pins to copper layers (`netclass { layers … }`), by
+    /// name, with the layers each may use. An engine that supports the
+    /// constraint routes these on their layers before anything else and the
+    /// routed copper is checked against the same pin afterwards
+    /// (`E-SYNTH-DRC-023`). FreeRouting does not support it and refuses a
+    /// request that carries one, rather than silently ignoring the pin.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub net_layers: Vec<NetLayers>,
+    /// Where the engines and their runtimes are found.
+    ///
+    /// Read from the environment when the request is built; a caller with
+    /// explicit settings overwrites fields here instead of exporting them.
+    /// Never serialised: these are machine-local paths, not part of the
+    /// routing contract, and a deserialised request re-reads its own
+    /// environment.
+    #[serde(skip_serializing, default = "crate::tools::ToolPaths::from_env")]
+    pub tools: crate::tools::ToolPaths,
+}
+
+/// One net's layer pin: the copper layers it may be routed on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetLayers {
+    pub net: String,
+    pub layers: Vec<String>,
 }
 
 impl RouteRequest {
@@ -592,18 +729,44 @@ impl RouteRequest {
             limits: RouterLimits::default(),
             freerouting: FreeroutingOptions::default(),
             kicad_routing_tools: KiCadRoutingToolsOptions::default(),
+            escapes: Vec::new(),
+            escapes_off: Vec::new(),
             policy: FabricationPolicy::default(),
             profile_name: "unspecified".to_string(),
             input_hash: String::new(),
-            source_revision: None,
+            source_revision: revision_from(std::env::var("SYNTH_SOURCE_REVISION").ok()),
             routing_order: Vec::new(),
+            ground_nets: Vec::new(),
+            return_via_critical_nets: None,
+            return_via_medium_nets: Vec::new(),
+            fine_pitch_return_via_advisory: false,
+            net_layers: Vec::new(),
+            tools: crate::tools::ToolPaths::from_env(),
         }
     }
+}
+
+/// The source revision a caller names in `SYNTH_SOURCE_REVISION`, so the routing
+/// report says which commit its board was built from. An empty value names none.
+fn revision_from(value: Option<String>) -> Option<String> {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_named_source_revision_is_kept_and_a_blank_one_is_not() {
+        assert_eq!(
+            revision_from(Some(" abc123\n".into())).as_deref(),
+            Some("abc123")
+        );
+        assert_eq!(revision_from(Some("  ".into())), None);
+        assert_eq!(revision_from(None), None);
+    }
 
     /// A scratch directory holding an exported board and, optionally, its
     /// sibling project.
@@ -677,6 +840,7 @@ mod tests {
     /// on what it declares.
     fn empty_board() -> synth_ir::Board {
         synth_ir::Board {
+            outline: None,
             name: "t".to_string(),
             layers: 4,
             manufacturer: None,
@@ -852,10 +1016,31 @@ mod tests {
             RouterEngine::KiCadRoutingTools,
         );
 
-        request.use_profile_floor("jlc-filled-via");
+        request.use_profile_floor("jlc-filled-via", 2);
         assert!(request.policy.process_fills_via_in_pad);
 
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
+        assert!(!request.policy.process_fills_via_in_pad);
+    }
+
+    /// The router resolves the tier against the copper count as the exporter
+    /// and DRC do. `jlc-advanced` is not sold on two layers, so a 2-layer
+    /// board naming it is routed and gated against the standard floor, not
+    /// against a fill nobody agreed to.
+    #[test]
+    fn the_profile_floor_is_resolved_against_the_layer_count() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+
+        request.use_profile_floor("jlc-advanced", 4);
+        assert_eq!(request.policy.min_drill_diameter_nm, 200_000);
+        assert!(request.policy.process_fills_via_in_pad);
+
+        request.use_profile_floor("jlc-advanced", 2);
+        assert_eq!(request.policy.min_drill_diameter_nm, 200_000);
         assert!(!request.policy.process_fills_via_in_pad);
     }
 
@@ -874,7 +1059,7 @@ mod tests {
             .required_processes
             .insert(synth_ir::ProcessRequirement::ViaInPad);
 
-        request.use_profile_floor("jlc-filled-via");
+        request.use_profile_floor("jlc-filled-via", 2);
         let unmet = request.use_board_process_requirements(&board);
 
         assert!(unmet.is_empty());
@@ -893,7 +1078,7 @@ mod tests {
             .required_processes
             .insert(synth_ir::ProcessRequirement::ViaInPad);
 
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
         let unmet = request.use_board_process_requirements(&board);
 
         assert_eq!(unmet, vec![synth_ir::ProcessRequirement::ViaInPad]);
@@ -919,7 +1104,7 @@ mod tests {
 
         // The operator's flag, applied before the floor as the CLI applies it.
         request.policy.allow_via_in_pad = true;
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
         let unmet = request.use_board_process_requirements(&board);
 
         assert!(
@@ -945,7 +1130,7 @@ mod tests {
         );
 
         request.policy.allow_via_in_pad = true;
-        request.use_profile_floor("jlcpcb");
+        request.use_profile_floor("jlcpcb", 2);
 
         assert!(request.policy.allow_via_in_pad);
         assert!(!request.policy.process_fills_via_in_pad);

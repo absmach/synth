@@ -1,0 +1,8 @@
+(version 1)
+(rule "manufacturer copper to board edge"
+  (constraint edge_clearance (min 0.3mm)))
+(rule "manufacturer copper to NPTH hole"
+  (constraint edge_clearance (min 0.2mm))
+  (condition "A.Pad_Type == 'NPTH, mechanical'"))
+(rule "manufacturer copper to hole"
+  (constraint hole_clearance (min 0.2mm)))

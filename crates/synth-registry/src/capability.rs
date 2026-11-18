@@ -74,6 +74,13 @@ impl ElectricalType {
         )
     }
 
+    /// Returns true if a pin of this type can drive a net: every output
+    /// driver plus bidirectional I/O. This is the registry's definition of an
+    /// output-capable pin, the only kind that may carry `[pins.drive]` data.
+    pub fn can_output(&self) -> bool {
+        self.is_output_driver() || *self == ElectricalType::Bidirectional
+    }
+
     /// Returns true if this type can sink current (output or open-drain).
     pub fn can_sink(&self) -> bool {
         matches!(

@@ -204,13 +204,15 @@ fn a_hard_sidecar_offset_moves_the_label_by_exactly_that_amount() {
         "[labels.J3]\ndx = 0.0\ndy = 0.0\npriority = \"hard\"\n",
         "hard-base",
     );
+    // The fitted rim is tight, so the offset stays inside the board's room
+    // below the part rather than asking the edge guard to clamp it.
     let moved = at(
-        "[labels.J3]\ndx = 3.0\ndy = -2.0\npriority = \"hard\"\n",
+        "[labels.J3]\ndx = 3.0\ndy = -1.0\npriority = \"hard\"\n",
         "hard-moved",
     );
     assert!(
-        (moved.0 - base.0 - 3.0).abs() < 0.01 && (moved.1 - base.1 + 2.0).abs() < 0.01,
-        "label moved from {base:?} to {moved:?}, expected a shift of (3.0, -2.0)"
+        (moved.0 - base.0 - 3.0).abs() < 0.01 && (moved.1 - base.1 + 1.0).abs() < 0.01,
+        "label moved from {base:?} to {moved:?}, expected a shift of (3.0, -1.0)"
     );
 }
 

@@ -1,0 +1,61 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-11-04T11:39:52",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.6",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/2c6a02ee-c397-579a-9b9c-0c39aee43605",
+            "violations": [
+                {
+                    "description": "Pins of type Bidirectional and Power output are connected",
+                    "items": [
+                        {
+                            "description": "Symbol U3 Pin 5 [SDO, Bidirectional, Line]",
+                            "pos": {
+                                "x": 6.5786,
+                                "y": 1.4986
+                            },
+                            "uuid": "a3cb344c-b14b-40b5-bcb4-d192c94afabf"
+                        },
+                        {
+                            "description": "Symbol #FLG8824 Pin 1 [Power output, Line]",
+                            "pos": {
+                                "x": 6.858,
+                                "y": 0.5842
+                            },
+                            "uuid": "5e86d0bc-10da-424a-b5be-42d2fbdd29f2"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "pin_to_pin"
+                }
+            ]
+        }
+    ],
+    "source": "i2c_sensor_node.kicad_sch"
+}

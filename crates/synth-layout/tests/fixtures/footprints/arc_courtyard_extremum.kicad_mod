@@ -1,0 +1,20 @@
+(footprint "arc_courtyard_extremum"
+	(version 20240108)
+	(generator "synth-fixture")
+	(layer "F.Cu")
+	(descr "A courtyard arc from -45 to 135 degrees through 45 degrees, radius 2: it reaches x = 2 and y = 2 between its sampled points")
+	(fp_arc
+		(start 1.414214 -1.414214)
+		(mid 1.414214 1.414214)
+		(end -1.414214 1.414214)
+		(stroke (width 0.05) (type solid))
+		(layer "F.CrtYd")
+	)
+	(fp_line
+		(start -1.414214 1.414214)
+		(end 1.414214 -1.414214)
+		(stroke (width 0.05) (type solid))
+		(layer "F.CrtYd")
+	)
+	(pad "1" smd rect (at 0 0) (size 0.5 0.5) (layers "F.Cu"))
+)

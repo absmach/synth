@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use synth_ir::{Board, ComponentId};
-use synth_layout::{route::pin_terminal_xy, ComponentPlacement};
+use synth_layout::{ComponentPlacement, route::pin_terminal_xy};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -190,4 +190,57 @@ fn compact_designs_stay_on_a4() {
         synth_layout::SheetSize::A4,
         "a two-component design must keep the product-decision default"
     );
+}
+
+/// The issue's check on a real design with several regions: the region boxes
+/// fill the page frame and neighbours that share an edge sit no more than one
+/// grid step apart. The other examples have fewer than three regions, where
+/// the fill is covered by the unit tests instead.
+#[test]
+fn real_design_regions_fill_the_page_frame() {
+    // The frame the boxes are cut for: inside the 20 mm margin and above the
+    // 34 mm title block plus its 6.35 mm text margin.
+    const MARGIN: f64 = 20.0;
+    const TITLE_BAND: f64 = 34.0 + 6.35;
+    const GRID_MM: f64 = 2.54;
+    let board = board_for("examples/env_logger/env_logger.synth");
+    let layout = synth_layout::layout(&board);
+    let boxes = &layout.group_boxes;
+    assert!(boxes.len() >= 3, "{} regions", boxes.len());
+
+    let (w, h) = layout.sheet_size.dims_mm();
+    let frame_area = (w - 2.0 * MARGIN) * (h - MARGIN - TITLE_BAND);
+    let covered: f64 = boxes
+        .iter()
+        .map(|b| (b.max_mm.0 - b.min_mm.0) * (b.max_mm.1 - b.min_mm.1))
+        .sum();
+    assert!(
+        covered >= 0.95 * frame_area,
+        "boxes cover {covered:.0} of the {frame_area:.0} mm2 frame"
+    );
+
+    // Of the boxes beside (or below) one that share part of its edge, the
+    // nearest is the one it touches; a box behind another may be farther.
+    let overlaps = |a0: f64, a1: f64, b0: f64, b1: f64| a0 < b1 && b0 < a1;
+    for a in boxes {
+        let right = boxes
+            .iter()
+            .filter(|c| overlaps(a.min_mm.1, a.max_mm.1, c.min_mm.1, c.max_mm.1))
+            .map(|c| c.min_mm.0 - a.max_mm.0)
+            .filter(|gap| *gap >= 0.0)
+            .min_by(f64::total_cmp);
+        let below = boxes
+            .iter()
+            .filter(|c| overlaps(a.min_mm.0, a.max_mm.0, c.min_mm.0, c.max_mm.0))
+            .map(|c| c.min_mm.1 - a.max_mm.1)
+            .filter(|gap| *gap >= 0.0)
+            .min_by(f64::total_cmp);
+        for gap in right.into_iter().chain(below) {
+            assert!(
+                gap <= GRID_MM,
+                "{} has a neighbour {gap:.2} mm away",
+                a.group
+            );
+        }
+    }
 }

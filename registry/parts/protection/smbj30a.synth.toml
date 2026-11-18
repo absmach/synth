@@ -1,0 +1,33 @@
+id = "smbj30a"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Vishay SMBJ30A 600 W unidirectional TVS, SMB (DO-214AA). max_voltage_v is the 30 V standoff VWM, not a clamp or abs max: VBR 33.3-36.8 V at 1 mA, VC 48.4 V at 12.4 A"
+mpn = "SMBJ30A"
+kicad_symbol = "Device:D_Zener"
+kicad_footprint = "Diode_SMD:D_SMB"
+
+[footprint_dimensions]
+width_mm = 7.3
+height_mm = 4.5
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 30.0
+
+[[pins]]
+name = "cathode"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "anode"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.vishay.com/docs/88392/smbj.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-28"

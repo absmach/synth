@@ -1,0 +1,61 @@
+{
+    "$schema": "https://schemas.kicad.org/erc.v1.json",
+    "coordinate_units": "mm",
+    "date": "2026-10-27T14:58:58",
+    "ignored_checks": [
+        {
+            "description": "Global label only appears once in the schematic",
+            "key": "single_global_label"
+        },
+        {
+            "description": "Four connection points are joined together",
+            "key": "four_way_junction"
+        },
+        {
+            "description": "SPICE model issue",
+            "key": "simulation_model_issue"
+        },
+        {
+            "description": "Assigned footprint doesn't match footprint filters",
+            "key": "footprint_filter"
+        }
+    ],
+    "included_severities": [
+        "error",
+        "warning",
+        "exclusion"
+    ],
+    "kicad_version": "10.0.7",
+    "sheets": [
+        {
+            "path": "/",
+            "uuid_path": "/36d71e4e-15dc-5259-9893-3a7df2bbdd47",
+            "violations": [
+                {
+                    "description": "Label connects more than one wire at 647700, 1778000",
+                    "items": [
+                        {
+                            "description": "Label 'MODEM_IDLE'",
+                            "pos": {
+                                "x": 64.77,
+                                "y": 177.8
+                            },
+                            "uuid": "332afedb-eae9-5caf-adce-cf8c81f90d4e"
+                        },
+                        {
+                            "description": "Vertical Wire, length 25.40 mm",
+                            "pos": {
+                                "x": 64.77,
+                                "y": 161.29
+                            },
+                            "uuid": "07f58588-da85-5171-bc3f-9baba136d772"
+                        }
+                    ],
+                    "severity": "warning",
+                    "type": "label_multiple_wires"
+                }
+            ]
+        }
+    ],
+    "source": "usb_uart.kicad_sch"
+}

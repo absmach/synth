@@ -1,6 +1,6 @@
 id = "usb_c_receptacle"
 kind = "connector"
-description = "USB-C receptacle, 24-pin SMD. Modelled here with primary and mirrored power/ground/data pins for full pad coverage."
+description = "USB-C receptacle, 16-pin SMD (HRO TYPE-C-31-M-12). Modelled here with primary and mirrored power/ground/data pins for full pad coverage."
 mpn = "TYPE-C-31-M-12"
 lcsc_pn = "C165948"
 kicad_symbol = "Connector:USB_C_Receptacle"
@@ -114,3 +114,8 @@ electrical_type = "passive"
 name = "sbu2"
 number = "B8"
 electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://datasheet.lcsc.com/datasheet/pdf/9e56b777c022540fcce7c7f67825f55e.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"

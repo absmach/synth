@@ -50,7 +50,7 @@ use std::collections::{HashMap, HashSet};
 use synth_registry::{ElectricalType, PinCapability};
 
 use crate::board::{Board, ComponentId, Net, NetId, PinId};
-use crate::power_domains::{infer_power_domains, PowerDomainMap};
+use crate::power_domains::{PowerDomainMap, infer_power_domains};
 
 /// The motif a [`FunctionalCluster`] was recognized as.
 ///
@@ -551,6 +551,10 @@ impl Recognizer {
 
             // Decoupling capacitors, up to the declared count per rail.
             for rule in &part.required_decoupling {
+                // A capacitor behind a series part is not at this pin.
+                if rule.through.is_some() {
+                    continue;
+                }
                 let Some(pin_idx) = part.pins.iter().position(|p| p.name == rule.net) else {
                     continue;
                 };
@@ -1595,10 +1599,12 @@ mod tests {
         );
         let clusters = recognize_clusters(&b);
         assert_eq!(find(&clusters, 0).kind, ClusterKind::Singleton);
-        assert!(clusters
-            .iter()
-            .flat_map(|c| &c.members)
-            .all(|m| m.role != MemberRole::SignalSeries));
+        assert!(
+            clusters
+                .iter()
+                .flat_map(|c| &c.members)
+                .all(|m| m.role != MemberRole::SignalSeries)
+        );
     }
 
     /// A connector with no series resistor on it stays a singleton, so a
@@ -2019,10 +2025,11 @@ mod tests {
         let rf = find(&clusters, 0);
         assert_eq!(rf.kind, ClusterKind::RfMatching);
         assert_eq!(rf.members.len(), 2);
-        assert!(rf
-            .members
-            .iter()
-            .all(|m| m.role == MemberRole::RfMatchElement));
+        assert!(
+            rf.members
+                .iter()
+                .all(|m| m.role == MemberRole::RfMatchElement)
+        );
     }
 
     /// Every component ends up in exactly one cluster, so no consumer

@@ -1,0 +1,78 @@
+id = "header_1x8"
+kind = "connector"
+description = "Harwin M20-9990846 1x8 through-hole pin header, 2.54 mm pitch, vertical, 3 A per contact"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "M20-9990846"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x08_P2.54mm_Vertical"
+kicad_symbol = "Connector_Generic:Conn_01x08"
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p3"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p4"
+number = "4"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p5"
+number = "5"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p6"
+number = "6"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p7"
+number = "7"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "p8"
+number = "8"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 21.32
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
+datasheet_url = "https://content.harwin.com/asset/640f59f4-1860-40fe-82ef-f2a104ffa7d8/DRG-00479-Technical-Drawing-Datasheet-M20-999-pdf.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"

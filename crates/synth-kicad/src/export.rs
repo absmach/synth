@@ -43,11 +43,10 @@ pub enum ExportError {
         #[source]
         source: synth_place::PlaceError,
     },
-    #[error(
-        "power-plane fanout failed: net `{net}`: {detail}. A declared plane needs a \
-         stitching via beside each pad; none could be placed without via-in-pad."
-    )]
+    #[error("power-plane fanout failed: net `{net}`: {detail}")]
     PlaneFanout { net: String, detail: String },
+    #[error("keepout export failed: keepout `{name}`: {detail}")]
+    Keepout { name: String, detail: String },
 }
 
 #[derive(Debug, Clone)]
@@ -280,7 +279,8 @@ fn export_inner(
     // before) or one file per sheet boundary (large boards only).
     // The project file below lists every sheet, so it comes after.
     let global_layout = synth_layout::layout_with_sidecar(board, sidecars.schematic_path());
-    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let sheets =
+        synth_layout::sheets::layout_sheets(board, global_layout, sidecars.schematic_path());
     let project_namespace = uuid_v5::project_namespace(&board.name);
     // Project file (.kicad_pro): minimal JSON. KiCad fills in the
     // rest on first open; the deterministic root keeps diffs stable.
@@ -347,7 +347,7 @@ fn export_inner(
     write_file(&project_path, &project_text)?;
     write_file(
         &out_dir.join(format!("{stem}.kicad_dru")),
-        &design_rules(&manufacturer_profile(board)),
+        &design_rules(&manufacturer_profile(board), board),
     )?;
 
     // Library file (.kicad_sym): self-contained symbol library
@@ -442,7 +442,8 @@ fn export_inner(
     // agree on positions and power-flag label sets. One `.kicad_sch`
     // for small boards (§P26 splits large splittable boards only, so
     // this path stays byte-identical); one file per sheet otherwise.
-    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    let library_text =
+        symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     if sheets.len() == 1 {
         let schematic_text =
@@ -468,21 +469,33 @@ fn export_inner(
     // external router, which reads this file and writes its own candidate
     // back; Synth does not synthesize traces here, so nothing downstream
     // can mistake them for router output.
-    let label_overrides = sidecars
+    let placement_sidecar = sidecars
         .placement_path()
-        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file)
-        .map(|sidecar| sidecar.labels)
-        .unwrap_or_default();
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file);
+    let (label_overrides, fixed_vias) = placement_sidecar
+        .as_ref()
+        .map_or_default(|sidecar| (sidecar.labels.clone(), sidecar.vias.clone()));
+    let outline: &[synth_layout::sidecar::SidecarPoint] = placement_sidecar
+        .as_ref()
+        .map_or(&[], |sidecar| sidecar.outline.as_slice());
     let pcb_text = pcb::build_pcb(
         board,
         &placement,
         &synth_pcb::Routing::default(),
         &project_namespace,
         &label_overrides,
+        &fixed_vias,
+        outline,
     )
-    .map_err(|error| ExportError::PlaneFanout {
-        net: error.net,
-        detail: error.detail,
+    .map_err(|error| match error {
+        pcb::PcbBuildError::PlaneFanout(e) => ExportError::PlaneFanout {
+            net: e.net,
+            detail: e.detail,
+        },
+        pcb::PcbBuildError::Keepout(e) => ExportError::Keepout {
+            name: e.name,
+            detail: e.detail,
+        },
     })?
     .to_string_pretty();
     write_file(&pcb_path, &pcb_text)?;
@@ -554,7 +567,7 @@ pub fn export_schematic_only(
     let library_path = out_dir.join(format!("{stem}.kicad_sym"));
 
     let global_layout = synth_layout::layout_with_sidecar(board, schematic_sidecar);
-    let sheets = synth_layout::sheets::layout_sheets(board, global_layout);
+    let sheets = synth_layout::sheets::layout_sheets(board, global_layout, schematic_sidecar);
     let project_namespace = uuid_v5::project_namespace(&board.name);
 
     let mut sheet_entries = vec![vec![
@@ -611,7 +624,8 @@ pub fn export_schematic_only(
     );
     write_file(&out_dir.join("sym-lib-table"), &sym_table)?;
 
-    let library_text = symbol_lib::build_library(board, &sheets[0].layout).to_string_pretty();
+    let library_text =
+        symbol_lib::build_library(board, &library_layout(&sheets)).to_string_pretty();
     write_file(&library_path, &library_text)?;
     let sheet_count = sheets.len();
     if sheet_count == 1 {
@@ -688,19 +702,43 @@ fn place_candidates(
     board: &Board,
     sidecar: Option<&Path>,
 ) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
-    place_candidates_with_margins(board, sidecar, &[], &[])
+    // Seeds 1 to 8: widening to 1..16 reproduced env_logger's failing
+    // arrangement. 1.25 and 1.0 mm are the two density steps below the 1.5 mm
+    // base that improved the tuning corpus without breaking a board.
+    place_candidates_with_margins(board, sidecar, &[1.25, 1.0], &[1, 2, 3, 4, 5, 6, 7, 8])
+}
+
+/// One step below the tightest caller margin, tried only on dense boards.
+/// Courtyard gaps this size are still far above any copper clearance the fab
+/// profile checks, and a dense board has enough parallel channels that the
+/// seeded repack gains area without stranding a net. 0.9 mm kept all 12 corpus
+/// boards clean; 0.85 and 0.8 mm changed no board (Oct 2026).
+const TIGHTEST_SEEDED_MARGIN_MM: f64 = 0.9;
+
+/// Seeds the tightest-margin sweep tries, taken from the end of the caller's
+/// list. At 0.9 mm the first four seeds never won a corpus board, while seed
+/// 7 gave sensor_logger its 2172 mm2 arrangement (Oct 2026).
+const TIGHTEST_SWEEP_SEEDS: usize = 4;
+
+/// Whether the seeded tight-margin sweep applies to a board of this size.
+///
+/// The sweep only changes the arrangement when the board has enough
+/// equal-degree peers; below the gate it trades routing room for area. The
+/// gate is the placer's dense tier so the two cannot drift apart.
+fn uses_seeded_tight_margins(component_count: usize) -> bool {
+    component_count >= synth_place::DENSE_BOARD_COMPONENTS
 }
 
 /// Generate candidates, additionally placing once per entry in `extra_margins`
 /// and once per non-zero entry in `extra_seeds`.
 ///
-/// The base set the export chooses among leaves both at their defaults; the
-/// place→route→re-place loop varies them to get genuinely different
-/// arrangements to route. Density margin changes how tightly parts pack; a
-/// seed changes the order among equal-degree components, which changes the
-/// greedy first-fit packing without relaxing any constraint. Duplicate
-/// arrangements are removed, first occurrence kept, so the result stays
-/// deterministic.
+/// The base set the export chooses among already tries a spread of alternate
+/// seeds, so the export gets genuinely different legal arrangements to compare
+/// even without a router; the place→route→re-place loop adds a spread of density
+/// margins on top. A seed changes the order among equal-degree components,
+/// which changes the greedy first-fit packing without relaxing any constraint.
+/// Duplicate arrangements are removed, first occurrence kept, so the result
+/// stays deterministic.
 fn place_candidates_with_margins(
     board: &Board,
     sidecar: Option<&Path>,
@@ -716,50 +754,113 @@ fn place_candidates_with_margins(
     // override has to be applied here too or export reruns placement with
     // a different orientation than the placer just used.
     let rotation_overrides = flash_rotation_overrides(board);
-    let hinted =
-        synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar)?;
-    let mut candidates = vec![hinted];
+    // The hinted pass is a candidate, not a precondition. Taking it with `?`
+    // refused the whole export the moment it failed, before the unhinted
+    // pass, the other margins or the other seeds had been tried — so a board
+    // the hinted pass could not pack was rejected even when one of the others
+    // would have placed it, and a complete floorplan could not rescue it.
+    // Keep the error instead, and report it only if nothing places at all.
+    let mut candidates = Vec::new();
+    let mut first_error = None;
+    match synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar) {
+        Ok(hinted) => candidates.push(hinted),
+        Err(error) => first_error = Some(error),
+    }
 
-    // The hinted placement is not automatically the better one. A hint pins a
-    // part where the author asked, which can be worse for routing than where
-    // the solver would have put it; the export path has no router to ask, so
-    // it decides on legality first and on the route-aware estimate second.
-    // Only a candidate that is no less legal is allowed to win.
-    if hints_are_all_soft(board) {
-        let mut unhinted = board.clone();
-        for component in &mut unhinted.components {
-            component.placement_hint = None;
+    // A declared outline fixes the frame and, in the sidecar-driven flow, the
+    // floorplan too. Margin and seed sweeps only repack an auto-sized board,
+    // so skip them: they cost one full solve each and cannot change the result.
+    if board.outline.is_none() {
+        // The hinted placement is not automatically the better one. A hint pins a
+        // part where the author asked, which can be worse for routing than where
+        // the solver would have put it; the export path has no router to ask, so
+        // it decides on legality first and on the route-aware estimate second.
+        // Only a candidate that is no less legal is allowed to win.
+        if hints_are_all_soft(board) {
+            let mut unhinted = board.clone();
+            for component in &mut unhinted.components {
+                component.placement_hint = None;
+            }
+            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
+                &unhinted,
+                margin,
+                &rotation_overrides,
+                sidecar,
+            ) {
+                candidates.push(candidate);
+            }
         }
-        if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
-            &unhinted,
-            margin,
-            &rotation_overrides,
-            sidecar,
-        ) {
-            candidates.push(candidate);
+
+        for &extra in extra_margins {
+            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
+                board,
+                extra,
+                &rotation_overrides,
+                sidecar,
+            ) {
+                candidates.push(candidate);
+            }
+        }
+
+        for &seed in extra_seeds {
+            if seed == 0 {
+                continue;
+            }
+            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
+                board,
+                margin,
+                &rotation_overrides,
+                sidecar,
+                seed,
+            ) {
+                candidates.push(candidate);
+            }
+        }
+
+        // A seeded tight-margin arrangement only helps a board whose parts have
+        // enough equal-degree peers for the seed to change the row structure. On a
+        // handful of parts the seed rediscovers the same packing while the tighter
+        // margin eats the channel between courtyards: the 3-part ldo_block routes
+        // cleanly at the canonical margins and fails as soon as a seeded tight
+        // candidate wins on area. Dense boards keep the seeded sweep.
+        if uses_seeded_tight_margins(board.components.len()) {
+            // The tight margins at alternate seeds never won a dense corpus
+            // board: their best lost to the base seed and to the 0.9 mm sweep, so
+            // only the base margins above and the tightest sweep below run.
+            for &seed in extra_seeds.iter().rev().take(TIGHTEST_SWEEP_SEEDS) {
+                if seed == 0 {
+                    continue;
+                }
+                if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
+                    board,
+                    TIGHTEST_SEEDED_MARGIN_MM,
+                    &rotation_overrides,
+                    sidecar,
+                    seed,
+                ) {
+                    candidates.push(candidate);
+                }
+            }
         }
     }
 
-    for &extra in extra_margins {
-        if let Ok(candidate) =
-            synth_place::place_with_tuning_and_sidecar(board, extra, &rotation_overrides, sidecar)
-        {
-            candidates.push(candidate);
-        }
-    }
-
-    for &seed in extra_seeds {
-        if seed == 0 {
-            continue;
-        }
-        if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
-            board,
-            margin,
-            &rotation_overrides,
-            sidecar,
-            seed,
-        ) {
-            candidates.push(candidate);
+    // The export is what the external router and the independent DRC gate
+    // judge, so it fits the tight rim here. The default placer keeps the
+    // wider perimeter the built-in router's coverage tests need. A passive
+    // that sets an edge takes the tighter passive rim: its pads still clear
+    // the fab edge rule, and only the channel a connector or IC fans out
+    // through has to stay wide.
+    // A declared `outline` is the board the author asked for: fitting a tight
+    // rim round the parts would silently replace it.
+    if board.outline.is_none() {
+        for candidate in &mut candidates {
+            synth_place::fit_outline_with_passive_margin_mm(
+                board,
+                candidate,
+                synth_place::tight_edge_margin_mm(board),
+                synth_place::passive_edge_margin_mm(board),
+            );
+            synth_place::trim_outline_to_grid(board, candidate);
         }
     }
 
@@ -769,22 +870,136 @@ fn place_candidates_with_margins(
             distinct.push(candidate);
         }
     }
+    if distinct.is_empty() {
+        // Every pass failed. Report the hinted one's error: that is the board
+        // as written, so it is the diagnostic the author can act on. Only a
+        // failed hinted pass can leave this empty, and that pass records its
+        // error, so there is always one to return.
+        return Err(first_error.expect("a failed hinted pass records its error"));
+    }
     Ok(distinct)
 }
 
-/// Ordering key for candidate placements: legality, then routability.
+/// Ordering key for candidate placements: legality, then the hard edge
+/// contracts, then routability, then the shape the outline would fit.
 ///
 /// Violations lead — an illegal placement is never preferred, however short
-/// its copper — then net hazards, then total copper.
-fn placement_key(board: &Board, placement: &synth_place::Placement) -> (usize, usize, usize, u64) {
+/// its copper — then a candidate that keeps every hard edge-hinted connector
+/// on its declared edge, then net hazards, then the layout's shape. Shape
+/// only decides between candidates with the same legality, the same connector
+/// contracts and the same count of overlong nets, so a denser arrangement
+/// cannot buy its compactness with a routing hazard.
+///
+/// On a dense board whose rim hard edge hints fix, the shape term is dead
+/// space plus a quarter of the box (in quarter square millimetres). The same
+/// box can then hide very different amounts of air between the pinned rows,
+/// and only the dead cells separate them. On every other board the box is the
+/// right term: on a sparse board a handful of raster cells flips arrangements
+/// that the box already orders correctly.
+fn placement_key(
+    board: &Board,
+    placement: &synth_place::Placement,
+) -> (usize, usize, usize, usize, u64, u64) {
     let violations = placement_score(board, placement);
+    let contracts = hard_edge_contract_violations(board, placement);
     let estimate = synth_place::routability(board, placement);
+    let area_nm2 = u64::try_from(placement.board_outline.width_nm().max(0)).unwrap_or(0)
+        * u64::try_from(placement.board_outline.height_nm().max(0)).unwrap_or(0);
+    let size = if board.components.len() >= synth_place::DENSE_BOARD_COMPONENTS
+        && has_hard_edge_hint(board)
+    {
+        synth_place::dead_cells(board, placement) * 4 + area_nm2 / 1_000_000_000_000
+    } else {
+        area_nm2
+    };
     (
         violations,
+        contracts,
         thermal_crowding(board, placement),
         estimate.overlong_nets,
+        size,
         estimate.copper_length_nm,
     )
+}
+
+/// Whether the design pins at least one connector to an edge with a hard hint.
+///
+/// Such a hint fixes the rim the outline has to keep, so the box cannot shrink
+/// freely and the remaining win is the air between the pinned parts. A board
+/// without one has no fixed rim to pack around, and its box already orders
+/// candidates correctly.
+fn has_hard_edge_hint(board: &Board) -> bool {
+    board.components.iter().any(|component| {
+        matches!(component.kind.as_str(), "connector" | "jack")
+            && component.placement_hint.as_ref().is_some_and(|hint| {
+                hint.priority == synth_ir::PlacementPriority::Hard && hint.edge.is_some()
+            })
+    })
+}
+
+/// Hard edge hints are contracts, not preferences: a connector the design
+/// pins to an edge must stay in that edge's band and, when its part declares
+/// a mating face, open outward.
+///
+/// The solver enforces this while it places, but one of its escapes — the
+/// whole-canvas fallback a blocked band takes — can still leave a connector
+/// in the middle of the board. Candidates differ in whether that happened, so
+/// the export has to count it; otherwise a taller arrangement that routed
+/// marginally better used to win with the connector stranded 13 mm from its
+/// declared edge.
+fn hard_edge_contract_violations(board: &Board, placement: &synth_place::Placement) -> usize {
+    let band_cap_nm = synth_geometry::mm_to_nm(15.0);
+    board
+        .components
+        .iter()
+        .filter(|component| matches!(component.kind.as_str(), "connector" | "jack"))
+        .filter_map(|component| {
+            let hint = component.placement_hint.as_ref()?;
+            let edge = hint.edge.as_ref()?;
+            if hint.priority != synth_ir::PlacementPriority::Hard {
+                return None;
+            }
+            let placed = placement
+                .components
+                .iter()
+                .find(|candidate| candidate.id == component.id)?;
+            let outline = placement.board_outline;
+            let (distance_nm, board_edge) = match edge {
+                synth_ir::PlacementEdge::Left => (
+                    placed.center.x_nm - outline.min.x_nm,
+                    synth_place::floorplan::BoardEdge::Left,
+                ),
+                synth_ir::PlacementEdge::Right => (
+                    outline.max.x_nm - placed.center.x_nm,
+                    synth_place::floorplan::BoardEdge::Right,
+                ),
+                synth_ir::PlacementEdge::Top => (
+                    placed.center.y_nm - outline.min.y_nm,
+                    synth_place::floorplan::BoardEdge::Top,
+                ),
+                synth_ir::PlacementEdge::Bottom => (
+                    outline.max.y_nm - placed.center.y_nm,
+                    synth_place::floorplan::BoardEdge::Bottom,
+                ),
+            };
+            // The same band the solver's edge hint reserves, capped by the
+            // board so a small outline cannot make it unreachable.
+            let band_nm = band_cap_nm
+                .min(outline.width_nm() / 3)
+                .min(outline.height_nm() / 3);
+            let off_edge = distance_nm > band_nm;
+            let mis_faced = component
+                .part
+                .as_ref()
+                .and_then(|part| part.footprint_dimensions.as_ref())
+                .and_then(|dimensions| dimensions.mating_face)
+                .is_some_and(|face| {
+                    placed.rotation
+                        != synth_place::floorplan::rotation_for_mating_edge(face, board_edge)
+                });
+            (off_edge || mis_faced).then_some(())
+        })
+        .count()
 }
 
 /// Pairs of hot components placed within [`HOT_SPACING_MM`] of each other.
@@ -900,8 +1115,11 @@ fn placement_score(board: &Board, placement: &synth_place::Placement) -> usize {
 
 /// The profile of the manufacturer the board declares, resolved as the router
 /// resolves it, so the exported rules and the router work to the same numbers.
-fn manufacturer_profile(board: &Board) -> synth_drc::ManufacturerProfile {
-    synth_drc::ManufacturerProfile::from_name(board.manufacturer.as_deref().unwrap_or_default())
+pub(crate) fn manufacturer_profile(board: &Board) -> synth_drc::ManufacturerProfile {
+    synth_drc::ManufacturerProfile::for_layers(
+        board.manufacturer.as_deref().unwrap_or_default(),
+        board.layers,
+    )
 }
 
 /// The project's custom DRC rules (`<board>.kicad_dru`), from the board's
@@ -910,15 +1128,78 @@ fn manufacturer_profile(board: &Board) -> synth_drc::ManufacturerProfile {
 /// `kicad-cli` does not read them from the project file. An NPTH hole is an
 /// edge to KiCad, so it gets its own rule at the hole-to-copper figure; KiCad
 /// applies the last matching rule, so it comes after the general one.
-fn design_rules(profile: &synth_drc::ManufacturerProfile) -> String {
+fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> String {
     let edge = synth_geometry::nm_to_mm(profile.min_copper_to_edge_nm);
     let hole = synth_geometry::nm_to_mm(profile.min_drill_to_copper_nm);
-    format!(
+    let mut rules = format!(
         "(version 1)\n\
          (rule \"manufacturer copper to board edge\"\n  (constraint edge_clearance (min {edge}mm)))\n\
          (rule \"manufacturer copper to NPTH hole\"\n  (constraint edge_clearance (min {hole}mm))\n  (condition \"A.Pad_Type == 'NPTH, mechanical'\"))\n\
          (rule \"manufacturer copper to hole\"\n  (constraint hole_clearance (min {hole}mm)))\n"
-    )
+    );
+    // A via no wider than the process's via-in-pad land, inside the courtyard of
+    // a component that declares an under-pad escape, is a filled and capped via:
+    // the manufacturer's guide gives its land as the drill plus 0.15 mm, which
+    // leaves less ring than the plain via floor the project states board-wide.
+    // An ordinary small via elsewhere keeps the floor. KiCad applies the last
+    // matching rule, so these come last.
+    // A filled and capped via is declared by the board's `requires via_in_pad` as
+    // well as by the component's escape, as the in-memory DRC reads it.
+    let via_in_pad_required = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad);
+    if let Some(land_nm) = profile.via_in_pad_land_nm().filter(|_| via_in_pad_required) {
+        use std::fmt::Write as _;
+        let land = synth_geometry::nm_to_mm(land_nm);
+        let ring = synth_geometry::nm_to_mm(profile.via_in_pad_land_extra_nm / 2);
+        for component in board.components.iter().filter(|c| {
+            c.escape
+                .as_ref()
+                .is_some_and(|e| !e.off && e.method == Some(synth_ir::EscapeMethod::Underpad))
+        }) {
+            let refdes = &component.refdes;
+            let _ = writeln!(
+                rules,
+                "(rule \"filled and capped via in pad {refdes}\"\n  (constraint annular_width (min {ring}mm))\n  (constraint via_diameter (min {land}mm))\n  (condition \"A.Type == 'Via' && A.Diameter <= {land}mm && A.insideCourtyard('{refdes}')\"))"
+            );
+        }
+    }
+    rules.push_str(&layer_pin_rules(board));
+    rules
+}
+
+/// A `netclass { layers … }` pin as KiCad custom rules, so `kicad-cli pcb
+/// drc` and a person editing the board both see it: a track of the class on
+/// any other copper layer is a violation, and a class held to one layer may
+/// not use a via, since a through via leaves that layer.
+fn layer_pin_rules(board: &Board) -> String {
+    use std::fmt::Write as _;
+    let copper: Vec<String> = match board.layers {
+        0 | 1 => Vec::new(),
+        count => std::iter::once("F.Cu".to_string())
+            .chain((1..count - 1).map(|inner| format!("In{inner}.Cu")))
+            .chain(std::iter::once("B.Cu".to_string()))
+            .collect(),
+    };
+    let mut rules = String::new();
+    for class in board.netclasses.iter().filter(|c| !c.layers.is_empty()) {
+        let name = &class.name;
+        for layer in copper.iter().filter(|l| !class.layers.contains(l)) {
+            let _ = write!(
+                rules,
+                "(rule \"netclass {name} stays off {layer}\"\n  (layer \"{layer}\")\n  \
+                 (condition \"A.NetClass == '{name}'\")\n  (constraint disallow track))\n"
+            );
+        }
+        if class.layers.len() == 1 {
+            let _ = write!(
+                rules,
+                "(rule \"netclass {name} changes no layer\"\n  \
+                 (condition \"A.NetClass == '{name}'\")\n  (constraint disallow via))\n"
+            );
+        }
+    }
+    rules
 }
 
 /// The `board.design_settings` block for a board's declared manufacturer.
@@ -1119,6 +1400,14 @@ fn build_net_settings<'a>(
         if a.class == "Default" {
             continue;
         }
+        // The board file names a net by its IR name, and the router reads the
+        // classes by the names in the board it routes. A net drawn as a plain
+        // wire has no label or power symbol, so it has no `visible` name and,
+        // without this, no class: it routed at the 0.2 mm default whatever the
+        // source declared.
+        if let Some(net) = board.net(a.net).filter(|net| !net.auto_named) {
+            assignments_json.insert(net.name.clone(), json!(a.class));
+        }
         let Some(names) = visible.get(&a.net) else {
             continue;
         };
@@ -1143,6 +1432,22 @@ fn build_net_settings<'a>(
     })
 }
 
+/// The layout the symbol library is built from: the first sheet's, with the power
+/// flags of every other sheet added. A board split over several sheets puts a rail
+/// label on one sheet only, and a library built from the first sheet alone would not
+/// define that label's symbol, so ERC would report its instances as missing.
+fn library_layout(sheets: &[synth_layout::sheets::SheetLayout]) -> synth_layout::Layout {
+    let mut merged = sheets[0].layout.clone();
+    for sheet in &sheets[1..] {
+        for flag in &sheet.layout.power_flags {
+            if !merged.power_flags.iter().any(|f| f.label == flag.label) {
+                merged.power_flags.push(flag.clone());
+            }
+        }
+    }
+    merged
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1153,6 +1458,20 @@ mod tests {
         assert_eq!(sanitize_filename("ok-name_42"), "ok-name_42");
         assert_eq!(sanitize_filename("../etc/passwd"), "___etc_passwd");
         assert_eq!(sanitize_filename(""), "untitled");
+    }
+
+    #[test]
+    fn seeded_tight_margins_start_exactly_at_the_dense_part_count() {
+        let gate = synth_place::DENSE_BOARD_COMPONENTS;
+        assert!(
+            !uses_seeded_tight_margins(gate - 1),
+            "a board with {} parts is below the dense gate",
+            gate - 1
+        );
+        assert!(
+            uses_seeded_tight_margins(gate),
+            "a board with {gate} parts is the first that may run the sweep"
+        );
     }
 
     fn board_from(src: &str) -> Board {
@@ -1168,6 +1487,184 @@ mod tests {
         synth_ir::lower(&parsed.ast.unwrap(), &registry, "inline.synth")
             .board
             .unwrap()
+    }
+
+    /// An MCU, a header, and (`dense`) eighteen 0603s to pass the dense-part
+    /// gate. `hint` pins the header to the right edge as a hard contract.
+    fn edge_candidate_board(hint: bool, dense: bool) -> Board {
+        use std::fmt::Write as _;
+        let mut src = String::from("board \"edge_candidate\" {\n  layers 2\n");
+        src.push_str("  component U1: mcu \"rp2350\"\n");
+        src.push_str("  component J1: connector \"header_1x3\"");
+        if hint {
+            src.push_str(" { placement_hint { edge: right priority: hard } }");
+        }
+        src.push('\n');
+        if dense {
+            for index in 1..=18 {
+                writeln!(src, "  component C{index}: capacitor \"c_generic_0603\"").unwrap();
+            }
+        }
+        src.push_str("}\n");
+        board_from(&src)
+    }
+
+    /// Manual 60 x 30 mm arrangement of [`edge_candidate_board`]: the MCU on
+    /// the right, the header at `connector_x_mm`, the passives in two rows.
+    fn edge_candidate_placement(board: &Board, connector_x_mm: f64) -> synth_place::Placement {
+        use synth_geometry::{Layer, Point, Rect, Rotation, mm_to_nm};
+        let mut passive = 0_u32;
+        let components = board
+            .components
+            .iter()
+            .map(|component| {
+                let (x_mm, y_mm) = match component.refdes.as_str() {
+                    "U1" => (45.0, 15.0),
+                    "J1" => (connector_x_mm, 15.0),
+                    _ => {
+                        let column = f64::from(passive % 9);
+                        let row = if passive < 9 { 3.0 } else { 27.0 };
+                        passive += 1;
+                        (5.0 + column * 6.0, row)
+                    }
+                };
+                synth_place::ComponentPlacement {
+                    id: component.id,
+                    center: Point::new(mm_to_nm(x_mm), mm_to_nm(y_mm)),
+                    rotation: Rotation::Zero,
+                    layer: Layer::Top,
+                }
+            })
+            .collect();
+        synth_place::Placement {
+            board_outline: Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0))),
+            components,
+        }
+    }
+
+    fn outline_area_nm2(placement: &synth_place::Placement) -> u64 {
+        u64::try_from(placement.board_outline.width_nm().max(0)).unwrap()
+            * u64::try_from(placement.board_outline.height_nm().max(0)).unwrap()
+    }
+
+    /// A stranded hard edge connector is a contract violation, not a cheaper
+    /// shape: the export must keep the connector on its declared edge even
+    /// when the stranded arrangement leaves less dead space.
+    /// A board split over several sheets puts a power-rail label on one sheet only; the
+    /// symbol library is built from the labels of all of them, not the first sheet's.
+    #[test]
+    fn the_symbol_library_defines_a_rail_label_that_only_a_later_sheet_uses() {
+        let board = board_from(
+            r#"board "b" { layers 2
+                component U1: regulator "ams1117_3v3"
+                component C1: capacitor "c_generic_0805" value "10uF"
+                connect U1.vout -> C1.p1
+                connect U1.gnd -> C1.p2
+            }"#,
+        );
+        let layout = synth_layout::layout(&board);
+        let mut flag = layout
+            .power_flags
+            .first()
+            .expect("the regulator board has a power flag")
+            .clone();
+        flag.label = "ONLY_ON_SHEET_TWO".to_string();
+        let mut first = layout.clone();
+        first.power_flags.clear();
+        let mut second = layout;
+        second.power_flags = vec![flag];
+        let sheets = vec![
+            synth_layout::sheets::SheetLayout {
+                name: None,
+                layout: first,
+            },
+            synth_layout::sheets::SheetLayout {
+                name: Some("B".to_string()),
+                layout: second,
+            },
+        ];
+        let library =
+            symbol_lib::build_library(&board, &library_layout(&sheets)).to_string_pretty();
+        assert!(
+            library.contains("ONLY_ON_SHEET_TWO"),
+            "the library must define the label of a later sheet's power flag"
+        );
+        let first_sheet_only =
+            symbol_lib::build_library(&board, &sheets[0].layout).to_string_pretty();
+        assert!(!first_sheet_only.contains("ONLY_ON_SHEET_TWO"));
+    }
+
+    #[test]
+    fn a_stranded_edge_connector_loses_to_a_flush_one_despite_dead_cells() {
+        let board = edge_candidate_board(true, true);
+        let flush = edge_candidate_placement(&board, 57.8);
+        let stranded = edge_candidate_placement(&board, 20.0);
+        let flush_key = placement_key(&board, &flush);
+        let stranded_key = placement_key(&board, &stranded);
+
+        assert_eq!(flush_key.0, 0, "the flush candidate must be legal");
+        assert_eq!(flush_key.0, stranded_key.0, "legality does not decide");
+        assert_eq!(flush_key.1, 0, "the flush connector keeps its edge");
+        assert_eq!(stranded_key.1, 1, "the stranded connector breaks it");
+        assert!(
+            stranded_key.4 < flush_key.4,
+            "the stranded shape has less dead space ({} vs {}), so the contract \
+             term is what rejects it",
+            stranded_key.4,
+            flush_key.4
+        );
+        assert!(
+            flush_key < stranded_key,
+            "the flush candidate must rank first"
+        );
+    }
+
+    /// On a dense board whose hard edge hint fixes the rim, the shape term is
+    /// dead cells plus a quarter of the box; a sparse board, or a dense one
+    /// without a hard edge hint, keeps the box alone.
+    #[test]
+    fn the_shape_term_counts_dead_cells_only_on_a_pinned_dense_board() {
+        for (hint, dense, dead_driven) in [
+            (true, true, true),
+            (true, false, false),
+            (false, true, false),
+        ] {
+            let board = edge_candidate_board(hint, dense);
+            let placement = edge_candidate_placement(&board, 57.8);
+            let area_nm2 = outline_area_nm2(&placement);
+            let size = placement_key(&board, &placement).4;
+            let expected = if dead_driven {
+                synth_place::dead_cells(&board, &placement) * 4 + area_nm2 / 1_000_000_000_000
+            } else {
+                area_nm2
+            };
+            assert_eq!(
+                size, expected,
+                "hint={hint} dense={dense}: the shape term must match its guard"
+            );
+        }
+    }
+
+    /// The dead-cell term is what orders two legal dense candidates that
+    /// share the same box and the same connector contracts.
+    #[test]
+    fn a_dense_board_ranks_two_flush_candidates_by_dead_cells() {
+        let board = edge_candidate_board(true, true);
+        let edge = edge_candidate_placement(&board, 57.8);
+        let inset = edge_candidate_placement(&board, 52.0);
+        let edge_key = placement_key(&board, &edge);
+        let inset_key = placement_key(&board, &inset);
+
+        assert_eq!(edge_key.0, inset_key.0, "legality does not decide");
+        assert_eq!(edge_key.1, inset_key.1, "both stay in the edge band");
+        let edge_dead = synth_place::dead_cells(&board, &edge);
+        let inset_dead = synth_place::dead_cells(&board, &inset);
+        assert_ne!(edge_dead, inset_dead, "the two shapes must differ");
+        assert_eq!(
+            edge_key < inset_key,
+            edge_dead < inset_dead,
+            "dead cells decide the dense shape term: {edge_dead} vs {inset_dead}"
+        );
     }
 
     #[test]
@@ -1209,6 +1706,27 @@ mod tests {
         assert!(
             assignments.values().any(|v| v == "I2C"),
             "an I2C net must be assigned: {assignments:?}"
+        );
+    }
+
+    /// A net the schematic draws as a plain wire has no label for KiCad to know
+    /// it by, but the board names it, and the router reads classes by that name.
+    #[test]
+    fn a_net_with_no_label_is_still_assigned_its_class() {
+        let board = board_from(
+            r#"board "b" {
+                netclass "BIG" { trace_width 0.8mm }
+                component J1: connector "jst_xh_2pin"
+                component R1: resistor "r_generic_0603" value "1k"
+                net "VIN_RAW" class "BIG" { J1.p1 R1.p1 }
+            }"#,
+        );
+        let settings = build_net_settings(&board, std::iter::empty());
+        let assignments = settings["netclass_assignments"].as_object().unwrap();
+        assert_eq!(
+            assignments.get("VIN_RAW"),
+            Some(&json!("BIG")),
+            "{assignments:?}"
         );
     }
 
@@ -1305,7 +1823,7 @@ mod tests {
              min_annular_ring_mm = 0.13\nmin_drill_to_copper_mm = 0.33\n",
         )
         .unwrap();
-        let rules = design_rules(&profile);
+        let rules = design_rules(&profile, &board_from(r#"board "b" { layers 2 }"#));
         for expected in [
             "(constraint edge_clearance (min 0.77mm))",
             "(constraint hole_clearance (min 0.33mm))",
@@ -1313,6 +1831,98 @@ mod tests {
         ] {
             assert!(rules.contains(expected), "{expected}\n{rules}");
         }
+    }
+
+    /// A `netclass { layers … }` pin becomes one rule per copper layer the
+    /// class may not use, plus a via ban when it keeps to a single layer.
+    #[test]
+    fn a_layer_pin_is_written_as_custom_rules() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let one = design_rules(
+            &profile,
+            &board_from(r#"board "b" { layers 4 netclass "ETH" { layers "F.Cu" } }"#),
+        );
+        for layer in ["In1.Cu", "In2.Cu", "B.Cu"] {
+            assert!(
+                one.contains(&format!(
+                    "(rule \"netclass ETH stays off {layer}\"\n  (layer \"{layer}\")\n  \
+                     (condition \"A.NetClass == 'ETH'\")\n  (constraint disallow track))"
+                )),
+                "{layer}\n{one}"
+            );
+        }
+        assert!(!one.contains("stays off F.Cu"), "{one}");
+        assert!(one.contains("(constraint disallow via)"), "{one}");
+
+        let outer = design_rules(
+            &profile,
+            &board_from(r#"board "b" { layers 4 netclass "ETH" { layers "F.Cu", "B.Cu" } }"#),
+        );
+        assert!(outer.contains("stays off In1.Cu") && !outer.contains("stays off B.Cu"));
+        assert!(
+            !outer.contains("disallow via"),
+            "two layers may be joined: {outer}"
+        );
+
+        let free = design_rules(
+            &profile,
+            &board_from(r#"board "b" { layers 4 netclass "X" { } }"#),
+        );
+        assert!(!free.contains("netclass"), "{free}");
+    }
+
+    /// A via-in-pad tier states the guide's land for a filled and capped via
+    /// as a rule of its own, so KiCad does not hold it to the plain via ring
+    /// floor the project states board-wide. A tier without via-in-pad gets no
+    /// such rule.
+    #[test]
+    fn a_via_in_pad_tier_exports_the_filled_via_rule_and_a_plain_tier_does_not() {
+        let source = r#"board "b" { layers 6
+            requires via_in_pad
+            component U1: fpga "ice40hx4k_bg121" { escape { method underpad } }
+            component U2: fpga "ice40hx4k_bg121" { escape { off } } }"#;
+        let advanced = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(source),
+        );
+        assert!(
+            advanced.contains("(constraint annular_width (min 0.075mm))"),
+            "{advanced}"
+        );
+        assert!(
+            advanced.contains("A.Type == 'Via' && A.Diameter <= 0.35mm && A.insideCourtyard('U1')"),
+            "{advanced}"
+        );
+        assert!(
+            !advanced.contains("insideCourtyard('U2')"),
+            "a part that does not escape under its pads has no filled via: {advanced}"
+        );
+        let undeclared = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(r#"board "b" { layers 6 }"#),
+        );
+        assert!(
+            !undeclared.contains("annular_width"),
+            "a board that declares no under-pad escape keeps the plain floor: {undeclared}"
+        );
+        let standard = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_standard(),
+            &board_from(source),
+        );
+        assert!(!standard.contains("annular_width"), "{standard}");
+        // An escape alone buys the process nothing: no one fills or caps a via the
+        // board did not require via-in-pad for, so the ring floor stands.
+        let no_requirement = design_rules(
+            &synth_drc::ManufacturerProfile::jlc_advanced(),
+            &board_from(
+                r#"board "b" { layers 6
+                component U1: fpga "ice40hx4k_bg121" { escape { method underpad } } }"#,
+            ),
+        );
+        assert!(
+            !no_requirement.contains("annular_width"),
+            "a board that does not require via-in-pad keeps the plain floor: {no_requirement}"
+        );
     }
 
     /// The router resolves the board's declared manufacturer, so the exported

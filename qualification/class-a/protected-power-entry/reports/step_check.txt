@@ -1,0 +1,2 @@
+framing ok: True; entities 41956; dangling references 0; solids 18; footprints with a model in the board 84
+845073b94d geometry hash

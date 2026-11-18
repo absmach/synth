@@ -1,0 +1,27 @@
+id = "header_1x2"
+kind = "connector"
+description = "1x2 through-hole pin header, 2.54mm pitch, for a jumper"
+mpn = "HX PZ2.54-1x2P ZZ"
+lcsc_pn = "C32713268"
+kicad_symbol = "Connector_Generic:Conn_01x02"
+kicad_footprint = "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical"
+
+[footprint_dimensions]
+width_mm = 3.54
+height_mm = 6.08
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.lcsc.com/datasheet/lcsc_datasheet_2407231541_hanxia-HX-PZ2-54-1x2P-ZZ_C32713268.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-27"

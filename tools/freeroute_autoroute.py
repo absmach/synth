@@ -681,47 +681,15 @@ def main() -> int:
             check=True,
         )
 
-        try:
-            stitched, unresolved = stitch_floating_pour(
-                args.output_board, args.allow_via_in_pad
-            )
-        except Exception as exc:
-            write_report(router="freerouting", error="stitch_failed", detail=str(exc))
-            raise
-        if stitched:
-            print(f"stitched {len(stitched)} floating pour piece(s)", flush=True)
-        try:
-            tied, tie_unresolved = tie_distant_ground_pads(args.output_board)
-        except Exception as exc:
-            write_report(router="freerouting", error="tie_failed", detail=str(exc))
-            raise
-        if tied:
-            print(f"tied {len(tied)} ground pad(s) to the planes", flush=True)
-
-        # Counted from the merged board rather than from the engine's log, so
-        # the claim can be checked against the file that was written.
-        written = pcbnew.LoadBoard(args.output_board)
-        tracks = all_tracks(written)
-        # KiCad names a routed track `PCB_TRACK`; the constant is matched by
-        # suffix so a build that spells it differently still counts, and an
-        # unmatched name is reported rather than quietly folded into a zero.
-        segments = sum(1 for t in tracks if t.GetClass().endswith("TRACK"))
-        vias = sum(1 for t in tracks if t.GetClass().endswith("VIA"))
-        write_report(
-            router="freerouting",
-            jar=str(args.jar),
-            java_version=java_version(args.java),
-            passes=args.passes,
-            threads=args.threads,
-            ses_path=ses,
-            imported_segments=segments,
-            imported_vias=vias,
-            stitch_vias=len(stitched),
-            stitch_unresolved=unresolved,
-            ground_vias=len(tied),
-            ground_unresolved=tie_unresolved,
-            notes=[],
+        postprocess = os.path.join(
+            os.path.dirname(__file__), "freeroute_postprocess.py"
         )
+        command = [sys.executable, postprocess, args.output_board]
+        if args.allow_via_in_pad:
+            command.append("--allow-via-in-pad")
+        if args.report:
+            command.extend(["--report", args.report])
+        subprocess.run(command, check=True)
     return 0
 
 

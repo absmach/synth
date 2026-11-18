@@ -3,10 +3,10 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::SCHEMA_VERSION;
 use crate::location::Location;
 use crate::patch::Patch;
 use crate::severity::Severity;
-use crate::SCHEMA_VERSION;
 
 /// A reference to a domain entity (component, pin, net, ...) that the
 /// diagnostic concerns. Tagged on `kind` for forward compatibility.

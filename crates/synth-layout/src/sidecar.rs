@@ -208,6 +208,19 @@ pub struct SidecarLayout {
     /// these, so they belong in `<design>.placement.layout.toml`.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub labels: HashMap<String, SidecarLabel>,
+    /// Vias the design fixes by hand, such as a thermal array under an
+    /// exposed pad. The PCB export writes them before routing, so the router
+    /// sees them as existing copper of their net.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub vias: Vec<SidecarVia>,
+    /// Explicit closed board outline in board millimetres, in path order.
+    ///
+    /// Empty keeps the placer's fitted rectangle. A non-empty list replaces
+    /// the rectangle in the exported Edge.Cuts, so a notch or other
+    /// non-rectangular outline is part of the design source and is reproduced
+    /// by a normal export.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outline: Vec<SidecarPoint>,
     /// Force the sheet to the smallest size that fits the drawing, with the
     /// drawing centred on it.
     /// Applied *after* the auto-layout, because the pipeline re-derives
@@ -217,8 +230,19 @@ pub struct SidecarLayout {
     pub fit_sheet: bool,
 }
 
+/// One vertex of an explicit board outline, in board millimetres.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct SidecarPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SidecarPlacement {
+    /// Position in the file's own space: sheet millimetres in a schematic
+    /// sidecar; in a placement sidecar, board millimetres at the footprint
+    /// origin, the `(at x y)` the exported board carries, not the placer's
+    /// courtyard centre.
     #[serde(default)]
     pub x: f64,
     #[serde(default)]
@@ -282,10 +306,28 @@ pub enum OverridePriority {
     Hard,
 }
 
+/// A via placed by hand, in board millimetres, on a named net.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SidecarVia {
+    pub x: f64,
+    pub y: f64,
+    pub net: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ForcedNetLabel {
     pub net: String,
     pub source: OverrideSource,
+}
+
+/// True when `path` is a schematic sidecar that pins at least one component.
+///
+/// A sidecar with only a page fit or forced labels leaves the layout free to
+/// re-pack; one with component positions is a drawing the author arranged by
+/// hand, so the multi-sheet split must keep it as it is.
+pub fn has_component_overrides(path: Option<&Path>) -> bool {
+    path.and_then(SidecarLayout::load_from_file)
+        .is_some_and(|sidecar| !sidecar.components.is_empty())
 }
 
 impl SidecarLayout {
@@ -293,7 +335,6 @@ impl SidecarLayout {
         let content = std::fs::read_to_string(path).ok()?;
         toml::from_str(&content).ok()
     }
-
     pub fn save_to_file(&self, path: &Path) -> std::io::Result<()> {
         let content = toml::to_string_pretty(self)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -301,13 +342,12 @@ impl SidecarLayout {
     }
 
     pub fn merge_override(&mut self, refdes: String, placement: SidecarPlacement) {
-        if let Some(existing) = self.components.get(&refdes) {
-            if existing.source == OverrideSource::HumanDrag
-                && placement.source == OverrideSource::Agent
-                && existing.priority >= placement.priority
-            {
-                return;
-            }
+        if let Some(existing) = self.components.get(&refdes)
+            && existing.source == OverrideSource::HumanDrag
+            && placement.source == OverrideSource::Agent
+            && existing.priority >= placement.priority
+        {
+            return;
         }
         self.components.insert(refdes, placement);
     }
@@ -331,21 +371,21 @@ impl SidecarLayout {
             // Stale-sheet guard (§P26): coordinates are sheet-local,
             // so an override recorded on another sheet must not move
             // this component.
-            if let Some(want) = override_pos.sheet.as_deref() {
-                if sheet_of(refdes) != Some(want) {
-                    continue;
-                }
+            if let Some(want) = override_pos.sheet.as_deref()
+                && sheet_of(refdes) != Some(want)
+            {
+                continue;
             }
-            if let Some(&comp_id) = refdes_to_id.get(refdes) {
-                if let Some(placement) = layout.components.iter_mut().find(|p| p.id == comp_id) {
-                    placement.center_mm = (override_pos.x, override_pos.y);
-                    placement.rotation = match override_pos.rotation {
-                        90 => Rotation::Ninety,
-                        180 => Rotation::OneEighty,
-                        270 => Rotation::TwoSeventy,
-                        _ => Rotation::Zero,
-                    };
-                }
+            if let Some(&comp_id) = refdes_to_id.get(refdes)
+                && let Some(placement) = layout.components.iter_mut().find(|p| p.id == comp_id)
+            {
+                placement.center_mm = (override_pos.x, override_pos.y);
+                placement.rotation = match override_pos.rotation {
+                    90 => Rotation::Ninety,
+                    180 => Rotation::OneEighty,
+                    270 => Rotation::TwoSeventy,
+                    _ => Rotation::Zero,
+                };
             }
         }
 
@@ -358,10 +398,10 @@ impl SidecarLayout {
                 .iter()
                 .filter(|(_, p)| p.relative_to.is_some())
             {
-                if let Some(want) = override_pos.sheet.as_deref() {
-                    if sheet_of(refdes) != Some(want) {
-                        continue;
-                    }
+                if let Some(want) = override_pos.sheet.as_deref()
+                    && sheet_of(refdes) != Some(want)
+                {
+                    continue;
                 }
                 let Some(anchor) = override_pos.relative_to.as_ref() else {
                     continue;
@@ -558,6 +598,30 @@ hide = true
     }
 
     #[test]
+    fn a_sidecar_without_vias_has_none_and_writes_none_back() {
+        let sidecar: SidecarLayout = toml::from_str("[components.U1]\nx = 1.0\ny = 2.0\n").unwrap();
+        assert!(sidecar.vias.is_empty());
+        let written = toml::to_string(&sidecar).unwrap();
+        assert!(!written.contains("vias"), "{written}");
+    }
+
+    #[test]
+    fn vias_survive_a_round_trip() {
+        let toml = "[[vias]]\nx = 33.0\ny = 16.0\nnet = \"GND\"\n";
+        let sidecar: SidecarLayout = toml::from_str(toml).unwrap();
+        assert_eq!(
+            sidecar.vias,
+            vec![SidecarVia {
+                x: 33.0,
+                y: 16.0,
+                net: "GND".into()
+            }]
+        );
+        let again: SidecarLayout = toml::from_str(&toml::to_string(&sidecar).unwrap()).unwrap();
+        assert_eq!(again.vias, sidecar.vias);
+    }
+
+    #[test]
     fn labels_survive_a_round_trip() {
         let toml = "[labels.C3]\nhide = true\n";
         let sidecar: SidecarLayout = toml::from_str(toml).unwrap();
@@ -569,6 +633,7 @@ hide = true
         use synth_diagnostics::Span;
         use synth_ir::{Board, Component, ComponentId};
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -590,6 +655,7 @@ hide = true
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: sheet.map(str::to_string),
                     source_span: Span::new(0, 0),
@@ -702,11 +768,13 @@ mod forced_label_tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
         };
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -967,6 +1035,20 @@ mod forced_label_tests {
             "board.placement.layout.toml"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn explicit_outline_parses_and_round_trips() {
+        let text = "schema_version = 2\n\
+                    [[outline]]\nx = 2.5\ny = -0.01\n\
+                    [[outline]]\nx = 10.0\ny = -0.01\n\
+                    [[outline]]\nx = 10.0\ny = 20.0\n\
+                    [[outline]]\nx = 26.4\ny = 20.0\n";
+        let sidecar: SidecarLayout = toml::from_str(text).expect("outline parses");
+        assert_eq!(sidecar.outline.len(), 4);
+        assert_eq!(sidecar.outline[1], SidecarPoint { x: 10.0, y: -0.01 });
+        let written = toml::to_string(&sidecar).expect("outline serializes");
+        assert!(written.contains("[[outline]]"));
     }
 
     #[test]

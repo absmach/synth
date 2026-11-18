@@ -34,3 +34,5 @@ electrical_type = "passive"
 
 [provenance]
 datasheet_url = "https://ecsxtal.com/store/pdf/ecx-32.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"

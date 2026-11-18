@@ -31,10 +31,12 @@ pub fn pin_with(
         electrical_type,
         capabilities: caps.to_vec(),
         required: false,
+        footprint_only: false,
         unit: None,
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
     }
 }
 
@@ -61,6 +63,7 @@ pub fn part(kind: &str, pins: Vec<Pin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -74,6 +77,8 @@ pub fn part_with_decoupling(kind: &str, pins: Vec<Pin>, rules: &[(&str, u32)]) -
             value: "100nF".to_string(),
             count: *count,
             max_distance_mm: None,
+            to: None,
+            through: None,
         })
         .collect();
     p
@@ -89,6 +94,7 @@ pub fn component(id: u32, refdes: &str, part: Part) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::default(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: Span::new(0, 0),
@@ -136,6 +142,7 @@ pub fn board(
         legends: false,
         keepouts: Vec::new(),
         stackup: None,
+        outline: None,
         netclasses: Vec::new(),
         buses: Vec::new(),
         modules: Vec::new(),

@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use synth_ir::{Board, PinId};
-use synth_layout::route::pin_terminal_xy;
 use synth_layout::Layout;
+use synth_layout::route::pin_terminal_xy;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

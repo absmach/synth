@@ -1,0 +1,37 @@
+id = "cdsot23_sm712"
+kind = "diode"
+version = 0
+lifecycle = "active"
+description = "Bourns CDSOT23-SM712 400 W bidirectional dual TVS, -7 V to +12 V standoff, SOT-23, for RS-485 A and B surge protection"
+mpn = "CDSOT23-SM712"
+lcsc_pn = "C404012"
+kicad_symbol = "Diode:SM712_SOT23"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
+
+[footprint_dimensions]
+width_mm = 3.86
+height_mm = 3.4
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 12.0
+
+[[pins]]
+name = "a1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "a2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "common"
+number = "3"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.lcsc.com/datasheet/lcsc_datasheet_1912111437_BOURNS-CDSOT23-SM712_C404012.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-27"

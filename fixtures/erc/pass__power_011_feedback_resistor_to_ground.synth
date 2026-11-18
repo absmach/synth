@@ -22,4 +22,6 @@ board "power_011_feedback_resistor_to_ground" {
   connect U1.fb -> R3.p1
   connect R3.p2 -> U1.gnd
   connect J1.p1 -> U1.en
+  // The exposed thermal pad is the ground path on this regulator.
+  connect U1.ep -> U1.gnd
 }

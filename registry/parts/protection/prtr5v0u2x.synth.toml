@@ -39,3 +39,5 @@ required = true
 
 [provenance]
 datasheet_url = "https://assets.nexperia.com/documents/data-sheet/PRTR5V0U2X.pdf"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

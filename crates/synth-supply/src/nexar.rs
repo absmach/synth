@@ -2,11 +2,11 @@
 
 //! Nexar GraphQL distributor API adapter (covers Mouser, DigiKey, Arrow, Farnell).
 
-use crate::cache::load_env_file;
+use crate::cache::env_or_dotenv;
 use crate::distributor::Distributor;
 use crate::types::{
-    normalize_part_number, AssemblyEligibility, LifecycleStatus, PriceTier, PurchaseConstraints,
-    StockStatus, SupplyError, SupplyStatus,
+    AssemblyEligibility, LifecycleStatus, PriceTier, PurchaseConstraints, StockStatus, SupplyError,
+    SupplyStatus, normalize_part_number,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -27,8 +27,7 @@ pub struct NexarDistributor {
 impl NexarDistributor {
     #[must_use]
     pub fn new() -> Self {
-        load_env_file();
-        let token = std::env::var("NEXAR_TOKEN").ok();
+        let token = env_or_dotenv("NEXAR_TOKEN");
         Self {
             client: Client::builder()
                 .user_agent("Synth-EDA/0.0.1 (supply-chain-query)")
@@ -180,7 +179,7 @@ impl Distributor for NexarDistributor {
                 return Err(SupplyError::NoExactMatch {
                     distributor: "Nexar".to_string(),
                     part_number: pn.to_string(),
-                })
+                });
             }
         };
 
@@ -245,15 +244,13 @@ impl Distributor for NexarDistributor {
             purchase: PurchaseConstraints {
                 moq: best_offer.moq,
                 order_multiple: None,
-                price_tiers: unit_price_usd
-                    .map(|price| {
-                        vec![PriceTier {
-                            minimum_quantity: best_offer.moq.unwrap_or(1),
-                            maximum_quantity: None,
-                            unit_price_usd: price,
-                        }]
-                    })
-                    .unwrap_or_default(),
+                price_tiers: unit_price_usd.map_or_default(|price| {
+                    vec![PriceTier {
+                        minimum_quantity: best_offer.moq.unwrap_or(1),
+                        maximum_quantity: None,
+                        unit_price_usd: price,
+                    }]
+                }),
             },
             unit_price_usd,
             lifecycle: LifecycleStatus::Active,

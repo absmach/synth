@@ -36,10 +36,10 @@ use synth_layout::route::snap_grid_127;
 use synth_layout::sheets::SheetLayout;
 use uuid::Uuid;
 
-use crate::export::{write_file, ExportError};
+use crate::export::{ExportError, write_file};
 use crate::schematic::{
-    build_sheet_schematic, PlacedSheetInstance, PowerRefAllocator, RootFurniture, RootWire,
-    SheetRender,
+    PlacedSheetInstance, PowerRefAllocator, RootFurniture, RootWire, SheetRender,
+    build_sheet_schematic,
 };
 use crate::uuid_v5::derive_entity_uuid;
 
@@ -126,12 +126,7 @@ pub(crate) fn export_sheets(
                 max_y = max_y.max(y);
             }
         }
-        let needed = synth_layout::fit_sheet_size(min_x, max_x, min_y, max_y);
-        let (have_w, have_h) = root.sheet_size.dims_mm();
-        let (want_w, want_h) = needed.dims_mm();
-        if want_w > have_w || want_h > have_h {
-            root.sheet_size = needed;
-        }
+        root.sheet_size = root_page(board, root.sheet_size, (min_x, max_x, min_y, max_y));
     }
 
     let mut power_refs = PowerRefAllocator::default();
@@ -211,6 +206,29 @@ fn content_bounds(board: &Board, layout: &synth_layout::Layout) -> (f64, f64, f6
     ))
 }
 
+/// The page the root file needs, from its content plus the sheet-instance
+/// row and wire channels below it.
+///
+/// A root that no longer holds the split content inherits the global layout's
+/// page — A0, for a design big enough to split — and kept it: notes and a row
+/// of sheet symbols on a mostly empty A0. Without an explicit
+/// `schematic { paper }` request the page tracks what the root draws; one is
+/// still honoured (the page may grow past it, never shrink below it).
+fn root_page(
+    board: &Board,
+    current: synth_layout::SheetSize,
+    bounds: (f64, f64, f64, f64),
+) -> synth_layout::SheetSize {
+    let needed = synth_layout::fit_sheet_size(bounds.0, bounds.1, bounds.2, bounds.3);
+    let (have_w, have_h) = current.dims_mm();
+    let (want_w, want_h) = needed.dims_mm();
+    if board.schematic_paper.is_none() || want_w > have_w || want_h > have_h {
+        needed
+    } else {
+        current
+    }
+}
+
 /// Everything the multi-sheet export needs: per-sheet files and
 /// members, root furniture, and per-sheet power drivers.
 #[derive(Debug)]
@@ -269,6 +287,7 @@ pub fn plan_multisheet(
     let box_h = pin_y - box_y;
     let mut instances = Vec::new();
     let mut files = Vec::new();
+    let mut used_files: HashSet<String> = HashSet::new();
     for (index, sheet) in sheets.iter().enumerate() {
         let Some(name) = sheet.name.as_deref() else {
             continue;
@@ -281,6 +300,16 @@ pub fn plan_multisheet(
         let width =
             snap_grid_127(INSTANCE_MIN_W.max(pins_here.len() as f64 * PIN_PITCH + 2.0 * PIN_PITCH));
         let uuid = sheet_uuid(project, name);
+        // Two sheet names can sanitise to one file name ("A / B" and
+        // "A + B"): the second gets a numeric suffix rather than
+        // overwriting the first sheet's file.
+        let base = sanitize_sheet(name);
+        let mut file = sheet_filename(stem, name);
+        let mut suffix = 2;
+        while !used_files.insert(file.clone()) {
+            file = format!("{stem}_{base}_{suffix}.kicad_sch");
+            suffix += 1;
+        }
         let mut pins = Vec::new();
         for (pi, net) in pins_here.iter().enumerate() {
             let px =
@@ -290,7 +319,7 @@ pub fn plan_multisheet(
         }
         instances.push(PlacedSheetInstance {
             name: name.to_string(),
-            file: sheet_filename(stem, name),
+            file: file.clone(),
             uuid,
             at_mm: (cursor_x, box_y),
             size_mm: (width, box_h),
@@ -299,7 +328,7 @@ pub fn plan_multisheet(
         files.push(SheetFile {
             name: name.to_string(),
             uuid,
-            file: sheet_filename(stem, name),
+            file,
             members,
         });
         cursor_x += width + INSTANCE_GAP;
@@ -362,7 +391,9 @@ pub fn plan_multisheet(
 mod tests {
     use super::*;
     use synth_diagnostics::Span;
-    use synth_ir::{Component, ComponentId, Net};
+    use synth_ir::{
+        Component, ComponentId, Net, NetEndpoint, NetId, PinId, SchematicOverflow, SchematicPaper,
+    };
     use synth_layout::sheets::layout_sheets;
     use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize};
     use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin as RegPin, PinNumber};
@@ -374,10 +405,12 @@ mod tests {
             electrical_type: ElectricalType::Passive,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -399,6 +432,7 @@ mod tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -412,6 +446,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: sheet.map(str::to_string),
             source_span: Span::new(0, 0),
@@ -420,6 +455,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -466,6 +502,74 @@ mod tests {
         }
     }
 
+    /// A power net spanning two sheets must keep a power symbol on a sheet
+    /// that holds only passive pins of it: the split drops the cross-sheet
+    /// wire and skips hierarchical stubs for power nets, so the symbol is
+    /// the only connection.
+    #[test]
+    fn a_cross_sheet_power_net_exports_a_power_symbol_on_a_passive_only_sheet() {
+        use synth_registry::ElectricalType as Et;
+        let power_out = RegPin {
+            name: "vcc".to_string(),
+            number: PinNumber("1".to_string()),
+            electrical_type: Et::PowerOutput,
+            capabilities: Vec::new(),
+            required: false,
+            footprint_only: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+            drive: None,
+        };
+        let mut components = Vec::new();
+        for id in 0..40 {
+            components.push(component(id, Some("A")));
+        }
+        for id in 40..80 {
+            components.push(component(id, Some("B")));
+        }
+        components[0].refdes = "U1".to_string();
+        components[0].part = Some(part(vec![power_out]));
+        components[40].refdes = "C1".to_string();
+        components[40].part = Some(part(vec![pin("p1")]));
+        let mut b = board(
+            components,
+            vec![Net {
+                id: NetId(0),
+                name: "VCC".to_string(),
+                auto_named: false,
+                endpoints: vec![
+                    NetEndpoint {
+                        component: ComponentId(0),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                    NetEndpoint {
+                        component: ComponentId(40),
+                        pin: PinId(0),
+                        source_span: Span::new(0, 0),
+                    },
+                ],
+                netclass: None,
+                voltage: None,
+            }],
+        );
+        // A tiny requested page forces the split without a huge fixture.
+        b.schematic_paper = Some(SchematicPaper::A5);
+        b.schematic_overflow = Some(SchematicOverflow::Hierarchy);
+        let dir = tempfile::tempdir().expect("temp dir");
+        let out = crate::export_schematic_only(&b, dir.path(), None).expect("export");
+        assert!(out.sheet_count >= 3, "root + A + B");
+        let a = std::fs::read_to_string(dir.path().join("test_A.kicad_sch")).expect("A sheet");
+        let load = std::fs::read_to_string(dir.path().join("test_B.kicad_sch")).expect("B sheet");
+        assert!(a.contains("power:VCC"), "driver sheet lost VCC:\n{a}");
+        assert!(
+            load.contains("power:VCC"),
+            "passive-only sheet lost VCC:\n{load}"
+        );
+    }
+
     #[test]
     fn small_board_stays_single_file() {
         let b = board(
@@ -473,7 +577,7 @@ mod tests {
             vec![],
         );
         let global = layout_at(&[(0, 50.0, 50.0), (1, 100.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(sheets.len(), 1, "small boards keep the single-file path");
         assert_eq!(sheets[0].name, None);
     }
@@ -487,7 +591,7 @@ mod tests {
             vec![],
         );
         let global = layout_at(&[(0, 50.0, 50.0), (1, 900.0, 50.0), (2, 1700.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(
             sheets.len(),
             1,
@@ -515,7 +619,7 @@ mod tests {
             (2, 1400.0, 50.0),
             (3, 1500.0, 50.0),
         ]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert_eq!(sheets.len(), 3, "root + A + B");
         assert_eq!(sheets[0].name, None);
         let names: Vec<_> = sheets[1..].iter().map(|s| s.name.clone()).collect();
@@ -539,8 +643,8 @@ mod tests {
             vec![],
         );
         let mk = || layout_at(&[(0, 50.0, 50.0), (1, 800.0, 50.0), (2, 900.0, 50.0)]);
-        let a = layout_sheets(&b, mk());
-        let z = layout_sheets(&b, mk());
+        let a = layout_sheets(&b, mk(), None);
+        let z = layout_sheets(&b, mk(), None);
         assert_eq!(a, z, "split output must be byte-deterministic");
     }
 
@@ -622,7 +726,7 @@ mod tests {
             .board
             .unwrap();
         let global = synth_layout::layout(&board);
-        let sheets = synth_layout::sheets::layout_sheets(&board, global);
+        let sheets = synth_layout::sheets::layout_sheets(&board, global, None);
         assert!(
             sheets.len() > 1,
             "board must be large enough to split, got {} sheet(s)",
@@ -693,7 +797,7 @@ mod tests {
         // board genuinely splits and this test exercises a multi-sheet
         // root rather than a single sheet.
         let global = layout_at(&[(0, 50.0, 50.0), (1, 1400.0, 50.0), (2, 1500.0, 50.0)]);
-        let sheets = layout_sheets(&b, global);
+        let sheets = layout_sheets(&b, global, None);
         assert!(sheets.len() > 1, "precondition: the board splits");
         let project = crate::uuid_v5::project_namespace(&b.name);
         let root_uuid = derive_entity_uuid(&project, "sheet", "root");
@@ -727,6 +831,210 @@ mod tests {
         let single = crate::schematic::build_schematic(&b, &project).to_string_pretty();
         assert_eq!(single.matches("(instances").count(), 0);
         let _ = Span::new(0, 0);
+    }
+
+    /// Every sheet a cross-sheet net touches gets exactly one pin for it,
+    /// however many endpoints it has there; a net that stays on one sheet
+    /// gets none.
+    #[test]
+    fn a_cross_sheet_net_gets_one_pin_per_sheet() {
+        use synth_diagnostics::Span;
+        use synth_ir::{Net, NetEndpoint, NetId, PinId};
+
+        let ep = |c: u32, p: u32| NetEndpoint {
+            component: ComponentId(c),
+            pin: PinId(p),
+            source_span: Span::new(0, 0),
+        };
+        let b = board(
+            vec![
+                component(0, Some("A")),
+                component(1, Some("A")),
+                component(2, Some("B")),
+                component(3, Some("C")),
+            ],
+            vec![
+                Net {
+                    id: NetId(0),
+                    name: "SIG".to_string(),
+                    auto_named: false,
+                    // Two endpoints on A, one each on B and C.
+                    endpoints: vec![ep(0, 0), ep(1, 0), ep(2, 0), ep(3, 0)],
+                    netclass: None,
+                    voltage: None,
+                },
+                Net {
+                    id: NetId(1),
+                    name: "LOCAL".to_string(),
+                    auto_named: false,
+                    endpoints: vec![ep(0, 1), ep(1, 1)],
+                    netclass: None,
+                    voltage: None,
+                },
+            ],
+        );
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[
+            (0, 30.0, 30.0),
+            (1, 60.0, 30.0),
+            (2, ceiling_w * 2.0, 30.0),
+            (3, ceiling_w * 2.0 + 60.0, 30.0),
+        ]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 4, "root + A + B + C");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        assert_eq!(plan.files.len(), 3);
+        for instance in &plan.furniture.instances {
+            let nets: Vec<&str> = instance.pins.iter().map(|(net, ..)| net.as_str()).collect();
+            assert_eq!(
+                nets,
+                vec!["SIG"],
+                "sheet {} gets one SIG pin, no LOCAL pin",
+                instance.name
+            );
+        }
+    }
+
+    /// Two sheet names that sanitise to the same file must not write the
+    /// same `.kicad_sch`: the root would point two instances at one file
+    /// and one sheet's content would be lost.
+    #[test]
+    fn colliding_sheet_file_names_are_disambiguated() {
+        let b = board(
+            vec![
+                component(0, Some("I2C + EEPROM")),
+                component(1, Some("I2C / EEPROM")),
+            ],
+            vec![],
+        );
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[(0, 30.0, 30.0), (1, ceiling_w * 2.0, 30.0)]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3, "root + two named sheets");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        let files: Vec<&str> = plan.files.iter().map(|f| f.file.as_str()).collect();
+        assert_ne!(files[0], files[1], "two sheets, two files: {files:?}");
+        let instances: Vec<&str> = plan
+            .furniture
+            .instances
+            .iter()
+            .map(|i| i.file.as_str())
+            .collect();
+        assert_eq!(instances, files, "instances point at their own files");
+    }
+
+    /// A sheet literally named with the suffix a disambiguated sheet took
+    /// (`A_2`) still gets its own file.
+    #[test]
+    fn a_literal_suffix_does_not_collide_with_a_disambiguated_name() {
+        let b = board(
+            vec![
+                component(0, Some("A/B")),
+                component(1, Some("A B")),
+                component(2, Some("A_B_2")),
+            ],
+            vec![],
+        );
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[
+            (0, 30.0, 30.0),
+            (1, ceiling_w * 2.0, 30.0),
+            (2, ceiling_w * 2.0 + 60.0, 30.0),
+        ]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 4, "root + three named sheets");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        let files: Vec<&str> = plan.files.iter().map(|f| f.file.as_str()).collect();
+        let unique: HashSet<&&str> = files.iter().collect();
+        assert_eq!(unique.len(), files.len(), "one file per sheet: {files:?}");
+        let instances: Vec<&str> = plan
+            .furniture
+            .instances
+            .iter()
+            .map(|i| i.file.as_str())
+            .collect();
+        assert_eq!(instances, files);
+    }
+
+    /// A sub-sheet prints the same Value the root does. `(no value)` is the
+    /// documented value -> MPN sentinel, not something a split adds.
+    #[test]
+    fn a_sub_sheet_prints_the_same_value_as_the_root() {
+        let mut valued = component(0, None);
+        valued.value = Some("330".to_string());
+        let mut unset = component(1, None);
+        unset.refdes = "DZ9".to_string();
+        let mut sub_valued = component(2, Some("A"));
+        sub_valued.value = Some("330".to_string());
+        let mut sub_unset = component(3, Some("A"));
+        sub_unset.refdes = "DZ10".to_string();
+        let b = board(vec![valued, unset, sub_valued, sub_unset], vec![]);
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let global = layout_at(&[
+            (0, 30.0, 30.0),
+            (1, 60.0, 30.0),
+            (2, ceiling_w * 2.0, 30.0),
+            (3, ceiling_w * 2.0 + 30.0, 30.0),
+        ]);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 2);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let render = |layout: &Layout, name: Option<&str>| {
+            crate::schematic::build_sheet_schematic(
+                &b,
+                &project,
+                layout,
+                &crate::schematic::SheetRender {
+                    name,
+                    uuid: derive_entity_uuid(&project, "sheet", name.unwrap_or("root")),
+                    project_name: &b.name,
+                    symbol_path: Some("/x".to_string()),
+                    members: None,
+                    power_drivers: None,
+                    root_furniture: None,
+                },
+                &mut crate::schematic::PowerRefAllocator::default(),
+            )
+            .to_string_pretty()
+        };
+        let root = render(&sheets[0].layout, None);
+        let sub = render(&sheets[1].layout, Some("A"));
+        for text in [&root, &sub] {
+            assert!(text.contains("\"330\""), "the value is drawn:\n{text}");
+            assert_eq!(
+                text.matches("(no value)").count(),
+                1,
+                "one part has no value, on every sheet:\n{text}"
+            );
+        }
+    }
+
+    /// A root that no longer holds the split content gives back the A0 it
+    /// inherited from the global layout and keeps only the page it draws.
+    #[test]
+    fn the_root_page_tracks_its_content() {
+        let b = board(vec![component(0, None)], vec![]);
+        let page = root_page(&b, SheetSize::A0, (20.0, 120.0, 20.0, 120.0));
+        assert_eq!(
+            page,
+            SheetSize::A4,
+            "one part and a sheet-symbol row fit A4"
+        );
+
+        // An explicit paper request is honoured: the page may grow past it,
+        // never shrink below it.
+        let mut asked = board(vec![component(0, None)], vec![]);
+        asked.schematic_paper = Some(synth_ir::SchematicPaper::A3);
+        assert_eq!(
+            root_page(&asked, SheetSize::A3, (20.0, 120.0, 20.0, 120.0)),
+            SheetSize::A3
+        );
     }
 
     /// The root sheet is sized from the same content bounds as every other

@@ -478,19 +478,21 @@ fn check_wire_crossings(layout: &Layout, max_crossings: usize) -> Vec<Diagnostic
     if crossings <= max_crossings {
         return Vec::new();
     }
-    vec![DiagnosticBuilder::new(
-        "E-SYNTH-SCHEM-002",
-        Severity::Warning,
-        "excessive wire-crossing density",
-    )
-    .message(format!(
-        "sheet has {crossings} different-net wire crossings, exceeding the budget of \
+    vec![
+        DiagnosticBuilder::new(
+            "E-SYNTH-SCHEM-002",
+            Severity::Warning,
+            "excessive wire-crossing density",
+        )
+        .message(format!(
+            "sheet has {crossings} different-net wire crossings, exceeding the budget of \
              {max_crossings}"
-    ))
-    .expected(format!("at most {max_crossings} crossings"))
-    .found(format!("{crossings} crossings"))
-    .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-002")
-    .build()]
+        ))
+        .expected(format!("at most {max_crossings} crossings"))
+        .found(format!("{crossings} crossings"))
+        .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-002")
+        .build(),
+    ]
 }
 
 // ----- E-SYNTH-SCHEM-003: decoupling capacitor separation --------------------
@@ -592,6 +594,10 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
         };
 
         for req in &part.required_decoupling {
+            // A capacitor behind a series part is not at this pin.
+            if req.through.is_some() {
+                continue;
+            }
             // The rail net carrying the IC's power pin. Resolved
             // through the pin (not by net-name equality): merged rails
             // keep one global net whose name rarely equals the manifest
@@ -697,20 +703,17 @@ fn check_decoupling_distance(board: &Board, layout: &Layout, max_mm: f64) -> Vec
 /// (rather than truncated to net labels) spans more than `max_mm`.
 ///
 /// A net's span is the larger of its wire bounding-box width and
-/// height. Nets truncated to labels are excluded: they carry no wires
-/// (the `labeled_net_ids` guard is a belt-and-braces filter) and are
-/// exactly the "net-label truncation" the rule wants to reward.
+/// height. Nets truncated to labels carry no wires, so they never fire,
+/// and that is the "net-label truncation" the rule wants to reward. A net
+/// that is flagged and also wired inside a region is measured on its
+/// wires, so a long wired piece still fires.
 ///
 /// Nets are aggregated across all their `WirePath`s (max span wins) and
 /// emitted in ascending net-id order for deterministic output.
 fn check_long_nets(layout: &Layout, max_mm: f64) -> Vec<Diagnostic> {
-    let labeled: HashSet<NetId> = layout.labeled_net_ids();
     let mut spans: HashMap<NetId, f64> = HashMap::new();
 
     for wire in &layout.wires {
-        if labeled.contains(&wire.net) {
-            continue;
-        }
         let mut min_x = f64::MAX;
         let mut max_x = f64::MIN;
         let mut min_y = f64::MAX;
@@ -955,19 +958,21 @@ fn check_page_overflow(board: &Board, layout: &Layout) -> Vec<Diagnostic> {
     let Some((x, y)) = worst else {
         return Vec::new();
     };
-    vec![DiagnosticBuilder::new(
-        "E-SYNTH-SCHEM-007",
-        Severity::Warning,
-        "content overflows the selected sheet size",
-    )
-    .message(format!(
-        "content reaches ({x:.1}, {y:.1}) mm but the sheet is only {w:.0} × {h:.0} mm \
+    vec![
+        DiagnosticBuilder::new(
+            "E-SYNTH-SCHEM-007",
+            Severity::Warning,
+            "content overflows the selected sheet size",
+        )
+        .message(format!(
+            "content reaches ({x:.1}, {y:.1}) mm but the sheet is only {w:.0} × {h:.0} mm \
                  (origin at the top-left corner); move it onto the page or resize the sheet",
-    ))
-    .expected(format!("all content within {w:.0} × {h:.0} mm"))
-    .found(format!("content extends to ({x:.1}, {y:.1}) mm"))
-    .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-007")
-    .build()]
+        ))
+        .expected(format!("all content within {w:.0} × {h:.0} mm"))
+        .found(format!("content extends to ({x:.1}, {y:.1}) mm"))
+        .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-007")
+        .build(),
+    ]
 }
 
 // ----- E-SYNTH-SCHEM-008: net name case --------------------------------------
@@ -1197,25 +1202,27 @@ fn check_sheet_fill(board: &Board, layout: &Layout, min_ratio: f64) -> Vec<Diagn
         return Vec::new();
     }
     let smaller_hint = format!(" — content would fit {fitted:?}");
-    vec![DiagnosticBuilder::new(
-        "E-SYNTH-SCHEM-012",
-        Severity::Info,
-        "sheet fill ratio below threshold",
-    )
-    .message(format!(
-        "content ({content_w:.0} × {content_h:.0} mm) covers only {:.0}% of the \
+    vec![
+        DiagnosticBuilder::new(
+            "E-SYNTH-SCHEM-012",
+            Severity::Info,
+            "sheet fill ratio below threshold",
+        )
+        .message(format!(
+            "content ({content_w:.0} × {content_h:.0} mm) covers only {:.0}% of the \
          {sheet_w:.0} × {sheet_h:.0} mm sheet, below the {:.0}% threshold{smaller_hint}; \
          compact the layout or move to a smaller sheet",
-        ratio * 100.0,
-        min_ratio * 100.0,
-    ))
-    .expected(format!(
-        "at least {:.0}% of the sheet covered",
-        min_ratio * 100.0
-    ))
-    .found(format!("{:.0}% covered", ratio * 100.0))
-    .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-012")
-    .build()]
+            ratio * 100.0,
+            min_ratio * 100.0,
+        ))
+        .expected(format!(
+            "at least {:.0}% of the sheet covered",
+            min_ratio * 100.0
+        ))
+        .found(format!("{:.0}% covered", ratio * 100.0))
+        .explanation_url("synth.docs/diagnostics/E-SYNTH-SCHEM-012")
+        .build(),
+    ]
 }
 
 // ----- E-SYNTH-SCHEM-013: group regions overlap ------------------------------
@@ -1597,12 +1604,15 @@ mod tests {
                 value: "100n".to_string(),
                 count: 1,
                 max_distance_mm: None,
+                to: None,
+                through: None,
             }],
             kicad_symbol: None,
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -1623,10 +1633,12 @@ mod tests {
             electrical_type: synth_registry::ElectricalType::Bidirectional,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }];
         part
     }
@@ -1636,6 +1648,7 @@ mod tests {
         // IC at (10, 10); a VCC net connecting IC pin 0 and cap C1 at
         // (100, 10) — 90 mm apart, beyond the 15 mm default.
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -1655,6 +1668,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -1668,6 +1682,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -1721,6 +1736,7 @@ mod tests {
     #[test]
     fn decoupling_cap_near_ic_is_silent() {
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -1740,6 +1756,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -1753,6 +1770,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -1840,6 +1858,28 @@ mod tests {
         };
         let layout = layout(Vec::new(), Vec::new(), Vec::new(), vec![net_label]);
         assert!(check_long_nets(&layout, 100.0).is_empty());
+    }
+
+    #[test]
+    fn a_long_wired_piece_of_a_flagged_net_is_flagged() {
+        // A net that leaves its region is wired inside each region and
+        // flagged once there, so its wires still have to stay short.
+        let net_label = NetLabel {
+            net: NetId(0),
+            component: ComponentId(0),
+            pin: PinId(0),
+            label: "LEAVES_REGION".to_string(),
+            spot: synth_layout::LabelSpot::default(),
+        };
+        let layout = layout(
+            Vec::new(),
+            vec![wire(NetId(0), vec![(0.0, 0.0), (150.0, 0.0)])],
+            Vec::new(),
+            vec![net_label],
+        );
+        let violations = check_long_nets(&layout, 100.0);
+        assert_eq!(violations.len(), 1);
+        assert_eq!(violations[0].code, "E-SYNTH-SCHEM-004");
     }
 
     // ----- E-SYNTH-SCHEM-005 ----------------------------------------------
@@ -2124,11 +2164,13 @@ mod tests {
         let violations = check_net_label_case(&layout);
         assert_eq!(violations.len(), 1);
         assert_eq!(violations[0].code, "E-SYNTH-SCHEM-008");
-        assert!(violations[0]
-            .message
-            .as_deref()
-            .unwrap()
-            .contains("I2C_DATA"));
+        assert!(
+            violations[0]
+                .message
+                .as_deref()
+                .unwrap()
+                .contains("I2C_DATA")
+        );
     }
 
     #[test]
@@ -2172,6 +2214,7 @@ mod tests {
 
     fn board_with_nets(nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -2343,6 +2386,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -2451,6 +2495,7 @@ mod tests {
                 dnp: false,
                 properties: std::collections::BTreeMap::new(),
                 placement_hint: None,
+                escape: None,
                 group: Some(group.to_string()),
                 sheet: None,
                 source_span: Span::new(0, 0),
@@ -2490,6 +2535,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),
@@ -2540,6 +2586,7 @@ mod tests {
     #[test]
     fn aggregate_check_returns_warnings_in_rule_order() {
         let board = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -2559,6 +2606,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -2572,6 +2620,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -2585,6 +2634,7 @@ mod tests {
                     dnp: false,
                     properties: std::collections::BTreeMap::new(),
                     placement_hint: None,
+                    escape: None,
                     group: None,
                     sheet: None,
                     source_span: Span::new(0, 0),
@@ -2696,6 +2746,7 @@ mod tests {
         // A VCC rail with no explicit voltage name trips SCHEM-010
         // wherever it is rendered — a stable diagnostic to attribute.
         let b = Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -2784,6 +2835,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: None,
             source_span: Span::new(0, 0),

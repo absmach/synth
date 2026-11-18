@@ -128,7 +128,12 @@ pub fn best_known_order(dir: &Path, board_hash: &str) -> Option<Vec<String>> {
 /// nothing, so the default is no side effects.
 #[must_use]
 pub fn configured_dir() -> Option<PathBuf> {
-    std::env::var_os("SYNTH_ROUTING_OUTCOMES_DIR")
+    dir_from(std::env::var_os("SYNTH_ROUTING_OUTCOMES_DIR"))
+}
+
+/// The records directory named by a `SYNTH_ROUTING_OUTCOMES_DIR` value.
+fn dir_from(value: Option<std::ffi::OsString>) -> Option<PathBuf> {
+    value
         .map(PathBuf::from)
         .filter(|path| !path.as_os_str().is_empty())
 }
@@ -206,7 +211,11 @@ mod tests {
     fn unset_environment_means_no_logging() {
         // The default must be side-effect free; a run only writes a dataset
         // when it was asked to.
-        std::env::remove_var("SYNTH_ROUTING_OUTCOMES_DIR");
-        assert!(configured_dir().is_none());
+        assert!(dir_from(None).is_none());
+        assert!(dir_from(Some("".into())).is_none());
+        assert_eq!(
+            dir_from(Some("/tmp/outcomes".into())),
+            Some(PathBuf::from("/tmp/outcomes"))
+        );
     }
 }

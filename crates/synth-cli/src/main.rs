@@ -12,6 +12,7 @@
 //! - `2` — usage error (bad arguments, file not found)
 //! - `3` — internal compiler error (a bug — should never happen)
 
+mod logging;
 mod release;
 
 use std::io::Write;
@@ -20,7 +21,8 @@ use std::process::Command as ProcessCommand;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use synth_diagnostics::NativeCheckStatus;
+use synth_diagnostics::{NativeCheckEvidence, NativeCheckStatus, UnknownReason};
+use tracing::{debug, error, info, warn};
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
@@ -41,6 +43,28 @@ struct Cli {
     /// only how long they take.
     #[arg(long, global = true, value_name = "N")]
     jobs: Option<usize>,
+
+    /// List a missing fast-edge return via beside a fine-pitch pad row as an
+    /// advisory instead of blocking. Needs signal-integrity review sign-off.
+    /// `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1` (or `true`) also enables it.
+    #[arg(long, global = true)]
+    fine_pitch_return_via_advisory: bool,
+
+    /// Raise the log level: `-v` is debug, `-vv`/`-vvv` is trace. Default
+    /// is info. Diagnostics go to stderr; stdout carries only the
+    /// command's own output. `SYNTH_LOG` overrides this when set.
+    #[arg(
+        long,
+        short,
+        global = true,
+        action = clap::ArgAction::Count,
+        conflicts_with = "quiet"
+    )]
+    verbose: u8,
+
+    /// Log errors only: hide progress and warnings.
+    #[arg(long, short, global = true, conflicts_with = "verbose")]
+    quiet: bool,
 
     #[command(subcommand)]
     command: Command,
@@ -74,6 +98,26 @@ enum Command {
         /// Skip resolution and lowering; run parsing only.
         #[arg(long)]
         parse_only: bool,
+    },
+
+    /// Simulate a design against its `<design>.sim.toml` testbench
+    /// sidecar. Exits 0 only when every measured limit passes.
+    Sim {
+        /// Path to a `.synth` source file.
+        input: PathBuf,
+
+        /// Path to the component registry. Auto-discovered: `--registry`, else `$SYNTH_REGISTRY`, else `./registry/parts` (or an ancestor directory), else the embedded seed registry.
+        #[arg(long, value_name = "DIR")]
+        registry: Option<PathBuf>,
+
+        /// Draft `<design>.sim.toml` from the shapes in the design instead of
+        /// running a simulation.
+        #[arg(long)]
+        suggest: bool,
+
+        /// Overwrite an existing `<design>.sim.toml` when drafting.
+        #[arg(long, requires = "suggest")]
+        force: bool,
     },
 
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
@@ -213,6 +257,17 @@ enum Command {
         /// and falls back to the normal choice when routing is unavailable.
         #[arg(long)]
         place_route_iterate: bool,
+        /// Wall-clock budget in seconds for `--place-route-iterate`; 0 is the
+        /// default of 900. Every routing run is capped at what is left, a share
+        /// for the final route is kept back, and the search keeps the best
+        /// placement found so far when the budget is spent.
+        #[arg(long, default_value_t = 0)]
+        place_route_budget_secs: u64,
+        /// Let a DFM Danger finding block a release export (`--gerbers` and
+        /// similar). Opt-in: the DFM rules are not yet calibrated against
+        /// JLCDFM, so by default findings are only recorded.
+        #[arg(long)]
+        dfm_gate: bool,
     },
 
     /// Apply the highest-confidence `suggested_fix` from every
@@ -885,11 +940,15 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    logging::init(cli.verbose, cli.quiet);
+    let fine_pitch_advisory = cli.fine_pitch_return_via_advisory
+        || std::env::var("SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY")
+            .is_ok_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
     let jobs = match cli.jobs {
         Some(0) => {
             // A zero-thread pool is a usage error, not a request for the
             // default: silently running on every core would hide the typo.
-            eprintln!("error: --jobs must be at least 1");
+            error!("--jobs must be at least 1");
             return ExitCode::from(EXIT_USAGE);
         }
         Some(n) => {
@@ -897,7 +956,7 @@ fn main() -> ExitCode {
                 .num_threads(n)
                 .build_global()
             {
-                eprintln!("error: could not configure {n} worker threads: {err}");
+                error!("could not configure {n} worker threads: {err}");
                 return ExitCode::from(EXIT_USAGE);
             }
             n
@@ -908,7 +967,7 @@ fn main() -> ExitCode {
     // Size the repair waves identically to the pool so every core gets a
     // distinct candidate instead of queueing (or idling).
     synth_kicad::set_worker_threads(jobs);
-    eprintln!("synth: using {jobs} worker threads");
+    debug!(threads = jobs, "configured worker thread pool");
     let result = match cli.command {
         Command::Validate {
             input,
@@ -925,6 +984,12 @@ fn main() -> ExitCode {
             strict_registry,
             parse_only,
         ),
+        Command::Sim {
+            input,
+            registry,
+            suggest,
+            force,
+        } => sim(&input, registry.as_deref(), suggest, force),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -963,6 +1028,8 @@ fn main() -> ExitCode {
             best_of,
             allow_incomplete,
             place_route_iterate,
+            place_route_budget_secs,
+            dfm_gate,
         } => export_kicad(
             &input,
             registry.as_deref(),
@@ -993,9 +1060,12 @@ fn main() -> ExitCode {
             krt_fab_overrides.as_deref(),
             krt_same_net_pad_clearance,
             krt_allow_via_in_pad,
+            fine_pitch_advisory,
             best_of,
             allow_incomplete,
             place_route_iterate,
+            place_route_budget_secs,
+            dfm_gate,
         ),
         Command::Fix {
             input,
@@ -1056,6 +1126,7 @@ fn main() -> ExitCode {
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
                 krt_allow_via_in_pad,
+                fine_pitch_advisory,
             )
             .with_timeout(router_timeout),
             best_of,
@@ -1091,6 +1162,7 @@ fn main() -> ExitCode {
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
                 krt_allow_via_in_pad,
+                fine_pitch_advisory,
             )
             .with_timeout(router_timeout),
             pretty,
@@ -1184,14 +1256,15 @@ fn main() -> ExitCode {
     match result {
         Ok(code) => ExitCode::from(code),
         Err(e) => {
-            eprintln!("synth: {e}");
+            error!("{e}");
             ExitCode::from(EXIT_USAGE)
         }
     }
 }
 
-const CAPABILITY_COMMANDS: [&str; 19] = [
+const CAPABILITY_COMMANDS: [&str; 20] = [
     "validate",
+    "sim",
     "dump-ast",
     "dump-ir",
     "export-kicad",
@@ -1215,6 +1288,15 @@ const CAPABILITY_COMMANDS: [&str; 19] = [
 type CapabilityLimit = (&'static str, Option<&'static str>, &'static str);
 
 const UNSUPPORTED: &[CapabilityLimit] = &[
+    // A command-level limit, not a language constraint: `constraint` is
+    // reserved for netclass/diff_pair/keepout attribute names.
+    (
+        "spice_simulation",
+        None,
+        "`synth sim` runs an operating point or an AC decade sweep only; transient and DC-sweep \
+         analyses, pulse/pwl/sin sources, expression measures and vendor model import are not \
+         implemented yet.",
+    ),
     (
         "coupled_diff_pair_routing",
         Some("diff_pair.couple"),
@@ -1226,6 +1308,14 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
         Some("diff_pair.max_skew"),
         "`max_skew` can be declared and is recorded in the IR, but nothing enforces it and no \
          stage fails on residual skew; any tuning is left to the router.",
+    ),
+    (
+        "library_silkscreen_limits",
+        None,
+        "Silkscreen owned by a library footprint is exported byte-for-byte so \
+         `lib_footprint_mismatch` stays clean. A library stroke thinner than a \
+         fabricator's legend minimum is reported by the DFM check but is not \
+         rewritten; move the via or choose a footprint that meets the limit.",
     ),
     (
         "return_path_and_layer_transition_analysis",
@@ -1256,14 +1346,19 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
         "Enable ordering, power-good signals and sequencing timing are neither declared nor checked.",
     ),
     (
-        "escape_fanout_strategy",
+        "escape_pattern_and_direction",
+        // No `constraint`: a limit names the attribute it qualifies, and there
+        // is none to name here. `component.escape` exists — it is listed in
+        // `routing_constraints` below — but this limit is not about `escape`.
+        // It is about pattern and direction, which no attribute declares, so
+        // pointing at `escape` would claim this limit qualifies something the
+        // block can express.
         None,
-        "Via geometry is declarable per netclass, but escape strategy is not: nothing expresses \
-         which layer a fine-pitch ball fans out to, or in what pattern. The gap is Synth's, not \
-         the router's — KiCadRoutingTools ships a BGA fanout engine (`py_router/bga_fanout`, \
-         including an under-pad method for arrays its channel router cannot escape) and Synth \
-         never invokes it. `synth_router::escape` reports whether a package can be fanned out at \
-         the process floor, and nothing acts on what it reports.",
+        "A component's `escape` block picks the engine (`channel`, `underpad`), limits the \
+         copper layers, or turns the escape off. What it cannot express is a pattern or a \
+         direction: the engine's `--primary-escape`, `--force-escape-direction` and \
+         `--layer-costs` are not reachable from a board, so which way a package fans out is the \
+         engine's choice.",
     ),
 ];
 
@@ -1295,6 +1390,24 @@ fn capability_limits(limits: &[CapabilityLimit]) -> Vec<serde_json::Value> {
             entry
         })
         .collect()
+}
+
+/// One manufacturer profile as the capability list reports it. The minimums are
+/// read from the profile the validators and the exporter use, so the list cannot
+/// report a constraint the checks no longer apply.
+fn manufacturer_profile_entry(name: &str, layers: &[u32]) -> serde_json::Value {
+    let profile = synth_drc::ManufacturerProfile::from_name(name);
+    let mut entry = serde_json::json!({
+        "name": name,
+        "layers": layers,
+        "min_trace_width_mm": synth_geometry::nm_to_mm(profile.min_trace_width_nm),
+        "min_clearance_mm": synth_geometry::nm_to_mm(profile.min_copper_clearance_nm),
+        "min_drill_mm": synth_geometry::nm_to_mm(profile.min_drill_diameter_nm),
+    });
+    if synth_drc::ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&name) {
+        entry["offers"] = serde_json::json!(["via_in_pad"]);
+    }
+    entry
 }
 
 fn capability_descriptor() -> serde_json::Value {
@@ -1330,15 +1443,16 @@ fn capability_descriptor() -> serde_json::Value {
             {"name": "kicad_export", "evidence": ["artifact_hashes", "archive_sha256"]}
         ],
         "manufacturer_profiles": [
-            {"name": "jlc-standard", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3},
-            {"name": "pcbway-standard", "layers": [2, 4], "min_trace_width_mm": 0.15, "min_clearance_mm": 0.15, "min_drill_mm": 0.3},
-            {"name": "oshpark-4layer", "layers": [4], "min_trace_width_mm": 0.125, "min_clearance_mm": 0.125, "min_drill_mm": 0.25},
-            {"name": "jlc-filled-via", "layers": [2, 4], "min_trace_width_mm": 0.127, "min_clearance_mm": 0.127, "min_drill_mm": 0.3, "offers": ["via_in_pad"]}
+            manufacturer_profile_entry("jlc-standard", &[2, 4]),
+            manufacturer_profile_entry("pcbway-standard", &[2, 4]),
+            manufacturer_profile_entry("oshpark-4layer", &[4]),
+            manufacturer_profile_entry("jlc-filled-via", &[2, 4]),
+            manufacturer_profile_entry("jlc-advanced", &[4, 6]),
         ],
         "language": {
             "syntax_version": "1.0",
             "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
-            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description"],
+            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
         "geometry_and_constraints": {
@@ -1380,10 +1494,10 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
-                "keepout": ["radius"],
-                "component": ["placement_hint"],
+                "keepout": ["radius", "anchor", "at", "layers"],
+                "component": ["placement_hint", "escape"],
                 "requires": ["via_in_pad"]
             },
             "fabrication_processes": {
@@ -1392,9 +1506,10 @@ fn capability_descriptor() -> serde_json::Value {
                 "processes": {
                     "via_in_pad": "the process fills and caps a via drilled inside an SMD pad, which at fine pitch is the only escape the geometry leaves"
                 },
-                "profiles_offering_via_in_pad": ["jlc-filled-via"],
+                "profiles_offering_via_in_pad": ["jlc-filled-via", "jlc-advanced"],
                 "gate": "E-SYNTH-PROCESS-002: a requirement the declared tier does not offer is an error, so a requirement is never a permission on its own",
-                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors. Escape strategy — which layer a ball fans out to, and in what pattern — is not declarable; see the unsupported entry",
+                "via_geometry": "netclass via_diameter / via_drill reach the exported net class; E-SYNTH-PROCESS-003 checks both against the profile's drill and annular-ring floors",
+                "escape": "dense grid arrays (three pad rows and three columns, at or below 1.3 mm pitch) are escaped before routing by KiCadRoutingTools, with the escape via sized from the declared process floor and the fabrication tier pinned to it. A component's `escape { method … layers … }` block overrides the engine and layers, and `escape { off }` leaves a package to the general router; pattern and direction are not declarable, see the escape_pattern_and_direction limit",
                 "override": "--krt-allow-via-in-pad permits via-in-pad in the fabrication gate without a declared requirement or a capable tier; it is an operator taking responsibility for one panel, not a process answer"
             },
             "units": ["mm", "mil", "ohm", "kohm", "mohm", "v", "mv", "a", "ma", "mhz", "ghz", "pf", "nf", "uf"]
@@ -1692,16 +1807,16 @@ fn check(
                 "  release_ready: {}",
                 manufacturing["release_ready"].as_bool().unwrap_or(false)
             );
-            if let Some(overrides) = release.get("overrides").and_then(|o| o.as_array()) {
-                if !overrides.is_empty() {
-                    println!("  {}", release::UNTRUSTED_BANNER);
-                    for record in overrides {
-                        println!(
-                            "    {} via {}",
-                            record["code"].as_str().unwrap_or("?"),
-                            record["flag"].as_str().unwrap_or("?")
-                        );
-                    }
+            if let Some(overrides) = release.get("overrides").and_then(|o| o.as_array())
+                && !overrides.is_empty()
+            {
+                println!("  {}", release::UNTRUSTED_BANNER);
+                for record in overrides {
+                    println!(
+                        "    {} via {}",
+                        record["code"].as_str().unwrap_or("?"),
+                        record["flag"].as_str().unwrap_or("?")
+                    );
                 }
             }
         }
@@ -1779,15 +1894,15 @@ fn manufacturing_status(
     }
     let native_unknown = native
         .and_then(|n| n["stages"].as_array())
-        .is_some_and(|stages| stages.iter().any(|s| s["status"] == "unknown"));
+        .is_some_and(|stages| {
+            stages
+                .iter()
+                .any(|s| s["status"] == "unknown" && s["advisory"] != true)
+        });
     if native_unknown {
         return "unknown";
     }
-    if fab_pass {
-        "pass"
-    } else {
-        "fail"
-    }
+    if fab_pass { "pass" } else { "fail" }
 }
 
 fn registry_qualify(
@@ -1818,13 +1933,13 @@ fn registry_qualify(
     let report = synth_registry::qualify_registry(&subject, &facts, &facts, &tool_version);
 
     if let Some(path) = report_path {
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
-        eprintln!("wrote {}", path.display());
+        info!("wrote {}", path.display());
     } else if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -2280,7 +2395,7 @@ fn registry_manifest(
             let expected_lines: std::collections::BTreeSet<&str> = expected.lines().collect();
             let actual_lines: std::collections::BTreeSet<&str> = actual.lines().collect();
             for line in expected_lines.symmetric_difference(&actual_lines) {
-                eprintln!("manifest mismatch: {line}");
+                warn!("manifest mismatch: {line}");
             }
             anyhow::bail!(
                 "Tier-1 registry does not match manifest {}",
@@ -2298,32 +2413,6 @@ fn registry_manifest(
         }
         Ok(EXIT_SUCCESS)
     }
-}
-
-/// R15.9: collect the deduplicated ids of every board part that would
-/// export with a synthesized bounding-box footprint fallback — i.e.
-/// parts with no `kicad_footprint` at all, or whose referenced
-/// footprint cannot be resolved to real pad geometry on disk.
-fn parts_without_real_footprint(board: &synth_ir::Board) -> Vec<String> {
-    let mut seen = std::collections::BTreeSet::new();
-    let mut missing = Vec::new();
-    for component in &board.components {
-        let Some(part) = component.part.as_ref() else {
-            continue;
-        };
-        if !seen.insert(part.id.as_str().to_string()) {
-            continue;
-        }
-        let resolves = part
-            .kicad_footprint
-            .as_deref()
-            .and_then(synth_layout::kicad_footprint_loader::pads)
-            .is_some();
-        if !resolves {
-            missing.push(part.id.as_str().to_string());
-        }
-    }
-    missing
 }
 
 /// R15.3 trust boundary: part ids on `board` that carry `[provenance]`
@@ -2351,11 +2440,11 @@ fn parts_unverified(board: &synth_ir::Board) -> Vec<String> {
 /// hallucinating pinouts.
 fn part_stub(id: &str, pins: usize, user_registry: Option<&Path>) -> anyhow::Result<u8> {
     if id.is_empty() {
-        eprintln!("error: part id must not be empty");
+        error!("part id must not be empty");
         return Ok(1);
     }
     if pins == 0 {
-        eprintln!("error: --pins must be at least 1");
+        error!("--pins must be at least 1");
         return Ok(1);
     }
     let dir = user_registry
@@ -2588,10 +2677,10 @@ fn import_kicad_batch(
     let mut imported = 0usize;
     let mut failed: Vec<(String, String)> = Vec::new();
     for lib_id in &lib_ids {
-        if let Some(cap) = limit {
-            if imported >= cap {
-                break;
-            }
+        if let Some(cap) = limit
+            && imported >= cap
+        {
+            break;
         }
         match import_kicad_one(lib_id, None, None, &user_dir, true) {
             Ok(_) => imported += 1,
@@ -2974,8 +3063,8 @@ fn schem_erc_config_for(design: &Path) -> synth_kicad::SchemErcConfig {
         Ok(Some(config)) => config.schematic,
         Ok(None) => synth_validate::config::SchematicSettings::default(),
         Err(e) => {
-            eprintln!(
-                "warning: ignoring schematic ERC config for {}: {e}",
+            warn!(
+                "ignoring schematic ERC config for {}: {e}",
                 design.display()
             );
             synth_validate::config::SchematicSettings::default()
@@ -3013,18 +3102,18 @@ fn resolve_tier1(explicit: Option<&Path>) -> Tier1Source {
     if let Some(p) = explicit {
         return Tier1Source::Dir(p.to_path_buf());
     }
-    if let Ok(env) = std::env::var("SYNTH_REGISTRY") {
-        if !env.is_empty() {
-            return Tier1Source::Dir(PathBuf::from(env));
-        }
+    if let Ok(env) = std::env::var("SYNTH_REGISTRY")
+        && !env.is_empty()
+    {
+        return Tier1Source::Dir(PathBuf::from(env));
     }
     if let Some(dir) = discover_registry_dir() {
         return Tier1Source::Dir(dir);
     }
-    if let Some(shipped) = synth_registry::shipped_registry_dir() {
-        if shipped.join("parts").is_dir() {
-            return Tier1Source::Dir(shipped.join("parts"));
-        }
+    if let Some(shipped) = synth_registry::shipped_registry_dir()
+        && shipped.join("parts").is_dir()
+    {
+        return Tier1Source::Dir(shipped.join("parts"));
     }
     Tier1Source::Embedded
 }
@@ -3050,8 +3139,8 @@ fn discover_registry_dir() -> Option<PathBuf> {
 fn emit_registry_warnings(warnings: &[synth_registry::LoadWarning]) {
     for w in warnings {
         let synth_registry::LoadWarning::Shadow { id, user_path } = w;
-        eprintln!(
-            "synth: W-SYNTH-REG-001: user part `{}` (at {}) shadows a shipped part",
+        warn!(
+            "W-SYNTH-REG-001: user part `{}` (at {}) shadows a shipped part",
             id,
             user_path.display()
         );
@@ -3097,7 +3186,7 @@ fn load_registry_strict(
                         res.registry
                     }
                     Err(e) => {
-                        eprintln!("synth: registry load failed (strict): {e}");
+                        error!("registry load failed (strict): {e}");
                         return None;
                     }
                 };
@@ -3109,7 +3198,7 @@ fn load_registry_strict(
                                 Some(res.registry)
                             }
                             Err(e) => {
-                                eprintln!("synth: registry load failed (strict): {e}");
+                                error!("registry load failed (strict): {e}");
                                 None
                             }
                         }
@@ -3124,10 +3213,10 @@ fn load_registry_strict(
                         Some(res.registry)
                     }
                     Err(e) => {
-                        eprintln!("synth: registry load failed (strict): {e}");
-                        eprintln!(
-                            "synth: hint: check --registry, set SYNTH_REGISTRY, or run from a \
-                         synth checkout"
+                        error!("registry load failed (strict): {e}");
+                        info!(
+                            "hint: check --registry, set SYNTH_REGISTRY, or run from a \
+                             synth checkout"
                         );
                         None
                     }
@@ -3135,15 +3224,15 @@ fn load_registry_strict(
                 _ => match synth_registry::load_dir(&dir) {
                     Ok(r) => Some(r),
                     Err(e) => {
-                        eprintln!("synth: could not load registry from {}: {e}", dir.display());
+                        error!("could not load registry from {}: {e}", dir.display());
                         None
                     }
                 },
             }
         }
         Tier1Source::Embedded => {
-            eprintln!(
-                "synth: no registry/parts found — using the embedded seed registry \
+            debug!(
+                "no registry/parts found — using the embedded seed registry \
                  (hint: pass --registry, set SYNTH_REGISTRY, or run from a synth checkout \
                  to pick up local parts)"
             );
@@ -3159,7 +3248,7 @@ fn load_registry_strict(
                             Some(res.registry)
                         }
                         Err(e) => {
-                            eprintln!("synth: registry load failed (strict): {e}");
+                            error!("registry load failed (strict): {e}");
                             None
                         }
                     }
@@ -3187,6 +3276,150 @@ fn is_flat_user_registry(dir: &Path) -> bool {
     has_toml && !has_subdirectory
 }
 
+fn sim(
+    input: &Path,
+    registry_dir: Option<&Path>,
+    suggest: bool,
+    force: bool,
+) -> anyhow::Result<u8> {
+    let (source, file) = read_source(input)?;
+    let parse = synth_parser::parse(&source, file.clone());
+    write_sim_diagnostics(&parse.diagnostics)?;
+    if parse.has_errors() {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+    let Some(ast) = parse.ast else {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    };
+
+    let import_root = input
+        .parent()
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    let loader = synth_ir::FsImportLoader { root: import_root };
+    let resolved = synth_ir::resolve_imports(&ast, &loader, &file);
+    write_sim_diagnostics(&resolved.diagnostics)?;
+    if resolved
+        .diagnostics
+        .iter()
+        .any(|d| d.severity.is_blocking())
+    {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+
+    let Some(registry) = load_registry(registry_dir) else {
+        anyhow::bail!("could not load the component registry");
+    };
+    let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    write_sim_diagnostics(&lowered.diagnostics)?;
+    if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    }
+    let Some(board) = lowered.board else {
+        return Ok(EXIT_VALIDATION_ERRORS);
+    };
+
+    if suggest {
+        return Ok(draft_testbench(&board, input, force));
+    }
+
+    let sidecar = synth_sim::sidecar_path(input);
+    let testbench = match synth_sim::Testbench::from_path(&sidecar) {
+        Ok(testbench) => testbench,
+        Err(diagnostic) => {
+            write_sim_diagnostics(&[diagnostic])?;
+            return Ok(EXIT_VALIDATION_ERRORS);
+        }
+    };
+
+    let mut registry_dirs = Vec::new();
+    if let Tier1Source::Dir(dir) = resolve_tier1(registry_dir) {
+        registry_dirs.push(dir);
+    }
+    if let Some(user) = synth_registry::user_registry_dir()
+        && user.is_dir()
+        && !registry_dirs.contains(&user)
+    {
+        registry_dirs.push(user);
+    }
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            design_path: Some(input.to_path_buf()),
+            testbench_path: Some(sidecar.clone()),
+            registry_dirs,
+            ..synth_sim::SimOptions::default()
+        },
+    );
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    for measure in &report.measures {
+        let status = match (measure.min, measure.max) {
+            (None, None) => "MEASURED",
+            _ if measure.passed() => "PASS",
+            _ => "FAIL",
+        };
+        let limits = match (measure.min, measure.max) {
+            (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
+            (Some(min), None) => format!(" (min {min})"),
+            (None, Some(max)) => format!(" (max {max})"),
+            (None, None) => String::new(),
+        };
+        writeln!(
+            out,
+            "{status} {} = {} {}{limits}",
+            measure.name, measure.value, measure.unit
+        )?;
+    }
+    let blocking: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity.is_blocking())
+        .cloned()
+        .collect();
+    write_sim_diagnostics(&blocking)?;
+
+    Ok(if report.passed() {
+        EXIT_SUCCESS
+    } else {
+        EXIT_VALIDATION_ERRORS
+    })
+}
+
+/// Draft the sidecar from the compiled board and write it unless an existing
+/// file would be lost. All progress lines go to stderr so a caller can pipe
+/// them without mixing in a future stdout report.
+fn draft_testbench(board: &synth_ir::Board, input: &Path, force: bool) -> u8 {
+    let suggestion = synth_sim::suggest_testbench(board);
+    for reason in &suggestion.not_covered {
+        eprintln!("not covered: {reason}");
+    }
+    for warning in &suggestion.warnings {
+        eprintln!("{warning}");
+    }
+    let Some(toml) = suggestion.toml else {
+        eprintln!(
+            "no testbench shapes found in {}; nothing written",
+            input.display()
+        );
+        return EXIT_SUCCESS;
+    };
+
+    let sidecar = synth_sim::sidecar_path(input);
+    if sidecar.exists() && !force {
+        eprintln!("refusing to overwrite {}; pass --force", sidecar.display());
+        return EXIT_VALIDATION_ERRORS;
+    }
+    if let Err(error) = std::fs::write(&sidecar, toml) {
+        eprintln!("error: could not write {}: {error}", sidecar.display());
+        return EXIT_VALIDATION_ERRORS;
+    }
+    eprintln!("wrote {}", sidecar.display());
+    EXIT_SUCCESS
+}
+
 fn validate(
     input: &Path,
     format: Format,
@@ -3201,51 +3434,50 @@ fn validate(
     let mut diagnostics = parse.diagnostics;
     let schematic_sidecar = sidecar_path_for(input);
 
-    if !parse_only {
-        if let Some(ast) = parse.ast.as_ref() {
-            // Resolve imports against the input file's parent directory
-            // (the sandbox root). Imports use relative paths only.
-            let import_root = input
-                .parent()
-                .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
-            let loader = synth_ir::FsImportLoader { root: import_root };
-            let resolved = synth_ir::resolve_imports(ast, &loader, &file);
-            diagnostics.extend(resolved.diagnostics);
+    if !parse_only && let Some(ast) = parse.ast.as_ref() {
+        // Resolve imports against the input file's parent directory
+        // (the sandbox root). Imports use relative paths only.
+        let import_root = input
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        let loader = synth_ir::FsImportLoader { root: import_root };
+        let resolved = synth_ir::resolve_imports(ast, &loader, &file);
+        diagnostics.extend(resolved.diagnostics);
 
-            if let Some(registry) =
-                load_registry_strict(registry_dir, user_registry, strict_registry)
-            {
-                let lowered = synth_ir::lower(&resolved.program, &registry, &file);
-                diagnostics.extend(lowered.diagnostics);
-                if let Some(board) = lowered.board.as_ref() {
-                    // Per-design ERC config (`<design>.synth.erc.toml`),
-                    // when present, overrides the pin-conflict table and
-                    // the deeper-check thresholds.
-                    let erc_config = synth_validate::ErcConfig::load_for_design(input)
-                        .map_err(|e| anyhow::anyhow!("ERC config: {e}"))?
-                        .unwrap_or_default();
-                    diagnostics.extend(synth_validate::run_erc_with_config(
-                        board,
-                        &file,
-                        &erc_config,
-                    ));
-                    // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
-                    // warnings; never blocking. Per-sheet on §P26 split
-                    // boards so findings attribute to their page (and the
-                    // split itself clears the single-sheet overflow).
-                    //
-                    // Over the *schematic sidecar* layout, not the bare
-                    // auto-layout: the sheet these rules judge is the one
-                    // `synth render` and `synth_export` produce, and on the
-                    // auto-layout a tuned design reports sheet overflow and
-                    // low fill for a drawing that is fine.
-                    let global =
-                        synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
-                    let sheets = synth_layout::sheets::layout_sheets(board, global);
-                    let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
-                    synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
-                    diagnostics.extend(schem);
-                }
+        if let Some(registry) = load_registry_strict(registry_dir, user_registry, strict_registry) {
+            let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+            diagnostics.extend(lowered.diagnostics);
+            if let Some(board) = lowered.board.as_ref() {
+                // Per-design ERC config (`<design>.synth.erc.toml`),
+                // when present, overrides the pin-conflict table and
+                // the deeper-check thresholds.
+                let erc_config = synth_validate::ErcConfig::load_for_design(input)
+                    .map_err(|e| anyhow::anyhow!("ERC config: {e}"))?
+                    .unwrap_or_default();
+                diagnostics.extend(synth_validate::run_erc_with_config(
+                    board,
+                    &file,
+                    &erc_config,
+                ));
+                // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
+                // warnings; never blocking. Per-sheet on §P26 split
+                // boards so findings attribute to their page (and the
+                // split itself clears the single-sheet overflow).
+                //
+                // Over the *schematic sidecar* layout, not the bare
+                // auto-layout: the sheet these rules judge is the one
+                // `synth render` and `synth_export` produce, and on the
+                // auto-layout a tuned design reports sheet overflow and
+                // low fill for a drawing that is fine.
+                let global = synth_layout::layout_with_sidecar(board, schematic_sidecar.as_deref());
+                let sheets = synth_layout::sheets::layout_sheets(
+                    board,
+                    global,
+                    schematic_sidecar.as_deref(),
+                );
+                let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
+                synth_kicad::attach_schem_erc_locations(&mut schem, board, &file);
+                diagnostics.extend(schem);
             }
         }
     }
@@ -3598,17 +3830,10 @@ fn print_signal_integrity(violations: &[synth_drc::Violation]) -> usize {
     for violation in violations {
         if violation.is_blocking() {
             blocking += 1;
+            error!("{} {}", violation.code, violation.message);
+        } else {
+            warn!("{} {}", violation.code, violation.message);
         }
-        eprintln!(
-            "{} {} {}",
-            if violation.is_blocking() {
-                "error:"
-            } else {
-                "warning:"
-            },
-            violation.code,
-            violation.message
-        );
     }
     blocking
 }
@@ -3665,8 +3890,9 @@ fn route_design(
     // Signal/power-integrity on the delivered copper, so `synth route` and
     // `synth drc` see the same findings the export gate does instead of only
     // the geometry kicad-cli judges.
-    let profile = synth_drc::ManufacturerProfile::from_name(
+    let profile = synth_drc::ManufacturerProfile::for_layers(
         board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+        board.layers,
     );
     let delivered = report
         .artifacts
@@ -3781,13 +4007,13 @@ fn repair_unresolvable_footprints(
     // Report every gap, whether or not it can be repaired, so the reason for
     // a `--force` export is always visible.
     for gap in &gaps {
-        eprintln!(
-            "warning: [E-SYNTH-FP-001] part `{}` ({}) references footprint `{}`, which is not installed",
+        warn!(
+            "[E-SYNTH-FP-001] part `{}` ({}) references footprint `{}`, which is not installed",
             gap.part_id, gap.refdes, gap.wanted
         );
         if gap.candidates.is_empty() {
-            eprintln!(
-                "         no candidate found in {} footprint(s) under {:?}; \
+            warn!(
+                "no candidate found in {} footprint(s) under {:?}; \
                  import one (`synth part import-lcsc <C-code>`) or author it (`synth part stub`)",
                 index.entries.len(),
                 fr::search_roots()
@@ -3795,8 +4021,8 @@ fn repair_unresolvable_footprints(
             continue;
         }
         for (i, c) in gap.candidates.iter().enumerate() {
-            eprintln!("         [{:.2}] {}", c.score, c.lib_id);
-            eprintln!("                {}", c.reason);
+            debug!("[{:.2}] {}", c.score, c.lib_id);
+            debug!("       {}", c.reason);
             if i == 0 {
                 break;
             }
@@ -3808,8 +4034,8 @@ fn repair_unresolvable_footprints(
     for gap in &gaps {
         let Some(best) = fr::resolve_one(&index, &gap.wanted, &[]) else {
             if gap.candidates.len() > 1 {
-                eprintln!(
-                    "warning: part `{}` left un-repaired: the top two candidates are within \
+                warn!(
+                    "part `{}` left un-repaired: the top two candidates are within \
                      {:.2} of each other, which is too close to call. Set `kicad_footprint` \
                      on the part by hand.",
                     gap.part_id,
@@ -3833,8 +4059,8 @@ fn repair_unresolvable_footprints(
         });
         match write_user_part_overlay(&fixed, user_registry, registry_dir) {
             Ok(path) => {
-                eprintln!(
-                    "         auto-repaired: `{}` -> `{}` (written to {})",
+                info!(
+                    "auto-repaired: `{}` -> `{}` (written to {})",
                     gap.wanted,
                     best.lib_id,
                     path.display()
@@ -3842,8 +4068,8 @@ fn repair_unresolvable_footprints(
                 repaired = true;
             }
             Err(e) => {
-                eprintln!(
-                    "warning: could not write repair for part `{}` into the user registry: {e}",
+                warn!(
+                    "could not write repair for part `{}` into the user registry: {e}",
                     gap.part_id
                 );
             }
@@ -3894,6 +4120,11 @@ fn sanitize_part_id(id: &str) -> String {
 }
 
 /// Handler for `synth part resolve-footprint`.
+///
+/// The listing below is the command's result, not a log record: it is
+/// written directly to stderr (stdout stays machine-readable) and is not
+/// filtered, because `-q` must not hide the report the command exists to
+/// print. Progress and failures inside the pipeline use `tracing` instead.
 fn part_resolve_footprint(
     registry_dir: Option<&Path>,
     user_registry: Option<&Path>,
@@ -4009,9 +4240,12 @@ fn export_kicad(
     krt_fab_overrides: Option<&Path>,
     krt_same_net_pad_clearance: f64,
     krt_allow_via_in_pad: bool,
+    fine_pitch_advisory: bool,
     best_of: bool,
     allow_incomplete: bool,
     place_route_iterate: bool,
+    place_route_budget_secs: u64,
+    dfm_gate: bool,
 ) -> anyhow::Result<u8> {
     if autoroute {
         // Still parsed, so an existing script fails with something
@@ -4100,7 +4334,17 @@ fn export_kicad(
     let mut overrides: Vec<release::OverrideRecord> = Vec::new();
 
     // Slice 7: Run Synth ERC validation before exporting
-    let erc_diags = synth_validate::run_erc(board, &file);
+    // The operator's via-in-pad decision has to reach this gate, not only the
+    // router. ERC runs first, so `--krt-allow-via-in-pad` was documented as an
+    // override that could never fire: a board declaring `requires via_in_pad`
+    // against an incapable tier failed `E-SYNTH-PROCESS-002` here and the
+    // export stopped before anything asked whether an operator had signed for
+    // it.
+    let erc_config = synth_validate::ErcConfig {
+        via_in_pad_override: krt_allow_via_in_pad,
+        ..synth_validate::ErcConfig::default()
+    };
+    let erc_diags = synth_validate::run_erc_with_config(board, &file, &erc_config);
     write_diagnostics_to_stderr(&erc_diags)?;
     let has_erc_errors = erc_diags.iter().any(|d| d.severity.is_blocking());
     if has_erc_errors {
@@ -4123,12 +4367,12 @@ fn export_kicad(
     // stock KiCad, or shipped in the registry). Parts without one export with
     // a synthesized bounding-box fallback whose pad geometry is a guess —
     // not fabricable. Reject unless `--force`.
-    let unfootprinted = parts_without_real_footprint(board);
+    let unfootprinted = synth_layout::kicad_footprint_loader::parts_without_real_footprint(board);
     if !unfootprinted.is_empty() {
         let list = unfootprinted.join(", ");
         if force {
-            eprintln!(
-                "error: {banner} [E-SYNTH-EXPORT-001] exporting with synthesized \
+            error!(
+                "{banner} [E-SYNTH-EXPORT-001] exporting with synthesized \
                  bounding-box footprints for: {list} (--force). Pad geometry is a guess, \
                  not the manufacturer's land pattern.",
                 banner = release::UNTRUSTED_BANNER
@@ -4142,8 +4386,8 @@ fn export_kicad(
                 ),
             ));
         } else {
-            eprintln!(
-                "error: [E-SYNTH-EXPORT-001] the following parts have no real `.kicad_mod` \
+            error!(
+                "[E-SYNTH-EXPORT-001] the following parts have no real `.kicad_mod` \
                  footprint and would export with a synthesized bounding-box fallback: {list}. \
                  Import real footprints (`synth part import lcsc` / `synth part import kicad`), \
                  ship them in the registry, or re-run with --force to export anyway."
@@ -4164,7 +4408,7 @@ fn export_kicad(
     // Thresholds come from the design's `<design>.synth.erc.toml`
     // `[schematic]` section when present (Phase E), else the defaults.
     let pre_layout = synth_layout::layout_with_sidecar(board, sidecar);
-    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone());
+    let pre_sheets = synth_layout::sheets::layout_sheets(board, pre_layout.clone(), sidecar);
     let mut schem_diags = synth_kicad::check_schem_erc_sheets_with_config(
         board,
         &pre_sheets,
@@ -4174,7 +4418,7 @@ fn export_kicad(
     write_diagnostics_to_stderr(&schem_diags)?;
 
     if let Some(notice) = synth_layout::SidecarKind::Schematic.migration_notice(input) {
-        eprintln!("warning: {notice}");
+        warn!("{notice}");
     }
 
     let options = router_options(
@@ -4188,26 +4432,51 @@ fn export_kicad(
         krt_fab_overrides,
         krt_same_net_pad_clearance,
         krt_allow_via_in_pad,
+        fine_pitch_advisory,
     );
 
     // Opt-in place→route→re-place: route each candidate placement and keep
     // the one that routes best, rather than trusting the export path's
     // route-free estimate. Falls back to the normal choice when there is
     // nothing to gain or the engine is unavailable.
+    let mut search_budget =
+        synth_router::search_budget::SearchBudget::start(place_route_budget_secs);
     let (chosen_placement, chosen_order) = if place_route_iterate {
-        select_placement_for_routing(board, &sidecars, router, &options, best_of)?
-            .map_or((None, Vec::new()), |(placement, order)| {
-                (Some(placement), order)
-            })
+        select_placement_for_routing(
+            board,
+            &sidecars,
+            router,
+            &options,
+            best_of,
+            &mut search_budget,
+        )?
+        .map_or((None, Vec::new()), |(placement, order)| {
+            (Some(placement), order)
+        })
     } else {
         (None, Vec::new())
     };
-
     let result = match &chosen_placement {
         Some(placement) => synth_kicad::export_with_placement(board, out_dir, &sidecars, placement),
         None => synth_kicad::export_with_sidecars(board, out_dir, &sidecars),
     }
     .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+
+    // The final export counts against the budget too, so the limit is worked out
+    // after it: the router gets what the export left, never less than it needs to
+    // deliver the board.
+    let options = if place_route_iterate {
+        let limit = search_budget
+            .final_limit(std::time::Duration::from_secs(options.timeout_secs))
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "the placement search used the whole --place-route-budget-secs, so the final route was not started"
+                )
+            })?;
+        options.with_timeout(Some(limit.as_secs()))
+    } else {
+        options
+    };
 
     // Copper is generated by the external router, never by Synth. The
     // export above is the un-routed baseline; this run reads it, routes it,
@@ -4225,8 +4494,9 @@ fn export_kicad(
     // Signal integrity and power integrity on the routed copper. The rules
     // need the routed board, not the placement, so they run here on the file
     // the router produced. Blocking findings stop the export unless --force.
-    let drc_profile = synth_drc::ManufacturerProfile::from_name(
+    let drc_profile = synth_drc::ManufacturerProfile::for_layers(
         board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+        board.layers,
     );
     // Read the delivered copper, not the baseline path: the router may deliver
     // its board elsewhere, and reading the un-routed baseline would make these
@@ -4239,8 +4509,8 @@ fn export_kicad(
     let synth_violations = synth_drc_on_routed(board, &delivered, &drc_profile);
     let blocking = print_signal_integrity(&synth_violations);
     if blocking > 0 && !force {
-        eprintln!(
-            "error: the routed board has {blocking} blocking signal/power-integrity finding(s); \
+        error!(
+            "the routed board has {blocking} blocking signal/power-integrity finding(s); \
              fix the routing or use --force to export anyway."
         );
         return Ok(1);
@@ -4259,11 +4529,11 @@ fn export_kicad(
         )?;
     }
 
-    eprintln!("wrote {}", result.project_path.display());
-    eprintln!("wrote {}", result.schematic_path.display());
-    eprintln!("wrote {}", result.library_path.display());
-    eprintln!("wrote {}", result.pcb_path.display());
-    eprintln!("wrote {}", result.bom_path.display());
+    info!("wrote {}", result.project_path.display());
+    info!("wrote {}", result.schematic_path.display());
+    info!("wrote {}", result.library_path.display());
+    info!("wrote {}", result.pcb_path.display());
+    info!("wrote {}", result.bom_path.display());
 
     let mut fab_evidence = None;
     if !fab.is_empty() {
@@ -4273,23 +4543,23 @@ fn export_kicad(
         // is a warning there); manufacturing export is where it becomes a
         // hard gate, per §18.8.2.
         if let Some(refusal) = structural_refusal(board) {
-            eprintln!("{refusal}");
+            error!("{refusal}");
             return Ok(1);
         }
         let unverified = parts_unverified(board);
         if !unverified.is_empty() {
             let list = unverified.join(", ");
             if !allow_unverified_parts {
-                eprintln!(
-                    "error: [W-SYNTH-PART-UNVERIFIED] refusing fab export: the following parts \
+                error!(
+                    "[W-SYNTH-PART-UNVERIFIED] refusing fab export: the following parts \
                      have no reviewer (`[provenance].reviewed_by` empty): {list}. Review them \
                      and set `reviewed_by`, or re-run with --allow-unverified-parts to submit \
                      anyway."
                 );
                 return Ok(1);
             }
-            eprintln!(
-                "error: {banner} [W-SYNTH-PART-UNVERIFIED] fab export includes parts no one \
+            error!(
+                "{banner} [W-SYNTH-PART-UNVERIFIED] fab export includes parts no one \
                  has reviewed: {list} (--allow-unverified-parts).",
                 banner = release::UNTRUSTED_BANNER
             );
@@ -4302,13 +4572,13 @@ fn export_kicad(
         match synth_kicad::run_fab(&result.pcb_path, out_dir, &fab) {
             Ok(artifacts) => {
                 if let Some(dir) = artifacts.gerbers_dir {
-                    eprintln!("wrote gerbers into {}", dir.display());
+                    info!("wrote gerbers into {}", dir.display());
                 }
                 if let Some(dir) = artifacts.drill_dir {
-                    eprintln!("wrote drill files into {}", dir.display());
+                    info!("wrote drill files into {}", dir.display());
                 }
                 if let Some(path) = artifacts.step_path {
-                    eprintln!("wrote {}", path.display());
+                    info!("wrote {}", path.display());
                 }
                 fab_evidence = Some(synth_diagnostics::NativeCheckEvidence::concluded(
                     FAB_STAGE,
@@ -4346,7 +4616,7 @@ fn export_kicad(
     // Slice 3: Run KiCad ERC if requested
     let mut has_kicad_erc_errs = false;
     if validate_erc {
-        eprintln!(
+        info!(
             "running kicad-cli sch erc on {}",
             result.schematic_path.display()
         );
@@ -4355,13 +4625,20 @@ fn export_kicad(
             report_unavailable_check(&erc.evidence);
         } else {
             if erc.violations.is_empty() {
-                eprintln!("kicad-cli sch erc: 0 violations found");
+                info!("kicad-cli sch erc: 0 violations found");
             } else {
                 for v in &erc.violations {
-                    eprintln!(
-                        "[kicad-erc] {}: [{}] {}",
-                        v.severity, v.violation_type, v.description
-                    );
+                    if v.is_error() {
+                        error!(
+                            "[kicad-erc] {}: [{}] {}",
+                            v.severity, v.violation_type, v.description
+                        );
+                    } else {
+                        warn!(
+                            "[kicad-erc] {}: [{}] {}",
+                            v.severity, v.violation_type, v.description
+                        );
+                    }
                 }
             }
             has_kicad_erc_errs = erc.errors().next().is_some();
@@ -4392,43 +4669,114 @@ fn export_kicad(
         report_unavailable_check(&drc.evidence);
     } else {
         for v in &drc.violations {
-            eprintln!("[kicad-drc] error: [{}] {}", v.code, v.message);
+            error!("[kicad-drc] [{}] {}", v.code, v.message);
         }
         has_kicad_drc_errors = !drc.violations.is_empty();
         report_drc_counts(&drc.counts);
     }
     let release_drc_blocked = production && drc.counts.blocking_count() > 0;
     if release_drc_blocked {
-        eprintln!(
-            "error: release export blocked: KiCad DRC is not clean ({}); \
+        error!(
+            "release export blocked: KiCad DRC is not clean ({}); \
              --force does not override this.",
             drc.counts
         );
     }
     native.push(drc.evidence);
 
+    // Manufacturability is read from the board that ships. Every export
+    // records it; only a release export (fab files requested) run with
+    // `--dfm-gate` is stopped by a Danger finding. The gate is opt-in until
+    // the rules are calibrated against the fab's own tool.
+    let (dfm_evidence, dfm_report) = dfm_stage(&delivered, &drc_profile, dfm_gate);
+    let dfm_danger = dfm_report
+        .as_ref()
+        .map_or(0, synth_drc::dfm::DfmReport::danger_count);
+    let release_dfm_blocked = dfm_blocks_release(production, dfm_gate, dfm_report.as_ref());
+    if let Some(report) = &dfm_report {
+        if release_dfm_blocked {
+            for finding in &report.findings {
+                if matches!(finding.severity, synth_drc::dfm::DfmSeverity::Danger) {
+                    error!(
+                        "[dfm] {:?}: [{}] {}",
+                        finding.severity, finding.rule, finding.message
+                    );
+                } else {
+                    warn!(
+                        "[dfm] {:?}: [{}] {}",
+                        finding.severity, finding.rule, finding.message
+                    );
+                }
+            }
+            error!(
+                "release export blocked: DFM found {dfm_danger} Danger finding(s) ({}); \
+                 --force does not override this.",
+                dfm_evidence.detail.as_deref().unwrap_or_default()
+            );
+        } else if !report.findings.is_empty() {
+            for line in &dfm_evidence.findings {
+                warn!("[dfm] {line}");
+            }
+            warn!(
+                "DFM found {} finding(s) a fab would flag ({}); each is listed above \
+                 and in the verification report.{}",
+                report.findings.len(),
+                dfm_evidence.detail.as_deref().unwrap_or_default(),
+                if !dfm_gate {
+                    " Pass --dfm-gate to let Danger findings block a release export."
+                } else if !production {
+                    " --dfm-gate blocks only a release export (--gerbers and similar); \
+                     this export is not one."
+                } else {
+                    ""
+                }
+            );
+        }
+    }
+    if dfm_report.is_none() && (dfm_evidence.advisory || !production) {
+        warn!(
+            "the DFM check could not read the board ({}); it is recorded as unknown \
+             and {}.",
+            dfm_evidence.detail.as_deref().unwrap_or_default(),
+            if dfm_gate {
+                "--dfm-gate blocks only a release export (--gerbers and similar), \
+                 which this export is not"
+            } else {
+                "does not block without --dfm-gate"
+            }
+        );
+    }
+    native.push(dfm_evidence);
+
     let blocked_by_unknown: Vec<_> = native
         .iter()
-        .filter(|e| e.status == NativeCheckStatus::Unknown)
+        .filter(|e| e.status == NativeCheckStatus::Unknown && !e.advisory)
         .filter(|e| production || e.stage == synth_kicad::ERC_STAGE)
         .collect();
     if !blocked_by_unknown.is_empty() {
-        eprintln!();
         if production {
-            eprintln!(
-                "error: UNTRUSTED / NOT FOR FABRICATION — this export has no native \
+            error!(
+                "UNTRUSTED / NOT FOR FABRICATION — this export has no native \
                  verification evidence:"
             );
         } else {
-            eprintln!("error: requested native verification could not be performed:");
+            error!("requested native verification could not be performed:");
         }
         for evidence in &blocked_by_unknown {
-            eprintln!("  {}", evidence.summary_line());
+            warn!("{}", evidence.summary_line());
         }
-        eprintln!(
-            "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
-             then re-run; --force does not override this."
-        );
+        if blocked_by_unknown.iter().any(|e| e.stage != DFM_STAGE) {
+            warn!(
+                "An unavailable check is not a pass. Install KiCad (or set KICAD_CLI), \
+                 then re-run; --force does not override this."
+            );
+        }
+        if blocked_by_unknown.iter().any(|e| e.stage == DFM_STAGE) {
+            warn!(
+                "The dfm check reads the board file itself and needs no KiCad: fix the board \
+                 file it could not read, or drop --dfm-gate; --force does not override this."
+            );
+        }
     }
 
     if let Some(path) = verification_report {
@@ -4455,8 +4803,9 @@ fn export_kicad(
         overrides,
         release::reviewer_state(board),
     )
+    .with_synthetic_symbols(release::synthetic_symbol_parts(board))
     .with_signal_integrity(&synth_violations)
-    .with_release_blocked(release_drc_blocked)
+    .with_release_blocked(release_drc_blocked || release_dfm_blocked)
     .with_routing(Some(release::RoutingState::from_report(
         &routing,
         &run_record,
@@ -4464,17 +4813,16 @@ fn export_kicad(
     let manifest_path = manifest
         .write_to(out_dir)
         .map_err(|e| anyhow::anyhow!("could not write the release manifest: {e}"))?;
-    eprintln!("wrote {}", manifest_path.display());
+    info!("wrote {}", manifest_path.display());
     for note in manifest
         .routing
         .iter()
         .flat_map(|r| r.fabrication_notes.iter())
     {
-        eprintln!("fabrication note: {note}");
+        info!("fabrication note: {note}");
     }
     if let Some(banner) = manifest.banner() {
-        eprintln!();
-        eprintln!("{banner}");
+        warn!("{banner}");
     }
 
     // --safe conflicts with the override flags at parse time; this is the
@@ -4482,8 +4830,8 @@ fn export_kicad(
     // is actually clean, so a path that records an override without a flag
     // behind it cannot slip through a release gate either.
     if safe && manifest.has_overrides() {
-        eprintln!(
-            "error: --safe was requested but the export recorded {} override(s); see {}",
+        error!(
+            "--safe was requested but the export recorded {} override(s); see {}",
             manifest.overrides.len(),
             manifest_path.display()
         );
@@ -4495,12 +4843,12 @@ fn export_kicad(
     // loudly, because the artifacts it writes are otherwise indistinguishable
     // from a release.
     if allow_incomplete && !routing.is_fabrication_ready() {
-        eprintln!(
-            "warning: DRAFT / NOT FOR FABRICATION — exporting an un-routed board: {}",
+        warn!(
+            "DRAFT / NOT FOR FABRICATION — exporting an un-routed board: {}",
             routing.summary()
         );
-        eprintln!(
-            "  the un-routed baseline is preserved beside the export for review or \
+        warn!(
+            "the un-routed baseline is preserved beside the export for review or \
              for an external router to complete; the routing run record names it."
         );
     }
@@ -4510,6 +4858,7 @@ fn export_kicad(
         || (has_erc_errors && !force)
         || (has_kicad_drc_errors && !force)
         || release_drc_blocked
+        || release_dfm_blocked
         || has_kicad_erc_errs
         || !blocked_by_unknown.is_empty()
         // Fail-closed: an un-routed export is not fabricable, and neither
@@ -4618,7 +4967,7 @@ fn write_jlcpcb_bundle(
         result.out_dir.join("manifest.json"),
         serde_json::to_vec_pretty(&manifest)?,
     )?;
-    eprintln!(
+    info!(
         "wrote JLCPCB manufacturing bundle to {}",
         result.out_dir.display()
     );
@@ -4647,34 +4996,166 @@ fn collect_bundle_files(
 }
 
 const FAB_STAGE: &str = "kicad_fab";
+const DFM_STAGE: &str = "dfm";
 
 fn report_drc_counts(counts: &synth_drc::DrcCounts) {
     let line = format!("kicad-cli pcb drc: {counts}");
     if counts.is_clean() {
-        eprintln!("{line} (Phase 13 Zero-DRC gate clean)");
+        info!("{line} (Phase 13 Zero-DRC gate clean)");
     } else {
-        eprintln!("{line}");
-        eprintln!(
-            "  note: unconnected pads belong to a net but have no copper path yet; \
+        info!("{line}");
+        debug!(
+            "unconnected pads belong to a net but have no copper path yet; \
              warnings are advisory, not rule violations"
         );
     }
 }
 
 fn report_unavailable_check(evidence: &synth_diagnostics::NativeCheckEvidence) {
-    eprintln!("warning: {}", evidence.summary_line());
-    eprintln!("  tool: {}", evidence.tool);
+    warn!("{}", evidence.summary_line());
+    debug!("tool: {}", evidence.tool);
     if let Some(version) = &evidence.tool_version {
-        eprintln!("  version: {version}");
+        debug!("version: {version}");
     }
     if !evidence.command.is_empty() {
-        eprintln!("  command: {}", evidence.command.join(" "));
+        debug!("command: {}", evidence.command.join(" "));
     }
     if let Some(detail) = &evidence.detail {
-        eprintln!("  detail: {detail}");
+        debug!("detail: {detail}");
     }
     if let Some(stderr) = &evidence.stderr {
-        eprintln!("  stderr: {}", stderr.replace('\n', "\n          "));
+        debug!("stderr: {}", stderr.replace('\n', "\n          "));
+    }
+}
+
+/// Whether the DFM stage stops a release export: gated, and either a Danger
+/// finding or a board it could not read (`report` is `None`), which is never clean.
+fn dfm_blocks_release(
+    production: bool,
+    gate: bool,
+    report: Option<&synth_drc::dfm::DfmReport>,
+) -> bool {
+    production && gate && report.is_none_or(|r| r.danger_count() > 0)
+}
+
+/// The manufacturability stage: what a fab's DFM tool would flag on the
+/// board that ships. A board that cannot be read is `unknown`, never clean.
+fn dfm_stage(
+    pcb: &Path,
+    profile: &synth_drc::ManufacturerProfile,
+    gate: bool,
+) -> (NativeCheckEvidence, Option<synth_drc::dfm::DfmReport>) {
+    const TOOL: &str = "synth-drc";
+    let text = match std::fs::read_to_string(pcb) {
+        Ok(text) => text,
+        Err(e) => {
+            let detail = format!("cannot read {}: {e}", pcb.display());
+            let evidence = NativeCheckEvidence::unknown(
+                DFM_STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportUnreadable,
+                detail,
+            )
+            .with_advisory(!gate);
+            return (evidence, None);
+        }
+    };
+    match synth_drc::dfm::check_dfm(&text, profile) {
+        Err(e) => {
+            let evidence = NativeCheckEvidence::unknown(
+                DFM_STAGE,
+                TOOL,
+                Vec::new(),
+                UnknownReason::ReportMalformed,
+                e.to_string(),
+            )
+            .with_advisory(!gate);
+            (evidence, None)
+        }
+        Ok(report) => {
+            let mut evidence =
+                NativeCheckEvidence::concluded(DFM_STAGE, TOOL, Vec::new(), report.danger_count());
+            let counts: Vec<String> = report
+                .counts()
+                .iter()
+                .map(|((rule, severity), n)| format!("{rule} {severity:?} {n}").to_lowercase())
+                .collect();
+            let mut parts = counts;
+            if report.unchecked_silk_text > 0 {
+                parts.push(format!(
+                    "{} silk text item(s) not measured",
+                    report.unchecked_silk_text
+                ));
+            }
+            if report.unchecked_silk_graphics > 0 {
+                parts.push(format!(
+                    "{} silk curve(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            let detail = parts.join(", ");
+            let mut unsupported = vec![
+                "pth_to_trace: graded Warning only, known not to match JLCDFM".to_string(),
+                "silk_text_clearance: text is counted, not measured".to_string(),
+                "filled_silk: ink covering a pad or hole is tested at sampled points, not by exact area".to_string(),
+            ];
+            // Assumed figures only matter when their rule ran on this profile.
+            if profile.min_silk_to_hole_nm > 0 {
+                unsupported.push(format!(
+                    "silk_to_hole: {} um floor assumed, not published by JLC",
+                    profile.min_silk_to_hole_nm / 1000
+                ));
+            }
+            if profile.min_pad_to_pad_nm > 0 {
+                unsupported.push(format!(
+                    "copper_merge_tolerance: {} um uncalibrated",
+                    profile.copper_merge_below_nm / 1000
+                ));
+            }
+            if report.unchecked_silk_graphics > 0 {
+                unsupported.push(format!(
+                    "silk_curves: {} curve or legacy arc item(s) not measured",
+                    report.unchecked_silk_graphics
+                ));
+            }
+            if report.unread_tracks > 0 {
+                unsupported.push(format!(
+                    "track_read: {} arc track(s) or segment(s) could not be read and were not measured",
+                    report.unread_tracks
+                ));
+            }
+            if report.approximated_pads > 0 {
+                unsupported.push(format!(
+                    "pad_shape: {} custom or trapezoid pad(s) measured by their bounding box, not their exact outline",
+                    report.approximated_pads
+                ));
+            }
+            unsupported.extend(
+                report.unchecked_rules.iter().map(|rule| {
+                    format!("{rule}: {} publishes no figure, rule not run", profile.name)
+                }),
+            );
+            let findings = report
+                .findings
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{:?} [{}] at ({:.3}, {:.3}) mm: {}",
+                        f.severity, f.rule, f.at_mm.0, f.at_mm.1, f.message
+                    )
+                })
+                .collect();
+            // Findings only decide the release when the gate is on.
+            evidence = evidence
+                .with_unsupported(unsupported)
+                .with_findings(findings)
+                .with_advisory(!gate);
+            if !detail.is_empty() {
+                evidence.detail = Some(detail);
+            }
+            (evidence, Some(report))
+        }
     }
 }
 
@@ -4683,8 +5164,10 @@ fn write_verification_report(
     input: &Path,
     native: &[synth_diagnostics::NativeCheckEvidence],
 ) -> anyhow::Result<()> {
+    // An advisory stage is recorded but does not decide readiness.
     let release_ready = native
         .iter()
+        .filter(|e| !e.advisory)
         .all(synth_diagnostics::NativeCheckEvidence::is_trusted);
     let report = serde_json::json!({
         "schema_version": "synth.verification.v1",
@@ -4692,10 +5175,10 @@ fn write_verification_report(
         "release_ready": release_ready,
         "stages": native,
     });
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
     }
     std::fs::write(path, serde_json::to_string_pretty(&report)?)?;
     Ok(())
@@ -4717,6 +5200,7 @@ struct RouterOptions {
     fab_overrides: Option<PathBuf>,
     same_net_pad_clearance: f64,
     allow_via_in_pad: bool,
+    fine_pitch_return_via_advisory: bool,
     /// Wall-clock budget for the whole external run.
     timeout_secs: u64,
 }
@@ -4746,6 +5230,7 @@ fn router_options(
     fab_overrides: Option<&Path>,
     same_net_pad_clearance: f64,
     allow_via_in_pad: bool,
+    fine_pitch_advisory: bool,
 ) -> RouterOptions {
     RouterOptions {
         freerouting_jar: freerouting_jar.map(Path::to_path_buf),
@@ -4757,8 +5242,24 @@ fn router_options(
         fab_overrides: fab_overrides.map(Path::to_path_buf),
         same_net_pad_clearance,
         allow_via_in_pad,
+        fine_pitch_return_via_advisory: fine_pitch_advisory,
         timeout_secs: default_router_timeout_secs(),
     }
+}
+
+/// Overlay the CLI's tool-location flags on the locations a request read
+/// from the environment. A flag that was not passed leaves the environment's
+/// value in place.
+fn apply_tool_flags(tools: &mut synth_router::ToolPaths, options: &RouterOptions) {
+    let overlay = |slot: &mut Option<PathBuf>, flag: &Option<PathBuf>| {
+        if flag.is_some() {
+            slot.clone_from(flag);
+        }
+    };
+    overlay(&mut tools.freerouting_jar, &options.freerouting_jar);
+    overlay(&mut tools.freerouting_java, &options.freerouting_java);
+    overlay(&mut tools.krt_repo, &options.kicad_routing_tools_repo);
+    overlay(&mut tools.krt_python, &options.kicad_routing_tools_python);
 }
 
 fn default_router_timeout_secs() -> u64 {
@@ -4792,11 +5293,14 @@ fn build_route_request(
     request.kicad_routing_tools.fab_tier = options.fab_tier.as_str().to_string();
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
+    request.use_board_escapes(board);
+    request.use_board_layer_pins(board);
     request.use_profile_floor(
         &board
             .manufacturer
             .clone()
             .unwrap_or_else(|| "jlc-standard".to_string()),
+        board.layers,
     );
     // After the floor, so the capability is read from the profile this board
     // actually names.
@@ -4827,8 +5331,8 @@ fn build_route_request(
             .collect::<Vec<_>>()
             .join("`, `");
         if request.policy.allow_via_in_pad {
-            eprintln!(
-                "warning: board requires `{named}`, which profile `{}` does not offer; \
+            warn!(
+                "board requires `{named}`, which profile `{}` does not offer; \
                  proceeding on the operator override [E-SYNTH-PROCESS-002]",
                 request.profile_name
             );
@@ -4847,22 +5351,14 @@ fn build_route_request(
         .kicad_routing_tools
         .fab_overrides
         .clone_from(&options.fab_overrides);
-    // Environment-only configuration reaches the adapters through the
-    // environment they already read; explicit flags win because they are
-    // exported here before discovery runs.
-    if let Some(jar) = &options.freerouting_jar {
-        std::env::set_var("SYNTH_FREEROUTING_JAR", jar);
-    }
-    if let Some(java) = &options.freerouting_java {
-        std::env::set_var("SYNTH_FREEROUTING_JAVA", java);
-    }
-    if let Some(repo) = &options.kicad_routing_tools_repo {
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", repo);
-    }
-    if let Some(python) = &options.kicad_routing_tools_python {
-        std::env::set_var("SYNTH_KRT_PYTHON", python);
-    }
+    // The request read the environment when it was built; an explicit flag
+    // overrides that reading on this request only.
+    apply_tool_flags(&mut request.tools, options);
     request.routing_order = routing_order.to_vec();
+    request.ground_nets = synth_drc::ground_net_names(board);
+    request.return_via_critical_nets = Some(synth_drc::return_path_critical_net_names(board));
+    request.return_via_medium_nets = synth_drc::return_path_medium_net_names(board);
+    request.fine_pitch_return_via_advisory = options.fine_pitch_return_via_advisory;
     request.preserve_baseline()?;
     Ok(request)
 }
@@ -4904,103 +5400,146 @@ fn select_placement_for_routing(
     engine: ExternalRouter,
     options: &RouterOptions,
     best_of: bool,
+    budget: &mut synth_router::search_budget::SearchBudget,
 ) -> anyhow::Result<Option<(synth_place::Placement, Vec<String>)>> {
     let candidates = synth_kicad::placement_candidates(board, sidecars)
         .map_err(|e| anyhow::anyhow!("could not enumerate placement candidates: {e}"))?;
     if candidates.len() < 2 {
         return Ok(None);
     }
-    eprintln!(
-        "placement feedback: routing {} candidate placements to choose between them",
-        candidates.len()
+    info!(
+        "placement feedback: routing {} candidate placements to choose between them, within {} s",
+        candidates.len(),
+        budget.total().as_secs()
     );
 
-    let mut best: Option<(CandidateCost, synth_place::Placement, Vec<String>)> = None;
-    for (index, candidate) in candidates.iter().enumerate() {
-        let Some((cost, report)) =
-            evaluate_candidate(board, sidecars, engine, options, best_of, candidate, index)?
-        else {
-            eprintln!(
-                "placement feedback: {} is unavailable; keeping the export's own placement",
-                engine.as_str()
+    // A run is never given longer than the router's own timeout.
+    let requested = std::time::Duration::from_secs(options.timeout_secs);
+    let Some(search) = synth_router::search_budget::route_candidates(
+        &candidates,
+        budget,
+        requested,
+        |candidate, index, clock| {
+            let (cost, report) = match evaluate_candidate(
+                board, sidecars, engine, options, best_of, candidate, index, clock,
+            )? {
+                CliAttempt::Routed(cost, report) => (cost, report),
+                CliAttempt::NoTime => {
+                    info!("placement feedback: candidate {index} used its time preparing; skipped");
+                    return Ok::<_, anyhow::Error>(synth_router::search_budget::Attempt::NoTime);
+                }
+                CliAttempt::EngineUnavailable => {
+                    warn!(
+                        "placement feedback: {} is unavailable; keeping the export's own placement",
+                        engine.as_str()
+                    );
+                    return Ok(synth_router::search_budget::Attempt::EngineUnavailable);
+                }
+            };
+            info!(
+                "placement feedback: candidate {index} -> {} (open nets {}, blocking {}, vias {}, \
+                 segments {})",
+                report.state.as_str(),
+                report.statistics.open_nets,
+                cost.2,
+                report.statistics.vias,
+                report.statistics.segments,
             );
-            return Ok(None);
-        };
-        eprintln!(
-            "placement feedback: candidate {index} -> {} (open nets {}, blocking {}, vias {}, \
-             segments {})",
-            report.state.as_str(),
-            report.statistics.open_nets,
-            cost.2,
-            report.statistics.vias,
-            report.statistics.segments,
+            Ok(synth_router::search_budget::Attempt::Routed(
+                synth_router::search_budget::Evaluated {
+                    cost,
+                    order: report.recommended_routing_order.clone(),
+                },
+            ))
+        },
+    )?
+    else {
+        return Ok(None);
+    };
+    if search.cut_short {
+        info!(
+            "placement feedback: the {} s budget ended the search after {} of {} candidates; \
+             keeping the best found",
+            budget.total().as_secs(),
+            search.routed,
+            search.total
         );
-        if best
-            .as_ref()
-            .is_none_or(|(previous, _, _)| cost < *previous)
-        {
-            best = Some((
-                cost,
-                candidate.clone(),
-                report.recommended_routing_order.clone(),
-            ));
-        }
     }
+    let mut best = search.best;
 
     // Hardest-net grouping: the winner named the nets the router struggled
     // with. Ask for one more placement that pulls each such net's parts toward
     // the component carrying most of its pins, and keep it if it routes better.
-    if let Some((best_cost, _, order)) = best.clone() {
-        if !order.is_empty() {
-            let hints = synth_place::hard_net_proximity_hints(board, &order);
-            if !hints.is_empty() {
-                let hinted = synth_place::with_hard_net_hints(board, &hints);
-                if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
-                    if let Some(candidate) = grouped.into_iter().next() {
-                        if let Some((cost, report)) = evaluate_candidate(
-                            board,
-                            sidecars,
-                            engine,
-                            options,
-                            best_of,
-                            &candidate,
-                            usize::MAX,
-                        )? {
-                            eprintln!(
-                                "placement feedback: hardest-net grouping -> {cost:?} \
+    // It is one more routing run, so it gets what is left of the budget, or is
+    // skipped.
+    if let Some((best_cost, _, order)) = best.clone()
+        && !order.is_empty()
+    {
+        let hints = synth_place::hard_net_proximity_hints(board, &order);
+        if !hints.is_empty() {
+            let Some(limit) = budget.candidate_limit(requested) else {
+                info!("placement feedback: no budget left for the hardest-net grouping run");
+                return Ok(best.map(|(_, placement, order)| (placement, order)));
+            };
+            let hinted = synth_place::with_hard_net_hints(board, &hints);
+            if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars)
+                && let Some(candidate) = grouped.into_iter().next()
+            {
+                let began = std::time::Instant::now();
+                let evaluated = evaluate_candidate(
+                    board,
+                    sidecars,
+                    engine,
+                    options,
+                    best_of,
+                    &candidate,
+                    usize::MAX,
+                    budget.run_clock(limit),
+                )?;
+                budget.note_run(began.elapsed());
+                if matches!(evaluated, CliAttempt::NoTime) {
+                    info!(
+                        "placement feedback: the hardest-net grouping run used its time preparing; skipped"
+                    );
+                }
+                if let CliAttempt::Routed(cost, report) = evaluated {
+                    info!(
+                        "placement feedback: hardest-net grouping -> {cost:?} \
                                  (was {best_cost:?})"
-                            );
-                            if cost < best_cost {
-                                // Keep the grouped placement's own advice, not the
-                                // earlier candidate's: the routing order is
-                                // calculated per-placement, so the two are not
-                                // interchangeable.
-                                best = Some((
-                                    cost,
-                                    candidate,
-                                    report.recommended_routing_order.clone(),
-                                ));
-                            }
-                        }
+                    );
+                    if cost < best_cost {
+                        // Keep the grouped placement's own advice, not the
+                        // earlier candidate's: the routing order is
+                        // calculated per-placement, so the two are not
+                        // interchangeable.
+                        best = Some((cost, candidate, report.recommended_routing_order.clone()));
                     }
                 }
             }
         }
     }
 
-    if let Some((_, _, order)) = &best {
-        if !order.is_empty() {
-            eprintln!(
-                "placement feedback: hardest nets first on a retry: {}",
-                order.join(", ")
-            );
-        }
+    if let Some((_, _, order)) = &best
+        && !order.is_empty()
+    {
+        info!(
+            "placement feedback: hardest nets first on a retry: {}",
+            order.join(", ")
+        );
     }
     Ok(best.map(|(_, placement, order)| (placement, order)))
 }
 
-/// Export `candidate` to a scratch directory and route it, returning the route
-/// cost and report. `None` when the engine is unavailable.
+/// How one candidate's routing ended, with the report the caller prints from.
+enum CliAttempt {
+    Routed(CandidateCost, Box<synth_router::RouteReport>),
+    EngineUnavailable,
+    NoTime,
+}
+
+/// Export `candidate` to a scratch directory and route it under `clock`,
+/// returning the route cost and report, or saying that the engine is
+/// unavailable or that the export left no time to route.
 fn evaluate_candidate(
     board: &synth_ir::Board,
     sidecars: &synth_kicad::Sidecars,
@@ -5009,13 +5548,21 @@ fn evaluate_candidate(
     best_of: bool,
     candidate: &synth_place::Placement,
     index: usize,
-) -> anyhow::Result<Option<(CandidateCost, synth_router::RouteReport)>> {
+    clock: synth_router::search_budget::RunClock,
+) -> anyhow::Result<CliAttempt> {
+    // The clock started before this export, so the router gets what the export
+    // left of the run's limit, and is not started when too little is left.
     let scratch =
         std::env::temp_dir().join(format!("synth-place-route-{}-{index}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
     let result = synth_kicad::export_with_placement(board, &scratch, sidecars, candidate)
         .map_err(|e| anyhow::anyhow!("candidate export failed: {e}"))?;
-    let request = build_route_request(board, &result, engine.into(), options, &[])?;
+    let Some(router_secs) = clock.router_timeout_secs() else {
+        let _ = std::fs::remove_dir_all(&scratch);
+        return Ok(CliAttempt::NoTime);
+    };
+    let capped = options.clone().with_timeout(Some(router_secs));
+    let request = build_route_request(board, &result, engine.into(), &capped, &[])?;
     // Best-of-N per candidate when asked: the winner is the best engine's
     // attempt, judged by the same independent checks.
     let report = if best_of {
@@ -5027,9 +5574,9 @@ fn evaluate_candidate(
     };
     let _ = std::fs::remove_dir_all(&scratch);
     if report.state == synth_router::RouteState::RouterUnavailable {
-        return Ok(None);
+        return Ok(CliAttempt::EngineUnavailable);
     }
-    Ok(Some((report.layout_cost(), report)))
+    Ok(CliAttempt::Routed(report.layout_cost(), Box::new(report)))
 }
 
 /// Synth's rule engine run on the **routed** board, read back from disk.
@@ -5161,7 +5708,7 @@ fn route_externally(
     } else {
         routing_order.to_vec()
     };
-    eprintln!(
+    info!(
         "routing {} with {}",
         request.router_input_path().display(),
         if best_of {
@@ -5171,8 +5718,8 @@ fn route_externally(
         }
     );
     if !request.routing_order.is_empty() {
-        eprintln!(
-            "  reserving routes for the hardest nets first: {}",
+        info!(
+            "reserving routes for the hardest nets first: {}",
             request.routing_order.join(", ")
         );
     }
@@ -5180,9 +5727,9 @@ fn route_externally(
         let base_out = request.out_dir.clone();
         let portfolio = synth_router::route_best_of(&request, &synth_router::RouterEngine::all());
         for attempt in &portfolio.attempts {
-            eprintln!("  attempt: {}", attempt.summary());
+            info!("attempt: {}", attempt.summary());
         }
-        eprintln!("  winner: {}", portfolio.winner.as_str());
+        info!("winner: {}", portfolio.winner.as_str());
         // The winner's artifacts live in its own subdirectory; point the
         // request there so the reports below reference the board that won.
         request.engine = portfolio.winner;
@@ -5207,29 +5754,49 @@ fn route_externally(
     // look deliverable.
     if !report.is_fabrication_ready() {
         if report.state == synth_router::RouteState::RouterUnavailable {
-            eprintln!(
-                "error: {} is not available; the exported board at {} is the \
+            error!(
+                "{} is not available; the exported board at {} is the \
                  un-routed baseline and is preserved for review.",
                 engine.as_str(),
                 request.baseline_path().display()
             );
+        } else if report
+            .failure
+            .as_ref()
+            .is_some_and(|f| f.reason == synth_router::RouterFailureReason::Unsupported)
+        {
+            // No copper was produced: the engine refused a constraint it
+            // cannot honour. Saying "failed validation" would imply a board
+            // exists and was rejected.
+            error!(
+                "{} cannot honour this routing request; the exported board at {} is the \
+                 un-routed baseline and is preserved for review. See {}.",
+                engine.as_str(),
+                request.baseline_path().display(),
+                request.report_path().display()
+            );
         } else if report.state == synth_router::RouteState::ValidationFailed {
-            eprintln!(
-                "error: the routed board failed independent validation; see {}.",
+            error!(
+                "the routed board failed independent validation; see {}.",
                 request.report_path().display()
             );
         } else {
-            eprintln!(
-                "warning: the routed board is review-only — a required check could \
+            warn!(
+                "the routed board is review-only — a required check could \
                  not be performed, which is not the same as a clean result. See {}.",
                 request.report_path().display()
             );
         }
-        eprintln!("(design: {})", input.display());
+        info!("(design: {})", input.display());
     }
     Ok(report)
 }
 
+/// Print the routing run's verdict.
+///
+/// This is the command's result, not a log record: it goes to stderr
+/// because stdout belongs to the JSON run record, and it is deliberately
+/// unfiltered so `-q` cannot suppress the verdict.
 fn print_route_report(report: &synth_router::RouteReport) {
     eprintln!("{}", report.summary());
     if let Some(provenance) = Some(&report.provenance) {
@@ -5244,18 +5811,23 @@ fn print_route_report(report: &synth_router::RouteReport) {
     for reason in report
         .validation
         .as_ref()
-        .map(|v| v.blocking_reasons.clone())
-        .unwrap_or_default()
+        .map_or_default(|v| v.blocking_reasons.clone())
     {
         eprintln!("  blocking: {reason}");
     }
     for check in report
         .validation
         .as_ref()
-        .map(|v| v.unavailable_checks.clone())
-        .unwrap_or_default()
+        .map_or_default(|v| v.unavailable_checks.clone())
     {
         eprintln!("  not checked: {check}");
+    }
+    for advisory in report
+        .validation
+        .as_ref()
+        .map_or_default(|v| v.advisories.clone())
+    {
+        eprintln!("  advisory: {advisory}");
     }
     if let Some(counts) = report.validation.as_ref().and_then(|v| v.kicad_drc) {
         eprintln!(
@@ -5291,6 +5863,10 @@ fn request_run_record_path(board: &synth_ir::Board, result: &synth_kicad::Export
 }
 
 /// Print the availability of every supported routing engine.
+///
+/// This is the command's result, not a log record: it goes straight to
+/// stderr (stdout is reserved for machine-readable output) and is never
+/// filtered, so `-q` cannot hide an answer the operator asked for.
 fn dump_routers(pretty: bool) -> anyhow::Result<u8> {
     let out_dir = std::env::temp_dir().join(format!("synth-routers-{}", std::process::id()));
     std::fs::create_dir_all(&out_dir).map_err(|e| anyhow::anyhow!("{e}"))?;
@@ -5367,21 +5943,20 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
         diagnostics
             .iter()
             .filter_map(|d| {
-                if smt {
-                    if let Some(smt_patch) = d
+                if smt
+                    && let Some(smt_patch) = d
                         .suggested_fixes
                         .iter()
                         .find(|p| matches!(p.kind, synth_diagnostics::PatchKind::SolveSmt { .. }))
-                    {
-                        return Some((d, smt_patch.clone()));
-                    }
+                {
+                    return Some((d, smt_patch.clone()));
                 }
                 d.suggested_fixes.first().cloned().map(|p| (d, p))
             })
             .collect();
 
     if diag_patches.is_empty() {
-        eprintln!(
+        info!(
             "synth fix: no machine-applicable patches in {} diagnostics",
             diagnostics.len()
         );
@@ -5404,7 +5979,7 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
                 if smt {
                     patch.apply(&current)
                 } else {
-                    eprintln!("synth fix: skipping SMT patch ({constraint}); pass --smt to solve");
+                    warn!("synth fix: skipping SMT patch ({constraint}); pass --smt to solve");
                     Err(synth_diagnostics::PatchError::Unsupported(
                         "smt disabled".into(),
                     ))
@@ -5419,13 +5994,13 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
                 applied += 1;
             }
             Err(e) => {
-                eprintln!("synth fix: skipping patch ({e})");
+                warn!("synth fix: skipping patch ({e})");
                 skipped += 1;
             }
         }
     }
 
-    eprintln!(
+    info!(
         "synth fix: applied {applied} / {total} patch(es), skipped {skipped}",
         total = diag_patches.len(),
     );
@@ -5435,7 +6010,7 @@ fn fix(input: &Path, registry_dir: Option<&Path>, smt: bool, dry_run: bool) -> a
     } else if current != source {
         std::fs::write(input, &current)
             .map_err(|e| anyhow::anyhow!("could not write {}: {e}", input.display()))?;
-        eprintln!("synth fix: wrote {}", input.display());
+        info!("synth fix: wrote {}", input.display());
     }
     Ok(EXIT_SUCCESS)
 }
@@ -5479,6 +6054,19 @@ fn schema(kind: SchemaKind) -> anyhow::Result<u8> {
 fn write_diagnostics_to_stderr(
     diagnostics: &[synth_diagnostics::Diagnostic],
 ) -> anyhow::Result<()> {
+    write_diagnostics(diagnostics, false)
+}
+
+/// `sim` diagnostics carry the actionable detail (the TOML error, the
+/// measured value, the missing install) in `message`, so print it too.
+fn write_sim_diagnostics(diagnostics: &[synth_diagnostics::Diagnostic]) -> anyhow::Result<()> {
+    write_diagnostics(diagnostics, true)
+}
+
+fn write_diagnostics(
+    diagnostics: &[synth_diagnostics::Diagnostic],
+    include_message: bool,
+) -> anyhow::Result<()> {
     let stderr = std::io::stderr();
     let mut err = stderr.lock();
     for d in diagnostics {
@@ -5491,6 +6079,9 @@ fn write_diagnostics_to_stderr(
             "{}: [{}] {} ({})",
             d.severity, d.code, d.title, where_
         )?;
+        if include_message && let Some(message) = &d.message {
+            writeln!(&mut err, "  {message}")?;
+        }
     }
     Ok(())
 }
@@ -5751,7 +6342,7 @@ fn render(
         anyhow::bail!("kicad-cli pcb render failed with status: {status}");
     }
 
-    eprintln!("rendered 3D PCB image -> {}", out_path.display());
+    info!("rendered 3D PCB image -> {}", out_path.display());
 
     if svg {
         let svg_out = out_path.with_extension("svg");
@@ -5773,9 +6364,9 @@ fn render(
             .map_err(|e| anyhow::anyhow!("failed to execute {kicad_cli} for svg: {e}"))?;
 
         if svg_status.success() {
-            eprintln!("rendered 2D copper SVG -> {}", svg_out.display());
+            info!("rendered 2D copper SVG -> {}", svg_out.display());
         } else {
-            eprintln!("warning: kicad-cli pcb export svg returned failure: {svg_status}");
+            warn!("kicad-cli pcb export svg returned failure: {svg_status}");
         }
     }
 
@@ -5785,7 +6376,195 @@ fn render(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_gated_dfm_stage_that_could_not_read_the_board_blocks_a_release() {
+        assert!(super::dfm_blocks_release(true, true, None));
+        assert!(!super::dfm_blocks_release(true, false, None));
+        assert!(!super::dfm_blocks_release(false, true, None));
+        let clean = synth_drc::dfm::DfmReport::default();
+        assert!(!super::dfm_blocks_release(true, true, Some(&clean)));
+    }
+
+    #[test]
+    fn an_unreadable_board_blocks_only_when_the_dfm_gate_is_on() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_bad_{}.kicad_pcb", std::process::id()));
+        std::fs::write(&path, "(kicad_pcb (via").expect("write board");
+        let (ungated, _) = dfm_stage(&path, &profile, false);
+        let (gated, _) = dfm_stage(&path, &profile, true);
+        assert_eq!(ungated.status, NativeCheckStatus::Unknown);
+        assert!(ungated.advisory, "an ungated unknown must not block");
+        assert!(!gated.advisory, "a gated unknown must block");
+        // The same path export_kicad takes: stage -> blocked -> manifest.
+        let manifest = |gate: bool| {
+            let (_, report) = dfm_stage(&path, &profile, gate);
+            let blocked = dfm_blocks_release(true, gate, report.as_ref());
+            let m = release::ReleaseManifest::new("t", Path::new("b.synth"), true, vec![], vec![])
+                .with_release_blocked(blocked);
+            serde_json::to_value(&m).expect("manifest json")["release_ready"].clone()
+        };
+        assert_eq!(manifest(true), serde_json::json!(false));
+        assert_eq!(manifest(false), serde_json::json!(true));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn a_dfm_stage_lists_an_unreadable_arc_track_as_unsupported() {
+        let profile = synth_drc::ManufacturerProfile::jlc_standard();
+        let path =
+            std::env::temp_dir().join(format!("synth_dfm_arc_{}.kicad_pcb", std::process::id()));
+        std::fs::write(
+            &path,
+            r#"(kicad_pcb (arc (start 1 1) (end 2 2) (width 0.2) (layer "F.Cu") (net 1)))"#,
+        )
+        .expect("write board");
+        let (evidence, _) = dfm_stage(&path, &profile, false);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            evidence
+                .unsupported
+                .iter()
+                .any(|u| u.contains("1 arc track(s)")),
+            "{evidence:?}"
+        );
+    }
+
+    #[test]
+    fn the_capability_list_reports_each_profiles_own_minimums() {
+        let descriptor = capability_descriptor();
+        let profiles = descriptor["manufacturer_profiles"]
+            .as_array()
+            .expect("a profile list");
+        assert_eq!(profiles.len(), 5);
+        for entry in profiles {
+            let name = entry["name"].as_str().expect("a name");
+            let profile = synth_drc::ManufacturerProfile::from_name(name);
+            let drill = synth_geometry::nm_to_mm(profile.min_drill_diameter_nm);
+            assert!(
+                (entry["min_drill_mm"].as_f64().unwrap() - drill).abs() < 1e-9,
+                "{name}: the list says {} mm, the profile {drill} mm",
+                entry["min_drill_mm"]
+            );
+        }
+        let jlc = profiles
+            .iter()
+            .find(|p| p["name"] == "jlc-standard")
+            .unwrap();
+        assert_eq!(
+            jlc["min_drill_mm"].as_f64(),
+            Some(0.2),
+            "JLCPCB's preferred hole"
+        );
+        for entry in profiles {
+            let name = entry["name"].as_str().expect("a name");
+            if synth_drc::ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&name) {
+                assert_eq!(entry["offers"], serde_json::json!(["via_in_pad"]), "{name}");
+            } else {
+                assert!(entry.get("offers").is_none(), "{name}");
+            }
+        }
+    }
     use super::*;
+
+    /// The request every `route` caller builds carries the nets the DRC calls
+    /// ground, found from the board's pins, so the router's return-via passes
+    /// never fall back to guessing from names.
+    #[test]
+    fn a_tool_flag_overrides_the_environment_only_where_it_was_passed() {
+        let mut tools = synth_router::ToolPaths {
+            freerouting_jar: Some(PathBuf::from("/env/fr.jar")),
+            krt_repo: Some(PathBuf::from("/env/krt")),
+            ..synth_router::ToolPaths::default()
+        };
+        let options = RouterOptions {
+            freerouting_jar: Some(PathBuf::from("/flag/fr.jar")),
+            freerouting_java: None,
+            kicad_routing_tools_repo: None,
+            kicad_routing_tools_python: Some(PathBuf::from("/flag/python")),
+            escalation: KrtEscalation::Off,
+            fab_tier: KrtFabTier::Standard,
+            fab_overrides: None,
+            same_net_pad_clearance: 0.1,
+            allow_via_in_pad: false,
+            fine_pitch_return_via_advisory: false,
+            timeout_secs: 60,
+        };
+        apply_tool_flags(&mut tools, &options);
+        assert_eq!(tools.freerouting_jar, Some(PathBuf::from("/flag/fr.jar")));
+        assert_eq!(
+            tools.krt_repo,
+            Some(PathBuf::from("/env/krt")),
+            "no flag keeps the environment"
+        );
+        assert_eq!(tools.krt_python, Some(PathBuf::from("/flag/python")));
+        assert_eq!(tools.freerouting_java, None);
+    }
+
+    #[test]
+    fn the_route_request_carries_the_boards_ground_nets() {
+        let source = r#"board "returns" { layers 2
+            component U1: mcu "rp2350"
+            component C1: capacitor "c_generic_0603" value "100nF"
+            net "POWER_RETURN" { U1.gnd C1.p2 }
+            net "SIGNAL" { U1.gp0 C1.p1 }
+        }"#;
+        let parse = synth_parser::parse(source, "returns.synth".to_string());
+        let ast = parse.ast.as_ref().expect("parse");
+        let registry = synth_registry::load_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../registry/parts"),
+        )
+        .expect("registry");
+        let loader = synth_ir::FsImportLoader {
+            root: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        };
+        let resolved = synth_ir::resolve_imports(ast, &loader, "returns.synth");
+        let board = synth_ir::lower(&resolved.program, &registry, "returns.synth")
+            .board
+            .expect("board");
+        let dir = std::env::temp_dir().join(format!("synth-ground-request-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let pcb = dir.join("returns.kicad_pcb");
+        std::fs::write(&pcb, "(kicad_pcb)").expect("pcb");
+        let result = synth_kicad::ExportResult {
+            out_dir: dir.clone(),
+            project_path: dir.join("returns.kicad_pro"),
+            schematic_path: dir.join("returns.kicad_sch"),
+            library_path: dir.join("returns.kicad_sym"),
+            pcb_path: pcb,
+            bom_path: dir.join("bom.csv"),
+        };
+        let options = RouterOptions {
+            freerouting_jar: None,
+            freerouting_java: None,
+            kicad_routing_tools_repo: None,
+            kicad_routing_tools_python: None,
+            escalation: KrtEscalation::Off,
+            fab_tier: KrtFabTier::Standard,
+            fab_overrides: None,
+            same_net_pad_clearance: 0.1,
+            allow_via_in_pad: false,
+            fine_pitch_return_via_advisory: false,
+            timeout_secs: 60,
+        };
+        let request = build_route_request(
+            &board,
+            &result,
+            synth_router::RouterEngine::KiCadRoutingTools,
+            &options,
+            &[],
+        )
+        .expect("request");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(request.ground_nets, vec!["POWER_RETURN".to_string()]);
+        // SIGNAL is in no netclass and its GPIO pin could carry any edge rate,
+        // so the request holds it to a return via rather than downgrading it.
+        // Only a netclass declaring `edge_rate slow` is listed as an advisory.
+        assert_eq!(
+            request.return_via_critical_nets,
+            Some(vec!["SIGNAL".to_string()])
+        );
+    }
 
     /// A stage that writes more than a pipe holds must still be read.
     ///

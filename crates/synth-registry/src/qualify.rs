@@ -370,7 +370,7 @@ pub fn qualify_registry(
     tool_version: &str,
 ) -> QualificationReport {
     let mut ordered: Vec<(&PartId, &Part)> = registry.iter().collect();
-    ordered.sort_by(|a, b| a.0 .0.cmp(&b.0 .0));
+    ordered.sort_by(|a, b| a.0.0.cmp(&b.0.0));
 
     let parts: Vec<PartQualification> = ordered
         .into_iter()
@@ -649,7 +649,10 @@ fn check_pad_pin_coverage(part: &Part, pads: Option<&[PadFacts]>) -> Check {
         vec![Finding::blocking(
             "E-SYNTH-QUAL-002",
             "footprint has copper pads no pin declares",
-            format!("every copper pad of `{lib_id}` to be declared by `{}`", part.id.0),
+            format!(
+                "every copper pad of `{lib_id}` to be declared by `{}`",
+                part.id.0
+            ),
             format!(
                 "{} undeclared pad(s): {} — an exposed or thermal pad left out of the pin map is a short waiting to happen",
                 orphans.len(),
@@ -726,25 +729,52 @@ fn check_symbol_pin_coverage(part: &Part, symbols: &dyn SymbolFacts) -> Check {
         );
     };
 
+    // Footprint-only pads are excluded for the same reason the loader skips
+    // them: there is no symbol pin for them to match, and demanding one would
+    // make an exposed pad unqualifiable rather than merely undeclared.
+    let mislabelled: Vec<&str> = part
+        .pins
+        .iter()
+        .filter(|p| p.footprint_only)
+        .map(|p| p.number.0.trim())
+        .filter(|n| !n.is_empty() && symbol_pins.contains(*n))
+        .collect();
     let missing: Vec<&str> = part
         .pins
         .iter()
+        .filter(|p| !p.footprint_only)
         .map(|p| p.number.0.trim())
         .filter(|n| !n.is_empty() && !symbol_pins.contains(*n))
         .collect();
 
-    if missing.is_empty() {
-        return Check::pass(NAME);
+    let mut findings = Vec::new();
+    if !mislabelled.is_empty() {
+        findings.push(Finding::blocking(
+            "E-SYNTH-QUAL-005",
+            "footprint_only pin exists on the KiCad symbol",
+            format!(
+                "footprint-only pins of `{}` to be absent from `{lib_id}`",
+                part.id.0
+            ),
+            format!(
+                "{} mislabelled: {}",
+                mislabelled.len(),
+                sample(&mislabelled)
+            ),
+        ));
     }
-    Check::from_findings(
-        NAME,
-        vec![Finding::blocking(
+    if !missing.is_empty() {
+        findings.push(Finding::blocking(
             "E-SYNTH-QUAL-005",
             "declared pin number does not exist on the KiCad symbol",
             format!("every pin of `{}` to exist on `{lib_id}`", part.id.0),
             format!("{} unmatched: {}", missing.len(), sample(&missing)),
-        )],
-    )
+        ));
+    }
+    if findings.is_empty() {
+        return Check::pass(NAME);
+    }
+    Check::from_findings(NAME, findings)
 }
 
 /// Dimension values judged on their own, with no footprint involved.
@@ -774,15 +804,15 @@ fn check_declared_dimensions(part: &Part) -> Check {
         ));
     }
 
-    if let Some(margin) = declared.courtyard_margin_mm {
-        if margin < 0.0 || margin > MAX_COURTYARD_MARGIN_MM {
-            findings.push(Finding::review(
-                "E-SYNTH-QUAL-014",
-                "courtyard margin is outside the plausible range",
-                format!("0 .. {MAX_COURTYARD_MARGIN_MM} mm"),
-                format!("{margin} mm"),
-            ));
-        }
+    if let Some(margin) = declared.courtyard_margin_mm
+        && (margin < 0.0 || margin > MAX_COURTYARD_MARGIN_MM)
+    {
+        findings.push(Finding::review(
+            "E-SYNTH-QUAL-014",
+            "courtyard margin is outside the plausible range",
+            format!("0 .. {MAX_COURTYARD_MARGIN_MM} mm"),
+            format!("{margin} mm"),
+        ));
     }
 
     Check::from_findings(NAME, findings)
@@ -1066,10 +1096,12 @@ mod tests {
             electrical_type: ElectricalType::Bidirectional,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -1107,6 +1139,7 @@ mod tests {
                 label_hidden: None,
             }),
             operating_conditions: None,
+            spice: None,
         }
     }
 

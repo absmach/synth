@@ -85,20 +85,65 @@ const POLL_INTERVAL: Duration = Duration::from_millis(25);
 /// leaves the reader thread blocked forever.
 const DRAIN_GRACE: Duration = Duration::from_secs(5);
 
+/// How much of the spawned process tree to stop on timeout or cancellation.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum KillScope {
+    /// Stop only the direct child. The default for router engines.
+    #[default]
+    Child,
+    /// Stop the child and everything in its process group.
+    ///
+    /// For wrappers that start the engine without `exec`, the engine is not
+    /// the direct child; killing only the wrapper leaves it running.
+    ProcessTree,
+}
+
 /// Run `binary` with `args`, bounded by `budget` and `max_output_bytes`.
 ///
 /// The child's stdin is closed: a router that stops to read stdin would
 /// otherwise block forever, since nothing is going to type into it.
+///
+/// Stops early, as a cancelled run, when the ambient token (see
+/// [`set_ambient_cancel`]) is cancelled.
 pub fn run(
     binary: &Path,
     args: &[String],
     budget: Duration,
     max_output_bytes: usize,
 ) -> Result<Invocation, SpawnError> {
-    run_cancellable(binary, args, budget, max_output_bytes, None, None)
+    let ambient = ambient_cancel();
+    run_cancellable(
+        binary,
+        args,
+        budget,
+        max_output_bytes,
+        ambient.as_ref(),
+        None,
+        KillScope::Child,
+    )
 }
 
-/// Run with cancellation and a working directory.
+thread_local! {
+    static AMBIENT: std::cell::RefCell<Option<CancelToken>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The token every [`run`] on this thread watches, if one is set.
+fn ambient_cancel() -> Option<CancelToken> {
+    AMBIENT.with(|slot| slot.borrow().clone())
+}
+
+/// Sets the token that every [`run`] on this thread watches, or clears it.
+///
+/// A tool call reaches the routers and KiCad through many layers that take no
+/// token; the server sets the call's token on the thread that runs the call, so
+/// cancelling it ends the external router or `kicad-cli` that call is waiting
+/// on, and every later one on that thread starts already cancelled. Threads the
+/// call spawns do not inherit it.
+pub fn set_ambient_cancel(token: Option<CancelToken>) {
+    AMBIENT.with(|slot| *slot.borrow_mut() = token);
+}
+
+/// Run with cancellation, a working directory and an explicit kill scope.
 pub fn run_cancellable(
     binary: &Path,
     args: &[String],
@@ -106,6 +151,7 @@ pub fn run_cancellable(
     max_output_bytes: usize,
     cancel: Option<&CancelToken>,
     cwd: Option<&Path>,
+    kill: KillScope,
 ) -> Result<Invocation, SpawnError> {
     let mut command_repr = Vec::with_capacity(args.len() + 1);
     command_repr.push(binary.display().to_string());
@@ -120,6 +166,15 @@ pub fn run_cancellable(
         .stderr(Stdio::piped());
     if let Some(dir) = cwd {
         command.current_dir(dir);
+    }
+    if kill == KillScope::ProcessTree {
+        // The child leads its own group, so stopping the group reaches a
+        // grandchild started by a non-exec wrapper.
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt as _;
+            command.process_group(0);
+        }
     }
 
     let mut child = command.spawn().map_err(|e| SpawnError {
@@ -139,8 +194,7 @@ pub fn run_cancellable(
             Ok(Some(status)) => break Some(status),
             Ok(None) => {}
             Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                stop(&mut child, kill);
                 return Err(SpawnError {
                     detail: format!("could not wait on `{}`: {e}", binary.display()),
                     not_found: false,
@@ -150,13 +204,13 @@ pub fn run_cancellable(
         }
         if cancel.is_some_and(CancelToken::is_cancelled) {
             cancelled = true;
-            let _ = child.kill();
-            break child.wait().ok();
+            stop(&mut child, kill);
+            break None;
         }
         if Instant::now() >= deadline {
             timed_out = true;
-            let _ = child.kill();
-            break child.wait().ok();
+            stop(&mut child, kill);
+            break None;
         }
         std::thread::sleep(POLL_INTERVAL);
     };
@@ -179,6 +233,44 @@ pub fn run_cancellable(
         output_truncated: stdout_truncated || stderr_truncated,
         cwd: cwd.map_or_else(|| PathBuf::from("."), Path::to_path_buf),
     })
+}
+
+fn stop(child: &mut std::process::Child, kill: KillScope) {
+    if kill == KillScope::ProcessTree {
+        kill_process_group(child.id());
+    }
+    // The group kill is best-effort; the direct kill and wait always reap
+    // the process the caller owns.
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+#[cfg(unix)]
+fn kill_process_group(pid: u32) {
+    use nix::sys::signal::{Signal, killpg};
+    use nix::unistd::Pid;
+
+    if let Ok(pid) = i32::try_from(pid) {
+        let _ = killpg(Pid::from_raw(pid), Signal::SIGKILL);
+    }
+}
+
+#[cfg(windows)]
+fn kill_process_group(pid: u32) {
+    // Windows has no process group equivalent here; `/T` is the best-effort
+    // tree kill. The direct kill below still stops the owned child.
+    let _ = Command::new("taskkill")
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+#[cfg(not(any(unix, windows)))]
+fn kill_process_group(_pid: u32) {
+    // No process-group primitive on this target; the direct child is all we
+    // can stop.
 }
 
 use std::path::PathBuf;
@@ -386,6 +478,67 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn kill_process_tree_stops_a_wrapper_grandchild() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        let dir = std::env::temp_dir().join(format!("synth_proc_tree_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let pid_file = dir.join("child.pid");
+        let script = format!(
+            "#!/bin/sh\nsleep 60 &\necho $! > '{}'\nwait\n",
+            pid_file.display()
+        );
+        let wrapper = dir.join("wrapper.sh");
+        std::fs::write(&wrapper, script).expect("write wrapper");
+        let mut permissions = std::fs::metadata(&wrapper)
+            .expect("stat wrapper")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&wrapper, permissions).expect("chmod wrapper");
+
+        let started = Instant::now();
+        let run = run_cancellable(
+            &wrapper,
+            &[],
+            Duration::from_millis(300),
+            4096,
+            None,
+            None,
+            KillScope::ProcessTree,
+        )
+        .expect("wrapper ran");
+        assert!(run.timed_out);
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "group kill must close the pipes: {:?}",
+            started.elapsed()
+        );
+
+        let pid: u32 = std::fs::read_to_string(&pid_file)
+            .expect("child pid")
+            .trim()
+            .parse()
+            .expect("numeric pid");
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+        {
+            assert!(
+                Instant::now() < deadline,
+                "wrapper grandchild {pid} survived"
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_cancelled_run_reports_cancellation_not_timeout() {
         // These are different failures with different remedies, so they
@@ -405,12 +558,36 @@ mod tests {
             4096,
             Some(&token),
             None,
+            KillScope::Child,
         )
         .expect("stub ran");
         assert!(run.cancelled);
         assert!(!run.timed_out);
         assert!(!run.succeeded());
         assert_eq!(run.exit_code, None);
+    }
+
+    #[test]
+    fn the_ambient_token_stops_a_plain_run_and_the_next_one() {
+        let token = CancelToken::new();
+        set_ambient_cancel(Some(token.clone()));
+        std::thread::spawn({
+            let token = token.clone();
+            move || {
+                std::thread::sleep(Duration::from_millis(150));
+                token.cancel();
+            }
+        });
+        let started = Instant::now();
+        let first = run(&shell(), &sh("sleep 60"), Duration::from_secs(30), 4096).expect("ran");
+        let second = run(&shell(), &sh("sleep 60"), Duration::from_secs(30), 4096).expect("ran");
+        set_ambient_cancel(None);
+        assert!(first.cancelled && second.cancelled);
+        assert!(
+            started.elapsed() < Duration::from_secs(15),
+            "cancelling must stop the work, not wait it out: {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]
@@ -425,6 +602,7 @@ mod tests {
             4096,
             Some(&token),
             None,
+            KillScope::Child,
         )
         .expect("stub ran");
         assert!(run.cancelled);
@@ -482,6 +660,7 @@ mod tests {
             4096,
             None,
             Some(&dir),
+            KillScope::Child,
         )
         .expect("stub ran");
         assert!(run.succeeded());

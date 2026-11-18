@@ -43,8 +43,9 @@ use std::fmt::Write as _;
 /// with a 48-unit viewBox confirms the factor.
 pub const UNIT_TO_MM: f64 = 0.254;
 
-/// Margin added around the pad extents to form the courtyard (mm).
-const COURTYARD_MARGIN_MM: f64 = 0.25;
+/// Margin added around the pad extents to form the courtyard (mm). A part's
+/// `footprint_dimensions` are its body, with this margin on top.
+pub const COURTYARD_MARGIN_MM: f64 = 0.25;
 
 /// Pad outline shape as the source describes it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -162,14 +163,14 @@ fn attr(tag: &str, name: &str) -> Option<String> {
         let at = from + rel;
         let after = at + name.len();
         let rest = &tag[after..];
-        if let Some(eq) = rest.find('=') {
-            if rest[..eq].trim().is_empty() {
-                let quoted = rest[eq + 1..].trim_start();
-                if let Some(quoted) = quoted.strip_prefix('"') {
-                    if let Some(end) = quoted.find('"') {
-                        return Some(quoted[..end].to_string());
-                    }
-                }
+        if let Some(eq) = rest.find('=')
+            && rest[..eq].trim().is_empty()
+        {
+            let quoted = rest[eq + 1..].trim_start();
+            if let Some(quoted) = quoted.strip_prefix('"')
+                && let Some(end) = quoted.find('"')
+            {
+                return Some(quoted[..end].to_string());
             }
         }
         from = after;

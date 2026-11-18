@@ -74,14 +74,14 @@ use uuid::Uuid;
 
 use crate::field_clear;
 use crate::pin_reconcile::fanned_leg_stub;
-use crate::sexp::{num, pair, str_pair, Sexp};
+use crate::sexp::{Sexp, num, pair, str_pair};
 use crate::symbol_lib::{self, LIBRARY_NICKNAME};
 use crate::uuid_v5::derive_entity_uuid;
 
 pub use synth_layout::route::pin_terminal_xy;
 use synth_layout::route::{
-    classify_ic_pin, is_two_pin_symbol_kind, natural_rotation_offset, snap_grid_127,
-    synthesized_body, PIN_LENGTH, TWOPIN_HALF_W,
+    PIN_LENGTH, TWOPIN_HALF_W, classify_ic_pin, is_two_pin_symbol_kind, natural_rotation_offset,
+    snap_grid_127, synthesized_body,
 };
 
 /// Build the entire `.kicad_sch` s-expression for `board`.
@@ -578,6 +578,51 @@ pub(crate) fn build_sheet_schematic(
         }
     }
 
+    // A net the author named and the router drew only as wires has no flag to
+    // carry its name; a local label on its longest segment keeps it, so KiCad
+    // and the PCB use the same name instead of `Net-(...)`.
+    let flagged = layout.labeled_net_ids();
+    let power = layout.power_net_ids();
+    let all_stubs: Vec<(synth_ir::NetId, Vec<(f64, f64)>)> = layout
+        .net_labels
+        .iter()
+        .filter_map(|l| {
+            synth_layout::route::net_label_plan(board, l.component, l.pin, &placements, l.spot)
+                .map(|plan| (l.net, plan.wire))
+        })
+        .collect();
+    for net in board
+        .nets
+        .iter()
+        .filter(|n| !n.auto_named && !flagged.contains(&n.id) && !power.contains(&n.id))
+    {
+        let longest = layout
+            .wires
+            .iter()
+            .filter(|w| w.net == net.id)
+            .flat_map(|w| w.points.windows(2))
+            .max_by(|a, b| segment_len(a).total_cmp(&segment_len(b)));
+        if let Some(seg) = longest {
+            let stubs: Vec<&[(f64, f64)]> = all_stubs
+                .iter()
+                .filter(|(label_net, _)| *label_net != net.id)
+                .flat_map(|(_, wire)| wire.windows(2))
+                .collect();
+            let mut others: Vec<&[(f64, f64)]> = layout
+                .wires
+                .iter()
+                .filter(|w| w.net != net.id)
+                .flat_map(|w| w.points.windows(2))
+                .collect();
+            others.extend(stubs);
+            let mut points: Vec<(f64, f64)> = layout.junctions.clone();
+            points.extend(layout.wires.iter().flat_map(|w| w.points.iter().copied()));
+            let at = wire_name_label_at(seg, &others, &points);
+            let uuid = derive_entity_uuid(project, "wire_name_label", &net.name);
+            children.push(build_local_label(&net.name, at, uuid));
+        }
+    }
+
     // Cross-sheet stubs (§P26): one stub per in-sheet endpoint of a
     // net that continues elsewhere. Empty on single-sheet layouts.
     // On a sub-sheet the stub carries a hierarchical label, which the
@@ -641,39 +686,32 @@ pub(crate) fn build_sheet_schematic(
         ));
     }
 
-    // Titled outline boxes: one `(rectangle ...)` per declared `group`
-    // (§21.1), framing the caption and its parts. Same graphic
-    // status as captions — no electrical meaning, never trips ERC.
-    // Shape grammar mirrors the embedded symbol library
-    // (`(rectangle … (stroke …) (fill …))`), which is what
-    // `kicad-cli sch erc` accepts at top level — a bare
-    // `(rect … (fill none))` fails to load.
-    //
-    // Phase B2 styling: a dashed stroke in the group's deterministic
-    // hue ([`synth_layout::group_color`]) plus a translucent fill of
-    // the same hue, so each region reads as its own block (reference
-    // mechanism 2). The grammar was verified against `kicad-cli 10`:
-    // `(stroke (type dash) (color r g b 1))` and
-    // `(fill (type color) (color r g b 0.08))` both load.
-    for group_box in &layout.group_boxes {
-        let uuid = derive_entity_uuid(project, "group_box", &group_box.group);
-        let [r, g, b] = group_box.color;
+    // The outline of the region boxes (§21.1), framing each caption and its
+    // parts. Same graphic status as captions — no electrical meaning, never
+    // trips ERC. The boxes tile the page, so together they read as a single
+    // outline cut into sections: one colour, no tint, and each boundary
+    // drawn once as a `(polyline ...)` rather than once per box.
+    let [r, g, b] = REGION_LINE_RGB;
+    for (n, (from, to)) in region_outline(&layout.group_boxes, layout.sheet_size.dims_mm())
+        .into_iter()
+        .enumerate()
+    {
+        let uuid = derive_entity_uuid(project, "region_line", &n.to_string());
         children.push(Sexp::list(
-            "rectangle",
+            "polyline",
             vec![
                 Sexp::list(
-                    "start",
-                    vec![num(group_box.min_mm.0), num(group_box.min_mm.1)],
-                ),
-                Sexp::list(
-                    "end",
-                    vec![num(group_box.max_mm.0), num(group_box.max_mm.1)],
+                    "pts",
+                    vec![
+                        Sexp::list("xy", vec![num(from.0), num(from.1)]),
+                        Sexp::list("xy", vec![num(to.0), num(to.1)]),
+                    ],
                 ),
                 Sexp::list(
                     "stroke",
                     vec![
                         Sexp::list("width", vec![num(0.254)]),
-                        Sexp::list("type", vec![Sexp::atom("dash")]),
+                        Sexp::list("type", vec![Sexp::atom("solid")]),
                         Sexp::list(
                             "color",
                             vec![
@@ -681,21 +719,6 @@ pub(crate) fn build_sheet_schematic(
                                 Sexp::atom(g.to_string()),
                                 Sexp::atom(b.to_string()),
                                 num(1.0),
-                            ],
-                        ),
-                    ],
-                ),
-                Sexp::list(
-                    "fill",
-                    vec![
-                        Sexp::list("type", vec![Sexp::atom("color")]),
-                        Sexp::list(
-                            "color",
-                            vec![
-                                Sexp::atom(r.to_string()),
-                                Sexp::atom(g.to_string()),
-                                Sexp::atom(b.to_string()),
-                                num(0.08),
                             ],
                         ),
                     ],
@@ -717,8 +740,8 @@ pub(crate) fn build_sheet_schematic(
     // would place it on a distinct global net with no driver.
     for reconciled in &reconciled_pins {
         for leg in &reconciled.power_legs {
-            if let Some(rail) = leg_rail(leg) {
-                if let Some(sexps) = build_fanned_power_symbol(
+            if let Some(rail) = leg_rail(leg)
+                && let Some(sexps) = build_fanned_power_symbol(
                     board,
                     leg,
                     rail,
@@ -728,9 +751,9 @@ pub(crate) fn build_sheet_schematic(
                     &mut obstacles,
                     &mut power_names,
                     bounds.get(&leg.component).copied(),
-                ) {
-                    children.extend(sexps);
-                }
+                )
+            {
+                children.extend(sexps);
             }
         }
         for pin in &reconciled.no_connects {
@@ -817,20 +840,22 @@ fn build_power_flag_driver(
 ) -> Option<Sexp> {
     let component = board.component(driver.anchor_component)?;
     let part = component.part.as_ref()?;
-    let lib_id = part.kicad_symbol.as_deref()?;
-
-    let natural_offset = natural_rotation_offset(part);
-    // The anchor pin for an undriven power net is a declared power-input
-    // pin; those are placed un-rotated in the layout's canonical
-    // orientation, so logical rotation is zero.
-    let total_deg = natural_offset.rem_euclid(360.0);
-
-    let (x, y, dx, dy) = crate::pin_reconcile::physical_terminal(
-        lib_id,
-        &driver.anchor_pin_number,
-        driver.anchor_center,
-        total_deg,
-    )?;
+    let (x, y, dx, dy) = if let Some(terminal) = driver.anchor_terminal {
+        terminal
+    } else {
+        let lib_id = part.kicad_symbol.as_deref()?;
+        let natural_offset = natural_rotation_offset(part);
+        // The anchor pin for an undriven power net is a declared power-input
+        // pin; those are placed un-rotated in the layout's canonical
+        // orientation, so logical rotation is zero.
+        let total_deg = natural_offset.rem_euclid(360.0);
+        crate::pin_reconcile::physical_terminal(
+            lib_id,
+            &driver.anchor_pin_number,
+            driver.anchor_center,
+            total_deg,
+        )?
+    };
 
     let stub_len = POWER_FLAG_STUB_LEN;
     let flag_x = x + dx * stub_len;
@@ -905,7 +930,9 @@ fn fanned_leg_obstacles<'a>(
         };
         if let Some(((x, y), (flag_x, flag_y))) = fanned_leg_stub(board, leg, placements) {
             out.push(FieldObstacle::fixed(power_flag_rect(
-                flag_x, flag_y, rail.kind,
+                flag_x,
+                flag_y,
+                upright(rail.kind),
             )));
             out.push(FieldObstacle::fixed(wire_rect((x, y), (flag_x, flag_y))));
         }
@@ -975,12 +1002,13 @@ fn build_fanned_power_symbol(
         &refdes_pwr,
         label,
         rail.kind,
+        upright(rail.kind),
         (flag_x, flag_y),
         obstacles,
         power_names,
         bounds,
     );
-    let sym_sexp = power_symbol_sexp(lib_id_out, flag_x, flag_y, sym_uuid, properties);
+    let sym_sexp = power_symbol_sexp(lib_id_out, flag_x, flag_y, 0.0, sym_uuid, properties);
 
     Some(vec![wire_sexp, sym_sexp])
 }
@@ -991,12 +1019,13 @@ fn power_symbol_sexp(
     lib_id: String,
     flag_x: f64,
     flag_y: f64,
+    angle: f64,
     sym_uuid: Uuid,
     properties: Vec<Sexp>,
 ) -> Sexp {
     let mut children = vec![
         str_pair("lib_id", lib_id),
-        Sexp::list("at", vec![num(flag_x), num(flag_y), num(0.0)]),
+        Sexp::list("at", vec![num(flag_x), num(flag_y), num(angle)]),
         pair("unit", Sexp::atom("1")),
         pair("in_bom", Sexp::atom("no")),
         pair("on_board", Sexp::atom("no")),
@@ -1280,6 +1309,64 @@ fn build_sheet_instance(
     Sexp::list("sheet", children)
 }
 
+fn segment_len(seg: &[(f64, f64)]) -> f64 {
+    (seg[1].0 - seg[0].0).hypot(seg[1].1 - seg[0].1)
+}
+
+/// Where a net's name label sits on its wire segment `seg`: the midpoint, or
+/// the nearest point to it that is clear of every wire in `others`. KiCad joins
+/// a label to every wire under it, so a midpoint where another net crosses
+/// would merge the two nets.
+fn wire_name_label_at(
+    seg: &[(f64, f64)],
+    others: &[&[(f64, f64)]],
+    points: &[(f64, f64)],
+) -> (f64, f64) {
+    const STEP_MM: f64 = 1.27;
+    const CLEAR_MM: f64 = 0.5;
+    let at = |t: f64| {
+        (
+            seg[0].0 + (seg[1].0 - seg[0].0) * t,
+            seg[0].1 + (seg[1].1 - seg[0].1) * t,
+        )
+    };
+    let clear = |p: (f64, f64)| {
+        others
+            .iter()
+            .all(|other| point_to_segment_mm(p, other[0], other[1]) > CLEAR_MM)
+            && points
+                .iter()
+                .all(|q| (p.0 - q.0).hypot(p.1 - q.1) > CLEAR_MM)
+    };
+    let len = segment_len(seg);
+    let steps = if len > 0.0 {
+        (len / STEP_MM) as i32 / 2
+    } else {
+        0
+    };
+    for step in 0..=steps {
+        let shift = f64::from(step) * STEP_MM / len.max(f64::EPSILON);
+        for t in [0.5 - shift, 0.5 + shift] {
+            if (0.0..=1.0).contains(&t) && clear(at(t)) {
+                return at(t);
+            }
+        }
+    }
+    at(0.5)
+}
+
+/// Distance in mm from `p` to the segment `a`-`b`.
+fn point_to_segment_mm(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len_sq = dx * dx + dy * dy;
+    let t = if len_sq == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len_sq).clamp(0.0, 1.0)
+    };
+    (p.0 - (a.0 + t * dx)).hypot(p.1 - (a.1 + t * dy))
+}
+
 /// A local label at `at_mm`, text anchored left. Same-named local
 /// labels on one sheet are electrically connected, which is how the
 /// root joins its cross-sheet endpoints to the labelled sheet-pin
@@ -1394,6 +1481,92 @@ fn power_symbol_lib_id(label: &str) -> String {
 /// symbol sits.
 const POWER_FLAG_STUB_LEN: f64 = 2.54;
 
+/// The one colour every region box is stroked in.
+const REGION_LINE_RGB: [u8; 3] = [49, 66, 150];
+
+/// How far apart two box edges can be and still be one boundary: more than the
+/// gap the layout leaves between neighbours.
+const REGION_JOIN_MM: f64 = 0.3;
+
+/// The lines that outline `boxes` on a sheet `sheet` mm across, each boundary
+/// once. A box draws its right and bottom edges; it draws its left and top
+/// edges only where no neighbour's edge already runs along them. An edge that
+/// lies on the sheet frame, or on the top line of the title block, is left to
+/// them.
+fn region_outline(
+    boxes: &[synth_layout::GroupBox],
+    sheet: (f64, f64),
+) -> Vec<((f64, f64), (f64, f64))> {
+    let near = |a: f64, b: f64| (a - b).abs() < REGION_JOIN_MM;
+    let frame = synth_layout::SHEET_BORDER_MM;
+    let (block_x, block_y) = synth_layout::title_block_origin(sheet);
+    let mut lines = Vec::new();
+    for (i, b) in boxes.iter().enumerate() {
+        let ((x0, y0), (x1, y1)) = (b.min_mm, b.max_mm);
+        let others = || {
+            boxes
+                .iter()
+                .enumerate()
+                .filter(move |&(j, _)| j != i)
+                .map(|(_, o)| o)
+        };
+        if !near(x1, sheet.0 - frame) {
+            lines.push(((x1, y0), (x1, y1)));
+        }
+        if !near(y1, sheet.1 - frame) {
+            // Over the title block's top line the block draws the rest.
+            let end = if near(y1, block_y) {
+                x1.min(block_x)
+            } else {
+                x1
+            };
+            if end - x0 > REGION_JOIN_MM {
+                lines.push(((x0, y1), (end, y1)));
+            }
+        }
+        if !near(x0, frame) {
+            let met = others()
+                .filter(|o| near(o.max_mm.0, x0))
+                .map(|o| (o.min_mm.1, o.max_mm.1))
+                .collect();
+            lines.extend(
+                uncovered((y0, y1), met)
+                    .into_iter()
+                    .map(|(from, to)| ((x0, from), (x0, to))),
+            );
+        }
+        if !near(y0, frame) {
+            let met = others()
+                .filter(|o| near(o.max_mm.1, y0))
+                .map(|o| (o.min_mm.0, o.max_mm.0))
+                .collect();
+            lines.extend(
+                uncovered((x0, x1), met)
+                    .into_iter()
+                    .map(|(from, to)| ((from, y0), (to, y0))),
+            );
+        }
+    }
+    lines
+}
+
+/// The parts of `span` that none of the `met` spans cover.
+fn uncovered(span: (f64, f64), mut met: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+    met.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut out = Vec::new();
+    let mut at = span.0;
+    for (from, to) in met {
+        if from > at + REGION_JOIN_MM {
+            out.push((at, from.min(span.1)));
+        }
+        at = at.max(to);
+    }
+    if at < span.1 - REGION_JOIN_MM {
+        out.push((at, span.1));
+    }
+    out
+}
+
 /// Grid tolerance for "these two points are the same point" when
 /// deciding whether a flag lands on a foreign pin.
 const PIN_COINCIDENT_EPS: f64 = 0.05;
@@ -1431,10 +1604,10 @@ fn stub_is_blocked(
             }) {
                 continue;
             }
-            if let Some((px, py, _, _)) = pin_terminal_xy(board, component.id, pin_id, placements) {
-                if point_on_segment((px, py), from, to) {
-                    return true;
-                }
+            if let Some((px, py, _, _)) = pin_terminal_xy(board, component.id, pin_id, placements)
+                && point_on_segment((px, py), from, to)
+            {
+                return true;
             }
         }
     }
@@ -1507,7 +1680,22 @@ fn clear_power_flag_position(
     let (x, y, dx, dy) = (anchor.x, anchor.y, anchor.dx, anchor.dy);
     let stub_len = POWER_FLAG_STUB_LEN;
     let natural = (x + dx * stub_len, y + dy * stub_len);
-    if !stub_is_blocked(board, flag, placements, layout, (x, y), natural) {
+    let natural_is_clear = !stub_is_blocked(board, flag, placements, layout, (x, y), natural);
+    // A ground on a top edge pin would hang its triangle back over its own
+    // stub, so run the stub up and across and let the triangle drop beside
+    // the pin's column.
+    if natural_is_clear && flag.kind == synth_layout::PowerFlagKind::Gnd && dx == 0.0 && dy < 0.0 {
+        for step in [stub_len, -stub_len] {
+            let candidate = (natural.0 + step, natural.1);
+            let hangs = power_flag_rect(candidate.0, candidate.1, upright(flag.kind));
+            if !stub_is_blocked(board, flag, placements, layout, natural, candidate)
+                && !body_is_blocked(board, layout, placements, flag, &hangs)
+            {
+                return (candidate.0, candidate.1, Some(natural));
+            }
+        }
+    }
+    if natural_is_clear {
         return (natural.0, natural.1, None);
     }
     // Perpendicular from the pin, then along the axis. Bending the
@@ -1629,16 +1817,19 @@ fn build_power_symbol(
         ));
     }
 
+    let body = power_body(board, layout, placements, flag, (flag_x, flag_y), dx);
     let properties = power_symbol_properties(
         &refdes_pwr,
         &flag.label,
         flag.kind,
+        body,
         (flag_x, flag_y),
         obstacles,
         power_names,
         bounds,
     );
-    let sym_sexp = power_symbol_sexp(lib_id, flag_x, flag_y, sym_uuid, properties);
+    let angle = power_symbol_angle(flag.kind, body);
+    let sym_sexp = power_symbol_sexp(lib_id, flag_x, flag_y, angle, sym_uuid, properties);
 
     let mut out = stub_wires;
     out.push(sym_sexp);
@@ -1864,6 +2055,10 @@ const POWER_NAME_SIDE_MM: f64 = 1.9;
 const POWER_NAME_RING_STEP_MM: f64 = 2.54;
 /// How far the tip of the arrow or triangle is from the pin, in mm.
 const POWER_TIP_MM: f64 = 2.54;
+/// How far clear of other things a power name has to be, in mm. Under half
+/// the 1.27 mm between the name and its own symbol's drawing, so the symbol
+/// itself does not count as in the way.
+const POWER_NAME_CLEARANCE_MM: f64 = 0.4;
 
 /// A power symbol's position and the name it prints there.
 type PowerName = ((f64, f64), String);
@@ -1875,34 +2070,50 @@ type PowerName = ((f64, f64), String);
 /// afterwards.
 /// Stacked pins give several symbols at one point; the first draws the name and
 /// the rest keep theirs hidden, so the same text is not printed over itself.
+#[allow(clippy::too_many_arguments)]
 fn power_symbol_properties(
     refdes: &str,
     name: &str,
     kind: synth_layout::PowerFlagKind,
+    body: Body,
     at: (f64, f64),
     obstacles: &mut Vec<FieldObstacle>,
     power_names: &mut Vec<PowerName>,
     bounds: Option<field_clear::Rect>,
 ) -> Vec<Sexp> {
     // A rail arrow points up the sheet, a ground triangle down.
-    let away = match kind {
-        synth_layout::PowerFlagKind::Vcc => -1.0,
-        synth_layout::PowerFlagKind::Gnd => 1.0,
-    };
+    let away = upright(kind).1;
     let candidates: Vec<(f64, f64, Option<&'static str>)> =
         ring_distances(POWER_NAME_RING_STEP_MM, obstacle_reach(obstacles, at))
             .flat_map(|ring| {
-                [
-                    (0.0, away * (POWER_NAME_OFFSET_MM + ring), None),
-                    (POWER_NAME_SIDE_MM + ring, away * POWER_TIP_MM, Some("left")),
-                    (
-                        -(POWER_NAME_SIDE_MM + ring),
-                        away * POWER_TIP_MM,
-                        Some("right"),
-                    ),
-                ]
+                if body.0 == 0.0 {
+                    vec![
+                        (0.0, away * (POWER_NAME_OFFSET_MM + ring), None),
+                        (POWER_NAME_SIDE_MM + ring, away * POWER_TIP_MM, Some("left")),
+                        (
+                            -(POWER_NAME_SIDE_MM + ring),
+                            away * POWER_TIP_MM,
+                            Some("right"),
+                        ),
+                    ]
+                } else {
+                    // A symbol turned along its stub keeps its name on its own
+                    // row past the tip, or just above or below that row when
+                    // the row is taken.
+                    let justify = Some(if body.0 > 0.0 { "left" } else { "right" });
+                    let x = body.0 * POWER_NAME_OFFSET_MM;
+                    vec![
+                        (body.0 * (POWER_NAME_OFFSET_MM + ring), 0.0, justify),
+                        (x, -(POWER_NAME_SIDE_MM + ring), justify),
+                        (x, POWER_NAME_SIDE_MM + ring, justify),
+                    ]
+                }
             })
             .collect();
+    let angle = power_symbol_angle(kind, body);
+    // The field is counter-rotated like a turned part's, so the name stays
+    // horizontal.
+    let field_angle = if angle == 0.0 { 0.0 } else { 90.0 };
     let repeats = power_names.iter().any(|(p, n)| *p == at && n == name);
     let chars = name.chars().count();
     let rect_at = |(dx, dy, justify): (f64, f64, Option<&'static str>)| {
@@ -1912,8 +2123,14 @@ fn power_symbol_properties(
         .into_iter()
         .flat_map(field_clear::outside_strips)
         .collect();
-    let others = obstacles.iter().map(|o| &o.rect).chain(outside.iter());
-    let (dx, dy, justify) = field_clear::pick_clear(&candidates, &rect_at, &others);
+    // A name next to a pin, wire or text it only just misses reads as part of
+    // it, so a spot is clear when the margin around it is.
+    let others: Vec<field_clear::Rect> = obstacles
+        .iter()
+        .map(|o| o.rect.grown(POWER_NAME_CLEARANCE_MM))
+        .chain(outside)
+        .collect();
+    let (dx, dy, justify) = field_clear::pick_clear(&candidates, &rect_at, &others.iter());
     let pos = (at.0 + dx, at.1 + dy);
     if !repeats {
         power_names.push((at, name.to_string()));
@@ -1922,7 +2139,7 @@ fn power_symbol_properties(
     let value_effects = if repeats {
         hidden_field_effects()
     } else {
-        field_effects(justify)
+        field_effects(written_justify(justify, angle, field_angle))
     };
     let property = |field: &str, text: &str, pos: (f64, f64), effects: Sexp| {
         Sexp::list(
@@ -1930,7 +2147,7 @@ fn power_symbol_properties(
             vec![
                 Sexp::str(field),
                 Sexp::str(text),
-                Sexp::list("at", vec![num(pos.0), num(pos.1), num(0.0)]),
+                Sexp::list("at", vec![num(pos.0), num(pos.1), num(field_angle)]),
                 effects,
             ],
         )
@@ -1958,12 +2175,11 @@ fn variant_dnp_by_refdes(board: &Board) -> std::collections::BTreeMap<&str, Vec<
 fn symbol_unit_number(sym: &Sexp) -> u32 {
     if let Sexp::List { children, .. } = sym {
         for child in children {
-            if let Sexp::List { head, children } = child {
-                if head == "unit" {
-                    if let Some(Sexp::Atom(a)) = children.first() {
-                        return a.parse().unwrap_or(1);
-                    }
-                }
+            if let Sexp::List { head, children } = child
+                && head == "unit"
+                && let Some(Sexp::Atom(a)) = children.first()
+            {
+                return a.parse().unwrap_or(1);
             }
         }
     }
@@ -1995,7 +2211,9 @@ fn build_symbol_instance(
     let mut out = Vec::with_capacity(count as usize);
     for unit in 1..=count {
         let dy = if count > 1 {
-            synth_layout::kicad_lib_loader::unit_offset_mm(unit).1
+            part.kicad_symbol.as_deref().map_or(0.0, |lib_id| {
+                synth_layout::kicad_lib_loader::unit_offset_mm(lib_id, unit).1
+            })
         } else {
             0.0
         };
@@ -2137,19 +2355,109 @@ fn wire_rect(a: (f64, f64), b: (f64, f64)) -> field_clear::Rect {
     }
 }
 
-/// What a power symbol at (`x`, `y`) draws: from its point to the tip of the
-/// triangle below a ground or of the arrow above a rail.
-fn power_flag_rect(x: f64, y: f64, kind: synth_layout::PowerFlagKind) -> field_clear::Rect {
-    let tip = match kind {
-        synth_layout::PowerFlagKind::Gnd => y + POWER_TIP_MM,
-        synth_layout::PowerFlagKind::Vcc => y - POWER_TIP_MM,
-    };
-    field_clear::Rect {
-        x0: x - POWER_FLAG_HALF_MM,
-        y0: y.min(tip),
-        x1: x + POWER_FLAG_HALF_MM,
-        y1: y.max(tip),
+/// The way a power symbol's body points from its point, as a unit step on the
+/// sheet (y grows downward).
+type Body = (f64, f64);
+
+/// How KiCad draws a power symbol unturned: a ground triangle points down, a
+/// rail arrow up.
+fn upright(kind: synth_layout::PowerFlagKind) -> Body {
+    match kind {
+        synth_layout::PowerFlagKind::Gnd => (0.0, 1.0),
+        synth_layout::PowerFlagKind::Vcc => (0.0, -1.0),
     }
+}
+
+/// The angle to write for a symbol of `kind` so its body points along `body`.
+/// KiCad turns counter-clockwise on the sheet, so a triangle that points down
+/// ends up pointing right at 90 and left at 270, and an arrow that points up
+/// the other way round.
+fn power_symbol_angle(kind: synth_layout::PowerFlagKind, body: Body) -> f64 {
+    if body.0 == 0.0 {
+        return 0.0;
+    }
+    if (kind == synth_layout::PowerFlagKind::Gnd) == (body.0 > 0.0) {
+        90.0
+    } else {
+        270.0
+    }
+}
+
+/// What a power symbol at (`x`, `y`) draws: from its point to the tip of the
+/// triangle or arrow, as wide as the symbol across the body.
+fn power_flag_rect(x: f64, y: f64, body: Body) -> field_clear::Rect {
+    let (tip_x, tip_y) = (x + body.0 * POWER_TIP_MM, y + body.1 * POWER_TIP_MM);
+    let (half_x, half_y) = (
+        POWER_FLAG_HALF_MM * body.1.abs(),
+        POWER_FLAG_HALF_MM * body.0.abs(),
+    );
+    field_clear::Rect {
+        x0: x.min(tip_x) - half_x,
+        y0: y.min(tip_y) - half_y,
+        x1: x.max(tip_x) + half_x,
+        y1: y.max(tip_y) + half_y,
+    }
+}
+
+/// How the symbol of `flag`, drawn at `at` on a stub that leaves its pin along
+/// `dx`, points.
+///
+/// Unturned, a ground triangle drops one pin pitch below its stub, so beside a
+/// column of pins it ends on the next pin's row: across that pin's wire, number
+/// and flag, and its name finds no free spot nearer than the pin after that.
+/// Turned to point along the stub it stays in its own pin's row. It is only
+/// turned when the unturned body would land on a wire of another net or on a
+/// net label (a power net never has one), so a sheet where nothing is in the
+/// way keeps the usual symbol.
+fn power_body(
+    board: &Board,
+    layout: &synth_layout::Layout,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    flag: &synth_layout::PowerFlag,
+    at: (f64, f64),
+    dx: f64,
+) -> Body {
+    let unturned = upright(flag.kind);
+    if dx == 0.0 {
+        return unturned;
+    }
+    let rect = power_flag_rect(at.0, at.1, unturned);
+    if body_is_blocked(board, layout, placements, flag, &rect) {
+        (dx.signum(), 0.0)
+    } else {
+        unturned
+    }
+}
+
+/// Whether a symbol body drawn as `rect` would land on a wire or a label of
+/// another net, or on the stub of another rail's flag. On a header the arrow
+/// of one pin ends on the stub of the pin above it.
+fn body_is_blocked(
+    board: &Board,
+    layout: &synth_layout::Layout,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+    flag: &synth_layout::PowerFlag,
+    rect: &field_clear::Rect,
+) -> bool {
+    let on_a_wire = layout
+        .wires
+        .iter()
+        .filter(|wire| wire.net != flag.net)
+        .flat_map(|wire| wire.points.windows(2))
+        .any(|seg| rect.overlaps(&wire_rect(seg[0], seg[1])));
+    let on_a_flag = label_rects(board, layout, placements)
+        .iter()
+        .any(|label| rect.overlaps(label));
+    let on_a_stub = layout
+        .power_flags
+        .iter()
+        .filter(|other| other.net != flag.net)
+        .filter_map(|other| pin_terminal_xy(board, other.component, other.pin, placements))
+        .any(|(x, y, sx, sy)| {
+            let end = (x + sx * POWER_FLAG_STUB_LEN, y + sy * POWER_FLAG_STUB_LEN);
+            rect.overlaps(&wire_rect((x, y), end))
+        });
+    on_a_wire || on_a_flag || on_a_stub
 }
 
 /// The box of the group each component belongs to, so its text can stay
@@ -2173,6 +2481,45 @@ fn field_bounds(
             Some((c.id, rect))
         })
         .collect()
+}
+
+/// What each net label covers: its text and the stub that joins it to the pin.
+/// A cross-sheet label is drawn the same way.
+fn label_rects(
+    board: &Board,
+    layout: &synth_layout::Layout,
+    placements: &HashMap<ComponentId, &ComponentPlacement>,
+) -> Vec<field_clear::Rect> {
+    let labels = layout
+        .net_labels
+        .iter()
+        .map(|l| (&l.label, l.component, l.pin, l.spot))
+        .chain(layout.hierarchical_labels.iter().map(|l| {
+            (
+                &l.label,
+                l.component,
+                l.pin,
+                synth_layout::LabelSpot::default(),
+            )
+        }));
+    let mut out = Vec::new();
+    for (text, component, pin, spot) in labels {
+        let Some((x0, y0, x1, y1)) =
+            synth_layout::route::net_label_rect(board, text, component, pin, placements, spot)
+        else {
+            continue;
+        };
+        let Some((pin_x, ..)) = pin_terminal_xy(board, component, pin, placements) else {
+            continue;
+        };
+        out.push(field_clear::Rect {
+            x0: x0.min(pin_x),
+            y0,
+            x1: x1.max(pin_x),
+            y1,
+        });
+    }
+    out
 }
 
 /// Every wire, body, pin, net label, power flag and caption on the sheet as an
@@ -2212,37 +2559,11 @@ fn field_obstacles(
             })
         });
     }
-    // A net label is its text and the stub that joins it to the pin; a
-    // cross-sheet label is drawn the same way, but a net label on an upright
-    // pin first rises past the pin end (`build_net_label`).
-    let labels = layout
-        .net_labels
-        .iter()
-        .map(|l| (&l.label, l.component, l.pin, l.spot))
-        .chain(layout.hierarchical_labels.iter().map(|l| {
-            (
-                &l.label,
-                l.component,
-                l.pin,
-                synth_layout::LabelSpot::default(),
-            )
-        }));
-    for (text, component, pin, spot) in labels {
-        let Some((x0, y0, x1, y1)) =
-            synth_layout::route::net_label_rect(board, text, component, pin, placements, spot)
-        else {
-            continue;
-        };
-        let Some((pin_x, ..)) = pin_terminal_xy(board, component, pin, placements) else {
-            continue;
-        };
-        out.push(fixed(field_clear::Rect {
-            x0: x0.min(pin_x),
-            y0,
-            x1: x1.max(pin_x),
-            y1,
-        }));
-    }
+    out.extend(
+        label_rects(board, layout, placements)
+            .into_iter()
+            .map(fixed),
+    );
     for component in &board.components {
         let Some(part) = component.part.as_ref() else {
             continue;
@@ -2291,6 +2612,8 @@ fn field_obstacles(
     // neighbour is in the way, together with its stub and any bend.
     for flag in &layout.power_flags {
         if let Some((x, y, dx, dy)) = pin_terminal_xy(board, flag.component, flag.pin, placements) {
+            // The spot the symbol is drawn at, so the turn is decided where
+            // `build_power_symbol` decides it.
             let (cx, cy, corner) = clear_power_flag_position(
                 board,
                 flag,
@@ -2298,7 +2621,8 @@ fn field_obstacles(
                 layout,
                 PinAnchor { x, y, dx, dy },
             );
-            out.push(fixed(power_flag_rect(cx, cy, flag.kind)));
+            let body = power_body(board, layout, placements, flag, (cx, cy), dx);
+            out.push(fixed(power_flag_rect(cx, cy, body)));
             out.extend(
                 power_stub_points((x, y), corner, (cx, cy))
                     .windows(2)
@@ -2597,7 +2921,12 @@ fn build_symbol_unit(
     // dielectric) as hidden symbol fields, so KiCad BOM tooling and the
     // derating checks read them from the schematic. Same convention as
     // the MPN/LCSC fields above.
+    // `lcsc_pn`/`mpn` are instance overrides already folded into the part
+    // above, so they are not stamped a second time.
     for (name, value) in &component.properties {
+        if matches!(name.as_str(), "lcsc_pn" | "mpn") {
+            continue;
+        }
         fields.push(Sexp::list(
             "property",
             vec![
@@ -2616,10 +2945,10 @@ fn build_symbol_unit(
     // so KiCad always finds the alternate.
     for (number, name) in crate::alternates::pin_function_alternates(board, component) {
         // Only this unit's pins are drawn on this symbol.
-        if let Some(map) = units {
-            if map.get(&number).copied().unwrap_or(1) != unit {
-                continue;
-            }
+        if let Some(map) = units
+            && map.get(&number).copied().unwrap_or(1) != unit
+        {
+            continue;
         }
         let pin_uuid = derive_entity_uuid(
             project,
@@ -2641,6 +2970,36 @@ fn build_symbol_unit(
 
 #[cfg(test)]
 mod tests {
+    /// A name label on the midpoint of a wire joins any other net's wire that
+    /// crosses there, because KiCad connects a label to every wire under it.
+    #[test]
+    fn a_wire_name_label_keeps_off_a_wire_of_another_net() {
+        let bus = [(242.57, 31.75), (242.57, 67.31)];
+        let crossing = [(245.11, 49.53), (240.03, 49.53)];
+        let others: [&[(f64, f64)]; 1] = [&crossing];
+        let (x, y) = wire_name_label_at(&bus, &others, &[]);
+        assert!((x - 242.57).abs() < 1e-9, "the label stays on the wire");
+        assert!((31.75..=67.31).contains(&y), "the label stays on the wire");
+        assert!(
+            (y - 49.53).abs() > 0.5,
+            "the label at y {y} touches the crossing wire"
+        );
+    }
+
+    /// A branch of the *same* net meets the wire at a junction. KiCad joins a
+    /// label to every wire under it, so the name must move off the junction.
+    #[test]
+    fn a_wire_name_label_keeps_off_a_junction_of_the_same_net() {
+        let wire = [(0.0, 0.0), (25.4, 0.0)];
+        let junction = [(12.7, 0.0)];
+        let (x, y) = wire_name_label_at(&wire, &[], &junction);
+        assert!((y - 0.0).abs() < 1e-9, "the label stays on the wire");
+        assert!(
+            (x - 12.7).abs() > 0.5,
+            "the label at x {x} sits on the junction"
+        );
+    }
+
     use super::*;
     use std::path::Path;
     use synth_ir::lower;
@@ -2841,7 +3200,7 @@ mod tests {
         assert!(
             obstacles
                 .iter()
-                .any(|o| o.rect == power_flag_rect(cx, cy, kind)),
+                .any(|o| o.rect == power_flag_rect(cx, cy, upright(kind))),
             "no obstacle on the moved flag at {cleared:?}"
         );
     }
@@ -3154,8 +3513,8 @@ mod tests {
         let project = crate::uuid_v5::project_namespace(&board.name);
         let text = build_schematic(&board, &project).to_string_pretty();
         // Sanity: the styled forms are present before we ask KiCad.
-        assert!(text.contains("(type dash)"), "dashed stroke");
-        assert!(text.contains("(type color)"), "colour fill");
+        assert!(text.contains("(type solid)"), "solid stroke");
+        assert!(text.contains("(polyline"), "outline line");
         assert!(text.contains("bold"), "bold caption");
         assert!(text.contains("Keep leads short."), "in-box note line");
 
@@ -3178,7 +3537,7 @@ mod tests {
     }
 
     #[test]
-    fn group_box_exports_rectangle() {
+    fn group_box_exports_outline() {
         let board = lower_inline(
             r#"board "b" {
                 component R1: resistor "r_generic_0603"
@@ -3191,14 +3550,12 @@ mod tests {
         );
         let project = crate::uuid_v5::project_namespace(&board.name);
         let text = build_schematic(&board, &project).to_string_pretty();
-        assert!(text.contains("(rectangle"), "group outline box must render");
+        assert!(text.contains("(polyline"), "group outline must render");
         assert!(text.contains("\"Input\""), "group caption must render");
-        // Phase B2: dashed stroke in the group hue plus a translucent
-        // fill of the same hue.
-        assert!(text.contains("(type dash)"), "box stroke must be dashed");
+        // Thin solid stroke in the one region colour.
         assert!(
-            text.contains("(fill") && text.contains("(type color)"),
-            "box must carry a colour fill"
+            text.contains("(type solid)"),
+            "outline stroke must be solid"
         );
         // Phase B4: the caption renders bold.
         assert!(
@@ -3998,7 +4355,7 @@ mod tests {
                 };
                 legs_seen += 1;
                 for want in [
-                    power_flag_rect(flag.0, flag.1, rail.kind),
+                    power_flag_rect(flag.0, flag.1, upright(rail.kind)),
                     wire_rect(pin, flag),
                 ] {
                     assert!(
@@ -4099,7 +4456,7 @@ mod tests {
                 };
                 let key = format!(
                     "{:.2},{:.2}|{:.2},{:.2}",
-                    seg.0 .0, seg.0 .1, seg.1 .0, seg.1 .1
+                    seg.0.0, seg.0.1, seg.1.0, seg.1.1
                 );
                 if !seen.insert(key) {
                     return true;
@@ -4138,14 +4495,12 @@ mod tests {
                                     head: gh,
                                     children: ggc,
                                 } = gc
+                                    && (gh == "in_bom" || gh == "on_board")
+                                    && ggc.len() == 1
+                                    && let Sexp::Atom(a) = &ggc[0]
+                                    && a == "no"
                                 {
-                                    if (gh == "in_bom" || gh == "on_board") && ggc.len() == 1 {
-                                        if let Sexp::Atom(a) = &ggc[0] {
-                                            if a == "no" {
-                                                is_power = true;
-                                            }
-                                        }
-                                    }
+                                    is_power = true;
                                 }
                             }
                             if is_power {
@@ -4154,22 +4509,15 @@ mod tests {
                                         head: gh,
                                         children: ggc,
                                     } = gc
+                                        && gh == "at"
+                                        && let (Some(x), Some(y)) = (ggc.first(), ggc.get(1))
+                                        && let (Some(xv), Some(yv)) =
+                                            (parse_num_atom(x), parse_num_atom(y))
                                     {
-                                        if gh == "at" {
-                                            if let (Some(x), Some(y)) = (ggc.first(), ggc.get(1)) {
-                                                if let (Some(xv), Some(yv)) =
-                                                    (parse_num_atom(x), parse_num_atom(y))
-                                                {
-                                                    if !is_grid_aligned(xv) || !is_grid_aligned(yv)
-                                                    {
-                                                        println!(
-                                                            "UNALIGNED POWER_SYMBOL: xv={xv}, yv={yv}"
-                                                        );
-                                                    }
-                                                    coords.push((xv, yv));
-                                                }
-                                            }
+                                        if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
+                                            println!("UNALIGNED POWER_SYMBOL: xv={xv}, yv={yv}");
                                         }
+                                        coords.push((xv, yv));
                                     }
                                 }
                             }
@@ -4180,21 +4528,15 @@ mod tests {
                                     head: gh,
                                     children: ggc,
                                 } = gc
+                                    && gh == "at"
+                                    && let (Some(x), Some(y)) = (ggc.first(), ggc.get(1))
+                                    && let (Some(xv), Some(yv)) =
+                                        (parse_num_atom(x), parse_num_atom(y))
                                 {
-                                    if gh == "at" {
-                                        if let (Some(x), Some(y)) = (ggc.first(), ggc.get(1)) {
-                                            if let (Some(xv), Some(yv)) =
-                                                (parse_num_atom(x), parse_num_atom(y))
-                                            {
-                                                if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
-                                                    println!(
-                                                        "UNALIGNED GLOBAL_LABEL: xv={xv}, yv={yv}"
-                                                    );
-                                                }
-                                                coords.push((xv, yv));
-                                            }
-                                        }
+                                    if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
+                                        println!("UNALIGNED GLOBAL_LABEL: xv={xv}, yv={yv}");
                                     }
+                                    coords.push((xv, yv));
                                 }
                             }
                         }
@@ -4204,33 +4546,22 @@ mod tests {
                                     head: gh,
                                     children: ggc,
                                 } = gc
+                                    && gh == "pts"
                                 {
-                                    if gh == "pts" {
-                                        for ggg in ggc {
-                                            if let Sexp::List {
-                                                head: ggh,
-                                                children: gggc,
-                                            } = ggg
-                                            {
-                                                if ggh == "xy" {
-                                                    if let (Some(x), Some(y)) =
-                                                        (gggc.first(), gggc.get(1))
-                                                    {
-                                                        if let (Some(xv), Some(yv)) =
-                                                            (parse_num_atom(x), parse_num_atom(y))
-                                                        {
-                                                            if !is_grid_aligned(xv)
-                                                                || !is_grid_aligned(yv)
-                                                            {
-                                                                println!(
-                                                                    "UNALIGNED WIRE: xv={xv}, yv={yv}"
-                                                                );
-                                                            }
-                                                            coords.push((xv, yv));
-                                                        }
-                                                    }
-                                                }
+                                    for ggg in ggc {
+                                        if let Sexp::List {
+                                            head: ggh,
+                                            children: gggc,
+                                        } = ggg
+                                            && ggh == "xy"
+                                            && let (Some(x), Some(y)) = (gggc.first(), gggc.get(1))
+                                            && let (Some(xv), Some(yv)) =
+                                                (parse_num_atom(x), parse_num_atom(y))
+                                        {
+                                            if !is_grid_aligned(xv) || !is_grid_aligned(yv) {
+                                                println!("UNALIGNED WIRE: xv={xv}, yv={yv}");
                                             }
+                                            coords.push((xv, yv));
                                         }
                                     }
                                 }
@@ -4296,15 +4627,37 @@ mod tests {
     fn sensor_logger_no_body_crossing_wires() {
         let (board, _sexp, text) = build_reference("sensor_logger");
         let spans = wire_spans(&text);
-        // No wire segment longer than 20 mm — the sensor_logger is
-        // a compact single-row design; long wires indicate a route
-        // that crossed component bodies (the pre-fix NRST disaster
-        // spanned 74 mm; stock KiCad symbol is ~15 mm, fallback is 17.8 mm).
-        for span in &spans {
-            assert!(
-                *span <= 20.0,
-                "wire segment spans {span} mm — suspected body crossing"
+        // No wire may pass through the inside of an IC or connector body (the
+        // pre-fix NRST wire ran 74 mm straight through one). A part turned on
+        // its side is left out: its symbol size is that of the part unturned.
+        let layout = synth_layout::layout(&board);
+        for placement in &layout.components {
+            let Some(part) = board.component(placement.id).and_then(|c| c.part.as_ref()) else {
+                continue;
+            };
+            let (bw, bh) = synth_layout::body_size_for_part(part);
+            let upright = matches!(
+                placement.rotation,
+                synth_layout::Rotation::Zero | synth_layout::Rotation::OneEighty
             );
+            if bw < 1.0 || bh < 1.0 || !upright {
+                continue;
+            }
+            let (cx, cy) = placement.center_mm;
+            let (hw, hh) = (bw / 2.0 - 0.5, bh / 2.0 - 0.5);
+            for wire in &layout.wires {
+                for s in wire.points.windows(2) {
+                    let (lo_x, hi_x) = (s[0].0.min(s[1].0), s[0].0.max(s[1].0));
+                    let (lo_y, hi_y) = (s[0].1.min(s[1].1), s[0].1.max(s[1].1));
+                    assert!(
+                        hi_x <= cx - hw || lo_x >= cx + hw || hi_y <= cy - hh || lo_y >= cy + hh,
+                        "wire {s:?} runs through the body of {}",
+                        board
+                            .component(placement.id)
+                            .map_or("?", |c| c.refdes.as_str())
+                    );
+                }
+            }
         }
         // Sanity: the schematic must contain at least some signal
         // wires (the NRST reset network is a local wire, not just
@@ -4313,7 +4666,6 @@ mod tests {
             !spans.is_empty(),
             "expected at least some wires in the schematic"
         );
-        let _ = board;
     }
 
     /// One power symbol's Reference and Value as written: the symbol's `at`,
@@ -4323,6 +4675,27 @@ mod tests {
     type PowerSymbol = ((f64, f64), Vec<PowerField>);
 
     fn power_symbols(sexp: &Sexp) -> Vec<PowerSymbol> {
+        power_symbols_at_angle(sexp)
+            .into_iter()
+            .map(|(_, symbol)| symbol)
+            .collect()
+    }
+
+    /// The symbols that stand upright, whose triangle hangs below and whose
+    /// arrow rises above their point.
+    fn upright_power_symbols(sexp: &Sexp) -> Vec<PowerSymbol> {
+        power_symbols_at_angle(sexp)
+            .into_iter()
+            .filter(|(angle, _)| *angle == 0.0)
+            .map(|(_, symbol)| symbol)
+            .collect()
+    }
+
+    /// Each power symbol with the angle it is written at. A name is given as
+    /// KiCad draws it: it swaps left and right justification on a string it
+    /// turns the right way up, which is the case for a symbol at 90 with its
+    /// fields at 90.
+    fn power_symbols_at_angle(sexp: &Sexp) -> Vec<(f64, PowerSymbol)> {
         let Sexp::List { children, .. } = sexp else {
             return Vec::new();
         };
@@ -4342,6 +4715,7 @@ mod tests {
                 else {
                     unreachable!("filtered to lists")
                 };
+                let (x, y, angle) = at_of(s);
                 let fields = props
                     .iter()
                     .filter(|p| matches!(p, Sexp::List { head, .. } if head == "property"))
@@ -4350,18 +4724,24 @@ mod tests {
                             unreachable!("filtered to lists")
                         };
                         let effects = sub_node(p, "effects");
-                        let (x, y, _) = at_of(p);
+                        let (fx, fy, field_angle) = at_of(p);
+                        let justify = sub(effects, "justify").and_then(|j| j.first().map(str_of));
+                        let flip = (angle + field_angle).rem_euclid(360.0) == 180.0;
+                        let justify = match justify.as_deref() {
+                            Some("left") if flip => Some("right".to_string()),
+                            Some("right") if flip => Some("left".to_string()),
+                            _ => justify,
+                        };
                         (
                             str_of(&v[0]),
                             str_of(&v[1]),
-                            (x, y),
-                            sub(effects, "justify").and_then(|j| j.first().map(str_of)),
+                            (fx, fy),
+                            justify,
                             sub(effects, "hide").is_some_and(|h| str_of(&h[0]) == "yes"),
                         )
                     })
                     .collect();
-                let (x, y, _) = at_of(s);
-                ((x, y), fields)
+                (angle, ((x, y), fields))
             })
             .collect()
     }
@@ -4373,7 +4753,7 @@ mod tests {
     #[test]
     fn a_rail_symbol_shows_its_name_above_the_arrow() {
         let (_board, sexp, _text) = build_reference("ref_ldo_sensor");
-        let rails: Vec<_> = power_symbols(&sexp)
+        let rails: Vec<_> = upright_power_symbols(&sexp)
             .into_iter()
             .filter(|(_, f)| !matches!(power_value(f).1.as_str(), "GND" | "PWR_FLAG"))
             .collect();
@@ -4381,14 +4761,14 @@ mod tests {
         for ((_, y), fields) in &rails {
             let value = power_value(fields);
             assert!(!value.4, "{} is hidden", value.1);
-            assert!(value.2 .1 < *y, "{} is not above its arrow", value.1);
+            assert!(value.2.1 < *y, "{} is not above its arrow", value.1);
         }
     }
 
     #[test]
     fn a_ground_symbol_shows_its_name_below_the_triangle() {
         let (_board, sexp, _text) = build_reference("ref_ldo_sensor");
-        let grounds: Vec<_> = power_symbols(&sexp)
+        let grounds: Vec<_> = upright_power_symbols(&sexp)
             .into_iter()
             .filter(|(_, f)| power_value(f).1 == "GND")
             .collect();
@@ -4396,7 +4776,7 @@ mod tests {
         for ((_, y), fields) in &grounds {
             let value = power_value(fields);
             assert!(!value.4, "GND is hidden");
-            assert!(value.2 .1 > *y, "GND is not below its triangle");
+            assert!(value.2.1 > *y, "GND is not below its triangle");
         }
     }
 
@@ -4437,6 +4817,7 @@ mod tests {
                     "#PWR1",
                     "GND",
                     kind,
+                    upright(kind),
                     (0.0, 0.0),
                     &mut obstacles,
                     &mut Vec::new(),
@@ -4481,6 +4862,75 @@ mod tests {
     fn with_nothing_in_the_way_a_field_keeps_its_nearest_spot() {
         let candidates = field_candidates(FieldSide::Right, FieldSide::Left, 0.0);
         assert_eq!(candidates[0], (FieldSide::Right, 0.0));
+    }
+
+    /// The ground symbol of C1 on a board of a regulator and C1, with its
+    /// name as written: the symbol's position, the name's position and
+    /// justify. A horizontal wire runs `gap` mm under the place a name below
+    /// the triangle would end.
+    fn ground_name_over_wire(gap: f64) -> ((f64, f64), (f64, f64), Option<String>) {
+        let board = lower_lenient(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+                component C1: capacitor "c_generic_0603"
+                connect U1.vin -> C1.p1
+                connect U1.gnd -> C1.p2
+            }"#,
+        );
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let mut layout = synth_layout::layout(&board);
+        layout.wires.clear();
+        layout.net_labels.clear();
+        let index = |refdes: &str| board.components.iter().position(|c| c.refdes == refdes);
+        layout.components[index("U1").unwrap()].center_mm = (300.0, 100.0);
+        layout.components[index("C1").unwrap()].center_mm = (100.0, 100.0);
+        let ground = |layout: &synth_layout::Layout| {
+            let sexp = build_schematic_from_layout(&board, &project, layout);
+            let (at, fields) = power_symbols(&sexp)
+                .into_iter()
+                .filter(|(_, f)| power_value(f).1 == "GND")
+                .min_by(|(a, _), (b, _)| (a.0 - 100.0).abs().total_cmp(&(b.0 - 100.0).abs()))
+                .expect("C1 has a ground symbol");
+            let value = power_value(&fields).clone();
+            (at, value.2, value.3)
+        };
+        let (at, ..) = ground(&layout);
+        // The wire is as thick as an obstacle wire, so its top edge is `gap`
+        // under the name.
+        let y = at.1 + POWER_NAME_OFFSET_MM + FIELD_TEXT_HEIGHT_MM / 2.0 + gap + WIRE_HALF_WIDTH_MM;
+        layout.wires.push(synth_layout::WirePath {
+            net: board.nets[0].id,
+            points: vec![(at.0 - 5.0, y), (at.0 + 5.0, y)],
+            junctions: Vec::new(),
+        });
+        ground(&layout)
+    }
+
+    #[test]
+    fn a_ground_name_moves_beside_the_triangle_when_a_wire_is_close_below() {
+        // The wire does not touch the name below the triangle, but is only
+        // 0.2 mm from it.
+        let (at, name_at, justify) = ground_name_over_wire(0.2);
+        assert_eq!(
+            justify.as_deref(),
+            Some("left"),
+            "{name_at:?} is not at the side"
+        );
+        assert!(
+            name_at.0 > at.0,
+            "{name_at:?} is not right of the triangle {at:?}"
+        );
+        assert!(
+            (name_at.1 - (at.1 + POWER_TIP_MM)).abs() < 1e-6,
+            "{name_at:?} is not at the level of the tip of the triangle at {at:?}"
+        );
+    }
+
+    #[test]
+    fn a_ground_name_stays_below_the_triangle_when_a_wire_is_further_below() {
+        let (at, name_at, justify) = ground_name_over_wire(0.6);
+        assert_eq!(justify, None, "{name_at:?} left the spot below");
+        assert!((name_at.0 - at.0).abs() < 1e-6 && name_at.1 > at.1 + POWER_TIP_MM);
     }
 
     #[test]
@@ -4536,6 +4986,176 @@ mod tests {
                     );
                 }
             }
+        }
+    }
+
+    /// Where each power name must be drawn, from the board and its layout and
+    /// not from the schematic: one per rail flag and one per fanned power
+    /// leg, at the point the layout puts its symbol. Symbols at one point share
+    /// a name, so they count once.
+    fn expected_power_names(
+        board: &Board,
+        layout: &synth_layout::Layout,
+    ) -> Vec<(String, (f64, f64))> {
+        let placements: HashMap<ComponentId, &ComponentPlacement> =
+            layout.components.iter().map(|p| (p.id, p)).collect();
+        let rail_of = |net| layout.power_flags.iter().find(|f| f.net == net);
+        let mut terminals = Vec::new();
+        for flag in &layout.power_flags {
+            if let Some((x, y, dx, dy)) =
+                pin_terminal_xy(board, flag.component, flag.pin, &placements)
+            {
+                let anchor = PinAnchor { x, y, dx, dy };
+                let (symbol_x, symbol_y, _) =
+                    clear_power_flag_position(board, flag, &placements, layout, anchor);
+                terminals.push((flag.label.clone(), (symbol_x, symbol_y)));
+            }
+        }
+        for leg in crate::pin_reconcile::reconcile_all(board)
+            .iter()
+            .flat_map(|r| &r.power_legs)
+        {
+            if let (Some(rail), Some((_, symbol))) =
+                (rail_of(leg.net), fanned_leg_stub(board, leg, &placements))
+            {
+                terminals.push((rail.label.clone(), symbol));
+            }
+        }
+        terminals.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.partial_cmp(&b.1).unwrap()));
+        terminals.dedup_by(|a, b| a.0 == b.0 && (a.1.0 - b.1.0).hypot(a.1.1 - b.1.1) < 0.01);
+        terminals
+    }
+
+    /// How far a drawn power symbol may sit from its pin, in mm: a stub, plus a
+    /// bend when the symbol steps off the stub axis.
+    const POWER_SYMBOL_REACH_MM: f64 = 5.0;
+    /// How far a power name may sit from its symbol, in mm: the usual spot
+    /// past the arrow tip, plus the rings it moves out by when that is taken.
+    const POWER_NAME_REACH_MM: f64 = 9.0;
+
+    /// What is wrong with the power names `sexp` shows, given the names the
+    /// board needs. Each expected name must be matched by one shown name from
+    /// a symbol near its point, with the name beside that symbol. An expected
+    /// name nothing matches (missing or hidden) and a shown name no expected
+    /// name matches (drawn twice, or off its pin) are both reported.
+    fn power_name_problems(expected: &[(String, (f64, f64))], sexp: &Sexp) -> Vec<String> {
+        let mut shown = Vec::new();
+        for (at, fields) in power_symbols(sexp) {
+            let Some((_, text, pos, _, hidden)) = fields.iter().find(|f| f.0 == "Value") else {
+                continue;
+            };
+            if !hidden && text != "PWR_FLAG" {
+                shown.push((text.clone(), at, *pos));
+            }
+        }
+        let mut pairs: Vec<(f64, usize, usize)> = Vec::new();
+        for (s, (text, at, _)) in shown.iter().enumerate() {
+            for (e, (label, point)) in expected.iter().enumerate() {
+                let d = (at.0 - point.0).hypot(at.1 - point.1);
+                if label == text && d <= POWER_SYMBOL_REACH_MM {
+                    pairs.push((d, s, e));
+                }
+            }
+        }
+        pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        let mut shown_used = vec![false; shown.len()];
+        let mut expected_used = vec![false; expected.len()];
+        for (_, s, e) in pairs {
+            if !shown_used[s] && !expected_used[e] {
+                shown_used[s] = true;
+                expected_used[e] = true;
+            }
+        }
+        let mut problems = Vec::new();
+        for ((text, at, pos), used) in shown.iter().zip(shown_used) {
+            let away = (pos.0 - at.0).hypot(pos.1 - at.1);
+            if !used {
+                problems.push(format!("{text} shown at {at:?} belongs to no pin"));
+            } else if away > POWER_NAME_REACH_MM {
+                problems.push(format!("{text} at {pos:?} is {away:.1} mm from its symbol"));
+            }
+        }
+        for ((label, point), used) in expected.iter().zip(expected_used) {
+            if !used {
+                problems.push(format!("{label} at {point:?} is shown 0 times"));
+            }
+        }
+        problems
+    }
+
+    const POWER_NAME_REFERENCES: [&str; 5] = [
+        "ref_ldo_sensor",
+        "ref_usb_cdc",
+        "ref_crystal_mcu",
+        "ref_battery_charger",
+        "sensor_logger",
+    ];
+
+    #[test]
+    fn every_power_name_the_board_needs_is_shown_once() {
+        for name in POWER_NAME_REFERENCES {
+            let (board, sexp, _) = build_reference(name);
+            let expected = expected_power_names(&board, &synth_layout::layout(&board));
+            assert!(!expected.is_empty(), "{name} needs no power name");
+            let problems = power_name_problems(&expected, &sexp);
+            assert!(problems.is_empty(), "{name}: {problems:#?}");
+        }
+    }
+
+    /// Takes the first shown power name out of `sexp`, hidden or with its Value
+    /// field removed, and says which name it was.
+    fn drop_first_power_name(sexp: &mut Sexp, hide: bool) -> String {
+        let Sexp::List { children, .. } = sexp else {
+            panic!("a schematic is a list");
+        };
+        for symbol in children.iter_mut() {
+            let is_power = sub(symbol, "lib_id").is_some_and(|v| {
+                let id = str_of(&v[0]);
+                id.starts_with("power:") || id.starts_with("synth:")
+            }) && sub(symbol, "in_bom").is_some_and(|v| str_of(&v[0]) == "no");
+            let Sexp::List {
+                children: props, ..
+            } = symbol
+            else {
+                continue;
+            };
+            let shown = props.iter().position(|p| {
+                matches!(p, Sexp::List { head, children } if head == "property"
+                    && str_of(&children[0]) == "Value"
+                    && str_of(&children[1]) != "PWR_FLAG")
+                    && sub(sub_node(p, "effects"), "hide").is_none()
+            });
+            let Some(i) = shown.filter(|_| is_power) else {
+                continue;
+            };
+            let Sexp::List { children: v, .. } = &mut props[i] else {
+                unreachable!("matched a property list")
+            };
+            let text = str_of(&v[1]);
+            if hide {
+                *v.last_mut().unwrap() = hidden_field_effects();
+            } else {
+                props.remove(i);
+            }
+            return text;
+        }
+        panic!("no shown power name to drop");
+    }
+
+    #[test]
+    fn a_power_name_that_is_hidden_or_removed_is_reported() {
+        for hide in [true, false] {
+            let (board, mut sexp, _) = build_reference("sensor_logger");
+            let expected = expected_power_names(&board, &synth_layout::layout(&board));
+            let dropped = drop_first_power_name(&mut sexp, hide);
+            let problems = power_name_problems(&expected, &sexp);
+            assert!(
+                problems
+                    .iter()
+                    .any(|p| p.starts_with(&dropped) && p.ends_with("is shown 0 times")),
+                "{dropped} was {} but the check says {problems:?}",
+                if hide { "hidden" } else { "removed" }
+            );
         }
     }
 
@@ -4633,17 +5253,25 @@ mod tests {
             "sensor_logger",
         ] {
             let (_board, sexp, _text) = build_reference(name);
-            // A ground triangle hangs below its point, a rail arrow rises above.
-            let drawings: Vec<(f64, f64, f64, f64)> = power_symbols(&sexp)
+            // A ground triangle hangs below its point, a rail arrow rises
+            // above; a symbol turned to 90 points right, at 270 left.
+            let drawings: Vec<(f64, f64, f64, f64)> = power_symbols_at_angle(&sexp)
                 .into_iter()
-                .filter_map(|((x, y), fields)| {
+                .filter_map(|(angle, ((x, y), fields))| {
                     let value = power_value(&fields);
-                    let (y0, y1) = if value.2 .1 > y {
-                        (y, y + POWER_TIP_MM)
+                    let drawing = if angle == 0.0 {
+                        let (y0, y1) = if value.2.1 > y {
+                            (y, y + POWER_TIP_MM)
+                        } else {
+                            (y - POWER_TIP_MM, y)
+                        };
+                        (x - 1.27, y0, x + 1.27, y1)
+                    } else if value.2.0 > x {
+                        (x, y - 1.27, x + POWER_TIP_MM, y + 1.27)
                     } else {
-                        (y - POWER_TIP_MM, y)
+                        (x - POWER_TIP_MM, y - 1.27, x, y + 1.27)
                     };
-                    (!value.4).then_some((x - 1.27, y0, x + 1.27, y1))
+                    (!value.4).then_some(drawing)
                 })
                 .collect();
             for (field, x0, y0, x1, y1) in drawn_field_boxes(&sexp) {
@@ -4761,6 +5389,42 @@ mod tests {
         for (_, fields) in power_symbols(&sexp) {
             let reference = fields.iter().find(|f| f.0 == "Reference").unwrap();
             assert!(reference.4, "{} is shown", reference.1);
+        }
+    }
+
+    /// A net the author named and the schematic draws only as wires has no
+    /// flag to carry the name, so KiCad would call it `Net-(...)` and the PCB
+    /// would disagree. It carries a local label instead.
+    #[test]
+    fn a_named_net_drawn_only_as_wires_carries_its_name() {
+        let (mut board, _sexp, _text) = build_reference("sensor_logger");
+        let layout = synth_layout::layout(&board);
+        let flagged = layout.labeled_net_ids();
+        let power = layout.power_net_ids();
+        let wired: Vec<NetId> = board
+            .nets
+            .iter()
+            .filter(|n| {
+                !flagged.contains(&n.id)
+                    && !power.contains(&n.id)
+                    && layout.wires.iter().any(|w| w.net == n.id)
+            })
+            .map(|n| n.id)
+            .collect();
+        assert!(!wired.is_empty(), "no wired signal net to name");
+        for net in board.nets.iter_mut().filter(|n| wired.contains(&n.id)) {
+            net.name = format!("WIRED_{}", net.id.0);
+            net.auto_named = false;
+        }
+        let project = crate::uuid_v5::project_namespace(&board.name);
+        let text = build_schematic(&board, &project).to_string_pretty();
+        let flat: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        for id in wired {
+            assert!(
+                flat.contains(&format!("(label \"WIRED_{}\"", id.0)),
+                "wired net {} has no name label",
+                id.0
+            );
         }
     }
 

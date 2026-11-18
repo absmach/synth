@@ -37,12 +37,12 @@
 //! routing output in CI.
 
 use serde::{Deserialize, Serialize};
-use synth_geometry::{nm_to_mm, Point};
+use synth_geometry::{Point, nm_to_mm};
 use synth_ir::{Board, NetId};
 use synth_place::Placement;
 
-use crate::grid::{build_grid, Cell};
 use crate::Routing;
+use crate::grid::{Cell, build_grid};
 
 /// One structural violation found by the re-check.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

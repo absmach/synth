@@ -1,0 +1,144 @@
+id = "ch340c"
+kind = "ic"
+description = "WCH CH340C USB to UART bridge with internal oscillator (no crystal), SOP-16. Pin map checked against KiCad Interface_USB:CH340C. V3 depends on the supply mode: with VCC at 3.3 V tie V3 to VCC, with VCC at 5 V decouple V3 with 100 nF to GND; only the VCC decoupling is modelled, so a 5 V design must add the V3 capacitor itself"
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "CH340C"
+kicad_symbol = "Interface_USB:CH340C"
+kicad_footprint = "Package_SO:SOIC-16_3.9x9.9mm_P1.27mm"
+
+[operating_conditions]
+min_voltage_v = 3.0
+max_voltage_v = 5.3
+max_current_ma = 30.0
+power_budget = false
+
+[[pins]]
+name = "gnd"
+number = "1"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "txd"
+number = "2"
+electrical_type = "output"
+capabilities = ["uart_tx"]
+required = false
+
+[[pins]]
+name = "rxd"
+number = "3"
+electrical_type = "input"
+capabilities = ["uart_rx"]
+required = false
+
+[[pins]]
+name = "v3"
+number = "4"
+electrical_type = "power_output"
+capabilities = []
+required = true
+
+[[pins]]
+name = "ud_plus"
+number = "5"
+electrical_type = "differential_positive"
+capabilities = ["usb_dp"]
+required = true
+
+[[pins]]
+name = "ud_minus"
+number = "6"
+electrical_type = "differential_negative"
+capabilities = ["usb_dn"]
+required = true
+
+[[pins]]
+name = "nc7"
+number = "7"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "nc8"
+number = "8"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "cts"
+number = "9"
+electrical_type = "input"
+capabilities = []
+required = false
+
+[[pins]]
+name = "dsr"
+number = "10"
+electrical_type = "input"
+capabilities = []
+required = false
+
+[[pins]]
+name = "ri"
+number = "11"
+electrical_type = "input"
+capabilities = []
+required = false
+
+[[pins]]
+name = "dcd"
+number = "12"
+electrical_type = "input"
+capabilities = []
+required = false
+
+[[pins]]
+name = "dtr"
+number = "13"
+electrical_type = "output"
+capabilities = []
+required = false
+
+[[pins]]
+name = "rts"
+number = "14"
+electrical_type = "output"
+capabilities = []
+required = false
+
+[[pins]]
+name = "r232"
+number = "15"
+electrical_type = "input"
+capabilities = []
+required = false
+
+[[pins]]
+name = "vcc"
+number = "16"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[footprint_dimensions]
+width_mm = 7.4
+height_mm = 10.4
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://datasheet.lcsc.com/szlcsc/Jiangsu-Qin-Heng-CH340C_C84681.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"

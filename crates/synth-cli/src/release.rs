@@ -180,17 +180,13 @@ fn fabrication_notes(
 impl RoutingState {
     /// Build the release-gate view of a routing run record.
     pub fn from_report(report: &synth_router::RouteReport, run_record: &Path) -> Self {
-        let mut reasons: Vec<String> = report
-            .validation
-            .as_ref()
-            .map(|v| {
-                v.blocking_reasons
-                    .iter()
-                    .chain(v.unavailable_checks.iter())
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut reasons: Vec<String> = report.validation.as_ref().map_or_default(|v| {
+            v.blocking_reasons
+                .iter()
+                .chain(v.unavailable_checks.iter())
+                .cloned()
+                .collect()
+        });
         if let Some(failure) = &report.failure {
             reasons.push(failure.remediation.clone());
         }
@@ -220,15 +216,29 @@ pub struct ReleaseManifest {
     pub schema_version: String,
     pub tool_version: String,
     pub input: String,
+    /// Commit named by `SYNTH_SOURCE_REVISION` when the package was built.
+    /// `None` means the caller did not name one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_revision: Option<String>,
     pub fab_requested: bool,
     pub production_status: ProductionStatus,
     pub release_ready: bool,
+    /// What `production_status` and `release_ready` cover, so a reader of the
+    /// file alone does not take them for sign-off.
+    #[serde(default = "gate_scope")]
+    pub gate_scope: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overrides: Vec<OverrideRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exception: Option<Exception>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reviewer_state: Vec<ReviewerState>,
+    /// Parts whose schematic symbol Synth drew from the registry pin map
+    /// because the part names no KiCad library symbol. The artwork is
+    /// generated, not a reviewed library symbol, so a reader of the package
+    /// knows which parts' symbols to check.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub synthetic_symbols: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing: Option<RoutingState>,
     /// Signal/power-integrity findings on the routed board. Recorded so a CI
@@ -253,6 +263,32 @@ pub struct SignalIntegrityState {
     pub findings: Vec<SignalFinding>,
 }
 
+fn gate_scope() -> String {
+    "production_status and release_ready cover only Synth's routing and export gates: \
+     override flags, route validation and signal integrity. They are not a fabrication \
+     approval, a qualification result or a component review."
+        .to_string()
+}
+
+/// The input path as a checkout-relative path where possible, so a package
+/// does not record the absolute directory of the machine that built it.
+fn display_input(input: &Path) -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|cwd| input.strip_prefix(cwd).ok())
+        .unwrap_or(input)
+        .display()
+        .to_string()
+}
+
+/// The source revision a caller names in `SYNTH_SOURCE_REVISION`. An empty
+/// value names none, so an unset or blank variable is not stamped as a commit.
+fn revision_from(value: Option<String>) -> Option<String> {
+    value
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
 impl ReleaseManifest {
     pub fn new(
         tool_version: &str,
@@ -266,7 +302,8 @@ impl ReleaseManifest {
         Self {
             schema_version: SCHEMA_VERSION.to_string(),
             tool_version: tool_version.to_string(),
-            input: input.display().to_string(),
+            input: display_input(input),
+            source_revision: revision_from(std::env::var("SYNTH_SOURCE_REVISION").ok()),
             fab_requested,
             production_status: if clean {
                 ProductionStatus::Production
@@ -274,12 +311,21 @@ impl ReleaseManifest {
                 ProductionStatus::Untrusted
             },
             release_ready: clean,
+            gate_scope: gate_scope(),
             overrides,
             exception: None,
             reviewer_state,
+            synthetic_symbols: Vec::new(),
             routing: None,
             signal_integrity: None,
         }
+    }
+
+    /// Record the parts whose schematic symbol is synthesized.
+    #[must_use]
+    pub fn with_synthetic_symbols(mut self, parts: Vec<String>) -> Self {
+        self.synthetic_symbols = parts;
+        self
     }
 
     /// Record the routed signal/power-integrity findings.
@@ -315,11 +361,11 @@ impl ReleaseManifest {
     /// override does: the package is not fabricable, and the reason is in
     /// the manifest rather than only in a stderr line nobody archived.
     pub fn with_routing(mut self, routing: Option<RoutingState>) -> Self {
-        if let Some(state) = &routing {
-            if !state.is_fabrication_ready() {
-                self.production_status = ProductionStatus::Untrusted;
-                self.release_ready = false;
-            }
+        if let Some(state) = &routing
+            && !state.is_fabrication_ready()
+        {
+            self.production_status = ProductionStatus::Untrusted;
+            self.release_ready = false;
         }
         self.routing = routing;
         self
@@ -442,6 +488,20 @@ pub enum GateVerdict {
     Rejected,
 }
 
+/// The ids of the board's parts that name no KiCad symbol, so the schematic
+/// exporter draws them from the registry pin map, sorted and without repeats.
+pub fn synthetic_symbol_parts(board: &synth_ir::Board) -> Vec<String> {
+    board
+        .components
+        .iter()
+        .filter_map(|c| c.part.as_ref())
+        .filter(|p| p.kicad_symbol.is_none())
+        .map(|p| p.id.0.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 pub fn reviewer_state(board: &synth_ir::Board) -> Vec<ReviewerState> {
     let mut by_id: BTreeMap<String, ReviewerState> = BTreeMap::new();
     for component in &board.components {
@@ -482,6 +542,27 @@ mod tests {
         )
     }
 
+    #[test]
+    fn an_input_under_the_current_directory_is_recorded_relative() {
+        let cwd = std::env::current_dir().expect("cwd");
+        let absolute = cwd.join("qualification/class-b/rtd-afe/rtd_afe.synth");
+        assert_eq!(
+            display_input(&absolute),
+            "qualification/class-b/rtd-afe/rtd_afe.synth"
+        );
+        assert_eq!(display_input(Path::new("board.synth")), "board.synth");
+    }
+
+    #[test]
+    fn a_named_source_revision_is_kept_and_a_blank_one_is_not() {
+        assert_eq!(
+            revision_from(Some(" abc123\n".into())).as_deref(),
+            Some("abc123")
+        );
+        assert_eq!(revision_from(Some("  ".into())), None);
+        assert_eq!(revision_from(None), None);
+    }
+
     fn unverified() -> OverrideRecord {
         OverrideRecord::new(
             OverrideKind::UnverifiedParts,
@@ -501,6 +582,7 @@ mod tests {
             kicad_drc: None,
             blocking_reasons: Vec::new(),
             unavailable_checks: Vec::new(),
+            advisories: Vec::new(),
         }
     }
 
@@ -536,6 +618,14 @@ mod tests {
         })
         .unwrap();
         assert_eq!(some["fabrication_notes"][0], "n");
+    }
+
+    #[test]
+    fn the_manifest_says_its_status_fields_are_not_an_approval() {
+        let m = manifest(Vec::new());
+        let json = serde_json::to_value(&m).unwrap();
+        let scope = json["gate_scope"].as_str().unwrap();
+        assert!(scope.contains("not a fabrication approval"), "{scope}");
     }
 
     #[test]

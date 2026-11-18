@@ -1,13 +1,8 @@
 # Synth Diagnostic Protocol — v1.0
 
-**Status:** frozen for V1.
-**Schema:** [`schemas/diagnostic.schema.json`](../schemas/diagnostic.schema.json).
-**Schema version field:** `"schema_version": "1.0"`.
+**Status:** frozen for V1. **Schema:** [`schemas/diagnostic.schema.json`](../schemas/diagnostic.schema.json). **Schema version field:** `"schema_version": "1.0"`.
 
-This is the agent-facing contract for the Synth EDA compiler. Every
-diagnostic emitted by any stage (lexer, parser, semantic analysis,
-ERC, placement, routing, DRC, manufacturing export) conforms to the
-[`Diagnostic`](#diagnostic-object) shape below.
+This is the agent-facing contract for the Synth EDA compiler. Every diagnostic emitted by any stage (lexer, parser, semantic analysis, ERC, placement, routing, DRC, manufacturing export) conforms to the [`Diagnostic`](#diagnostic-object) shape below.
 
 ## Scope
 
@@ -15,27 +10,21 @@ The protocol covers:
 
 - The JSON shape of a single diagnostic record.
 - The wire format of `synth validate --format json` output.
-- The patch primitives that diagnostics may attach as
-  `suggested_fixes`.
+- The patch primitives that diagnostics may attach as `suggested_fixes`.
 - Stable diagnostic codes (`E-SYNTH-<CATEGORY>-NNN`).
 - Exit codes from CLI subcommands.
 
 The protocol does **not** cover:
 
 - The `Board` IR JSON (intentionally unstable through V1).
-- The `.synth` source-language grammar (covered by the SynthSpec
-  language reference).
+- The `.synth` source-language grammar (covered by the SynthSpec language reference).
 - The KiCad export file shapes (those follow KiCad 8 conventions).
 
 ## Compatibility
 
-- **Major bump (v2.0):** a field is removed or renamed; a previously
-  optional field becomes required; a `PatchKind` variant is removed.
-- **Minor bump (v1.1, v1.2, …):** a new optional field is added; a
-  new `PatchKind` variant is added; a new diagnostic code is
-  introduced. Agents pinned to v1.0 keep working.
-- **Patch release (v1.0.1, …):** wording-only changes to
-  `title` / `message` / `expected` / `found`. No structural change.
+- **Major bump (v2.0):** a field is removed or renamed; a previously optional field becomes required; a `PatchKind` variant is removed.
+- **Minor bump (v1.1, v1.2, …):** a new optional field is added; a new `PatchKind` variant is added; a new diagnostic code is introduced. Agents pinned to v1.0 keep working.
+- **Patch release (v1.0.1, …):** wording-only changes to `title` / `message` / `expected` / `found`. No structural change.
 
 ## Wire format
 
@@ -48,11 +37,7 @@ The protocol does **not** cover:
 }
 ```
 
-`diagnostics` is sorted in emission order: parse-stage diagnostics
-first (in source order), then import resolution, then lowering,
-then ERC rules in their registration order. Within an ERC rule,
-diagnostics are emitted in net-then-component order so the output is
-byte-deterministic across runs.
+`diagnostics` is sorted in emission order: parse-stage diagnostics first (in source order), then import resolution, then lowering, then ERC rules in their registration order. Within an ERC rule, diagnostics are emitted in net-then-component order so the output is byte-deterministic across runs.
 
 ### Diagnostic object
 
@@ -116,8 +101,7 @@ byte-deterministic across runs.
 | `suggested_fixes` | `[Patch]`     | Machine-applicable edits, sorted by descending confidence.   |
 | `explanation_url` | string        | Conventionally `synth.docs/diagnostics/<code>`.              |
 
-Absent optional fields are omitted from the JSON (not serialized as
-`null`). Agents may pass-through any field they don't recognise.
+Absent optional fields are omitted from the JSON (not serialized as `null`). Agents may pass-through any field they don't recognise.
 
 ### `Location`
 
@@ -133,11 +117,8 @@ Absent optional fields are omitted from the JSON (not serialized as
 }
 ```
 
-- **Authoritative:** `(file, byte_start, byte_end)`. Byte offsets are
-  UTF-8 byte indices, half-open `[start, end)`.
-- **Derived:** `line_start`, `col_start`, `line_end`, `col_end`. 1-indexed.
-  If a stage has not computed them, they default to `0` — agents must
-  treat `0` as "unknown" and fall back to byte offsets.
+- **Authoritative:** `(file, byte_start, byte_end)`. Byte offsets are UTF-8 byte indices, half-open `[start, end)`.
+- **Derived:** `line_start`, `col_start`, `line_end`, `col_end`. 1-indexed. If a stage has not computed them, they default to `0` — agents must treat `0` as "unknown" and fall back to byte offsets.
 
 ### `EntityRef`
 
@@ -157,15 +138,11 @@ Tagged on `kind`:
 { "kind": "pin", "component": "U1", "pin": "USB_DP", "confidence": 0.92 }
 ```
 
-Candidates are **informational**. They describe alternatives the
-agent might consider; they are not edits. For edits, see
-`suggested_fixes`.
+Candidates are **informational**. They describe alternatives the agent might consider; they are not edits. For edits, see `suggested_fixes`.
 
 ### `Patch`
 
-A `Patch` is a machine-applicable edit. The host applies it by
-calling `synth fix` or by invoking the equivalent function in
-`synth-diagnostics`.
+A `Patch` is a machine-applicable edit. The host applies it by calling `synth fix` or by invoking the equivalent function in `synth-diagnostics`.
 
 ```json
 {
@@ -195,8 +172,7 @@ calling `synth fix` or by invoking the equivalent function in
 }
 ```
 
-Replace the half-open byte range `[byte_start, byte_end)` with
-`replacement`. Out-of-bounds ranges return `PatchError::OutOfBounds`.
+Replace the half-open byte range `[byte_start, byte_end)` with `replacement`. Out-of-bounds ranges return `PatchError::OutOfBounds`.
 
 ##### `insert_at`
 
@@ -204,8 +180,7 @@ Replace the half-open byte range `[byte_start, byte_end)` with
 { "kind": "insert_at", "at": 42, "text": " -> " }
 ```
 
-Insert `text` at byte offset `at`. `at` may equal the source length
-(end-of-file insertion is valid).
+Insert `text` at byte offset `at`. `at` may equal the source length (end-of-file insertion is valid).
 
 ##### `delete_range`
 
@@ -213,8 +188,7 @@ Insert `text` at byte offset `at`. `at` may equal the source length
 { "kind": "delete_range", "range": { "byte_start": 100, "byte_end": 120 } }
 ```
 
-Delete the half-open byte range. Equivalent to
-`replace_range` with `replacement: ""`.
+Delete the half-open byte range. Equivalent to `replace_range` with `replacement: ""`.
 
 ##### `add_statement`
 
@@ -222,10 +196,7 @@ Delete the half-open byte range. Equivalent to
 { "kind": "add_statement", "scope": "main_board", "statement": "layers 4" }
 ```
 
-Insert a SynthSpec statement at the given scope. **Semantic
-primitive — not yet implemented in v1.0.** Returns
-`PatchError::Unsupported` from the textual apply entry point. A
-future `synth-patch` crate (introduced post-V1) will resolve this.
+Insert a SynthSpec statement at the given scope. **Semantic primitive — not yet implemented in v1.0.** Returns `PatchError::Unsupported` from the textual apply entry point. A future `synth-patch` crate (introduced post-V1) will resolve this.
 
 ##### `remove_statement`
 
@@ -233,48 +204,33 @@ future `synth-patch` crate (introduced post-V1) will resolve this.
 { "kind": "remove_statement", "id": "U7" }
 ```
 
-Remove a statement identified by `id`. **Same status as
-`add_statement`** — semantic, deferred.
+Remove a statement identified by `id`. **Same status as `add_statement`** — semantic, deferred.
 
 #### Patch application order
 
-Agents that apply multiple patches in one pass **must** sort by
-descending `byte_start` so earlier patches do not shift later byte
-offsets. The reference implementation in `synth fix` does this; it is
-also the algorithm documented in the agent harness
-(`crates/synth-validate/tests/agent_harness.rs`).
+Agents that apply multiple patches in one pass **must** sort by descending `byte_start` so earlier patches do not shift later byte offsets. The reference implementation in `synth fix` does this; it is also the algorithm documented in the agent harness (`crates/synth-validate/tests/agent_harness.rs`).
 
 ## CLI subcommands relevant to agents
 
 ### `synth validate --format json <input>`
 
-Run the full pipeline. Print diagnostics as a single JSON document on
-stdout. Exit `0` on clean, `1` on any error- or fatal-severity
-diagnostic, `2` on usage errors.
+Run the full pipeline. Print diagnostics as a single JSON document on stdout. Exit `0` on clean, `1` on any error- or fatal-severity diagnostic, `2` on usage errors.
 
 ### `synth fix [--dry-run] <input>`
 
-Run validate, collect the top `suggested_fix` per diagnostic, apply
-in reverse byte order, write the result back to the input file.
-`--dry-run` prints the patched source to stdout instead. Exit `0`
-even if patches fail to apply — the workflow is "apply what we can
-and re-validate."
+Run validate, collect the top `suggested_fix` per diagnostic, apply in reverse byte order, write the result back to the input file. `--dry-run` prints the patched source to stdout instead. Exit `0` even if patches fail to apply — the workflow is "apply what we can and re-validate."
 
 ### `synth schema diagnostic`
 
-Print the JSON Schema (draft 2020-12) for the diagnostic protocol to
-stdout. Useful for tooling that validates third-party diagnostic
-producers or consumers.
+Print the JSON Schema (draft 2020-12) for the diagnostic protocol to stdout. Useful for tooling that validates third-party diagnostic producers or consumers.
 
 ### `synth dump-ast --pretty <input>`
 
-Dump the parsed AST as JSON. The AST shape is **not stable** — it is
-exposed for debugging only; not part of this protocol.
+Dump the parsed AST as JSON. The AST shape is **not stable** — it is exposed for debugging only; not part of this protocol.
 
 ### `synth dump-ir --pretty <input>`
 
-Dump the lowered IR (`Board`) as JSON. Same stability caveat as
-`dump-ast`.
+Dump the lowered IR (`Board`) as JSON. Same stability caveat as `dump-ast`.
 
 ## Exit codes
 
@@ -289,14 +245,6 @@ Dump the lowered IR (`Board`) as JSON. Same stability caveat as
 
 The protocol is enforced by the following checks in CI:
 
-- `crates/synth-diagnostics/tests/schema_freshness.rs` — the checked-in
-  `schemas/diagnostic.schema.json` must match the schema derived from
-  the in-source types. Regenerate via
-  `cargo run -p synth-cli -- schema diagnostic > schemas/diagnostic.schema.json`.
-- `crates/synth-validate/tests/agent_harness.rs` — the reference
-  agent harness must converge on ≥80% of the seeded corpus
-  (`fixtures/agent/*.synth`) in ≤5 iterations, and the loop must be
-  deterministic across runs.
-- Existing parser- and ERC-fixture tests round-trip diagnostic JSON
-  via `insta` snapshots, so accidental shape changes show up in
-  pre-merge review.
+- `crates/synth-diagnostics/tests/schema_freshness.rs` — the checked-in `schemas/diagnostic.schema.json` must match the schema derived from the in-source types. Regenerate via `cargo run -p synth-cli -- schema diagnostic > schemas/diagnostic.schema.json`.
+- `crates/synth-validate/tests/agent_harness.rs` — the reference agent harness must converge on ≥80% of the seeded corpus (`fixtures/agent/*.synth`) in ≤5 iterations, and the loop must be deterministic across runs.
+- Existing parser- and ERC-fixture tests round-trip diagnostic JSON via `insta` snapshots, so accidental shape changes show up in pre-merge review.

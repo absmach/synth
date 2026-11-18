@@ -597,7 +597,7 @@ expression: schematic
 		)
 		(property
 			"Value"
-			"(no value)"
+			"PZ254V-11-04P"
 			(at 128.27 41.91 0)
 			(effects
 				(font
@@ -630,7 +630,7 @@ expression: schematic
 		)
 		(property
 			"MPN"
-			""
+			"PZ254V-11-04P"
 			(at 124.46 40.64 0)
 			(effects
 				(font
@@ -641,7 +641,7 @@ expression: schematic
 		)
 		(property
 			"LCSC"
-			""
+			"C492403"
 			(at 124.46 40.64 0)
 			(effects
 				(font
@@ -745,11 +745,12 @@ expression: schematic
 		(property
 			"Value"
 			"(no value)"
-			(at 91.44 57.88 90)
+			(at 100.33 54.61 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
+				(justify left)
 			)
 		)
 		(property
@@ -916,46 +917,46 @@ expression: schematic
 	(wire
 		(pts
 			(xy 87.63 53.34)
-			(xy 82.55 53.34)
+			(xy 85.09 53.34)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "23de62ad-51ad-5d5f-a920-5ecff9d4fa7a")
+		(uuid "f174709b-d415-59fa-9f77-453390ac780e")
 	)
 	(wire
 		(pts
-			(xy 82.55 53.34)
-			(xy 82.55 64.77)
+			(xy 85.09 53.34)
+			(xy 85.09 58.42)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "1bc31763-5d2c-549a-b828-ba03b2b583ab")
+		(uuid "ba290cc0-08d0-5847-8828-e7bf054b5a6f")
 	)
 	(wire
 		(pts
-			(xy 82.55 64.77)
-			(xy 119.38 64.77)
+			(xy 85.09 58.42)
+			(xy 119.38 58.42)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "8ab3160f-4727-5f1a-93d5-aea42ab4bf33")
+		(uuid "a7cef78f-277f-5c88-bdc7-639172dd7a29")
 	)
 	(wire
 		(pts
-			(xy 119.38 64.77)
+			(xy 119.38 58.42)
 			(xy 119.38 45.72)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "52ec2839-a3d0-5a14-930d-8a7ae0da0893")
+		(uuid "c94789e9-ebdb-5986-b96b-d9009dc4525d")
 	)
 	(wire
 		(pts
@@ -1051,10 +1052,10 @@ expression: schematic
 	)
 	(text
 		"Input"
-		(at 25.21 24.7 0)
+		(at 32.8075 24.7 0)
 		(effects
 			(font
-				(size 2 2)
+				(size 2.54 2.54)
 				bold
 			)
 			(justify left bottom)
@@ -1085,7 +1086,7 @@ expression: schematic
 	)
 	(text
 		"Build"
-		(at 35.24 72.77 0)
+		(at 35.24 69.66 0)
 		(effects
 			(font
 				(size 2 2)
@@ -1096,7 +1097,7 @@ expression: schematic
 	)
 	(text
 		"Assemble at JLCPCB."
-		(at 35.24 76.77 0)
+		(at 35.24 73.66 0)
 		(effects
 			(font
 				(size 1 1)
@@ -1105,18 +1106,52 @@ expression: schematic
 		)
 		(uuid "3eda6c41-e404-5a85-ba0e-aeba5fac1a6f")
 	)
-	(rectangle
-		(start 20.21 21.7)
-		(end 57.47 58.42)
+	(polyline
+		(pts
+			(xy 57.47 21.16)
+			(xy 57.47 58.42)
+		)
 		(stroke
 			(width 0.254)
-			(type dash)
-			(color 139 69 19 1)
+			(type solid)
+			(color 49 66 150 1)
 		)
-		(fill
-			(type color)
-			(color 139 69 19 0.08)
+		(uuid "3e8601c9-71c3-5011-be4c-384cf44d13f3")
+	)
+	(polyline
+		(pts
+			(xy 20.21 58.42)
+			(xy 57.47 58.42)
 		)
-		(uuid "72f86672-d111-5503-9946-64a7ba145b92")
+		(stroke
+			(width 0.254)
+			(type solid)
+			(color 49 66 150 1)
+		)
+		(uuid "9f7db7d7-85cf-58a9-89c9-0c9cf58a3c05")
+	)
+	(polyline
+		(pts
+			(xy 20.21 21.16)
+			(xy 20.21 58.42)
+		)
+		(stroke
+			(width 0.254)
+			(type solid)
+			(color 49 66 150 1)
+		)
+		(uuid "d323e51b-e3d7-57d7-b1cb-d4a0195add88")
+	)
+	(polyline
+		(pts
+			(xy 20.21 21.16)
+			(xy 57.47 21.16)
+		)
+		(stroke
+			(width 0.254)
+			(type solid)
+			(color 49 66 150 1)
+		)
+		(uuid "3c7537b9-9541-5fc8-b470-a5187209df1b")
 	)
 )

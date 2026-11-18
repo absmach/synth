@@ -8,26 +8,29 @@
 //! *splittable* — its components span at least two sheet boundaries
 //! (`sheet` blocks or import files, which lower to implicit sheets).
 //!
-//! The split reuses the single-sheet pipeline instead of
-//! re-clustering: `split_layout` partitions one finished [`Layout`]
-//! per sheet, drops cross-sheet wires in favour of
-//! [`HierarchicalLabel`] stubs, and recomputes captions, boxes,
-//! legends, and notes per sheet. Positions translate rigidly, so the
-//! per-sheet result stays deterministic. Component and net ids are
-//! never remapped — every sheet shares the parent [`Board`], which is
-//! what lets ERC, power inference, and the PCB flow stay
+//! The split plans the page boundaries first, then lays each non-empty
+//! partition out as its own small board through the single-sheet
+//! pipeline. A page therefore chooses the smallest standard sheet its
+//! own content needs and its regions tile that page, instead of
+//! inheriting the long strip the global layout gave them. Cross-sheet
+//! wires become [`HierarchicalLabel`] stubs, and captions, boxes,
+//! legends, and notes are recomputed per sheet. A design with
+//! schematic sidecar overrides keeps the old rigid slice, so a
+//! hand-placed page does not move. Component and net ids are never
+//! remapped in the result — every sheet reports the parent [`Board`]'s
+//! ids, which is what lets ERC, power inference, and the PCB flow stay
 //! sheet-agnostic.
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use synth_ir::{Board, ComponentId, NetId};
 
 use crate::{
-    annotate_groups, body_size_for_part, clamp_annotations_to_sheet, compact_sheet_to_fit,
-    effective_group, grow_sheet_to_fit, place_connector_legends, place_design_notes,
-    resolve_text_overlaps, settle_sheet_size, ComponentPlacement, HierarchicalLabel, Layout,
-    SheetSize, BODY_FALLBACK_H, BODY_FALLBACK_W, GROUP_CONTENT_PAD, GROUP_TITLE_BAND_MM,
-    PAGE_MARGIN,
+    ComponentPlacement, GROUP_CONTENT_PAD, GROUP_TITLE_BAND_MM, HierarchicalLabel, Layout,
+    PAGE_MARGIN, SHEET_BORDER_MM, SheetSize, annotate_groups, clamp_annotations_to_sheet,
+    compact_sheet_to_fit, effective_group, grow_sheet_to_fit, place_connector_legends,
+    place_design_notes, resolve_text_overlaps, settle_sheet_size, sidecar,
 };
 
 /// One sheet's share of a board: `None` is the root sheet, `Some`
@@ -104,10 +107,9 @@ pub fn plan_sheets(board: &Board) -> Vec<SheetPartition> {
 /// the requested page under `overflow = "hierarchy"`, where more content
 /// means more sheets.
 pub fn sheet_overflow(board: &Board, layout: &Layout) -> bool {
-    let Some((min_x, max_x, min_y, max_y)) = crate::content_bounds(board, layout) else {
+    let Some((need_w, need_h)) = crate::page_needs(board, layout) else {
         return false;
     };
-    let (need_w, need_h) = crate::sheet_needs(min_x, max_x, min_y, max_y);
     let (ceiling_w, ceiling_h) = crate::max_single_sheet(board).dims_mm();
     need_w > ceiling_w || need_h > ceiling_h
 }
@@ -116,39 +118,60 @@ pub fn sheet_overflow(board: &Board, layout: &Layout) -> bool {
 /// the board is small or unsplittable, one [`SheetLayout`] per sheet
 /// boundary otherwise. The caller renders one KiCad sheet per entry
 /// (root first).
-pub fn layout_sheets(board: &Board, global: Layout) -> Vec<SheetLayout> {
+///
+/// `sidecar` is the schematic layout sidecar, if the design has one.
+/// When it pins at least one component, the split keeps the drawn
+/// sheet as it is instead of laying each page out again, because
+/// re-packing would move parts the author placed on purpose. A sidecar
+/// that only records a page fit or forced labels leaves the layout
+/// free to re-pack.
+pub fn layout_sheets(board: &Board, global: Layout, sidecar: Option<&Path>) -> Vec<SheetLayout> {
+    let pinned = sidecar::has_component_overrides(sidecar);
     if !sheet_overflow(board, &global) {
         return vec![SheetLayout {
             name: None,
             layout: global,
         }];
     }
-    let partitions = plan_sheets(board);
-    if partitions
-        .iter()
-        .filter(|p| !p.components.is_empty())
-        .count()
-        < 2
-    {
+    let planned = plan_sheets(board);
+    if planned.iter().filter(|p| !p.components.is_empty()).count() < 2 {
         return vec![SheetLayout {
             name: None,
             layout: global,
         }];
     }
-    split_layout(board, &global, &partitions)
+    let mut partitions = planned;
+    // A group is a drawing region, not a sheet the author asked for. When
+    // every component sits in one, splitting leaves the root with nothing
+    // but sheet symbols round empty space; the first group's content takes
+    // the root instead. Explicit `sheet` blocks are the author's own
+    // hierarchy, so they keep their empty root.
+    if partitions[0].components.is_empty() && board.components.iter().all(|c| c.sheet.is_none()) {
+        let first = partitions.remove(1);
+        partitions[0].components = first.components;
+    }
+    split_layout_with_pinned(board, &global, &partitions, pinned)
 }
 
-/// Split one finished global [`Layout`] into per-sheet page-local
+/// Split a finished global [`Layout`] into per-sheet page-local
 /// layouts.
 ///
-/// Per partition: placements translate rigidly so the partition bbox
-/// starts at the page margin; intra-sheet wires, junctions touching
-/// kept wires, power flags, and local labels survive; cross-sheet
-/// wires are dropped in favour of [`HierarchicalLabel`] stubs (power
-/// nets need none — power symbols are global); captions, boxes,
-/// legends, and notes are recomputed for the subset, and the page
-/// regrows from A4.
+/// Each non-empty partition is laid out again as its own board, so a
+/// page is sized from what that sheet draws instead of the strip the
+/// global layout gave it. Cross-sheet signal nets become
+/// [`HierarchicalLabel`] stubs (power nets keep their global symbols);
+/// captions, boxes, legends, and notes are recomputed per sheet.
+#[cfg(test)]
 fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -> Vec<SheetLayout> {
+    split_layout_with_pinned(board, global, partitions, false)
+}
+
+fn split_layout_with_pinned(
+    board: &Board,
+    global: &Layout,
+    partitions: &[SheetPartition],
+    pinned: bool,
+) -> Vec<SheetLayout> {
     let power_nets: HashSet<NetId> = global.power_flags.iter().map(|f| f.net).collect();
     // Net -> partitions containing at least one endpoint.
     let mut net_partitions: HashMap<NetId, Vec<usize>> = HashMap::new();
@@ -164,27 +187,40 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
         .iter()
         .filter_map(|(net, parts)| (parts.len() > 1).then_some(*net))
         .collect();
-
-    // What each part draws past its body, so a sheet's rebase starts that at
-    // the margin too and not only the bodies.
-    let drawn = crate::drawn_beyond_bodies(board, global);
-    let placements: HashMap<ComponentId, &ComponentPlacement> =
-        global.components.iter().map(|p| (p.id, p)).collect();
+    // Which rendered sheet each note belongs to: its own `sheet` block, else
+    // the partition holding most of its group's components (ties to the root,
+    // which comes first). Taken from the partitions actually rendered, so a
+    // group merged onto the root keeps its note.
+    let note_homes: Vec<Option<String>> = board
+        .notes
+        .iter()
+        .map(|note| {
+            if note.sheet.is_some() {
+                return note.sheet.clone();
+            }
+            let group = note.group.as_deref()?;
+            let mut best: Option<(&Option<String>, usize)> = None;
+            for partition in partitions {
+                let count = partition
+                    .components
+                    .iter()
+                    .filter(|&&id| {
+                        board.component(id).and_then(|c| c.group.as_deref()) == Some(group)
+                    })
+                    .count();
+                if count > 0 && best.is_none_or(|(_, most)| count > most) {
+                    best = Some((&partition.name, count));
+                }
+            }
+            best.and_then(|(name, _)| name.clone())
+        })
+        .collect();
 
     partitions
         .iter()
         .enumerate()
         .map(|(pi, partition)| {
             let members: HashSet<ComponentId> = partition.components.iter().copied().collect();
-            // A wire survives only on its net's home sheet: nets
-            // touching several partitions lose their wires everywhere
-            // (hierarchical stubs take over) and so do wires whose
-            // net never touches this partition.
-            let keep_wire = |net: NetId| -> bool {
-                net_partitions
-                    .get(&net)
-                    .is_some_and(|parts| parts.len() == 1 && parts[0] == pi)
-            };
             // Hierarchical stubs for cross-sheet signal nets: one per
             // in-partition endpoint, named by the shared net name.
             // Power nets are skipped — their symbols join globally.
@@ -197,146 +233,108 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
                     members.contains(&e.component) && board.pin(e.component, e.pin).is_some()
                 })
                 .collect();
-            // A grouped part also needs the padding and the title band its
-            // group's box draws round it, which start above and left of it.
-            let box_reach = |id: ComponentId| {
-                if effective_group(board, id).is_some() {
-                    (GROUP_CONTENT_PAD, GROUP_TITLE_BAND_MM)
-                } else {
-                    (0.0, 0.0)
-                }
-            };
-            // Rigid rebase offset from the subset's placed bodies, what they
-            // draw past them, their group boxes, the labels its stubs get and
-            // kept wires so content starts at the page margin.
-            let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
-            for (id, (x0, y0, ..)) in drawn.iter().filter(|(id, _)| members.contains(id)) {
-                let (reach_x, reach_y) = box_reach(*id);
-                min_x = min_x.min(*x0 - reach_x);
-                min_y = min_y.min(*y0 - reach_y);
-            }
-            for (net, endpoint) in &stubs {
-                if let Some((x0, y0, ..)) = crate::route::net_label_rect(
-                    board,
-                    &net.name,
-                    endpoint.component,
-                    endpoint.pin,
-                    &placements,
-                    crate::LabelSpot::default(),
-                ) {
-                    let (reach_x, reach_y) = box_reach(endpoint.component);
-                    min_x = min_x.min(x0 - reach_x);
-                    min_y = min_y.min(y0 - reach_y);
-                }
-            }
-            for placement in global.components.iter().filter(|p| members.contains(&p.id)) {
-                let (cx, cy) = placement.center_mm;
-                let (bw, bh) = board
-                    .component(placement.id)
-                    .and_then(|c| c.part.as_ref())
-                    .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-                let (reach_x, reach_y) = box_reach(placement.id);
-                min_x = min_x.min(cx - bw / 2.0 - reach_x);
-                min_y = min_y.min(cy - bh / 2.0 - reach_y);
-            }
-            for wire in global.wires.iter().filter(|w| keep_wire(w.net)) {
-                for &(x, y) in &wire.points {
-                    min_x = min_x.min(x);
-                    min_y = min_y.min(y);
-                }
-            }
-            let (dx, dy) = if min_x.is_finite() {
-                // Snapped to the 1.27 mm connection grid: the global
-                // layout is grid-aligned, and an arbitrary fractional
-                // offset would push every wire end off-grid (KiCad
-                // ERC `endpoint_off_grid` + lost pin connections).
-                (
-                    crate::route::snap_grid_127(PAGE_MARGIN - min_x),
-                    crate::route::snap_grid_127(PAGE_MARGIN - min_y),
-                )
-            } else {
-                (0.0, 0.0)
-            };
-            let shift = |(x, y): (f64, f64)| (x + dx, y + dy);
 
-            let mut layout = Layout {
-                components: global
-                    .components
-                    .iter()
-                    .filter(|p| members.contains(&p.id))
-                    .map(|p| {
-                        let mut placed = *p;
-                        placed.center_mm = shift(p.center_mm);
-                        placed
-                    })
-                    .collect(),
-                wires: global
-                    .wires
-                    .iter()
-                    .filter(|w| keep_wire(w.net))
-                    .map(|w| {
-                        let mut routed = w.clone();
-                        routed.points = w.points.iter().copied().map(shift).collect();
-                        routed
-                    })
-                    .collect(),
-                junctions: Vec::new(),
-                power_flags: global
-                    .power_flags
-                    .iter()
-                    .filter(|f| members.contains(&f.component))
-                    .cloned()
-                    .collect(),
-                net_labels: global
-                    .net_labels
-                    .iter()
-                    .filter(|l| members.contains(&l.component) && !cross_net.contains(&l.net))
-                    .cloned()
-                    .collect(),
-                hierarchical_labels: Vec::new(),
-                annotations: Vec::new(),
-                group_boxes: Vec::new(),
-                sheet_size: SheetSize::A4,
+            let mut layout = if pinned {
+                // A hand-placed page keeps its arrangement: copy the drawn
+                // sheet as it is. `anchor_sheet` moves the whole slice onto
+                // the page once its boxes exist.
+                slice_sheet(global, &members, &net_partitions, pi, &cross_net)
+            } else {
+                relayout_sheet(
+                    board,
+                    &members,
+                    &global.power_flags,
+                    partition.name.as_deref(),
+                    &note_homes,
+                )
             };
-            // Junctions survive only where kept wires still meet:
-            // a dot left by a dropped cross-sheet wire would dangle.
-            layout.junctions = global
-                .junctions
-                .iter()
-                .filter(|&&(jx, jy)| {
-                    let (jx, jy) = (jx + dx, jy + dy);
-                    layout
-                        .wires
-                        .iter()
-                        .flat_map(|w| w.points.windows(2))
-                        .filter(|pair| pair.len() == 2)
-                        .any(|pair| point_on_segment((jx, jy), pair[0], pair[1], 1e-6))
-                })
-                .map(|&(jx, jy)| (jx + dx, jy + dy))
-                .collect();
+            // `power_nets` are excluded from hierarchical stubs below, and
+            // the cross-sheet wire is dropped, so a page that touches a power
+            // net must carry a power symbol of its own. The global classifier
+            // flags every endpoint, but make that guarantee here: a sheet
+            // whose only endpoints are passive pins (a decoupling bank with
+            // its regulator on another page) would otherwise lose the net.
+            for net in &power_nets {
+                if !cross_net.contains(net) || layout.power_flags.iter().any(|f| f.net == *net) {
+                    continue;
+                }
+                let Some(flag) = global.power_flags.iter().find(|f| f.net == *net) else {
+                    continue;
+                };
+                let Some(endpoint) = board
+                    .net(*net)
+                    .into_iter()
+                    .flat_map(|net| net.endpoints.iter())
+                    .find(|e| {
+                        members.contains(&e.component) && board.pin(e.component, e.pin).is_some()
+                    })
+                else {
+                    continue;
+                };
+                layout.power_flags.push(crate::PowerFlag {
+                    net: *net,
+                    component: endpoint.component,
+                    pin: endpoint.pin,
+                    kind: flag.kind,
+                    label: flag.label.clone(),
+                });
+            }
+            // A wire survives only on its net's home sheet: nets touching
+            // several partitions lose their wires everywhere (hierarchical
+            // stubs take over).
+            layout.wires.retain(|w| !cross_net.contains(&w.net));
+            layout.net_labels.retain(|l| !cross_net.contains(&l.net));
+            layout.hierarchical_labels.clear();
             for (net, endpoint) in &stubs {
                 layout.hierarchical_labels.push(HierarchicalLabel {
                     net: net.id,
                     component: endpoint.component,
                     pin: endpoint.pin,
-                    // The shared net name is what joins the sheets
-                    // in KiCad — identical text on every sheet the
-                    // net touches, like local net labels.
+                    // The shared net name is what joins the sheets in
+                    // KiCad — identical text on every sheet the net
+                    // touches, like local net labels.
                     label: net.name.clone(),
                 });
             }
-            // Captions, boxes, legends, and notes recomputed for the
-            // subset (positions are page-local now).
-            annotate_groups(board, &mut layout);
-            place_connector_legends(board, &mut layout);
-            place_sheet_notes(board, &mut layout, partition.name.as_deref());
+            if pinned {
+                // The slice carries no captions or boxes; draw them round
+                // the copied parts.
+                annotate_groups(board, &mut layout);
+                place_connector_legends(board, &mut layout);
+                place_sheet_notes(board, &mut layout, partition.name.as_deref(), &note_homes);
+            } else if layout.components.is_empty() {
+                // An empty root still carries the board's own notes, but not
+                // the group notes that already sit on their own sheet.
+                let mut root = board.clone();
+                root.notes = board
+                    .notes
+                    .iter()
+                    .zip(&note_homes)
+                    .filter(|(_, home)| home.as_deref() == partition.name.as_deref())
+                    .map(|(note, _)| note.clone())
+                    .collect();
+                place_design_notes(&root, &mut layout);
+            }
+            // The re-laid-out page already carries this sheet's captions,
+            // legends and notes: its sub-board was cut down to those notes
+            // before it was laid out.
+            grow_boxes_for_stubs(board, &mut layout, &stubs);
+            anchor_sheet(board, &mut layout, &stubs);
             resolve_text_overlaps(board, &mut layout);
-            grow_sheet_to_fit(board, &mut layout);
-            compact_sheet_to_fit(board, &mut layout);
-            // Sub-sheets honour the same `schematic { paper }` request as the
-            // root, so a design that asked for A3 does not come back as a
-            // hierarchy of A4 pages.
-            settle_sheet_size(board, &mut layout);
+            if pinned {
+                grow_sheet_to_fit(board, &mut layout);
+                compact_sheet_to_fit(board, &mut layout);
+                // Sub-sheets honour the same `schematic { paper }` request as
+                // the root, so a design that asked for A3 does not come back
+                // as a hierarchy of A4 pages.
+                settle_sheet_size(board, &mut layout);
+            }
+            // The re-laid-out page already went through the same sizing
+            // passes, and its notes were cut down to this sheet's before it
+            // was laid out, so its page is already the smallest this content
+            // needs. Re-running them here would grow it around the bottom
+            // edge `extend_boxes_to_frame_bottom` just filled, so only the
+            // annotations are clamped.
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
@@ -346,11 +344,326 @@ fn split_layout(board: &Board, global: &Layout, partitions: &[SheetPartition]) -
         .collect()
 }
 
+/// Copy one partition of a finished [`Layout`] onto its own page.
+fn slice_sheet(
+    global: &Layout,
+    members: &HashSet<ComponentId>,
+    net_partitions: &HashMap<NetId, Vec<usize>>,
+    pi: usize,
+    cross_net: &HashSet<NetId>,
+) -> Layout {
+    let keep_wire = |net: NetId| -> bool {
+        net_partitions
+            .get(&net)
+            .is_some_and(|parts| parts.len() == 1 && parts[0] == pi)
+    };
+    let wires: Vec<_> = global
+        .wires
+        .iter()
+        .filter(|w| keep_wire(w.net))
+        .cloned()
+        .collect();
+    // Junctions survive only where kept wires still meet: a dot left by a
+    // dropped cross-sheet wire would dangle.
+    let junctions = global
+        .junctions
+        .iter()
+        .copied()
+        .filter(|&(jx, jy)| {
+            wires
+                .iter()
+                .flat_map(|w| w.points.windows(2))
+                .filter(|pair| pair.len() == 2)
+                .any(|pair| point_on_segment((jx, jy), pair[0], pair[1], 1e-6))
+        })
+        .collect();
+    Layout {
+        components: global
+            .components
+            .iter()
+            .filter(|p| members.contains(&p.id))
+            .copied()
+            .collect(),
+        wires,
+        junctions,
+        power_flags: global
+            .power_flags
+            .iter()
+            .filter(|f| members.contains(&f.component))
+            .cloned()
+            .collect(),
+        net_labels: global
+            .net_labels
+            .iter()
+            .filter(|l| members.contains(&l.component) && !cross_net.contains(&l.net))
+            .cloned()
+            .collect(),
+        hierarchical_labels: Vec::new(),
+        annotations: Vec::new(),
+        group_boxes: Vec::new(),
+        sheet_size: SheetSize::A4,
+    }
+}
+
+/// Lay out one partition as its own board, so the page is chosen from what
+/// that sheet actually draws rather than from the global strip.
+fn relayout_sheet(
+    board: &Board,
+    members: &HashSet<ComponentId>,
+    global_flags: &[crate::PowerFlag],
+    sheet: Option<&str>,
+    note_homes: &[Option<String>],
+) -> Layout {
+    let sub = partition_board(board, members, sheet, note_homes);
+    if sub.board.components.is_empty() {
+        return Layout {
+            components: Vec::new(),
+            wires: Vec::new(),
+            junctions: Vec::new(),
+            power_flags: Vec::new(),
+            net_labels: Vec::new(),
+            hierarchical_labels: Vec::new(),
+            annotations: Vec::new(),
+            group_boxes: Vec::new(),
+            // The page is still the one the design asked for; the root's
+            // sheet instances and notes are fitted later.
+            sheet_size: crate::requested_sheet(board),
+        };
+    }
+    let power_nets: HashSet<NetId> = global_flags
+        .iter()
+        .filter_map(|flag| sub.sub_net_ids.get(&flag.net).copied())
+        .collect();
+    let mut layout = crate::layout_with_power(&sub.board, &power_nets);
+    // The global classification knows a rail is power even when this sheet
+    // holds only its decoupling pins. Keep it, and re-route if the local
+    // one drew a wire the page should draw as a symbol.
+    let flags: Vec<crate::PowerFlag> = global_flags
+        .iter()
+        .filter(|f| members.contains(&f.component))
+        .filter_map(|flag| {
+            Some(crate::PowerFlag {
+                net: *sub.sub_net_ids.get(&flag.net)?,
+                component: *sub.sub_component_ids.get(&flag.component)?,
+                pin: flag.pin,
+                kind: flag.kind,
+                label: flag.label.clone(),
+            })
+        })
+        .collect();
+    let same = flags.len() == layout.power_flags.len()
+        && flags.iter().all(|f| layout.power_flags.contains(f));
+    if !same {
+        layout.power_flags = flags;
+        crate::route_and_label(&sub.board, &mut layout);
+    }
+    remap_to_parent(&mut layout, &sub);
+    layout
+}
+
+/// The parent board's ids for the components and nets of one partition.
+///
+/// [`Board::component`] and [`Board::net`] index their vectors by id, so a
+/// sub-board has to renumber what it keeps; [`remap_to_parent`] turns the
+/// laid-out sub-board back into the parent's ids before the page leaves this
+/// module.
+struct PartitionBoard {
+    board: Board,
+    /// Sub-board index → parent component id.
+    parent_components: Vec<ComponentId>,
+    /// Sub-board index → parent net id.
+    parent_nets: Vec<NetId>,
+    /// Parent component id → sub-board index.
+    sub_component_ids: HashMap<ComponentId, ComponentId>,
+    /// Parent net id → sub-board index.
+    sub_net_ids: HashMap<NetId, NetId>,
+}
+
+/// The part of the board one sheet holds: same refdes and values, each net cut
+/// down to its endpoints on this sheet, and ids renumbered to keep the
+/// index-by-id accessors valid.
+fn partition_board(
+    board: &Board,
+    members: &HashSet<ComponentId>,
+    sheet: Option<&str>,
+    note_homes: &[Option<String>],
+) -> PartitionBoard {
+    let mut sub = board.clone();
+    // Only this page's notes: `place_design_notes` grows a region box to hold
+    // its note, so another page's note would inflate this page's paper.
+    sub.notes = board
+        .notes
+        .iter()
+        .zip(note_homes)
+        .filter(|(_, home)| home.as_deref() == sheet)
+        .map(|(note, _)| note.clone())
+        .collect();
+    let mut parent_components = Vec::new();
+    let mut sub_component_ids = HashMap::new();
+    let mut local_components = Vec::new();
+    for component in &board.components {
+        if !members.contains(&component.id) {
+            continue;
+        }
+        let id = ComponentId(parent_components.len() as u32);
+        sub_component_ids.insert(component.id, id);
+        parent_components.push(component.id);
+        let mut local = component.clone();
+        local.id = id;
+        local_components.push(local);
+    }
+    sub.components = local_components;
+
+    let mut parent_nets = Vec::new();
+    let mut sub_net_ids = HashMap::new();
+    let mut local_nets = Vec::new();
+    for net in &board.nets {
+        let mut local = net.clone();
+        local.endpoints.retain(|e| members.contains(&e.component));
+        if local.endpoints.is_empty() {
+            continue;
+        }
+        let id = NetId(parent_nets.len() as u32);
+        sub_net_ids.insert(net.id, id);
+        parent_nets.push(net.id);
+        for endpoint in &mut local.endpoints {
+            endpoint.component = sub_component_ids[&endpoint.component];
+        }
+        local.id = id;
+        local_nets.push(local);
+    }
+    sub.nets = local_nets;
+    // These name parts and nets of the whole design; the layout pipeline
+    // never reads them.
+    sub.diff_pairs.clear();
+    sub.buses.clear();
+    PartitionBoard {
+        board: sub,
+        parent_components,
+        parent_nets,
+        sub_component_ids,
+        sub_net_ids,
+    }
+}
+
+/// Turn a sub-board layout back into the parent board's ids.
+fn remap_to_parent(layout: &mut Layout, sub: &PartitionBoard) {
+    // The sub-board's ids are dense, so indexing the maps is exact.
+    let component = |id: ComponentId| sub.parent_components[id.0 as usize];
+    let net = |id: NetId| sub.parent_nets[id.0 as usize];
+    for placement in &mut layout.components {
+        placement.id = component(placement.id);
+    }
+    for wire in &mut layout.wires {
+        wire.net = net(wire.net);
+    }
+    for label in &mut layout.net_labels {
+        label.component = component(label.component);
+        label.net = net(label.net);
+    }
+    for flag in &mut layout.power_flags {
+        flag.component = component(flag.component);
+        flag.net = net(flag.net);
+    }
+    for label in &mut layout.hierarchical_labels {
+        label.component = component(label.component);
+        label.net = net(label.net);
+    }
+}
+
+/// Widen a region box to cover the hierarchical labels its pins get, so a
+/// stub that hangs past the part stays inside its region.
+fn grow_boxes_for_stubs(
+    board: &Board,
+    layout: &mut Layout,
+    stubs: &[(&synth_ir::Net, &synth_ir::NetEndpoint)],
+) {
+    let placements: HashMap<ComponentId, &ComponentPlacement> =
+        layout.components.iter().map(|p| (p.id, p)).collect();
+    for (net, endpoint) in stubs {
+        let Some((x0, y0, x1, y1)) = crate::route::net_label_rect(
+            board,
+            &net.name,
+            endpoint.component,
+            endpoint.pin,
+            &placements,
+            crate::LabelSpot::default(),
+        ) else {
+            continue;
+        };
+        let Some(group) = effective_group(board, endpoint.component) else {
+            continue;
+        };
+        let Some(box_) = layout.group_boxes.iter_mut().find(|b| b.group == group) else {
+            continue;
+        };
+        box_.min_mm.0 = box_.min_mm.0.min(x0 - GROUP_CONTENT_PAD);
+        box_.min_mm.1 = box_.min_mm.1.min(y0 - GROUP_TITLE_BAND_MM);
+        box_.max_mm.0 = box_.max_mm.0.max(x1 + GROUP_CONTENT_PAD);
+        box_.max_mm.1 = box_.max_mm.1.max(y1 + GROUP_CONTENT_PAD);
+    }
+}
+
+/// Start the sheet's leftmost drawn thing at the page margin (or the sheet
+/// border when it has region boxes). The labels of nets that cross to
+/// another sheet hang off a pin and are not part of the routed bounds, so
+/// they are measured here too.
+fn anchor_sheet(
+    board: &Board,
+    layout: &mut Layout,
+    stubs: &[(&synth_ir::Net, &synth_ir::NetEndpoint)],
+) {
+    let origin = if layout.group_boxes.is_empty() {
+        PAGE_MARGIN
+    } else {
+        SHEET_BORDER_MM
+    };
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    if let Some((x0, _, y0, _)) = crate::content_bounds(board, layout) {
+        min_x = min_x.min(x0);
+        min_y = min_y.min(y0);
+    }
+    let placements: HashMap<ComponentId, &ComponentPlacement> =
+        layout.components.iter().map(|p| (p.id, p)).collect();
+    for (net, endpoint) in stubs {
+        if let Some((x0, y0, ..)) = crate::route::net_label_rect(
+            board,
+            &net.name,
+            endpoint.component,
+            endpoint.pin,
+            &placements,
+            crate::LabelSpot::default(),
+        ) {
+            min_x = min_x.min(x0);
+            min_y = min_y.min(y0);
+        }
+    }
+    if !min_x.is_finite() {
+        return;
+    }
+    let (dx, dy) = (
+        crate::route::snap_grid_127(origin - min_x),
+        crate::route::snap_grid_127(origin - min_y),
+    );
+    if dx != 0.0 || dy != 0.0 {
+        crate::translate_layout(layout, dx, dy);
+    }
+}
+
 /// Design notes for one sheet: its own `notes` (by sheet name),
 /// group notes whose group lands mostly here, and — on the root
 /// sheet only — unscoped board notes. Mirrors `place_design_notes`
 /// but scoped to a partition instead of the whole board.
-fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
+///
+/// `homes` is one entry per `board.notes`, the sheet each is drawn on, as
+/// [`split_layout_with_pinned`] worked it out from the partitions.
+fn place_sheet_notes(
+    board: &Board,
+    layout: &mut Layout,
+    sheet: Option<&str>,
+    homes: &[Option<String>],
+) {
     let scoped = Board {
         groups: Vec::new(),
         legends: board.legends,
@@ -367,11 +680,13 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
         notes: board
             .notes
             .iter()
-            .filter(|n| note_sheet(board, layout, n).as_deref() == sheet)
-            .cloned()
+            .zip(homes)
+            .filter(|(_, home)| home.as_deref() == sheet)
+            .map(|(note, _)| note.clone())
             .collect(),
         keepouts: board.keepouts.clone(),
         stackup: board.stackup.clone(),
+        outline: board.outline,
         netclasses: board.netclasses.clone(),
         buses: vec![],
         modules: vec![],
@@ -382,33 +697,6 @@ fn place_sheet_notes(board: &Board, layout: &mut Layout, sheet: Option<&str>) {
     // Group boxes were recomputed for this subset already, so group
     // notes resolve against page-local geometry.
     place_design_notes(&scoped, layout);
-}
-
-/// Which sheet a note belongs on: its own sheet block first, else
-/// the sheet holding most of its group's placed components, else
-/// the root sheet.
-fn note_sheet(board: &Board, layout: &Layout, note: &synth_ir::Note) -> Option<String> {
-    if let Some(sheet) = note.sheet.clone() {
-        return Some(sheet);
-    }
-    let placed: HashSet<ComponentId> = layout.components.iter().map(|p| p.id).collect();
-    if let Some(group) = note.group.as_deref() {
-        let mut counts: HashMap<Option<String>, usize> = HashMap::new();
-        for component in &board.components {
-            if component.group.as_deref() != Some(group) || !placed.contains(&component.id) {
-                continue;
-            }
-            *counts.entry(component.sheet.clone()).or_default() += 1;
-        }
-        // Ties break to the root sheet deterministically: `None`
-        // sorts before any `Some`.
-        let mut ranked: Vec<(Option<String>, usize)> = counts.into_iter().collect();
-        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-        if let Some((sheet, _)) = ranked.into_iter().next() {
-            return sheet;
-        }
-    }
-    None
 }
 
 /// True when point `p` lies on segment `a→b` within tolerance.
@@ -428,11 +716,11 @@ fn point_on_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64), eps: f64) -> bo
 #[cfg(test)]
 mod tests {
     use synth_diagnostics::Span;
-    use synth_ir::{Component, ComponentId, Net, NetEndpoint, NetId, PinId};
+    use synth_ir::{Component, ComponentId, Net, NetEndpoint, NetId, Note, PinId};
     use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin as RegPin, PinNumber};
 
     use super::*;
-    use crate::{ComponentPlacement, Rotation, WirePath};
+    use crate::{ComponentPlacement, Rotation, WirePath, body_size_for_part};
 
     fn pin(name: &str) -> RegPin {
         RegPin {
@@ -441,10 +729,12 @@ mod tests {
             electrical_type: ElectricalType::Passive,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -466,6 +756,7 @@ mod tests {
             kicad_footprint: None,
             footprint_dimensions: None,
             operating_conditions: None,
+            spice: None,
         }
     }
 
@@ -479,6 +770,7 @@ mod tests {
             dnp: false,
             properties: std::collections::BTreeMap::new(),
             placement_hint: None,
+            escape: None,
             group: None,
             sheet: sheet.map(str::to_string),
             source_span: Span::new(0, 0),
@@ -511,6 +803,7 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
@@ -635,7 +928,9 @@ mod tests {
             ],
         );
         let partitions = plan_sheets(&b);
-        let sheets = split_layout(&b, &global, &partitions);
+        // The rigid (pinned) slice keeps the global wires; the re-laid-out
+        // path re-routes the sheet and is covered by the fill tests.
+        let sheets = split_layout_with_pinned(&b, &global, &partitions, true);
         assert_eq!(sheets.len(), 2);
         let root = &sheets[0];
         let power = &sheets[1];
@@ -693,10 +988,72 @@ mod tests {
         }
     }
 
-    /// A group's box is drawn round its parts with padding, so the box of a
-    /// split sheet starts at the margin too, not its parts.
+    /// A page grows its region boxes to hold its notes, so another page's
+    /// note must not be laid out here: it would inflate the paper even though
+    /// nothing on this sheet refers to it.
     #[test]
-    fn a_split_sheet_starts_its_group_boxes_at_the_margin() {
+    fn a_split_sheet_carries_only_its_own_notes() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut a = component(0, "R1", Some("A"), two());
+        a.group = Some("Group A".to_string());
+        let mut b = component(1, "R2", Some("B"), two());
+        b.group = Some("Group B".to_string());
+        let mut board = board(vec![a, b], Vec::new());
+        board.notes = vec![
+            Note {
+                title: "NOTE_A".to_string(),
+                lines: vec!["alpha".to_string()],
+                group: Some("Group A".to_string()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            },
+            Note {
+                title: "NOTE_B".to_string(),
+                lines: (0..8).map(|i| format!("beta {i}")).collect(),
+                group: Some("Group B".to_string()),
+                sheet: None,
+                source_span: Span::new(0, 0),
+            },
+        ];
+        let global = layout(
+            vec![placed(0, 30.0, 30.0), placed(1, 1200.0, 30.0)],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&board, global, None);
+        let sheet = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("A"))
+            .expect("the A sheet");
+        let texts: Vec<&str> = sheet
+            .layout
+            .annotations
+            .iter()
+            .map(|a| a.text.as_str())
+            .collect();
+        assert!(texts.contains(&"NOTE_A"));
+        assert!(
+            !texts.contains(&"NOTE_B"),
+            "the A sheet carries B's note: {texts:?}"
+        );
+        let root = sheets
+            .iter()
+            .find(|s| s.name.is_none())
+            .expect("the root sheet");
+        assert!(
+            root.layout
+                .annotations
+                .iter()
+                .all(|a| !a.text.starts_with("NOTE_")),
+            "a group note was copied onto the root: {:?}",
+            root.layout.annotations
+        );
+    }
+
+    /// A group's box is drawn round its parts with padding, so the box of a
+    /// split sheet starts at the sheet border like a single sheet's regions,
+    /// not at the wider page margin.
+    #[test]
+    fn a_split_sheet_starts_its_group_boxes_at_the_sheet_border() {
         let two = || vec![pin("p1"), pin("p2")];
         let b = board(
             vec![
@@ -713,12 +1070,20 @@ mod tests {
         let slack = 0.635 + 1e-6;
         let mut boxes = 0;
         for sheet in &sheets {
+            let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
             for group_box in &sheet.layout.group_boxes {
                 boxes += 1;
                 let (x, y) = group_box.min_mm;
                 assert!(
-                    x >= PAGE_MARGIN - slack && y >= PAGE_MARGIN - slack,
-                    "box {} starts at ({x:.2}, {y:.2}), off the margin",
+                    (x - SHEET_BORDER_MM).abs() <= slack && (y - SHEET_BORDER_MM).abs() <= slack,
+                    "box {} starts at ({x:.2}, {y:.2}), not on the sheet border",
+                    group_box.group
+                );
+                let (x1, y1) = group_box.max_mm;
+                assert!(
+                    x1 <= sheet_w - SHEET_BORDER_MM + slack
+                        && y1 <= sheet_h - crate::FRAME_INSET + slack,
+                    "box {} ends at ({x1:.2}, {y1:.2}), off the {sheet_w} × {sheet_h} page",
                     group_box.group
                 );
             }
@@ -727,9 +1092,9 @@ mod tests {
     }
 
     /// When the leftmost thing a group holds is a label of a net that crosses
-    /// to another sheet, the box round it starts at the margin too.
+    /// to another sheet, the box round it starts at the sheet border too.
     #[test]
-    fn a_split_sheet_starts_a_group_box_round_its_stub_label_at_the_margin() {
+    fn a_split_sheet_starts_a_group_box_round_its_stub_label_at_the_sheet_border() {
         let two = || vec![pin("p1"), pin("p2")];
         let b = board(
             vec![
@@ -750,12 +1115,20 @@ mod tests {
         let slack = 0.635 + 1e-6;
         let mut boxes = 0;
         for sheet in &sheets {
+            let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
             for group_box in &sheet.layout.group_boxes {
                 boxes += 1;
                 let (x, y) = group_box.min_mm;
                 assert!(
-                    x >= PAGE_MARGIN - slack && y >= PAGE_MARGIN - slack,
-                    "box {} starts at ({x:.2}, {y:.2}), off the margin",
+                    (x - SHEET_BORDER_MM).abs() <= slack && (y - SHEET_BORDER_MM).abs() <= slack,
+                    "box {} starts at ({x:.2}, {y:.2}), not on the sheet border",
+                    group_box.group
+                );
+                let (x1, y1) = group_box.max_mm;
+                assert!(
+                    x1 <= sheet_w - SHEET_BORDER_MM + slack
+                        && y1 <= sheet_h - crate::FRAME_INSET + slack,
+                    "box {} ends at ({x1:.2}, {y1:.2}), off the {sheet_w} × {sheet_h} page",
                     group_box.group
                 );
             }
@@ -791,7 +1164,7 @@ mod tests {
                 sheet.layout.components.iter().map(|p| (p.id, p)).collect();
             for label in &sheet.layout.hierarchical_labels {
                 labels += 1;
-                let (x0, y0, ..) = crate::route::net_label_rect(
+                let (x0, y0, x1, y1) = crate::route::net_label_rect(
                     &b,
                     &label.label,
                     label.component,
@@ -805,9 +1178,324 @@ mod tests {
                     "label {} starts at ({x0:.2}, {y0:.2}), off the margin",
                     label.label
                 );
+                let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
+                assert!(
+                    x1 <= sheet_w - SHEET_BORDER_MM + slack
+                        && y1 <= sheet_h - crate::FRAME_INSET + slack,
+                    "label {} ends at ({x1:.2}, {y1:.2}), off the {sheet_w} × {sheet_h} page",
+                    label.label
+                );
             }
         }
         assert!(labels > 0, "the net crosses sheets, so it has labels");
+    }
+
+    /// A split sheet is laid out for its own page, not left as the strip the
+    /// global layout gave it. Two parts a metre apart on the same sheet come
+    /// back packed together on A4.
+    #[test]
+    fn a_split_sheet_is_relaid_out_to_fit_its_own_page() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("Power"), two()),
+                component(1, "R2", Some("Power"), two()),
+                component(2, "R3", Some("Other"), two()),
+            ],
+            Vec::new(),
+        );
+        // The global layout is the strip the bug produced: the same sheet's
+        // parts sit a metre apart, which no page below A0 is wide enough for.
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 1200.0, 30.0),
+                placed(2, 30.0, 60.0),
+            ],
+            Vec::new(),
+        );
+        assert!(
+            sheet_overflow(&b, &global),
+            "the fixture must force a split"
+        );
+
+        let sheets = layout_sheets(&b, global, None);
+        let power = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Power"))
+            .expect("the Power sheet");
+        assert!(
+            power.layout.sheet_size.dims_mm().0 <= SheetSize::A4.dims_mm().0,
+            "Power kept the global strip: {:?}",
+            power.layout.sheet_size
+        );
+        let xs: Vec<f64> = power
+            .layout
+            .components
+            .iter()
+            .map(|p| p.center_mm.0)
+            .collect();
+        let spread = xs.iter().copied().fold(f64::MIN, f64::max)
+            - xs.iter().copied().fold(f64::MAX, f64::min);
+        assert!(spread < 100.0, "the parts are still {spread:.0} mm apart");
+    }
+
+    /// A split sheet keeps the paper the design asked for, even though the
+    /// page is sized independently.
+    #[test]
+    fn a_split_sheet_honours_the_requested_paper() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                component(0, "R1", Some("A"), two()),
+                component(1, "R2", Some("B"), two()),
+            ],
+            Vec::new(),
+        );
+        b.schematic_paper = Some(synth_ir::SchematicPaper::A3);
+        let global = layout(
+            vec![placed(0, 30.0, 30.0), placed(1, 1200.0, 30.0)],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        for sheet in &sheets {
+            assert_eq!(
+                sheet.layout.sheet_size,
+                SheetSize::A3,
+                "sheet {:?} ignored the requested paper",
+                sheet.name
+            );
+        }
+    }
+
+    /// A sidecar override is a position the author chose, so a pinned design
+    /// keeps the rigid slice instead of re-packing the page.
+    #[test]
+    fn a_pinned_design_keeps_the_rigid_split() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("Power"), two()),
+                component(1, "R2", Some("Power"), two()),
+                component(2, "R3", Some("Other"), two()),
+            ],
+            Vec::new(),
+        );
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 1200.0, 30.0),
+                placed(2, 30.0, 60.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = split_layout_with_pinned(&b, &global, &plan_sheets(&b), true);
+        let power = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Power"))
+            .expect("the Power sheet");
+        assert_eq!(power.layout.sheet_size, SheetSize::A0);
+    }
+
+    /// The public entry decides the pinned path from the sidecar itself, so a
+    /// caller cannot forget to pass the flag.
+    #[test]
+    fn a_schematic_sidecar_with_a_placement_pins_the_split() {
+        use crate::sidecar::{
+            OverridePriority, OverrideSource, SIDECAR_SCHEMA_VERSION, SidecarLayout,
+            SidecarPlacement,
+        };
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("Power"), two()),
+                component(1, "R2", Some("Power"), two()),
+                component(2, "R3", Some("Other"), two()),
+            ],
+            Vec::new(),
+        );
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 1200.0, 30.0),
+                placed(2, 30.0, 60.0),
+            ],
+            Vec::new(),
+        );
+        let free = layout_sheets(&b, global.clone(), None);
+        let power = free
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Power"))
+            .expect("the Power sheet");
+        assert_ne!(power.layout.sheet_size, SheetSize::A0);
+
+        let mut sidecar = SidecarLayout {
+            schema_version: SIDECAR_SCHEMA_VERSION,
+            ..Default::default()
+        };
+        sidecar.merge_override(
+            "R1".to_string(),
+            SidecarPlacement {
+                x: 30.0,
+                y: 30.0,
+                rotation: 0,
+                sheet: None,
+                source: OverrideSource::Agent,
+                priority: OverridePriority::Hard,
+                timestamp: None,
+                relative_to: None,
+                dx: 0.0,
+                dy: 0.0,
+            },
+        );
+        let path = std::env::temp_dir().join(format!("synth-sidecar-{}.toml", std::process::id()));
+        sidecar.save_to_file(&path).expect("write the sidecar");
+        let pinned = layout_sheets(&b, global, Some(&path));
+        let _ = std::fs::remove_file(&path);
+        let power = pinned
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Power"))
+            .expect("the Power sheet");
+        assert_eq!(power.layout.sheet_size, SheetSize::A0);
+    }
+
+    /// The regions of a re-laid-out sheet tile the page the sheet chose, so
+    /// the page is not just smaller but actually used.
+    #[test]
+    fn a_relaid_out_sheet_fills_its_page() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut input = component(0, "R1", Some("S"), two());
+        input.group = Some("Input".to_string());
+        let mut input2 = component(1, "R2", Some("S"), two());
+        input2.group = Some("Input".to_string());
+        let mut output = component(2, "R3", Some("S"), two());
+        output.group = Some("Output".to_string());
+        let mut output2 = component(3, "R4", Some("S"), two());
+        output2.group = Some("Output".to_string());
+        let b = board(
+            vec![
+                input,
+                input2,
+                output,
+                output2,
+                component(4, "R5", Some("T"), two()),
+            ],
+            Vec::new(),
+        );
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 1200.0, 30.0),
+                placed(2, 30.0, 300.0),
+                placed(3, 1200.0, 300.0),
+                placed(4, 30.0, 60.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        let sheet = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("S"))
+            .expect("the S sheet");
+        let (min_x, max_x, min_y, max_y) =
+            crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
+        let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
+        let fill = (max_x - min_x) * (max_y - min_y) / (sheet_w * sheet_h);
+        assert!(
+            fill >= 0.45,
+            "the page is only {:.0}% filled: {:.0} × {:.0} mm on {sheet_w} × {sheet_h}",
+            fill * 100.0,
+            max_x - min_x,
+            max_y - min_y
+        );
+    }
+
+    /// Four declared sheets, one of them a strip in the global layout: every
+    /// page is laid out from its own content, not left as a slice of the
+    /// global one.
+    #[test]
+    fn a_four_sheet_board_reuses_each_pages_space() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut input = component(0, "R1", Some("S"), two());
+        input.group = Some("Input".to_string());
+        let mut input2 = component(1, "R2", Some("S"), two());
+        input2.group = Some("Input".to_string());
+        let mut output = component(2, "R3", Some("S"), two());
+        output.group = Some("Output".to_string());
+        let mut output2 = component(3, "R4", Some("S"), two());
+        output2.group = Some("Output".to_string());
+        let b = board(
+            vec![
+                input,
+                input2,
+                output,
+                output2,
+                component(4, "R5", Some("T"), two()),
+                component(5, "R6", Some("U"), two()),
+                component(6, "R7", Some("V"), two()),
+            ],
+            Vec::new(),
+        );
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 1200.0, 30.0),
+                placed(2, 30.0, 300.0),
+                placed(3, 1200.0, 300.0),
+                placed(4, 30.0, 60.0),
+                placed(5, 60.0, 60.0),
+                placed(6, 90.0, 60.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 5, "root + four declared sheets");
+        let sheet = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("S"))
+            .expect("the S sheet");
+        assert_ne!(
+            sheet.layout.sheet_size,
+            SheetSize::A0,
+            "the S page is still the global strip"
+        );
+        let (min_x, max_x, min_y, max_y) =
+            crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
+        let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
+        let fill = (max_x - min_x) * (max_y - min_y) / (sheet_w * sheet_h);
+        assert!(
+            fill >= 0.45,
+            "the S page is only {:.0}% filled: {:.0} × {:.0} mm on {sheet_w} × {sheet_h}",
+            fill * 100.0,
+            max_x - min_x,
+            max_y - min_y
+        );
+    }
+
+    /// Region boxes fill the page out to the sheet border, so a layout whose
+    /// boxes end inside the border fits the largest single page, however
+    /// close that leaves them to the edge.
+    #[test]
+    fn region_boxes_out_to_the_sheet_border_do_not_overflow() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        b.schematic_overflow = Some(synth_ir::SchematicOverflow::Hierarchy);
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let mut layout = layout(vec![placed(0, 40.0, 40.0)], Vec::new());
+        layout.group_boxes.push(crate::GroupBox {
+            group: "Filter".to_string(),
+            min_mm: (SHEET_BORDER_MM, SHEET_BORDER_MM),
+            max_mm: (ceiling_w - SHEET_BORDER_MM - 0.5, 80.0),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        assert!(
+            !sheet_overflow(&b, &layout),
+            "a box 0.5 mm inside the border fits the page"
+        );
     }
 
     /// A design whose bodies fit the largest single page, but whose pin ends
@@ -835,6 +1523,357 @@ mod tests {
         );
     }
 
+    /// A split made only because the page is too small must not leave the
+    /// root holding nothing but sheet symbols: groups are drawing regions,
+    /// so the first one's parts take the root page.
+    #[test]
+    fn a_split_grouped_design_puts_its_first_group_on_the_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                grouped_component(0, "R1", "Input", two()),
+                grouped_component(1, "R2", "Input", two()),
+                grouped_component(2, "R3", "Power", two()),
+                grouped_component(3, "R4", "Power", two()),
+            ],
+            Vec::new(),
+        );
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        assert!(sheet_overflow(&b, &global));
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 2, "root + one sub-sheet");
+        assert_eq!(sheets[0].name, None);
+        assert_eq!(sheets[0].layout.components.len(), 2, "Input on the root");
+        assert_eq!(sheets[1].name.as_deref(), Some("Power"));
+        for sheet in &sheets {
+            assert!(
+                !sheet.layout.components.is_empty(),
+                "a sheet symbol with no content behind it"
+            );
+        }
+    }
+
+    /// A design whose content ends exactly on the page limit is not over
+    /// it: `sheet_overflow` is a strict `>`.
+    #[test]
+    fn a_design_exactly_at_the_sheet_limit_stays_single_sheet() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        let (ceiling_w, ceiling_h) = crate::max_single_sheet(&b).dims_mm();
+        let mut l = layout(vec![placed(0, 40.0, 40.0)], Vec::new());
+        l.group_boxes.push(crate::GroupBox {
+            group: "Filter".to_string(),
+            min_mm: (SHEET_BORDER_MM, SHEET_BORDER_MM),
+            // Both edges land exactly on the limit page_needs folds in.
+            max_mm: (
+                ceiling_w - SHEET_BORDER_MM,
+                ceiling_h - crate::FRAME_INSET - crate::TITLE_BLOCK_H,
+            ),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        assert!(
+            !sheet_overflow(&b, &l),
+            "content exactly at the limit is not over it"
+        );
+        assert_eq!(layout_sheets(&b, l, None).len(), 1);
+    }
+
+    /// A part with both a `sheet` and a `group` is partitioned by the
+    /// sheet: an explicit block outranks the drawing region.
+    #[test]
+    fn a_sheet_block_outranks_the_group_on_the_same_part() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut c = component(0, "R1", Some("Power"), two());
+        c.group = Some("Filter".to_string());
+        let b = board(vec![c], Vec::new());
+        let plan = plan_sheets(&b);
+        assert_eq!(plan.len(), 2, "root + Power, no Filter partition");
+        assert!(plan[0].components.is_empty());
+        assert_eq!(plan[1].name.as_deref(), Some("Power"));
+    }
+
+    /// A mix of explicit `sheet` parts and grouped parts keeps an empty
+    /// root: the sheets are the author's hierarchy, and the root is its
+    /// table of contents.
+    #[test]
+    fn a_mixed_sheet_and_group_split_keeps_its_empty_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("A"), two()),
+                grouped_component(1, "R2", "Filter", two()),
+            ],
+            Vec::new(),
+        );
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![placed(0, 30.0, 30.0), placed(1, ceiling_w * 2.0, 30.0)],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3, "root + A + Filter");
+        assert!(
+            sheets[0].layout.components.is_empty(),
+            "an explicit sheet keeps the root as its table of contents"
+        );
+    }
+
+    /// A note whose group has no components lands on the root and does not
+    /// panic.
+    #[test]
+    fn a_note_for_a_group_with_no_parts_lands_on_the_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                grouped_component(0, "R1", "Filter", two()),
+                component(1, "R2", Some("A"), two()),
+            ],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Ghost".to_string(),
+            lines: vec!["nothing is here".to_string()],
+            group: Some("Ghost".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![placed(0, 30.0, 30.0), placed(1, ceiling_w * 2.0, 30.0)],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3);
+        assert!(
+            sheets[0]
+                .layout
+                .annotations
+                .iter()
+                .any(|a| a.text == "nothing is here"),
+            "an orphan note stays on the root"
+        );
+        for sheet in &sheets[1..] {
+            assert!(
+                !sheet
+                    .layout
+                    .annotations
+                    .iter()
+                    .any(|a| a.text == "nothing is here"),
+                "no other sheet draws it"
+            );
+        }
+    }
+
+    /// A group merged onto the root keeps its note. The note follows the
+    /// partition that holds the group, and that partition is now the root.
+    #[test]
+    fn a_group_note_survives_being_merged_onto_the_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                grouped_component(0, "R1", "Input", two()),
+                grouped_component(1, "R2", "Input", two()),
+                grouped_component(2, "R3", "Power", two()),
+                grouped_component(3, "R4", "Power", two()),
+            ],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Input".to_string(),
+            lines: vec!["fused 5 V input".to_string()],
+            group: Some("Input".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 2);
+        assert!(
+            sheets[0]
+                .layout
+                .annotations
+                .iter()
+                .any(|a| a.text == "fused 5 V input"),
+            "the merged group's note is drawn on the root that holds it"
+        );
+    }
+
+    /// A group with one part still draws a box round everything that part
+    /// draws, not just round its body.
+    #[test]
+    fn a_one_part_group_box_holds_that_part() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![grouped_component(0, "C1", "Filter", two())],
+            Vec::new(),
+        );
+        let l = crate::layout(&b);
+        let bx = l
+            .group_boxes
+            .iter()
+            .find(|b| b.group == "Filter")
+            .expect("the group has a box");
+        let mut checked = 0;
+        for (id, (x0, y0, x1, y1)) in crate::drawn_beyond_bodies(&b, &l) {
+            if id != ComponentId(0) {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                x0 >= bx.min_mm.0 - 1e-6
+                    && x1 <= bx.max_mm.0 + 1e-6
+                    && y0 >= bx.min_mm.1 - 1e-6
+                    && y1 <= bx.max_mm.1 + 1e-6,
+                "drawn at ({x0:.1}, {y0:.1})..({x1:.1}, {y1:.1}) is outside \
+                 ({:.1}, {:.1})..({:.1}, {:.1})",
+                bx.min_mm.0,
+                bx.min_mm.1,
+                bx.max_mm.0,
+                bx.max_mm.1
+            );
+        }
+        assert!(checked > 0, "the part draws past its body");
+    }
+
+    /// A long group note is measured into the box it is drawn in, so the
+    /// text never hangs out of its region.
+    #[test]
+    fn a_group_note_stays_inside_its_box() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Filter".to_string(),
+            lines: vec!["series termination on every line of the bus ".repeat(4)],
+            group: Some("Filter".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let l = crate::layout(&b);
+        let bx = l
+            .group_boxes
+            .iter()
+            .find(|b| b.group == "Filter")
+            .expect("the group has a box");
+        let mut notes = 0;
+        for annotation in &l.annotations {
+            if !matches!(annotation.kind, crate::TextKind::NoteLine) {
+                continue;
+            }
+            notes += 1;
+            let (x0, y0, x1, y1) = crate::text_run_rect(annotation);
+            assert!(
+                x0 >= bx.min_mm.0 && x1 <= bx.max_mm.0 && y0 >= bx.min_mm.1 && y1 <= bx.max_mm.1,
+                "note text at ({x0:.1}, {y0:.1})..({x1:.1}, {y1:.1}) is outside the box"
+            );
+        }
+        assert_eq!(notes, 1);
+    }
+
+    /// Explicit `sheet` blocks are the author's own hierarchy, so they keep
+    /// a root that may be empty: it is the table of contents they asked for.
+    #[test]
+    fn an_explicit_sheet_split_keeps_an_empty_root() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let b = board(
+            vec![
+                component(0, "R1", Some("Power"), two()),
+                component(1, "R2", Some("Power"), two()),
+                component(2, "R3", Some("Signal"), two()),
+                component(3, "R4", Some("Signal"), two()),
+            ],
+            Vec::new(),
+        );
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        assert!(sheet_overflow(&b, &global));
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3);
+        assert!(sheets[0].layout.components.is_empty());
+        assert_eq!(sheets[1].name.as_deref(), Some("Power"));
+    }
+
+    /// A group's note belongs on the sheet that group was given, not on the
+    /// root: the note homes counted only the components' explicit `sheet`,
+    /// and a grouped part has none, so every group note landed on the root
+    /// page while its own sheet drew the box without the note.
+    #[test]
+    fn a_group_note_lands_on_the_groups_sheet() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![
+                grouped_component(0, "R1", "Filter", two()),
+                grouped_component(1, "R2", "Filter", two()),
+                component(2, "R3", Some("Power"), two()),
+                component(3, "R4", Some("Power"), two()),
+            ],
+            Vec::new(),
+        );
+        b.notes = vec![synth_ir::Note {
+            title: "Filter".to_string(),
+            lines: vec!["330 ohm series resistor".to_string()],
+            group: Some("Filter".to_string()),
+            sheet: None,
+            source_span: Span::new(0, 0),
+        }];
+        let (ceiling_w, _) = crate::max_single_sheet(&b).dims_mm();
+        let global = layout(
+            vec![
+                placed(0, 30.0, 30.0),
+                placed(1, 60.0, 30.0),
+                placed(2, ceiling_w * 2.0, 30.0),
+                placed(3, ceiling_w * 2.0 + 30.0, 30.0),
+            ],
+            Vec::new(),
+        );
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 3);
+        let note = "330 ohm series resistor";
+        let has_note = |s: &SheetLayout| {
+            s.layout
+                .annotations
+                .iter()
+                .any(|annotation| annotation.text == note)
+        };
+        assert!(has_note(&sheets[1]), "the Filter sheet carries its note");
+        assert!(
+            !has_note(&sheets[0]),
+            "the root must not carry a group note"
+        );
+    }
+
     #[test]
     fn power_nets_get_no_hierarchical_labels() {
         use synth_registry::ElectricalType as Et;
@@ -844,10 +1883,12 @@ mod tests {
             electrical_type: Et::PowerInput,
             capabilities: Vec::new(),
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         };
         let b = board(
             vec![
@@ -869,5 +1910,90 @@ mod tests {
             );
             assert_eq!(sheet.layout.power_flags.len(), 1);
         }
+    }
+
+    #[test]
+    fn a_passive_only_sheet_keeps_the_global_power_symbol() {
+        use synth_registry::ElectricalType as Et;
+        let out = RegPin {
+            name: "vout".to_string(),
+            number: PinNumber("1".to_string()),
+            electrical_type: Et::PowerOutput,
+            capabilities: Vec::new(),
+            required: false,
+            footprint_only: false,
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+            drive: None,
+        };
+        let b = board(
+            vec![
+                component(0, "U1", Some("Driver"), vec![out]),
+                component(1, "C1", Some("Load"), vec![pin("p1")]),
+            ],
+            vec![net(0, "VCC", &[(0, 0), (1, 0)])],
+        );
+        let mut global = layout(vec![placed(0, 30.0, 30.0), placed(1, 1200.0, 30.0)], vec![]);
+        global.power_flags = crate::classify_power_flags(&b);
+        assert_eq!(global.power_flags.len(), 2);
+        let sheets = split_layout(&b, &global, &plan_sheets(&b));
+        let load = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Load"))
+            .expect("the Load sheet");
+        assert_eq!(
+            load.layout
+                .power_flags
+                .iter()
+                .filter(|f| f.net == NetId(0) && f.component == ComponentId(1))
+                .count(),
+            1,
+            "the passive-only Load sheet lost the VCC symbol: {:?}",
+            load.layout.power_flags
+        );
+        // The pinned path copies the global flags instead of re-laying out;
+        // it must keep the same local symbol.
+        let pinned = split_layout_with_pinned(&b, &global, &plan_sheets(&b), true);
+        let load = pinned
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Load"))
+            .expect("the pinned Load sheet");
+        assert_eq!(
+            load.layout
+                .power_flags
+                .iter()
+                .filter(|f| f.net == NetId(0) && f.component == ComponentId(1))
+                .count(),
+            1,
+            "the pinned Load sheet lost the VCC symbol: {:?}",
+            load.layout.power_flags
+        );
+        // Even a global layout that flags only the driver must not leave the
+        // passive-only page without a symbol.
+        let mut partial = layout(vec![placed(0, 30.0, 30.0), placed(1, 1200.0, 30.0)], vec![]);
+        partial.power_flags = vec![crate::PowerFlag {
+            net: NetId(0),
+            component: ComponentId(0),
+            pin: PinId(0),
+            kind: crate::PowerFlagKind::Vcc,
+            label: "VCC".to_string(),
+        }];
+        let sheets = split_layout(&b, &partial, &plan_sheets(&b));
+        let load = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("Load"))
+            .expect("the partial-flag Load sheet");
+        assert_eq!(
+            load.layout
+                .power_flags
+                .iter()
+                .filter(|f| f.net == NetId(0) && f.component == ComponentId(1))
+                .count(),
+            1,
+            "a partial global flag set left the Load sheet isolated: {:?}",
+            load.layout.power_flags
+        );
     }
 }

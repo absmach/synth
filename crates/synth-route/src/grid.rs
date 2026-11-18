@@ -41,7 +41,7 @@
 //! them.
 
 use serde::{Deserialize, Serialize};
-use synth_geometry::{mm_to_nm, Point, Rect};
+use synth_geometry::{Point, Rect, mm_to_nm};
 use synth_ir::{Board, ComponentId, NetId};
 use synth_layout::kicad_footprint_loader;
 use synth_place::Placement;
@@ -731,10 +731,10 @@ pub fn is_adjacent_to_foreign_pad(
         let ny = y as i32 + dy;
         if nx >= 0 && ny >= 0 && nx < grid.width as i32 && ny < grid.height as i32 {
             let idx = base + (ny as usize) * stride_y + (nx as usize);
-            if let Cell::Pad(n) = grid.cells[idx] {
-                if n != owning_net {
-                    return true;
-                }
+            if let Cell::Pad(n) = grid.cells[idx]
+                && n != owning_net
+            {
+                return true;
             }
         }
     }
@@ -759,10 +759,10 @@ pub fn is_adjacent_to_foreign_track(
             let ny = y as i32 + dy;
             if nx >= 0 && ny >= 0 && nx < grid.width as i32 && ny < grid.height as i32 {
                 let idx = base + (ny as usize) * stride_y + (nx as usize);
-                if let Cell::Track(n) = grid.cells[idx] {
-                    if n != owning_net {
-                        return true;
-                    }
+                if let Cell::Track(n) = grid.cells[idx]
+                    && n != owning_net
+                {
+                    return true;
                 }
             }
         }
@@ -798,23 +798,21 @@ fn grid_range_for_rect(
         };
         let to_grid_max = |v: i64, o: i64| -> i64 {
             let diff = v - o;
-            if diff <= 0 {
-                0
-            } else {
-                diff / pitch
-            }
+            if diff <= 0 { 0 } else { diff / pitch }
         };
         let mut x0 = to_grid_min(rect_nm.min.x_nm, origin.x_nm);
         let mut x1 = to_grid_max(rect_nm.max.x_nm, origin.x_nm);
         let mut y0 = to_grid_min(rect_nm.min.y_nm, origin.y_nm);
         let mut y1 = to_grid_max(rect_nm.max.y_nm, origin.y_nm);
         if x0 > x1 {
-            let mid = ((rect_nm.min.x_nm + rect_nm.max.x_nm) / 2 - origin.x_nm + pitch / 2) / pitch;
+            let mid = (i64::midpoint(rect_nm.min.x_nm, rect_nm.max.x_nm) - origin.x_nm + pitch / 2)
+                / pitch;
             x0 = mid;
             x1 = mid;
         }
         if y0 > y1 {
-            let mid = ((rect_nm.min.y_nm + rect_nm.max.y_nm) / 2 - origin.y_nm + pitch / 2) / pitch;
+            let mid = (i64::midpoint(rect_nm.min.y_nm, rect_nm.max.y_nm) - origin.y_nm + pitch / 2)
+                / pitch;
             y0 = mid;
             y1 = mid;
         }

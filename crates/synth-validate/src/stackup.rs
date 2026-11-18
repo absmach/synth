@@ -114,15 +114,17 @@ impl ErcRule for StackupAlternationRule {
             ),
             _ => return Vec::new(),
         };
-        vec![error(
-            self.code(),
-            "stackup copper and insulator layers do not alternate",
-            file,
-            span,
-        )
-        .expected("copper first, then alternating insulator and copper, ending with copper")
-        .found(found)
-        .build()]
+        vec![
+            error(
+                self.code(),
+                "stackup copper and insulator layers do not alternate",
+                file,
+                span,
+            )
+            .expected("copper first, then alternating insulator and copper, ending with copper")
+            .found(found)
+            .build(),
+        ]
     }
 }
 
@@ -160,20 +162,20 @@ impl ErcRule for StackupNonPositiveRule {
                     .build(),
                 );
             }
-            if let StackupLayer::Insulator { er, .. } = layer {
-                if er.0 < MIN_ER_MICRO {
-                    out.push(
-                        error(
-                            self.code(),
-                            "stackup dielectric constant is below 1",
-                            file,
-                            layer_span(layer),
-                        )
-                        .expected("`er` of at least 1, the permittivity of vacuum")
-                        .found(format!("er {}", er.to_f64()))
-                        .build(),
-                    );
-                }
+            if let StackupLayer::Insulator { er, .. } = layer
+                && er.0 < MIN_ER_MICRO
+            {
+                out.push(
+                    error(
+                        self.code(),
+                        "stackup dielectric constant is below 1",
+                        file,
+                        layer_span(layer),
+                    )
+                    .expected("`er` of at least 1, the permittivity of vacuum")
+                    .found(format!("er {}", er.to_f64()))
+                    .build(),
+                );
             }
         }
         out

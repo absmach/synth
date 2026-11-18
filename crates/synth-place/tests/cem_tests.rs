@@ -17,6 +17,7 @@ fn create_test_board() -> Board {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: dummy_span,
@@ -30,6 +31,7 @@ fn create_test_board() -> Board {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: dummy_span,
@@ -43,6 +45,7 @@ fn create_test_board() -> Board {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: dummy_span,
@@ -69,6 +72,7 @@ fn create_test_board() -> Board {
     };
 
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),

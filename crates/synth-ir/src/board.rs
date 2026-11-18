@@ -76,6 +76,11 @@ pub struct Board {
     /// default thickness and carries no stackup section.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stackup: Option<Stackup>,
+    /// Fixed board rectangle (`outline 60mm x 30mm`), bottom-left at the
+    /// board origin. `None` means Edge.Cuts is fitted round the placed parts,
+    /// which is the historical behaviour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<BoardOutline>,
     /// Declared routing-constraint classes (`netclass "PWR" { … }`).
     /// Nets join a class via `class "PWR"` on their `net`, `power`,
     /// or `connect` statement; the PCB exporter emits one KiCad
@@ -107,6 +112,14 @@ pub struct Board {
     /// profile that offers it.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub required_processes: BTreeSet<ProcessRequirement>,
+    pub source_span: Span,
+}
+
+/// The board rectangle a design declares, in integer nanometres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoardOutline {
+    pub width: Length,
+    pub height: Length,
     pub source_span: Span,
 }
 
@@ -276,6 +289,10 @@ pub struct Component {
     pub properties: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placement_hint: Option<PlacementConstraint>,
+    /// How this package's pins leave it (`escape { … }`). `None` means the
+    /// design did not say, and a dense grid array is escaped anyway.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub escape: Option<EscapeIntent>,
     /// Name of the `group` this component was declared inside — the
     /// sub-circuit an engineer would point at ("USB-C input"). `None`
     /// for components declared directly in the board body.
@@ -460,6 +477,15 @@ pub struct Note {
 pub struct Keepout {
     pub name: String,
     pub radius: Option<Length>,
+    /// Component refdes whose placed centre anchors the zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+    /// Explicit board coordinate, in millimetres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<(Length, Length)>,
+    /// Copper layers the rule area covers; empty means every copper layer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
     pub source_span: Span,
 }
 
@@ -578,7 +604,57 @@ pub struct NetClass {
     /// bus/group length-match budget checked across the class.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_skew: Option<Length>,
+    /// How fast the class's nets switch (`edge_rate slow`). `None` is the
+    /// unknown case and is treated as fast: a generic output pin can carry a
+    /// fast edge, so only a class that says `slow` may lose its return via as
+    /// an advisory. Used by `synth_drc::return_path_critical_net_names`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge_rate: Option<EdgeRate>,
+    /// Copper layers the class's nets may be routed on (`layers "F.Cu"`),
+    /// KiCad names. Empty means every copper layer. The export writes it as a
+    /// custom DRC rule, the router honours it, and routed copper off these
+    /// layers is a blocking DRC violation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
     pub source_span: Span,
+}
+
+/// The edge rate a netclass declares (`edge_rate slow`, `medium` or `fast`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeRate {
+    Fast,
+    /// Edges no faster than the 0.3 ns the declaration is made against, so the
+    /// return-via window is a fraction of the wavelength at the edge's knee and
+    /// not one dielectric height. The net still needs a return via.
+    Medium,
+    Slow,
+}
+
+impl EdgeRate {
+    /// Parse `slow`, `medium` or `fast`, case-insensitively.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.to_ascii_lowercase().as_str() {
+            "fast" => Some(Self::Fast),
+            "medium" => Some(Self::Medium),
+            "slow" => Some(Self::Slow),
+            _ => None,
+        }
+    }
+}
+
+impl NetClass {
+    /// Whether the class pins its nets to outer copper only, where
+    /// controlled impedance is derived as microstrip.
+    #[must_use]
+    pub fn outer_layers_only(&self) -> bool {
+        !self.layers.is_empty()
+            && self
+                .layers
+                .iter()
+                .all(|layer| layer == "F.Cu" || layer == "B.Cu")
+    }
 }
 
 /// A `Net` as it is read: `auto_named` is missing from data written before
@@ -654,6 +730,58 @@ impl NetClass {
     pub fn declares_via_geometry(&self) -> bool {
         self.via_diameter.is_some() || self.via_drill.is_some()
     }
+}
+
+/// Escape engine for a package's pins.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EscapeMethod {
+    /// Route out between the pads, in the channels they leave.
+    Channel,
+    /// Drop a via inside each pad and route away underneath. The only
+    /// method a fully populated fine-pitch array leaves open.
+    Underpad,
+}
+
+impl EscapeMethod {
+    /// Resolve the spelling an `escape { method … }` used.
+    #[must_use]
+    pub fn from_source(name: &str) -> Option<Self> {
+        match name {
+            "channel" => Some(Self::Channel),
+            "underpad" => Some(Self::Underpad),
+            _ => None,
+        }
+    }
+
+    /// The spelling a board writes, which is also the engine's own.
+    #[must_use]
+    pub const fn as_source(self) -> &'static str {
+        match self {
+            Self::Channel => "channel",
+            Self::Underpad => "underpad",
+        }
+    }
+
+    /// Every method this build knows, for an unknown name's error.
+    pub const ALL: &'static [Self] = &[Self::Channel, Self::Underpad];
+}
+
+/// What a component's `escape { … }` block asked for.
+///
+/// `off` and a method are not contradictory in the grammar, so a board can
+/// say both; `off` wins, because refusing to escape a package is the
+/// stronger statement and silently escaping it anyway would be the worse
+/// failure.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EscapeIntent {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<EscapeMethod>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub off: bool,
+    pub source_span: Span,
 }
 
 impl Component {

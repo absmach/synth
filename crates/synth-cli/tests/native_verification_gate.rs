@@ -100,15 +100,21 @@ impl Outcome {
 /// The gate is fail-closed on routing, so every run here gets a stub
 /// router. Without one the export stops at the routing gate and the test
 /// would pass or fail for a reason it is not about.
-fn run_export(dir: &Path, cli: &Path, extra: &[&str]) -> std::process::Output {
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(dir);
+fn run_export(
+    dir: &Path,
+    cli: &Path,
+    extra: &[&str],
+    design_file: &Path,
+    envs: &[(&str, &str)],
+) -> std::process::Output {
+    let router = stub_router::install(dir);
     let out = dir.join("out");
     let report_path = dir.join("verification.json");
     let mut command = Command::new(SYNTH);
     command
+        .envs(router.envs())
         .arg("export-kicad")
-        .arg(design())
+        .arg(design_file)
         .arg("--out")
         .arg(&out)
         .arg("--verification-report")
@@ -116,16 +122,29 @@ fn run_export(dir: &Path, cli: &Path, extra: &[&str]) -> std::process::Output {
         .args(extra)
         .env("KICAD_CLI", cli)
         .env("SYNTH_KICAD_CLI_TIMEOUT_SECS", "2");
+    for (key, value) in envs {
+        command.env(key, value);
+    }
     command.output().expect("run synth export-kicad")
 }
 
 fn export(label: &str, stub_script: &str, extra: &[&str]) -> Outcome {
+    export_design(label, stub_script, extra, &design(), &[])
+}
+
+fn export_design(
+    label: &str,
+    stub_script: &str,
+    extra: &[&str],
+    design_file: &Path,
+    envs: &[(&str, &str)],
+) -> Outcome {
     let dir = scratch(label);
     let cli = stub(&dir, stub_script);
     let out = dir.join("out");
     let report_path = dir.join("verification.json");
 
-    let output = run_export(&dir, &cli, extra);
+    let output = run_export(&dir, &cli, extra, design_file, envs);
     let report = std::fs::read_to_string(&report_path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok());
@@ -364,9 +383,9 @@ fn a_missing_executable_is_unknown_and_blocks_a_requested_check() {
     let report_path = dir.join("verification.json");
     // The gate is fail-closed on routing, so a router has to be present for
     // this test to be about the missing KiCad and nothing else.
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -485,9 +504,9 @@ fn an_unsupported_version_is_unknown_before_the_tool_runs() {
         std::fs::set_permissions(&cli, perms).expect("chmod");
     }
     let report_path = dir.join("verification.json");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -542,9 +561,9 @@ fn a_plain_export_still_succeeds_but_records_the_unknown() {
     // The gate is fail-closed on routing, so this test needs a route to
     // isolate what it is about: KiCad being absent is an unknown, not a
     // failure, and that must stay true once routing is satisfied.
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -590,9 +609,9 @@ fn a_plain_export_with_allow_incomplete_is_a_draft_not_a_failure() {
     // pipeline uses to hand an un-routed board to an external router.
     let dir = scratch("plain_draft");
     let report_path = dir.join("verification.json");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -629,9 +648,9 @@ fn allow_incomplete_refuses_to_emit_fabrication_artifacts() {
     // check `--allow-incomplete --gerbers` would emit them from an unrouted
     // board and only afterwards fail.
     let dir = scratch("draft_fab");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -661,9 +680,9 @@ mod release_gate {
         // `export-kicad` as a subprocess, so the stub router has to be in
         // the environment for both.
         let dir = scratch(&format!("check_{label}"));
-        let _lock = stub_router::serialised();
-        let _router = stub_router::install(&dir);
+        let router = stub_router::install(&dir);
         let output = Command::new(SYNTH)
+            .envs(router.envs())
             .arg("check")
             .arg(design())
             .arg("--fab")
@@ -697,9 +716,14 @@ mod release_gate {
             manufacturing["native"]["release_ready"], false,
             "{report:#}"
         );
-        let stages = manufacturing["native"]["stages"]
+        // The DFM stage reads the board file itself and needs no KiCad, so it
+        // is the one stage a missing tool cannot make unknown.
+        let stages: Vec<_> = manufacturing["native"]["stages"]
             .as_array()
-            .expect("native stages");
+            .expect("native stages")
+            .iter()
+            .filter(|s| s["stage"] != "dfm")
+            .collect();
         assert!(
             stages.iter().all(|s| s["status"] == "unknown"),
             "{report:#}"
@@ -815,9 +839,9 @@ exit 0"#
     fn the_failing_counts_print_under_the_manufacturing_stage() {
         let dir = scratch("gate_text");
         let cli = stub(&dir, &drc_stub(UNCONNECTED));
-        let _lock = stub_router::serialised();
-        let _router = stub_router::install(&dir);
+        let router = stub_router::install(&dir);
         let output = Command::new(SYNTH)
+            .envs(router.envs())
             .arg("check")
             .arg(design())
             .arg("--fab")
@@ -837,4 +861,136 @@ exit 0"#
             "{stdout}"
         );
     }
+}
+
+/// Two resistors joined by one net: the smallest design with pads to route,
+/// so the stub router has copper to draw and silk to put on a pad.
+fn two_resistors(label: &str) -> PathBuf {
+    // A directory per test, so parallel tests never rewrite one file.
+    let path = scratch(&format!("{label}_design")).join("dfm.synth");
+    std::fs::write(
+        &path,
+        "board \"dfm\" {\n  layers 2\n  component R1: resistor \"rel_reviewed\" value \"10k\"\n  \
+         component R2: resistor \"rel_reviewed\" value \"10k\"\n  connect R1.p1 -> R2.p1\n}\n",
+    )
+    .expect("write design");
+    path
+}
+
+const SILK_ON_PAD: (&str, &str) = ("STUB_ROUTER_SILK_ON_PAD", "1");
+
+/// Export the two-resistor board with the fixture registry and footprint
+/// library, so the result does not depend on a KiCad library being installed
+/// on the machine, and with the stub router printing silk and text.
+fn export_dfm(label: &str, extra: &[&str]) -> Outcome {
+    let fixtures = workspace_root().join("fixtures").join("release-overrides");
+    let registry = fixtures.join("reviewed");
+    let footprints = fixtures.join("footprints");
+    let mut args = vec!["--registry", registry.to_str().expect("utf-8 path")];
+    args.extend_from_slice(extra);
+    export_design(
+        label,
+        &clean_stub(),
+        &args,
+        &two_resistors(label),
+        &[
+            SILK_ON_PAD,
+            (
+                "KICAD_FOOTPRINT_DIR",
+                footprints.to_str().expect("utf-8 path"),
+            ),
+        ],
+    )
+}
+
+#[test]
+fn a_board_with_nothing_to_flag_has_a_passing_dfm_stage() {
+    let run = export("dfm_clean", &clean_stub(), &[]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "pass");
+}
+
+#[test]
+fn silk_on_a_pad_is_recorded_without_blocking_a_plain_export() {
+    let run = export_dfm("dfm_plain", &[]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "fail");
+    assert_eq!(run.stage("dfm")["advisory"], true);
+    // Each finding is recorded with its rule and board location.
+    let findings = run.stage("dfm")["findings"].to_string();
+    assert!(
+        findings.contains("[silk_to_pad]") && findings.contains(" mm: "),
+        "{findings}"
+    );
+    assert!(
+        run.stage("dfm")["violations"].as_u64().unwrap_or(0) >= 1,
+        "{:#}",
+        run.stage("dfm")
+    );
+    let detail = run.stage("dfm")["detail"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    assert!(
+        detail.contains("silk_to_pad danger") && detail.contains("silk text item(s) not measured"),
+        "the counts and what was not measured must be recorded: {detail}"
+    );
+    // Ungated findings are advisory: they do not flip release_ready.
+    let report = run.report.as_ref().expect("report");
+    assert_eq!(report["release_ready"], true, "{report:#}");
+}
+
+#[test]
+fn silk_on_a_pad_does_not_block_a_release_export_without_dfm_gate() {
+    let run = export_dfm("dfm_release_ungated", &["--gerbers"]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "fail");
+    assert!(run.stderr.contains("--dfm-gate"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("[dfm] Danger [silk_to_pad]"),
+        "{}",
+        run.stderr
+    );
+}
+
+#[test]
+fn a_passing_dfm_stage_lists_the_checks_it_does_not_make() {
+    let run = export("dfm_clean_coverage", &clean_stub(), &[]);
+    assert_eq!(run.status("dfm"), "pass");
+    let unsupported = run.stage("dfm")["unsupported"].to_string();
+    assert!(
+        unsupported.contains("pth_to_trace")
+            && unsupported.contains("known not to match JLCDFM")
+            && unsupported.contains("silk_text"),
+        "{unsupported}"
+    );
+}
+
+#[test]
+fn silk_on_a_pad_blocks_a_gated_release_export_and_force_does_not_override() {
+    let run = export_dfm("dfm_release", &["--gerbers", "--dfm-gate", "--force"]);
+    assert_eq!(run.code, Some(1), "stderr:\n{}", run.stderr);
+    assert_eq!(run.status("dfm"), "fail");
+    assert_eq!(run.stage("dfm")["advisory"], serde_json::Value::Null);
+    assert!(
+        run.stderr.contains("release export blocked")
+            && run.stderr.contains("silk_to_pad")
+            && run.stderr.contains("--force does not override this"),
+        "the block and the rule must be stated: {}",
+        run.stderr
+    );
+    let manifest = run.manifest();
+    assert_eq!(manifest["release_ready"], false, "{manifest:#}");
+}
+
+#[test]
+fn findings_under_dfm_gate_without_a_release_export_do_not_ask_for_the_flag() {
+    let run = export_dfm("dfm_gate_plain", &["--dfm-gate"]);
+    assert_eq!(run.code, Some(0), "stderr:\n{}", run.stderr);
+    assert!(!run.stderr.contains("Pass --dfm-gate"), "{}", run.stderr);
+    assert!(
+        run.stderr.contains("blocks only a release export"),
+        "{}",
+        run.stderr
+    );
 }

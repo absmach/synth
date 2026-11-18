@@ -18,6 +18,33 @@ rule judges a via against the same ground the planes are built from. A board
 with no ground net is not checked, and a board without a declared `stackup` is
 not checked either, because the distance is a property of the dielectric.
 
+The router's return-via repair holds a board back for a missing return via on
+every signal net unless the design declares the net slow: a `netclass` with
+`edge_rate slow`. A generic `output` or `bidirectional` pin carries a fast SPI,
+USB or timer edge as readily as a slow GPIO, so pin type cannot prove a slow
+edge and an unclassified net stays blocking. One that is slow by declaration is
+listed in the route report's `advisories`, with the net and the position, and
+does not block.
+
+A net class may instead declare `edge_rate medium`: edges no faster than 0.3 ns.
+The net keeps the return-via requirement, but looks for the ground via within
+6 mm of the signal via, not one dielectric height. The 6 mm is a twentieth of
+the wavelength at the knee of a 0.3 ns edge (0.35 / 0.3 ns, about 1.2 GHz, in
+FR4 of relative permittivity 4.3, about 124 mm), a rule of thumb that PCB design
+guides give as a tenth to a twentieth of the wavelength. The stackup's thickest
+dielectric still sets the floor. The declaration is the design's claim: back it
+with the datasheet figures of the drivers on the net. A net whose pins prove a
+fast edge is never medium, with one exception: a declared `diff_pair` and a
+differential pin type are inferred fast, and a class that declares `edge_rate
+medium` replaces that inference for its nets. The declaration says the drivers
+have edges no faster than 0.3 ns, and the design answers for it with their
+datasheet figures. A clock, RF or analog pin, a crystal and a switching node are
+physical evidence of a fast edge, and no declaration replaces them.
+
+A `slow` declaration cannot downgrade a net whose own pins prove a fast edge: a
+differential pin or declared `diff_pair` on a class that does not declare
+`medium`, a clock pin, an RF or analog pin, a bare crystal's terminal, or a switching node at an inductor stays blocking.
+
 The rule is advisory: whether a discontinuity matters depends on the edge rate
 and the signalling scheme, which geometry alone cannot decide. As a `W-` code it
 never blocks a release.

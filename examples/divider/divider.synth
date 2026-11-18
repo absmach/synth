@@ -1,0 +1,13 @@
+// Resistor divider tracer for `synth sim`.
+// The sidecar `divider.sim.toml` drives VCC with 12 V and measures MID.
+board "divider" {
+  layers 2
+
+  component R1: resistor "r_generic_0805" value "10k"
+  component R2: resistor "r_generic_0805" value "10k"
+
+  power "VCC" 12v
+  net "VCC" { R1.p1 }
+  net "GND" { R2.p2 }
+  connect R1.p2 -> R2.p1 as "MID"
+}

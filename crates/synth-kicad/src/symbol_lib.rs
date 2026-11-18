@@ -25,13 +25,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use synth_ir::Board;
-use synth_layout::route::{is_two_pin_symbol_kind, synthesized_body};
 use synth_layout::PinSide;
+use synth_layout::route::{is_two_pin_symbol_kind, synthesized_body};
 use synth_registry::{ElectricalType, Part};
 
 use synth_layout::kicad_lib_loader;
 
-use crate::sexp::{num, pair, str_pair, Sexp};
+use crate::sexp::{Sexp, num, pair, str_pair};
 
 /// Spacing between pins along the body's left edge.
 const PIN_PITCH: f64 = 2.54;
@@ -178,24 +178,23 @@ pub fn build_pwr_flag_fallback() -> Sexp {
 /// their units already use the label, which equals the name after the
 /// colon for both `power:<label>` and `synth:<label>`.
 fn rename_symbol_outer(sym: &mut Sexp, new_name: &str) {
-    if let Sexp::List { head, children } = sym {
-        if head.as_str() == "symbol" && !children.is_empty() {
-            children[0] = Sexp::str(new_name);
-            let symbol_name = new_name.rsplit(':').next().unwrap_or(new_name);
-            for child in children.iter_mut().skip(1) {
-                if let Sexp::List {
-                    head: sub,
-                    children: sub_children,
-                } = child
-                {
-                    if sub.as_str() == "symbol" && !sub_children.is_empty() {
-                        if let Sexp::Str(name) = &sub_children[0] {
-                            if let Some(unit_body) = unit_body_suffix(name) {
-                                sub_children[0] = Sexp::str(format!("{symbol_name}{unit_body}"));
-                            }
-                        }
-                    }
-                }
+    if let Sexp::List { head, children } = sym
+        && head.as_str() == "symbol"
+        && !children.is_empty()
+    {
+        children[0] = Sexp::str(new_name);
+        let symbol_name = new_name.rsplit(':').next().unwrap_or(new_name);
+        for child in children.iter_mut().skip(1) {
+            if let Sexp::List {
+                head: sub,
+                children: sub_children,
+            } = child
+                && sub.as_str() == "symbol"
+                && !sub_children.is_empty()
+                && let Sexp::Str(name) = &sub_children[0]
+                && let Some(unit_body) = unit_body_suffix(name)
+            {
+                sub_children[0] = Sexp::str(format!("{symbol_name}{unit_body}"));
             }
         }
     }
@@ -684,10 +683,12 @@ mod tests {
             electrical_type,
             capabilities,
             required: false,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         }
     }
 
@@ -757,10 +758,12 @@ mod tests {
                     electrical_type: ElectricalType::Bidirectional,
                     capabilities: vec![],
                     required: false,
+                    footprint_only: false,
                     unit: None,
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
                 Pin {
                     name: "p2".into(),
@@ -768,14 +771,17 @@ mod tests {
                     electrical_type: ElectricalType::PowerInput,
                     capabilities: vec![],
                     required: true,
+                    footprint_only: false,
                     unit: None,
                     voltage_max_v: None,
                     voltage_min_v: None,
                     voltage_nominal_v: None,
+                    drive: None,
                 },
             ],
             required_decoupling: vec![],
             provenance: None,
+            spice: None,
         }
     }
 
@@ -853,12 +859,11 @@ mod tests {
                         head: h,
                         children: c,
                     } = child
+                        && h == "at"
+                        && c.len() >= 2
+                        && let (Some(x), Some(y)) = (num(&c[0]), num(&c[1]))
                     {
-                        if h == "at" && c.len() >= 2 {
-                            if let (Some(x), Some(y)) = (num(&c[0]), num(&c[1])) {
-                                out.push((x, y));
-                            }
-                        }
+                        out.push((x, y));
                     }
                 }
             } else {
@@ -883,10 +888,12 @@ mod tests {
             electrical_type: ElectricalType::PowerInput,
             capabilities: vec![],
             required: true,
+            footprint_only: false,
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
         };
         part.pins = vec![
             power("vdd"),

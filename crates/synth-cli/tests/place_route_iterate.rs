@@ -48,8 +48,14 @@ fn ring_source() -> String {
     src
 }
 
-fn run_export(design: &Path, out: &Path, extra: &[&str]) -> std::process::Output {
+fn run_export(
+    design: &Path,
+    out: &Path,
+    extra: &[&str],
+    router: &stub_router::StubRouter,
+) -> std::process::Output {
     Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design)
         .arg("--out")
@@ -64,8 +70,7 @@ fn run_export(design: &Path, out: &Path, extra: &[&str]) -> std::process::Output
 #[test]
 fn the_loop_routes_the_candidates_and_still_exports_the_winner() {
     let dir = scratch("on");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
 
     let design = dir.join("ring.synth");
     fs::write(&design, ring_source()).expect("write design");
@@ -75,7 +80,7 @@ fn the_loop_routes_the_candidates_and_still_exports_the_winner() {
     // rightly fails and the command exits non-zero. What this test measures is
     // the loop, not the stub's routing quality: it must route every candidate
     // and still produce a run record.
-    let output = run_export(&design, &out, &["--place-route-iterate"]);
+    let output = run_export(&design, &out, &["--place-route-iterate"], &router);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("placement feedback: routing") && stderr.contains("candidate"),
@@ -94,14 +99,13 @@ fn the_loop_routes_the_candidates_and_still_exports_the_winner() {
 #[test]
 fn without_the_flag_the_loop_does_not_run() {
     let dir = scratch("off");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
 
     let design = dir.join("ring.synth");
     fs::write(&design, ring_source()).expect("write design");
     let out = dir.join("out");
 
-    let output = run_export(&design, &out, &[]);
+    let output = run_export(&design, &out, &[], &router);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !stderr.contains("placement feedback"),

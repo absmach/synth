@@ -97,14 +97,12 @@ pub fn user_footprint_libs() -> Vec<(String, PathBuf)> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
-                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    if ext.eq_ignore_ascii_case("pretty") {
-                        if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                            out.push((name.to_string(), path));
-                        }
-                    }
-                }
+            if path.is_dir()
+                && let Some(ext) = path.extension().and_then(|e| e.to_str())
+                && ext.eq_ignore_ascii_case("pretty")
+                && let Some(name) = path.file_stem().and_then(|s| s.to_str())
+            {
+                out.push((name.to_string(), path));
             }
         }
     }
@@ -260,11 +258,8 @@ fn should_keep_block(block: &str) -> bool {
     true
 }
 
-/// Return `(width_mm, height_mm)` of the footprint's courtyard
-/// (the keep-out rectangle the placer must respect). Reads
-/// `(fp_rect ...)` blocks on layer `F.CrtYd`; if a footprint
-/// draws its courtyard with multiple `(fp_line ...)` segments
-/// instead, the bbox of the line endpoints is returned. Returns
+/// The footprint's courtyard (the keep-out rectangle the placer must respect):
+/// the box around everything drawn on `F.CrtYd`. Returns
 /// `None` when:
 /// - KiCad isn't installed locally;
 /// - the footprint file doesn't exist;
@@ -273,57 +268,261 @@ fn should_keep_block(block: &str) -> bool {
 ///
 /// Return `(center_offset_x_mm, center_offset_y_mm, width_mm, height_mm)` of the footprint's courtyard.
 pub fn courtyard_rect(lib_id: &str) -> Option<(f64, f64, f64, f64)> {
-    let text = read_footprint(lib_id)?;
-    let mut min_x = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    let mut found = false;
+    courtyard_rect_from_text(&read_footprint(lib_id)?)
+}
 
+/// [`courtyard_rect`] for a footprint file's text: `(center_x, center_y, width,
+/// height)` of everything drawn on `F.CrtYd`, lines, rectangles, arcs, circles
+/// and polygons alike. A footprint whose courtyard is a circle or a polygon,
+/// such as a radial capacitor or a mounting hole, is measured whole instead of
+/// being taken for one with no courtyard.
+#[must_use]
+pub fn courtyard_rect_from_text(text: &str) -> Option<(f64, f64, f64, f64)> {
+    let (min_x, min_y, max_x, max_y) = courtyard_extent_from_text(text)?;
+    Some((
+        f64::midpoint(min_x, max_x),
+        f64::midpoint(min_y, max_y),
+        max_x - min_x,
+        max_y - min_y,
+    ))
+}
+
+/// Every `(xy x y)` point in `block`.
+fn all_xy(block: &str) -> Vec<(f64, f64)> {
+    let mut points = Vec::new();
+    let mut rest = block;
+    while let Some(index) = rest.find("(xy ") {
+        if let Some(point) = xy_after(&rest[index..], "(xy ") {
+            points.push(point);
+        }
+        rest = &rest[index + "(xy ".len()..];
+    }
+    points
+}
+
+/// The bounding box of everything drawn on `F.CrtYd` in a footprint file's text:
+/// lines, rectangles, arcs (start, middle and end), circles and polygons. A
+/// courtyard drawn with arcs or a circle is measured whole, where reading only
+/// its lines can give a height of zero. `(min_x, min_y, max_x, max_y)`, or `None`
+/// when nothing is drawn there.
+#[must_use]
+pub fn courtyard_extent_from_text(text: &str) -> Option<(f64, f64, f64, f64)> {
+    let mut extent: Option<(f64, f64, f64, f64)> = None;
+    let mut include = |x: f64, y: f64| {
+        extent = Some(match extent {
+            None => (x, y, x, y),
+            Some((a, b, c, d)) => (a.min(x), b.min(y), c.max(x), d.max(y)),
+        });
+    };
     let mut pos = 0;
-    while let Some(block_start) = find_next_block(&text, pos, &["(fp_rect", "(fp_line"]) {
-        let Some(block_end) = balanced_paren_end(&text, block_start) else {
+    while let Some(start) = find_next_block(
+        text,
+        pos,
+        &["(fp_rect", "(fp_line", "(fp_arc", "(fp_circle", "(fp_poly"],
+    ) {
+        let Some(end) = balanced_paren_end(text, start) else {
             break;
         };
-        let block = &text[block_start..block_end];
-        if block_contains_layer(block, "F.CrtYd") {
-            if block.starts_with("(fp_rect") {
-                if let Some((sx, sy)) = xy_after(block, "(start ") {
-                    if let Some((ex, ey)) = xy_after(block, "(end ") {
-                        min_x = min_x.min(sx).min(ex);
-                        max_x = max_x.max(sx).max(ex);
-                        min_y = min_y.min(sy).min(ey);
-                        max_y = max_y.max(sy).max(ey);
-                        found = true;
-                    }
-                }
-            } else if block.starts_with("(fp_line") {
-                if let Some((sx, sy)) = xy_after(block, "(start ") {
-                    min_x = min_x.min(sx);
-                    max_x = max_x.max(sx);
-                    min_y = min_y.min(sy);
-                    max_y = max_y.max(sy);
-                    found = true;
-                }
-                if let Some((ex, ey)) = xy_after(block, "(end ") {
-                    min_x = min_x.min(ex);
-                    max_x = max_x.max(ex);
-                    min_y = min_y.min(ey);
-                    max_y = max_y.max(ey);
-                    found = true;
+        let block = &text[start..end];
+        pos = end;
+        if !block_contains_layer(block, "F.CrtYd") {
+            continue;
+        }
+        if block.starts_with("(fp_circle") {
+            if let (Some((cx, cy)), Some((ex, ey))) =
+                (xy_after(block, "(center "), xy_after(block, "(end "))
+            {
+                let radius = (ex - cx).hypot(ey - cy);
+                include(cx - radius, cy - radius);
+                include(cx + radius, cy + radius);
+            }
+        } else if block.starts_with("(fp_poly") {
+            for (x, y) in all_xy(block) {
+                include(x, y);
+            }
+        } else if block.starts_with("(fp_arc") {
+            for (x, y) in arc_extent_points(block) {
+                include(x, y);
+            }
+        } else {
+            for key in ["(start ", "(end "] {
+                if let Some((x, y)) = xy_after(block, key) {
+                    include(x, y);
                 }
             }
         }
-        pos = block_end;
     }
-    if !found {
-        return None;
+    extent
+}
+
+/// The points that bound a courtyard arc: its end points, and every place the
+/// arc crosses an axis-aligned extreme of its circle that lies on the arc.
+/// Sampling the start, middle and end alone misses an extreme between them (an
+/// arc from -45 to 135 degrees reaches the circle's far x and far y).
+///
+/// A three-point arc (`start`, `mid`, `end`, all on the circle) is solved for
+/// its circle and sweep. The older form (`start` is the centre, `end` a point on
+/// the circle, `angle` the sweep) is bounded by its whole circle, which only
+/// ever errs larger, and so does an arc whose three points are in a line.
+fn arc_extent_points(block: &str) -> Vec<(f64, f64)> {
+    use std::f64::consts::{FRAC_PI_2, TAU};
+    let start = xy_after(block, "(start ");
+    let mid = xy_after(block, "(mid ");
+    let end = xy_after(block, "(end ");
+    let (Some(from), Some(over), Some(to)) = (start, mid, end) else {
+        // Centre, end point and sweep: bound the whole circle.
+        return match (start, end) {
+            (Some((cx, cy)), Some((ex, ey))) => {
+                let radius = (ex - cx).hypot(ey - cy);
+                vec![
+                    (cx - radius, cy - radius),
+                    (cx + radius, cy + radius),
+                    (ex, ey),
+                ]
+            }
+            _ => start.into_iter().chain(mid).chain(end).collect(),
+        };
+    };
+    let square = |p: (f64, f64)| p.0 * p.0 + p.1 * p.1;
+    let denominator =
+        2.0 * (from.0 * (over.1 - to.1) + over.0 * (to.1 - from.1) + to.0 * (from.1 - over.1));
+    if denominator.abs() < 1e-9 {
+        return vec![from, over, to];
     }
-    let w = max_x - min_x;
-    let h = max_y - min_y;
-    let cx = f64::midpoint(min_x, max_x);
-    let cy = f64::midpoint(min_y, max_y);
-    Some((cx, cy, w, h))
+    let centre = (
+        (square(from) * (over.1 - to.1)
+            + square(over) * (to.1 - from.1)
+            + square(to) * (from.1 - over.1))
+            / denominator,
+        (square(from) * (to.0 - over.0)
+            + square(over) * (from.0 - to.0)
+            + square(to) * (over.0 - from.0))
+            / denominator,
+    );
+    let radius = (from.0 - centre.0).hypot(from.1 - centre.1);
+    let angle = |p: (f64, f64)| (p.1 - centre.1).atan2(p.0 - centre.0);
+    let turn = |first: f64, second: f64| (second - first).rem_euclid(TAU);
+    let start_angle = angle(from);
+    let (to_mid, to_end) = (turn(start_angle, angle(over)), turn(start_angle, angle(to)));
+    // Counter-clockwise when the middle comes before the end going that way.
+    let counter_clockwise = to_mid < to_end;
+    let mut points = vec![from, over, to];
+    for quarter in 0..4 {
+        let at = f64::from(quarter) * FRAC_PI_2;
+        let on_arc = if counter_clockwise {
+            turn(start_angle, at) <= to_end
+        } else {
+            turn(at, start_angle) <= TAU - to_end
+        };
+        if on_arc {
+            points.push((centre.0 + radius * at.cos(), centre.1 + radius * at.sin()));
+        }
+    }
+    points
+}
+
+/// Half of a pad's width and height in the footprint's own axes, with the pad's
+/// angle (`(at x y angle)`) applied: a 0.5 x 2.0 mm pad turned a quarter is
+/// 2.0 x 0.5 mm. A circular pad looks the same turned any way.
+fn rotated_half_extent(pad_block: &str, size_mm: (f64, f64)) -> (f64, f64) {
+    let (half_w, half_h) = (size_mm.0 / 2.0, size_mm.1 / 2.0);
+    let round = pad_block
+        .split_whitespace()
+        .take(4)
+        .any(|token| token == "circle");
+    let angle = pad_angle_deg(pad_block);
+    if round || angle.abs() < 1e-9 {
+        return (half_w, half_h);
+    }
+    let (sin, cos) = angle.to_radians().sin_cos();
+    (
+        half_w * cos.abs() + half_h * sin.abs(),
+        half_w * sin.abs() + half_h * cos.abs(),
+    )
+}
+
+/// The angle of a pad in degrees: the third number of its `(at x y angle)`, or
+/// zero when it has none.
+fn pad_angle_deg(pad_block: &str) -> f64 {
+    let Some(at) = pad_block.find("(at ") else {
+        return 0.0;
+    };
+    pad_block[at + 4..]
+        .split(')')
+        .next()
+        .and_then(|numbers| numbers.split_whitespace().nth(2))
+        .and_then(|angle| angle.parse::<f64>().ok())
+        .unwrap_or(0.0)
+}
+
+/// The size of the box that holds every pad of a footprint file's text, pad
+/// copper included, with each pad's rotation applied to its corners. `None`
+/// when there is no pad.
+#[must_use]
+pub fn pads_extent_from_text(text: &str) -> Option<(f64, f64)> {
+    let mut min = (f64::INFINITY, f64::INFINITY);
+    let mut max = (f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let mut pos = 0;
+    let mut any = false;
+    while let Some(start) = find_next_block(text, pos, &["(pad "]) {
+        let Some(end) = balanced_paren_end(text, start) else {
+            break;
+        };
+        if let Some(pad) = parse_pad(&text[start..end]) {
+            let (half_w, half_h) = rotated_half_extent(&text[start..end], pad.size_mm);
+            min.0 = min.0.min(pad.center_mm.0 - half_w);
+            min.1 = min.1.min(pad.center_mm.1 - half_h);
+            max.0 = max.0.max(pad.center_mm.0 + half_w);
+            max.1 = max.1.max(pad.center_mm.1 + half_h);
+            any = true;
+        }
+        pos = end;
+    }
+    any.then_some((max.0 - min.0, max.1 - min.1))
+}
+
+/// The `footprint_dimensions` (body width and height) of a footprint file's
+/// text, in millimetres.
+///
+/// A registry part declares its body, and the courtyard margin on top of it, so
+/// the courtyard is the body plus the margin on each side and the margin is taken
+/// off here, not added twice. When the courtyard is missing, or measures to
+/// nothing, the pads' extent stands in for the body.
+///
+/// # Errors
+/// Returns why nothing usable could be measured: no courtyard that is larger
+/// than its margins and no pad.
+pub fn derive_footprint_dimensions_from_text(
+    text: &str,
+    margin_mm: f64,
+) -> Result<(f64, f64), String> {
+    let round = |v: f64| (v * 1000.0).round() / 1000.0;
+    if let Some((x0, y0, x1, y1)) = courtyard_extent_from_text(text) {
+        let (width, height) = (x1 - x0 - 2.0 * margin_mm, y1 - y0 - 2.0 * margin_mm);
+        if width > 0.0 && height > 0.0 {
+            return Ok((round(width), round(height)));
+        }
+    }
+    match pads_extent_from_text(text) {
+        Some((width, height)) if width > 0.0 && height > 0.0 => Ok((round(width), round(height))),
+        _ => Err("it has no courtyard larger than its margins and no pads to measure".to_string()),
+    }
+}
+
+/// As [`derive_footprint_dimensions_from_text`], for a footprint in the KiCad
+/// library, named `Library:Name`.
+///
+/// # Errors
+/// Returns why the footprint could not be read or measured, in words an author
+/// can act on.
+pub fn derive_footprint_dimensions(lib_id: &str, margin_mm: f64) -> Result<(f64, f64), String> {
+    let text = read_footprint(lib_id).ok_or_else(|| {
+        format!(
+            "footprint `{lib_id}` could not be read: KiCad's footprint library is not installed here, or it has no footprint of that name (check the spelling)"
+        )
+    })?;
+    derive_footprint_dimensions_from_text(&text, margin_mm)
+        .map_err(|why| format!("footprint `{lib_id}`: {why}"))
 }
 
 /// Return `(width_mm, height_mm)` of the footprint's courtyard.
@@ -420,6 +619,30 @@ pub fn pads(lib_id: &str) -> Option<Vec<Pad>> {
         return None;
     }
     Some(out)
+}
+
+/// R15.9: the deduplicated ids of every board part that would export with a
+/// synthesized bounding-box footprint, whose pad geometry is a guess: parts
+/// with no `kicad_footprint` at all, or whose referenced footprint cannot be
+/// resolved to real pad geometry on disk. Both the CLI export and the MCP
+/// `synth_export` gate on this, so they cannot disagree about a board.
+#[must_use]
+pub fn parts_without_real_footprint(board: &synth_ir::Board) -> Vec<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut missing = Vec::new();
+    for component in &board.components {
+        let Some(part) = component.part.as_ref() else {
+            continue;
+        };
+        if !seen.insert(part.id.as_str().to_string()) {
+            continue;
+        }
+        let resolves = part.kicad_footprint.as_deref().and_then(pads).is_some();
+        if !resolves {
+            missing.push(part.id.as_str().to_string());
+        }
+    }
+    missing
 }
 
 fn parse_pad(block: &str) -> Option<Pad> {
@@ -761,5 +984,101 @@ mod integration_tests {
                 "{lib_id}: h {h:.3} vs expected {expected_h:.3}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod courtyard_rect_tests {
+    use super::courtyard_rect_from_text;
+
+    /// `MountingHole:MountingHole_2.5mm`, trimmed to the two circles it draws:
+    /// the hole on `F.SilkS` and the courtyard on `F.CrtYd`, radius 2.75 mm.
+    const MOUNTING_HOLE: &str = r#"
+(footprint "MountingHole_2.5mm"
+	(fp_circle
+		(center 0 0)
+		(end 2.5 0)
+		(stroke (width 0.15) (type solid))
+		(fill no)
+		(layer "F.SilkS")
+	)
+	(fp_circle
+		(center 0 0)
+		(end 2.75 0)
+		(stroke (width 0.05) (type solid))
+		(fill no)
+		(layer "F.CrtYd")
+	)
+)
+"#;
+
+    /// A rectangular courtyard, which is what most footprints draw.
+    const RECT_COURTYARD: &str = r#"
+(footprint "R_0603"
+	(fp_rect
+		(start -1.48 -0.73)
+		(end 1.48 0.73)
+		(stroke (width 0.05) (type solid))
+		(fill no)
+		(layer "F.CrtYd")
+	)
+)
+"#;
+
+    /// A footprint with no courtyard at all.
+    const NO_COURTYARD: &str = r#"
+(footprint "bare"
+	(fp_line
+		(start -1 -1)
+		(end 1 1)
+		(stroke (width 0.1) (type solid))
+		(layer "F.SilkS")
+	)
+)
+"#;
+
+    /// The courtyard circle is 5.5 mm across, and that is the area a
+    /// neighbour has to be packed against. Reading nothing from it — which is
+    /// what happened before — left the placer reserving the 2.5 mm hole from
+    /// the registry instead, so parts landed 1.5 mm a side too close and
+    /// `kicad-cli pcb drc` reported `courtyards_overlap`.
+    #[test]
+    fn a_circular_courtyard_is_read_as_its_bounding_box() {
+        let (cx, cy, w, h) = courtyard_rect_from_text(MOUNTING_HOLE).expect("courtyard");
+        assert!(
+            (w - 5.5).abs() < 1e-9 && (h - 5.5).abs() < 1e-9,
+            "a radius 2.75 mm courtyard is 5.5 mm across, got {w} x {h}"
+        );
+        assert!(
+            cx.abs() < 1e-9 && cy.abs() < 1e-9,
+            "centred on the origin, got ({cx}, {cy})"
+        );
+    }
+
+    /// Only `F.CrtYd` counts: the silkscreen circle in the same footprint is
+    /// 5.0 mm across and must not widen the answer.
+    #[test]
+    fn a_silkscreen_circle_does_not_count_as_courtyard() {
+        let (_, _, w, _) = courtyard_rect_from_text(MOUNTING_HOLE).expect("courtyard");
+        assert!(
+            (w - 5.5).abs() < 1e-9,
+            "the F.SilkS circle must be ignored, got {w}"
+        );
+    }
+
+    /// A rectangle keeps answering the way it always did.
+    #[test]
+    fn a_rectangular_courtyard_is_unchanged() {
+        let (cx, cy, w, h) = courtyard_rect_from_text(RECT_COURTYARD).expect("courtyard");
+        assert!(
+            (w - 2.96).abs() < 1e-9 && (h - 1.46).abs() < 1e-9,
+            "{w} x {h}"
+        );
+        assert!(cx.abs() < 1e-9 && cy.abs() < 1e-9, "({cx}, {cy})");
+    }
+
+    #[test]
+    fn a_footprint_with_no_courtyard_still_answers_none() {
+        assert!(courtyard_rect_from_text(NO_COURTYARD).is_none());
     }
 }

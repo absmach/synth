@@ -1,0 +1,118 @@
+id = "mp2307_buck_ep"
+kind = "regulator"
+description = "MPS MP2307DN 3 A, 23 V, 340 kHz synchronous step-down converter, SOIC8N (exposed pad, backside tied to pin 4 GND). Pin map, ratings and package per MP2307 datasheet Rev 1.9; the exposed pad is 3.15-3.45 x 2.26-2.56 mm there, which the KiCad EP2.41x3.3mm footprint matches. KiCad ships no MP2307 symbol, and the nearest, MP2303ADN, has the same eight pins but no exposed-pad pin, so naming it would leave pad 9 unconnected; the schematic exporter draws the part from this pin map instead."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "MP2307DN-LF-Z"
+lcsc_pn = "C18921"
+kicad_footprint = "Package_SO:SOIC-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.3mm"
+
+[[pins]]
+name = "bs"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = true
+
+[[pins]]
+name = "in"
+number = "2"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "sw"
+number = "3"
+electrical_type = "passive"
+capabilities = ["switch_node"]
+required = true
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "fb"
+number = "5"
+electrical_type = "input"
+capabilities = ["feedback"]
+required = true
+
+[[pins]]
+name = "comp"
+number = "6"
+electrical_type = "passive"
+capabilities = []
+required = true
+
+[[pins]]
+name = "en"
+number = "7"
+electrical_type = "input"
+capabilities = []
+required = true
+
+[[pins]]
+name = "ss"
+number = "8"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "gnd_ep"
+number = "9"
+electrical_type = "power_input"
+capabilities = []
+required = true
+
+[operating_conditions]
+min_voltage_v = 4.75
+max_voltage_v = 23.0
+max_current_ma = 3000.0
+max_power_mw = 2000
+thermal_resistance_c_per_w = 50
+
+[footprint_dimensions]
+width_mm = 7.4
+height_mm = 5.4
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+generator = "synth_author_part"
+datasheet_url = "https://www.monolithicpower.com/pub/media/document/MP2307_r1.3.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-10-28"
+
+[[required_decoupling]]
+net = "in"
+value = "10uf"
+count = 2
+
+[[required_decoupling]]
+net = "in"
+value = "100nf"
+count = 1
+
+# BS needs 0.01 uF or more to SW (datasheet pin 1 description; 10 nF in its
+# typical application).
+[[required_decoupling]]
+net = "bs"
+to = "sw"
+value = "10nf"
+count = 1
+
+# The output capacitor sits behind the inductor on SW; the datasheet's typical
+# application uses 22 uF ceramic.
+[[required_decoupling]]
+net = "sw"
+through = "inductor"
+value = "22uf"
+count = 1

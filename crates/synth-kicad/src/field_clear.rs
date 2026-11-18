@@ -19,14 +19,25 @@ pub(crate) struct Rect {
 }
 
 impl Rect {
+    /// This rectangle with every edge moved `by` mm outward.
+    pub(crate) fn grown(&self, by: f64) -> Rect {
+        Rect {
+            x0: self.x0 - by,
+            y0: self.y0 - by,
+            x1: self.x1 + by,
+            y1: self.y1 + by,
+        }
+    }
+
+    /// Whether the two share any area; rectangles that only touch do not.
+    pub(crate) fn overlaps(&self, other: &Rect) -> bool {
+        self.overlap_area(other) > 0.0
+    }
+
     fn overlap_area(&self, other: &Rect) -> f64 {
         let w = self.x1.min(other.x1) - self.x0.max(other.x0);
         let h = self.y1.min(other.y1) - self.y0.max(other.y0);
-        if w > 0.0 && h > 0.0 {
-            w * h
-        } else {
-            0.0
-        }
+        if w > 0.0 && h > 0.0 { w * h } else { 0.0 }
     }
 }
 
@@ -231,6 +242,20 @@ mod tests {
             let got = pick_clear(&[outside, (5.0, 5.0)], &at, &strips.iter());
             assert_eq!(got, (5.0, 5.0), "{outside:?} was kept");
         }
+    }
+
+    #[test]
+    fn a_grown_obstacle_moves_text_that_only_just_misses_it() {
+        // "near" spans x 0 to 4; a block from 4.2 misses it by 0.2.
+        let obstacle = block(4.2, 6.0);
+        assert_eq!(
+            pick_clear(&CANDIDATES, &text_rect, &[obstacle].iter()),
+            "near"
+        );
+        assert_eq!(
+            pick_clear(&CANDIDATES, &text_rect, &[obstacle.grown(0.4)].iter()),
+            "far"
+        );
     }
 
     #[test]

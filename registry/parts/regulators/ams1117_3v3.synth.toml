@@ -16,8 +16,16 @@ courtyard_margin_mm = 0.25
 min_voltage_v = 3.5
 max_voltage_v = 15.0
 max_current_ma = 800.0
-max_power_mw = 1360
-thermal_resistance_c_per_w = 60
+max_power_mw = 1200
+thermal_resistance_c_per_w = 90
+
+[spice]
+file = "spice/ams1117_3v3.lib"
+subckt = "ams1117_3v3"
+pin_order = ["vin", "gnd", "vout"]
+
+[spice.params]
+rout = "100m"
 
 [[pins]]
 name = "gnd"
@@ -47,3 +55,8 @@ count = 2
 net = "vout"
 value = "10uf"
 count = 2
+
+[provenance]
+source = "seed"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"

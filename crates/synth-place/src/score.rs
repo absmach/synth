@@ -57,18 +57,17 @@ pub fn score_placement(board: &Board, placement: &Placement) -> PlacementScore {
                     if ep.component == component.id {
                         continue;
                     }
-                    if let Some(other) = board.components.iter().find(|c| c.id == ep.component) {
-                        if other.part.as_ref().is_some_and(|p| p.kind == "capacitor") {
-                            if let Some(cap_pos) = by_id.get(&other.id) {
-                                let dx = nm_to_mm((ic_pos.x_nm - cap_pos.x_nm).abs());
-                                let dy = nm_to_mm((ic_pos.y_nm - cap_pos.y_nm).abs());
-                                let dist = dx + dy;
-                                total_decoupling_dist += dist;
-                                decoupling_count += 1;
-                                if dist > max_decoupling_dist {
-                                    max_decoupling_dist = dist;
-                                }
-                            }
+                    if let Some(other) = board.components.iter().find(|c| c.id == ep.component)
+                        && other.part.as_ref().is_some_and(|p| p.kind == "capacitor")
+                        && let Some(cap_pos) = by_id.get(&other.id)
+                    {
+                        let dx = nm_to_mm((ic_pos.x_nm - cap_pos.x_nm).abs());
+                        let dy = nm_to_mm((ic_pos.y_nm - cap_pos.y_nm).abs());
+                        let dist = dx + dy;
+                        total_decoupling_dist += dist;
+                        decoupling_count += 1;
+                        if dist > max_decoupling_dist {
+                            max_decoupling_dist = dist;
                         }
                     }
                 }
@@ -91,10 +90,10 @@ pub fn score_placement(board: &Board, placement: &Placement) -> PlacementScore {
             "resistor" | "capacitor" | "inductor" | "diode"
         ) {
             total_passives += 1;
-            if let Some(pos) = by_id.get(&component.id) {
-                if nm_to_mm(pos.y_nm) <= top_rail_threshold_y {
-                    top_rail_passives += 1;
-                }
+            if let Some(pos) = by_id.get(&component.id)
+                && nm_to_mm(pos.y_nm) <= top_rail_threshold_y
+            {
+                top_rail_passives += 1;
             }
         }
     }
@@ -113,18 +112,18 @@ pub fn score_placement(board: &Board, placement: &Placement) -> PlacementScore {
     let max_y = nm_to_mm(placement.board_outline.max.y_nm);
 
     for component in &board.components {
-        if component.kind == "connector" {
-            if let Some(pos) = by_id.get(&component.id) {
-                let px = nm_to_mm(pos.x_nm);
-                let py = nm_to_mm(pos.y_nm);
-                let dist_left = (px - min_x).abs();
-                let dist_right = (max_x - px).abs();
-                let dist_top = (py - min_y).abs();
-                let dist_bottom = (max_y - py).abs();
-                let min_edge_dist = dist_left.min(dist_right).min(dist_top).min(dist_bottom);
-                if min_edge_dist > max_connector_edge_dist {
-                    max_connector_edge_dist = min_edge_dist;
-                }
+        if component.kind == "connector"
+            && let Some(pos) = by_id.get(&component.id)
+        {
+            let px = nm_to_mm(pos.x_nm);
+            let py = nm_to_mm(pos.y_nm);
+            let dist_left = (px - min_x).abs();
+            let dist_right = (max_x - px).abs();
+            let dist_top = (py - min_y).abs();
+            let dist_bottom = (max_y - py).abs();
+            let min_edge_dist = dist_left.min(dist_right).min(dist_top).min(dist_bottom);
+            if min_edge_dist > max_connector_edge_dist {
+                max_connector_edge_dist = min_edge_dist;
             }
         }
     }

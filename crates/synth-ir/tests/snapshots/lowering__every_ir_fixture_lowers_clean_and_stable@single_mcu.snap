@@ -20,7 +20,7 @@ expression: board
         "signed_by": [],
         "substitutes": [],
         "mpn": "RP2350A",
-        "lcsc_pn": "C14663",
+        "lcsc_pn": "C42411118",
         "pins": [
           {
             "name": "iovdd",
@@ -77,7 +77,7 @@ expression: board
             "electrical_type": "bidirectional",
             "capabilities": [
               "gpio",
-              "spi_mosi",
+              "spi_miso",
               "uart_tx",
               "i2c_sda"
             ],
@@ -118,7 +118,7 @@ expression: board
             "electrical_type": "bidirectional",
             "capabilities": [
               "gpio",
-              "spi_miso",
+              "spi_mosi",
               "uart_rx"
             ],
             "required": false,
@@ -672,13 +672,13 @@ expression: board
           {
             "net": "iovdd",
             "value": "100nf",
-            "count": 4,
+            "count": 7,
             "max_distance_mm": null
           },
           {
             "net": "dvdd",
             "value": "100nf",
-            "count": 2,
+            "count": 3,
             "max_distance_mm": null
           }
         ],
@@ -698,6 +698,14 @@ expression: board
           "max_current_ma": 150.0,
           "max_power_mw": 300.0,
           "thermal_resistance_c_per_w": 40.0
+        },
+        "provenance": {
+          "source": "seed",
+          "generator": null,
+          "datasheet_url": "https://datasheets.raspberrypi.com/rp2350/rp2350-datasheet.pdf",
+          "reviewed_by": "Steve Munene",
+          "reviewed_at": "2026-11-05",
+          "upstream_lcsc_pn": null
         }
       },
       "source_span": {

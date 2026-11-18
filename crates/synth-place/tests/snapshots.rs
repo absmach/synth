@@ -106,6 +106,41 @@ fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     );
 }
 
+/// `secure_tracker`'s outline before the 25 MHz oscillator's courtyard was
+/// corrected from 5.0 x 5.0 to its real 6.0 x 4.32 mm: 64.90 x 63.85 mm.
+const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.85;
+
+/// A 1 mm part correction must not move the board 44%.
+///
+/// Correcting one courtyard by 1 mm took this board from 4143.9 mm2 to
+/// 5960.9 mm2, and nothing failed on it: the insta snapshot records whatever
+/// the placer does, so the non-monotonicity in #158 would be baked in
+/// silently. This bounds it against the area from before that change.
+///
+/// The sweep in #158 had the board oscillating between 64.90 and 93.90 mm
+/// wide as one part grew in 0.2 mm steps. The cause was the canvas choice,
+/// not the search: the square and wider canvases finished within a couple of
+/// percent of each other in area while their widths differed by 18 mm, and
+/// selecting the strictly smallest flipped the aspect when a part changed by
+/// 0.2 mm. `choose_canvas` now requires a wider canvas to be 3% smaller
+/// before it displaces the square family; the 0.2 mm sweep is monotonic,
+/// 64.90 mm wide from 5.0 to 7.0 mm and 65.90 mm at 8.0. This guard is the
+/// regression check: the corrected output must stay near the area the board
+/// had before the correction.
+#[test]
+fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
+    let board = load_board("fixtures/kicad-reference/secure_tracker.synth");
+    let placement = synth_place::place(&board).expect("place");
+    let area = nm_to_mm(placement.board_outline.width_nm())
+        * nm_to_mm(placement.board_outline.height_nm());
+    let baseline = SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85;
+    assert!(
+        (area - baseline).abs() <= baseline * OUTLINE_AREA_TOLERANCE,
+        "outline area {area:.1} mm2 deviates more than 10% from baseline \
+         {baseline:.1} mm2 — see #158"
+    );
+}
+
 /// The external placement contract publishes the footprint origin (KiCad
 /// `at`), not the internal courtyard centre. For an asymmetric footprint the
 /// two differ by the courtyard offset; publishing the internal value shifts
@@ -163,12 +198,14 @@ fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
         .find(|component| component.id == usb.id)
         .expect("USB-C placement");
     assert_eq!(usb_placement.rotation, synth_geometry::Rotation::OneEighty);
-    assert!(synth_place::floorplan::connector_orientation_issues(
-        &board,
-        placement.board_outline,
-        &placement.components,
-    )
-    .is_empty());
+    assert!(
+        synth_place::floorplan::connector_orientation_issues(
+            &board,
+            placement.board_outline,
+            &placement.components,
+        )
+        .is_empty()
+    );
 
     let mut incorrect = placement.clone();
     incorrect
@@ -185,4 +222,153 @@ fn usb_c_orientation_is_derived_and_wrong_override_is_detected() {
     assert_eq!(issues.len(), 1);
     assert_eq!(issues[0].refdes, "J1");
     assert_eq!(issues[0].expected, synth_geometry::Rotation::OneEighty);
+}
+
+/// A connector whose hard `edge:` hint names its edge is checked against that
+/// edge wherever it sits. A pinned placement that leaves it far from the edge
+/// with its opening turned inward is reported, not skipped as an interior part.
+#[test]
+fn a_connector_with_an_edge_hint_is_checked_however_far_it_sits_from_the_edge() {
+    use synth_place::floorplan::{BoardEdge, rotation_for_mating_edge};
+
+    let board = load_board("fixtures/designs/edge_jst_connectors.synth");
+    let placement = synth_place::place(&board).expect("place");
+    let left = board
+        .components
+        .iter()
+        .find(|component| component.refdes == "J1")
+        .expect("J1 asks for the left edge");
+    let face = left
+        .part
+        .as_ref()
+        .and_then(|part| part.footprint_dimensions.as_ref())
+        .and_then(|dimensions| dimensions.mating_face)
+        .expect("J1 declares its mating face");
+    let mut pinned = placement.clone();
+    let part = pinned
+        .components
+        .iter_mut()
+        .find(|component| component.id == left.id)
+        .expect("J1 placement");
+    // Opening toward the right edge, and far from the left one.
+    part.rotation = rotation_for_mating_edge(face, BoardEdge::Right);
+    part.center = synth_geometry::Point::new(
+        pinned.board_outline.min.x_nm + synth_geometry::mm_to_nm(25.0),
+        part.center.y_nm,
+    );
+    let issues = synth_place::floorplan::connector_orientation_issues(
+        &board,
+        pinned.board_outline,
+        &pinned.components,
+    );
+    assert!(
+        issues.iter().any(|issue| issue.refdes == "J1"),
+        "{issues:?}"
+    );
+}
+
+/// A JST connector's plug opens outward on every edge, not only on the one the
+/// floorplan used to assume. Each connector here asks for a different edge; the
+/// rotation that points its declared mating face out of that edge is derived
+/// from the part, and the orientation check agrees.
+#[test]
+fn jst_connectors_face_outward_on_every_edge() {
+    use synth_geometry::Rotation;
+    use synth_place::floorplan::{BoardEdge, rotation_for_mating_edge};
+    use synth_registry::MatingFace;
+
+    let board = load_board("fixtures/designs/edge_jst_connectors.synth");
+    let placement = synth_place::place(&board).expect("place");
+
+    let asked = [
+        ("J1", BoardEdge::Left),
+        ("J2", BoardEdge::Right),
+        ("J3", BoardEdge::Bottom),
+        ("J4", BoardEdge::Top),
+    ];
+    for (refdes, edge) in asked {
+        let component = board
+            .components
+            .iter()
+            .find(|c| c.refdes == refdes)
+            .expect("connector");
+        let face = component
+            .part
+            .as_ref()
+            .and_then(|part| part.footprint_dimensions.as_ref())
+            .and_then(|dimensions| dimensions.mating_face);
+        assert_eq!(
+            face,
+            Some(MatingFace::Bottom),
+            "{refdes}'s part must declare which way its plug opens"
+        );
+        let placed = placement
+            .components
+            .iter()
+            .find(|c| c.id == component.id)
+            .expect("placement");
+        let expected: Rotation = rotation_for_mating_edge(MatingFace::Bottom, edge);
+        assert_eq!(
+            placed.rotation, expected,
+            "{refdes} asked for the {edge:?} edge and must open outward"
+        );
+    }
+
+    let issues = synth_place::floorplan::connector_orientation_issues(
+        &board,
+        placement.board_outline,
+        &placement.components,
+    );
+    assert!(
+        issues.is_empty(),
+        "an edge-mounted connector faces into the board: {issues:?}\noutline {:?}\n{:?}",
+        placement.board_outline,
+        placement
+            .components
+            .iter()
+            .filter(|c| board
+                .component(c.id)
+                .is_some_and(|k| k.refdes.starts_with('J')))
+            .map(|c| (
+                board.component(c.id).map(|k| k.refdes.clone()),
+                c.center,
+                c.rotation
+            ))
+            .collect::<Vec<_>>()
+    );
+}
+
+const VERTICAL_JST_XH: [&str; 2] = ["jst_b2b_xh_a_2pin", "jst_b4b_xh_a_4pin"];
+
+/// A connector part that goes on a board edge says which way its plug opens, or
+/// the placer has nothing to orient it by and the DRC cannot check it. Vertical
+/// pin headers are the exception: their opening faces up, not out of an edge.
+/// The two top-entry JST XH headers are vertical too, so they are listed by id.
+#[test]
+fn every_edge_connector_declares_which_way_its_plug_opens() {
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("registry loads");
+    let mut missing = Vec::new();
+    let mut checked = 0;
+    for (_, part) in registry.iter() {
+        if !matches!(part.kind.as_str(), "connector" | "jack")
+            || part.id.0.starts_with("header_")
+            || VERTICAL_JST_XH.contains(&part.id.0.as_str())
+        {
+            continue;
+        }
+        checked += 1;
+        let face = part
+            .footprint_dimensions
+            .as_ref()
+            .and_then(|dimensions| dimensions.mating_face);
+        if face.is_none() {
+            missing.push(part.id.0.clone());
+        }
+    }
+    assert!(checked >= 8, "found only {checked} edge connectors");
+    assert!(
+        missing.is_empty(),
+        "edge connectors with no mating_face: {missing:?}"
+    );
 }

@@ -153,6 +153,68 @@ class RegionCoverage(unittest.TestCase):
         self.assertAlmostEqual(got["region_coverage"], 400.0 / 600.0, places=4)
 
 
+# A page whose frame, inside the 20 mm margin and above the title block band, is
+# (20, 20) to (180, 120): 160 x 100 mm.
+FRAME_PAGE = (200.0, 160.35)
+
+
+class FrameCoverage(unittest.TestCase):
+    def cover(self, *boxes):
+        return sq.frame_coverage(list(boxes), FRAME_PAGE)
+
+    def test_boxes_one_line_apart_cover_nearly_all_of_the_frame(self):
+        self.assertAlmostEqual(self.cover((20, 20, 100, 120), (100.254, 20, 180, 120)), 0.9984, places=4)
+
+    def test_a_box_the_size_of_the_frame_covers_it(self):
+        self.assertAlmostEqual(self.cover((20, 20, 180, 120)), 1.0)
+
+    def test_a_hole_in_the_frame_is_not_covered(self):
+        self.assertAlmostEqual(self.cover((20, 20, 100, 120), (100, 20, 180, 70)), 0.75)
+
+    def test_a_box_past_the_frame_counts_only_inside_it(self):
+        self.assertAlmostEqual(self.cover((0, 0, 200, 160)), 1.0)
+
+    def test_no_boxes_cover_nothing(self):
+        self.assertEqual(self.cover(), 0.0)
+
+    def test_score_carries_it(self):
+        got = sq.score([], [], FRAME_PAGE, (), group_boxes=[(20, 20, 100, 120)])
+        self.assertAlmostEqual(got["frame_coverage"], 0.5)
+
+
+class MaxGapBetweenBoxes(unittest.TestCase):
+    def gap(self, *boxes):
+        return sq.max_gap_between_boxes_mm(list(boxes))
+
+    def test_boxes_one_line_apart_have_that_gap(self):
+        self.assertAlmostEqual(self.gap((0, 0, 10, 10), (10.254, 0, 20, 10)), 0.254)
+
+    def test_the_widest_gap_is_reported(self):
+        got = self.gap((0, 0, 10, 10), (10.254, 0, 20, 10), (25, 0, 30, 10))
+        self.assertAlmostEqual(got, 5.0)
+
+    def test_a_narrower_gap_after_the_widest_does_not_hide_it(self):
+        got = self.gap((0, 0, 10, 10), (15, 0, 20, 10), (20.254, 0, 30, 10))
+        self.assertAlmostEqual(got, 5.0)
+
+    def test_boxes_stacked_are_measured_down(self):
+        self.assertAlmostEqual(self.gap((0, 0, 10, 10), (0, 14, 10, 20)), 4.0)
+
+    def test_boxes_that_share_no_rows_or_columns_do_not_face(self):
+        self.assertEqual(self.gap((0, 0, 10, 10), (30, 30, 40, 40)), 0.0)
+
+    def test_a_box_between_two_hides_their_gap(self):
+        got = self.gap((0, 0, 10, 10), (10.254, 0, 20, 10), (20.254, 0, 30, 10))
+        self.assertAlmostEqual(got, 0.254)
+
+    def test_a_single_box_has_no_gap(self):
+        self.assertEqual(self.gap((0, 0, 10, 10)), 0.0)
+
+    def test_score_carries_it(self):
+        got = sq.score([], [], FRAME_PAGE, (), group_boxes=[(0, 0, 10, 10), (13, 0, 20, 10)])
+        self.assertAlmostEqual(got["max_gap_between_boxes_mm"], 3.0)
+
+
 def contain_sch(boxes=(), symbols=(), titles=(), wires=()):
     """A `.kicad_sch` with group boxes (x1, y1, x2, y2), one symbol definition
     `Device:R` (a rectangle from -1,-2 to 1,2 and pins at 0,+3.81 and 0,-3.81)

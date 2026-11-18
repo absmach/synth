@@ -1,0 +1,32 @@
+id = "r_pulse_10r_0603"
+kind = "resistor"
+version = 0
+lifecycle = "active"
+description = "Vishay CRCW060310R0JNEAHP 10 ohm 5% pulse-proof thick-film 0603 resistor, series element in the RS-485 surge circuit"
+mpn = "CRCW060310R0JNEAHP"
+lcsc_pn = "C844519"
+kicad_symbol = "Device:R_US"
+kicad_footprint = "Resistor_SMD:R_0603_1608Metric"
+
+[footprint_dimensions]
+width_mm = 2.96
+height_mm = 1.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 75.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+datasheet_url = "https://www.vishay.com/docs/20043/crcwhpe3.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-27"

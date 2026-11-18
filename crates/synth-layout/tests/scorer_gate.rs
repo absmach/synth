@@ -24,7 +24,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use synth_ir::Board;
-use synth_layout::score::{score, LayoutScore};
+use synth_layout::score::{LayoutScore, score};
 
 #[derive(serde::Deserialize, serde::Serialize)]
 struct Baselines {

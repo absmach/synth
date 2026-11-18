@@ -8,7 +8,7 @@
 //! those tracks — guaranteed minimum pitch and zero line overlap.
 
 use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
-use synth_layout::{route, ComponentPlacement, Layout, Rotation, SheetSize};
+use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize, route};
 use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
 
 fn two_pin_part() -> Part {
@@ -30,10 +30,12 @@ fn two_pin_part() -> Part {
                 electrical_type: ElectricalType::Passive,
                 capabilities: Vec::new(),
                 required: false,
+                footprint_only: false,
                 unit: None,
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             },
             Pin {
                 name: "p2".to_string(),
@@ -41,10 +43,12 @@ fn two_pin_part() -> Part {
                 electrical_type: ElectricalType::Passive,
                 capabilities: Vec::new(),
                 required: false,
+                footprint_only: false,
                 unit: None,
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
             },
         ],
         required_decoupling: Vec::new(),
@@ -52,6 +56,7 @@ fn two_pin_part() -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -65,6 +70,7 @@ fn resistor(id: ComponentId, refdes: &str) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
@@ -108,6 +114,7 @@ fn horizontal_y_segments(pts: &[(f64, f64)]) -> Vec<f64> {
 /// packing MUST put them on separate track levels.
 fn two_row_board_and_layout() -> (Board, Layout) {
     let board = Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),

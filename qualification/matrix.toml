@@ -1,0 +1,17 @@
+schema_version = "synth.qualification.v1"
+
+# Only the Class-B buck board (SYN-67) is declared here. The full reference
+# matrix and its harness are in #247; this file uses #247's schema so the row
+# moves over unchanged when that lands.
+[matrix]
+release_command = "synth check <board> --json"
+fab_command = "synth check <board> --fab --json"
+
+[[board]]
+id = "buck"
+path = "qualification/class-b/buck/buck.synth"
+class = "B"
+status = "experimental"
+expect = "pass"
+expect_fab = "fail"
+rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper is complete and `kicad-cli pcb drc` reports 0 errors and 0 warnings, so source and DRC pass. Every part with a registry record is reviewed. Manufacturing still fails under `synth check --fab`, which routes with KiCadRoutingTools: that copper leaves 11 signal vias without a ground return via (W-SYNTH-DRC-016), so the release is validation_failed. The board stays `experimental`: no human has signed off its artifacts."

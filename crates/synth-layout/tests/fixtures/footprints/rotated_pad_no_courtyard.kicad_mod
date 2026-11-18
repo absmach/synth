@@ -1,0 +1,7 @@
+(footprint "rotated_pad_no_courtyard"
+	(version 20240108)
+	(generator "synth-fixture")
+	(layer "F.Cu")
+	(descr "No courtyard: one 0.5 x 2.0 mm pad turned a quarter, so it is 2.0 x 0.5 mm on the board")
+	(pad "1" smd rect (at 0 0 90) (size 0.5 2.0) (layers "F.Cu" "F.Mask" "F.Paste"))
+)

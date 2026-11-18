@@ -94,3 +94,69 @@ fn diodes_number_pins_like_kicad() {
         "expected at least 10 diodes, checked {checked}"
     );
 }
+
+#[test]
+fn d_schottky_limits_are_the_datasheet_ratings_of_its_mpn() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    let part = registry
+        .lookup("d_schottky")
+        .expect("d_schottky is shipped");
+    assert_eq!(part.mpn.as_deref(), Some("1N5819HW-7-F"));
+    // Diodes Inc. 1N5819HW: VRRM 40 V, IO 1.0 A.
+    let limits = part
+        .operating_conditions
+        .as_ref()
+        .expect("operating limits");
+    assert_eq!(limits.max_voltage_v, Some(40.0));
+    assert_eq!(limits.max_current_ma, Some(1000.0));
+}
+
+#[test]
+fn a_decoupling_rule_names_a_pin_the_part_has() {
+    // A rule on a pin that does not exist is never checked, so it protects nothing.
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    for (_, part) in registry.iter() {
+        for rule in &part.required_decoupling {
+            for pin in std::iter::once(&rule.net).chain(rule.to.as_ref()) {
+                assert!(
+                    part.find_pin(pin).is_some(),
+                    "part {}: required_decoupling names pin `{pin}`, which it does not have",
+                    part.id
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn no_two_active_parts_share_a_manufacturer_part_number() {
+    use std::collections::BTreeMap;
+    // Two pairs of shipped parts predate this check and are used by existing
+    // boards, so renaming either would change them: they are listed rather than
+    // allowed, and a new duplicate fails.
+    const PREDATING: [&str; 2] = ["rp2350a", "w25q128jvsiq"];
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    let mut by_mpn: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (_, part) in registry.iter() {
+        if part.lifecycle != synth_registry::Lifecycle::Active {
+            continue;
+        }
+        if let Some(mpn) = part.mpn.as_deref().filter(|m| !m.trim().is_empty()) {
+            by_mpn
+                .entry(mpn.to_ascii_lowercase())
+                .or_default()
+                .push(part.id.0.clone());
+        }
+    }
+    let duplicates: Vec<_> = by_mpn
+        .iter()
+        .filter(|(mpn, ids)| ids.len() > 1 && !PREDATING.contains(&mpn.as_str()))
+        .collect();
+    assert!(
+        duplicates.is_empty(),
+        "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
+    );
+}

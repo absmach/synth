@@ -536,10 +536,10 @@ fn lower_body_stmt(
 fn prefix_component(c: &ComponentDeclAst, ctx: &InstanceCtx<'_>) -> ComponentDeclAst {
     let mut c = c.clone();
     c.refdes = format!("{}{}", ctx.prefix, c.refdes);
-    if let Some(value) = c.value.clone() {
-        if let Some(param) = value.strip_prefix('$') {
-            c.value = ctx.params.get(param).cloned();
-        }
+    if let Some(value) = c.value.clone()
+        && let Some(param) = value.strip_prefix('$')
+    {
+        c.value = ctx.params.get(param).cloned();
     }
     c
 }

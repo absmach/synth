@@ -1,0 +1,17 @@
+id = "mounting_hole_m2_5_clearance"
+kind = "mounting_hole"
+description = "M2.5 clearance mounting hole (2.7 mm NPTH) for a screw that passes through the board"
+kicad_symbol = "Mechanical:MountingHole"
+kicad_footprint = "MountingHole:MountingHole_2.7mm_M2.5"
+
+# 2.7 mm is the hole, the ISO 273 fine clearance for M2.5.
+# `MountingHole:MountingHole_2.7mm_M2.5` draws its courtyard as an fp_circle of
+# radius 2.95 mm, so the footprint is 5.9 mm across.
+[footprint_dimensions]
+width_mm = 2.7
+height_mm = 2.7
+courtyard_margin_mm = 1.6
+
+[provenance]
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"

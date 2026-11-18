@@ -19,6 +19,12 @@ The numbers say how much of the page is collisions and how much is wasted:
   region_coverage                 how much of the rectangle the group boxes span
                                   they cover (1.0 means they tile it, low means
                                   holes between and beside them)
+  frame_coverage                  share of the page frame (inside the 20 mm margin,
+                                  above the title block band) the group boxes
+                                  cover (1.0 means the boxes fill the frame)
+  max_gap_between_boxes_mm        widest gap between two group boxes that face
+                                  each other (a box behind another is not a
+                                  neighbour; 0.0 when none face)
   content_density                 share of 10 mm cells in the content box that
                                   hold a wire or text (low means wasted space;
                                   symbol outlines are not read, so it reads low)
@@ -105,6 +111,10 @@ FLAG_CHAR_MM = 1.12
 FLAG_PAD_MM = 2.9
 FLAG_H_MM = 2.65
 FLAG_TOUCH_MM = 0.2
+# The page frame the group boxes should fill: in from every edge by the margin,
+# and up from the bottom by the title block band (34 mm) and its text margin.
+FRAME_MARGIN_MM = 20.0
+FRAME_BOTTOM_MM = 40.35
 # Longest kicad-cli may take to plot one schematic.
 PLOT_TIMEOUT_S = 300
 
@@ -316,6 +326,53 @@ def region_coverage(boxes):
     width = max(b[2] for b in boxes) - min(b[0] for b in boxes)
     height = max(b[3] for b in boxes) - min(b[1] for b in boxes)
     return round(covered / (width * height), 4) if width > 0 and height > 0 else 0.0
+
+
+def frame_coverage(boxes, page):
+    """Share of the page frame that the group boxes cover.
+
+    The frame is the page inside the margin and above the title block band.
+    Only the part of a box inside the frame counts; boxes do not overlap, so the
+    sum is the covered area."""
+    width, height = page
+    fx0, fy0 = FRAME_MARGIN_MM, FRAME_MARGIN_MM
+    fx1, fy1 = width - FRAME_MARGIN_MM, height - FRAME_BOTTOM_MM
+    if fx1 <= fx0 or fy1 <= fy0:
+        return 0.0
+    covered = 0.0
+    for x1, y1, x2, y2 in boxes:
+        covered += max(0.0, min(x2, fx1) - max(x1, fx0)) * max(0.0, min(y2, fy1) - max(y1, fy0))
+    return round(covered / ((fx1 - fx0) * (fy1 - fy0)), 4)
+
+
+def max_gap_between_boxes_mm(boxes):
+    """The widest gap between two group boxes that face each other.
+
+    Two boxes face when they share rows (a gap across) or columns (a gap down)
+    and no third box lies between them over the shared span, so a box farther
+    off behind another is not a neighbour. 0.0 when no two boxes face."""
+    widest = 0.0
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1 :]:
+            for axis in (0, 1):
+                other = 1 - axis
+                first, second = (a, b) if a[axis] <= b[axis] else (b, a)
+                gap = second[axis] - first[axis + 2]
+                lo = max(first[other], second[other])
+                hi = min(first[other + 2], second[other + 2])
+                if gap < 0 or hi - lo <= TOLERANCE_MM:
+                    continue
+                between = any(
+                    c is not first
+                    and c is not second
+                    and c[axis] >= first[axis + 2] - TOLERANCE_MM
+                    and c[axis + 2] <= second[axis] + TOLERANCE_MM
+                    and min(c[other + 2], hi) - max(c[other], lo) > TOLERANCE_MM
+                    for c in boxes
+                )
+                if not between:
+                    widest = max(widest, gap)
+    return round(widest, 3)
 
 
 def _lib_pins(sch_text):
@@ -609,6 +666,8 @@ def score(
         "wire_crossings": crossings,
         "wire_length_mm": round(length, 1),
         "region_coverage": region_coverage(group_boxes),
+        "frame_coverage": frame_coverage(group_boxes, page),
+        "max_gap_between_boxes_mm": max_gap_between_boxes_mm(group_boxes),
         "content_density": _content_density(wires, texts, content_points),
         "passive_to_pin_mean_mm": round(sum(measured) / len(measured), 1) if measured else 0.0,
         "passive_to_pin_max_mm": round(max(measured), 1) if measured else 0.0,

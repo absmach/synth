@@ -131,23 +131,24 @@ fn test_rendered_schematic_integrity() {
             let mut prop_tokens = prop_block.split_whitespace();
             let key = prop_tokens.next().unwrap_or("").trim_matches('"');
             let val = prop_tokens.next().unwrap_or("").trim_matches('"');
-            if (key == "Reference" || key == "Value") && !val.is_empty() {
-                if let Some(at_idx) = prop_block.find("(at ") {
-                    let rest = &prop_block[at_idx + 4..];
-                    let mut tokens = rest.split_whitespace();
-                    if let (Some(x_str), Some(y_str)) = (tokens.next(), tokens.next()) {
-                        let px = sym_x + x_str.trim_end_matches(')').parse::<f64>().unwrap_or(0.0);
-                        let py = sym_y + y_str.trim_end_matches(')').parse::<f64>().unwrap_or(0.0);
-                        let text_w = (val.len() as f64) * 0.762 + 2.0;
-                        let text_h = 2.54;
-                        bboxes.push(TextBBox {
-                            label: format!("{key}:{val}"),
-                            min_x: px - text_w / 2.0,
-                            max_x: px + text_w / 2.0,
-                            min_y: py - text_h / 2.0,
-                            max_y: py + text_h / 2.0,
-                        });
-                    }
+            if (key == "Reference" || key == "Value")
+                && !val.is_empty()
+                && let Some(at_idx) = prop_block.find("(at ")
+            {
+                let rest = &prop_block[at_idx + 4..];
+                let mut tokens = rest.split_whitespace();
+                if let (Some(x_str), Some(y_str)) = (tokens.next(), tokens.next()) {
+                    let px = sym_x + x_str.trim_end_matches(')').parse::<f64>().unwrap_or(0.0);
+                    let py = sym_y + y_str.trim_end_matches(')').parse::<f64>().unwrap_or(0.0);
+                    let text_w = (val.len() as f64) * 0.762 + 2.0;
+                    let text_h = 2.54;
+                    bboxes.push(TextBBox {
+                        label: format!("{key}:{val}"),
+                        min_x: px - text_w / 2.0,
+                        max_x: px + text_w / 2.0,
+                        min_y: py - text_h / 2.0,
+                        max_y: py + text_h / 2.0,
+                    });
                 }
             }
         }
@@ -255,7 +256,15 @@ fn test_rendered_schematic_integrity() {
                                 assert!(
                                     is_valid_endpoint,
                                     "WIRE DRC VIOLATION: Wire segment ({:.2}, {:.2}) -> ({:.2}, {:.2}) passes through unrelated pin {} ({}) of component {} at ({:.2}, {:.2})!",
-                                    x1, y1, x2, y2, pin.number.0, pin.name, component.refdes, px, py
+                                    x1,
+                                    y1,
+                                    x2,
+                                    y2,
+                                    pin.number.0,
+                                    pin.name,
+                                    component.refdes,
+                                    px,
+                                    py
                                 );
                             }
                         }

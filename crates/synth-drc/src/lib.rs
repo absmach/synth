@@ -60,15 +60,22 @@
 #![forbid(unsafe_code)]
 #![allow(clippy::cast_possible_wrap, clippy::similar_names)]
 
+pub mod dfm;
 mod emc;
 mod geometry;
 pub mod kicad_cli;
+pub mod pcb_read;
 mod profile;
 mod rules;
 mod signal_integrity;
 /// The IPC-2221 width a `current` needs. Re-exported so the exporter can size
 /// a high-current net's trace for the router.
 pub use signal_integrity::required_width_nm;
+pub use signal_integrity::{
+    MEDIUM_EDGE_WINDOW_NM, ground_net_names, is_ground_name, return_path_critical_net_names,
+    return_path_medium_net_names,
+};
+pub use signal_integrity::{RETURN_VIA_CLEARANCE_NM, return_via_window_nm};
 
 use serde::{Deserialize, Serialize};
 use synth_geometry::Point;
@@ -77,7 +84,7 @@ use synth_pcb::Routing;
 use synth_place::Placement;
 
 pub use profile::{ManufacturerProfile, ProfileError};
-pub use rules::{replay, run_kicad_cli_drc, DrcCounts, NativeDrcOutcome, DRC_STAGE};
+pub use rules::{DRC_STAGE, DrcCounts, NativeDrcOutcome, replay, run_kicad_cli_drc};
 /// Re-exported so a DRC caller can resolve and hand in a board's physical
 /// stack without depending on `synth-geometry` directly.
 pub use synth_geometry::StackupProfile;
@@ -240,6 +247,7 @@ pub fn check_signal_integrity(
     ));
     violations.extend(signal_integrity::check_net_length(board, routing));
     violations.extend(signal_integrity::check_group_skew(board, routing));
+    violations.extend(signal_integrity::check_layer_pins(board, routing));
     violations.extend(signal_integrity::check_via_current(board, routing));
     violations
 }
@@ -284,7 +292,9 @@ fn evaluate(
     violations.extend(rules::check_min_copper_clearance(routing, profile));
     violations.extend(rules::check_copper_to_edge(routing, placement, profile));
     violations.extend(rules::check_min_drill_diameter(routing, profile));
-    violations.extend(rules::check_min_annular_ring(routing, profile));
+    violations.extend(rules::check_min_annular_ring(
+        board, placement, routing, profile,
+    ));
     violations.extend(rules::check_min_drill_to_copper(routing, profile));
     violations.extend(rules::check_courtyard_overlap(board, placement));
     violations.extend(rules::check_connector_orientation(board, placement));
@@ -316,6 +326,7 @@ fn evaluate(
     violations.extend(signal_integrity::check_diff_pair_skew(board, routing));
     violations.extend(signal_integrity::check_net_length(board, routing));
     violations.extend(signal_integrity::check_group_skew(board, routing));
+    violations.extend(signal_integrity::check_layer_pins(board, routing));
     violations.extend(signal_integrity::check_via_current(board, routing));
     violations.extend(signal_integrity::check_ampacity(
         board,
@@ -334,6 +345,202 @@ fn evaluate(
 mod tests {
     use super::*;
     use synth_ir::Board;
+
+    fn board_from_source(source: &str) -> Board {
+        let file = "ground.synth".to_string();
+        let parse = synth_parser::parse(source, file.clone());
+        let ast = parse.ast.as_ref().expect("parse");
+        let registry_dir = std::path::Path::new("../..").join("registry").join("parts");
+        let registry = synth_registry::load_dir(&registry_dir).expect("registry");
+        let loader = synth_ir::FsImportLoader {
+            root: std::path::PathBuf::from("../.."),
+        };
+        let resolved = synth_ir::resolve_imports(ast, &loader, &file);
+        synth_ir::lower(&resolved.program, &registry, &file)
+            .board
+            .expect("board")
+    }
+
+    /// A ground that its name does not give away, which is what a repair pass
+    /// that sees only the board file must still recognise.
+    #[test]
+    fn a_net_on_ground_pins_is_ground_whatever_it_is_called() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                component U1: mcu "rp2350"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                net "POWER_RETURN" { U1.gnd C1.p2 }
+                net "SIGNAL" { U1.gp0 C1.p1 }
+            }"#,
+        );
+        let ground = ground_net_names(&board);
+        assert!(ground.iter().any(|n| n == "POWER_RETURN"), "{ground:?}");
+        assert!(!ground.iter().any(|n| n == "SIGNAL"), "{ground:?}");
+    }
+
+    /// An unclassified net is critical. A generic GPIO pin is typed like any
+    /// other output, so it proves nothing about the edge rate; the same pin
+    /// can carry a fast SPI, USB or timer signal. Only a class that declares
+    /// `edge_rate slow` may be downgraded to an advisory.
+    #[test]
+    fn an_unclassified_net_is_critical_for_a_return_via() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                component U1: mcu "rp2350"
+                component X1: crystal "osc_smd_25mhz"
+                component L1: inductor "l_generic_1210" value "10uH"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "CLK_OUT" { X1.out R1.p1 }
+                net "SW_NODE" { L1.p1 C1.p1 }
+                net "SLOW_GPIO" { U1.gp0 R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "CLK_OUT"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SW_NODE"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
+    }
+
+    /// The declaration the reviewer asked for: a class saying its nets change
+    /// slowly is the one piece of evidence that allows an advisory. A fast
+    /// class, and a net in no class, stay critical.
+    #[test]
+    fn a_net_class_declaring_a_slow_edge_is_the_only_downgrade() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                netclass "I2C" { edge_rate slow }
+                netclass "SPI" { edge_rate fast }
+                component U1: mcu "rp2350"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "I2C_SDA" class "I2C" { U1.gp0 C1.p1 }
+                net "SPI_SCK" class "SPI" { U1.gp1 C1.p2 }
+                net "UNCLASSIFIED" { U1.gp2 R1.p1 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(!critical.iter().any(|n| n == "I2C_SDA"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SPI_SCK"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "UNCLASSIFIED"), "{critical:?}");
+    }
+
+    /// A `slow` class cannot quiet a net whose own pins prove a fast edge:
+    /// clock, differential, RF, analog, crystal and inductor nets stay
+    /// critical however they are declared.
+    #[test]
+    fn a_slow_class_does_not_downgrade_a_fast_net() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component U1: mcu "rp2350"
+                component X1: crystal "osc_smd_25mhz"
+                component Y1: crystal "xtal_generic"
+                component L1: inductor "l_generic_1210" value "10uH"
+                component J1: connector "micro_usb_b"
+                component ANT1: antenna "ant_chip_2g4"
+                component A1: opamp "mcp6022_dual"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "CLK_OUT" class "QUIET" { X1.out R1.p1 }
+                net "USB_DP" class "QUIET" { J1.dp U1.gp1 }
+                net "USB_DN" class "QUIET" { J1.dn U1.gp2 }
+                net "RF_FEED" class "QUIET" { ANT1.feed C1.p1 }
+                net "SENSE" class "QUIET" { A1.out_a R1.p2 }
+                net "XIN" class "QUIET" { U1.xin Y1.p1 }
+                net "SW_NODE" class "QUIET" { L1.p1 C1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        for net in [
+            "CLK_OUT", "USB_DP", "USB_DN", "RF_FEED", "SENSE", "XIN", "SW_NODE",
+        ] {
+            assert!(critical.iter().any(|n| n == net), "{net}: {critical:?}");
+        }
+    }
+
+    /// The inductor marks the switching node, not the rail its output
+    /// capacitors hold: a net on the inductor's filtered side, with a capacitor
+    /// to ground and no switch pin, is a rail that a slow declaration may quiet,
+    /// and the node the regulator switches stays critical.
+    #[test]
+    fn the_filtered_side_of_an_inductor_is_a_rail_and_the_switching_node_is_not() {
+        let board = board_from_source(
+            r#"board "buck" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component L1: inductor "l_generic_1210" value "10uH"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component C2: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "SW_NODE" class "QUIET" { L1.p1 C2.p1 }
+                net "BOOT" class "QUIET" { C2.p2 R1.p1 }
+                net "VOUT" class "QUIET" { L1.p2 C1.p1 }
+                net "GND" { C1.p2 R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "SW_NODE"), "{critical:?}");
+        assert!(!critical.iter().any(|n| n == "VOUT"), "{critical:?}");
+    }
+
+    /// An inductor net with no capacitor to ground is not a filtered rail: it
+    /// stays critical even under a slow declaration.
+    #[test]
+    fn an_inductor_net_with_no_capacitor_to_ground_stays_critical() {
+        let board = board_from_source(
+            r#"board "choke" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component L1: inductor "l_generic_1210" value "10uH"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "CHOKE" class "QUIET" { L1.p1 R1.p1 }
+                net "GND" { R1.p2 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "CHOKE"), "{critical:?}");
+    }
+
+    /// A declared differential pair holds both legs critical even when the
+    /// pins are typed plain and the class claims a slow edge.
+    #[test]
+    fn a_slow_class_does_not_downgrade_a_declared_diff_pair() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                netclass "QUIET" { edge_rate slow }
+                component U1: mcu "rp2350"
+                component R1: resistor "r_generic_0603" value "10k"
+                component R2: resistor "r_generic_0603" value "10k"
+                net "PAIR_P" class "QUIET" { U1.gp0 R1.p1 }
+                net "PAIR_N" class "QUIET" { U1.gp1 R2.p1 }
+                diff_pair "PAIR_P" "PAIR_N" { impedance 90ohm }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "PAIR_P"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "PAIR_N"), "{critical:?}");
+    }
+
+    /// A bare crystal's terminals are passive and the RP2350's `xin` and `xout`
+    /// are typed input and output, so no pin type marks the oscillator loop; the
+    /// crystal on the net does.
+    #[test]
+    fn a_net_on_a_bare_crystals_terminal_is_critical_for_a_return_via() {
+        let board = board_from_source(
+            r#"board "xtal" { layers 2
+                component U1: mcu "rp2350"
+                component Y1: crystal "xtal_generic"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "XIN" { U1.xin Y1.p1 }
+                net "XOUT" { U1.xout Y1.p2 }
+                net "SLOW_GPIO" { U1.gp0 R1.p1 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(critical.iter().any(|n| n == "XIN"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "XOUT"), "{critical:?}");
+        // Unclassified, so it blocks too: a plain pin does not prove a slow edge.
+        assert!(critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
+    }
 
     fn load_board(path: &str) -> Board {
         let source = std::fs::read_to_string(path).expect("read fixture");
@@ -625,6 +832,8 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -670,6 +879,8 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -744,12 +955,14 @@ mod tests {
             ],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_edge_coupling(
-            &far,
-            &ManufacturerProfile::jlc_standard(),
-            &stackup
-        )
-        .is_empty());
+        assert!(
+            super::signal_integrity::check_edge_coupling(
+                &far,
+                &ManufacturerProfile::jlc_standard(),
+                &stackup
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -861,6 +1074,283 @@ mod tests {
         );
     }
 
+    /// A net whose class declares `edge_rate medium` still needs a return via, but
+    /// looks for it within a fraction of the wavelength at its edge's knee and not
+    /// one dielectric height; a fast or undeclared net keeps the dielectric window.
+    #[test]
+    fn a_medium_edge_net_looks_for_its_return_via_in_a_wider_window() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        board.stackup = Some(four_layer_stackup());
+        let stackup = StackupProfile::for_board(&board);
+        let ground = board
+            .nets
+            .iter()
+            .find(|net| super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a ground net")
+            .id;
+        let signal = board
+            .nets
+            .iter()
+            .find(|net| !super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a signal net")
+            .id;
+        let class = |edge_rate| synth_ir::NetClass {
+            name: "SDRAM".to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            via_diameter: None,
+            via_drill: None,
+            max_length: None,
+            max_skew: None,
+            edge_rate,
+            layers: Vec::new(),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        };
+        let via = |net: NetId, x: i64| synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(x, 0),
+            drill_nm: 200_000,
+            pad_diameter_nm: 600_000,
+        };
+        // A ground via 3 mm away: outside a dielectric window, inside a medium one.
+        let routing = Routing {
+            vias: vec![via(signal, 0), via(ground, 3_000_000)],
+            ..Routing::default()
+        };
+        let signal_index = board.nets.iter().position(|n| n.id == signal).unwrap();
+        board.nets[signal_index].netclass = Some("SDRAM".to_string());
+        board.netclasses = vec![class(Some(synth_ir::EdgeRate::Fast))];
+        assert_eq!(
+            super::signal_integrity::check_return_path_vias(&board, &routing, &stackup).len(),
+            1,
+            "a fast net keeps the dielectric window"
+        );
+        board.netclasses = vec![class(Some(synth_ir::EdgeRate::Medium))];
+        assert!(
+            super::signal_integrity::check_return_path_vias(&board, &routing, &stackup).is_empty(),
+            "a medium net accepts a return via 3 mm away"
+        );
+        assert!(
+            synth_drc_critical(&board).contains(&board.nets[signal_index].name),
+            "a medium net still needs a return via"
+        );
+        // Beyond the medium window it is flagged again.
+        let far = Routing {
+            vias: vec![via(signal, 0), via(ground, 7_000_000)],
+            ..Routing::default()
+        };
+        assert_eq!(
+            super::signal_integrity::check_return_path_vias(&board, &far, &stackup).len(),
+            1
+        );
+    }
+
+    /// A differential pair is inferred fast, so a class's `edge_rate medium` used
+    /// to be ignored on its legs. A class that declares `medium` answers for its
+    /// pair's edge: the legs keep their return via and look for it in the medium
+    /// window; a pair on any other class keeps the dielectric window.
+    #[test]
+    fn a_diff_pair_on_a_medium_class_looks_for_its_return_via_in_the_wider_window() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        board.stackup = Some(four_layer_stackup());
+        let stackup = StackupProfile::for_board(&board);
+        let ground = board
+            .nets
+            .iter()
+            .find(|net| super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a ground net")
+            .id;
+        let signals: Vec<usize> = board
+            .nets
+            .iter()
+            .enumerate()
+            .filter(|(_, net)| !super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .map(|(index, _)| index)
+            .take(2)
+            .collect();
+        let (positive, negative) = (signals[0], signals[1]);
+        let (positive_id, negative_id) = (board.nets[positive].id, board.nets[negative].id);
+        board.nets[positive].netclass = Some("TMDS".to_string());
+        board.nets[negative].netclass = Some("TMDS".to_string());
+        board.diff_pairs = vec![synth_ir::DiffPair {
+            positive: board.nets[positive].name.clone(),
+            negative: board.nets[negative].name.clone(),
+            positive_net: Some(positive_id),
+            negative_net: Some(negative_id),
+            impedance: None,
+            max_skew: None,
+            couple: None,
+            source_span: synth_diagnostics::Span::new(0, 0),
+        }];
+        let class = |edge_rate| synth_ir::NetClass {
+            name: "TMDS".to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            via_diameter: None,
+            via_drill: None,
+            max_length: None,
+            max_skew: None,
+            edge_rate,
+            layers: Vec::new(),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        };
+        let via = |net: NetId, x: i64| synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(x, 0),
+            drill_nm: 200_000,
+            pad_diameter_nm: 600_000,
+        };
+        // A ground via 3 mm away: outside a dielectric window, inside a medium one.
+        let routing = Routing {
+            vias: vec![via(positive_id, 0), via(ground, 3_000_000)],
+            ..Routing::default()
+        };
+        board.netclasses = vec![class(None)];
+        assert_eq!(
+            super::signal_integrity::check_return_path_vias(&board, &routing, &stackup).len(),
+            1,
+            "a pair on a class with no declared edge keeps the dielectric window"
+        );
+        board.netclasses = vec![class(Some(synth_ir::EdgeRate::Medium))];
+        assert!(
+            super::signal_integrity::check_return_path_vias(&board, &routing, &stackup).is_empty(),
+            "a pair on a medium class accepts a return via 3 mm away"
+        );
+        assert!(
+            synth_drc_critical(&board).contains(&board.nets[positive].name),
+            "a medium pair leg still needs a return via"
+        );
+    }
+
+    /// A differential pin on a net does not by itself prove a fast edge once the
+    /// net's class declares `edge_rate medium`.
+    #[test]
+    fn a_medium_class_answers_for_a_differential_pin() {
+        use synth_registry::ElectricalType;
+        let mut board =
+            load_board("../../examples/placement_and_diff_pair/placement_and_diff_pair.synth");
+        board.diff_pairs.clear();
+        let pin_type = |board: &Board, net: &synth_ir::Net, wanted: &[ElectricalType]| {
+            net.endpoints.iter().any(|endpoint| {
+                board
+                    .component(endpoint.component)
+                    .and_then(|component| component.part.as_ref())
+                    .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
+                    .is_some_and(|pin| wanted.contains(&pin.electrical_type))
+            })
+        };
+        let differential = [
+            ElectricalType::DifferentialPositive,
+            ElectricalType::DifferentialNegative,
+        ];
+        let index = board
+            .nets
+            .iter()
+            .position(|net| {
+                pin_type(&board, net, &differential)
+                    && !pin_type(
+                        &board,
+                        net,
+                        &[
+                            ElectricalType::Clock,
+                            ElectricalType::Rf,
+                            ElectricalType::Analog,
+                        ],
+                    )
+            })
+            .expect("the fixture has a net with a differential pin");
+        let name = board.nets[index].name.clone();
+        board.nets[index].netclass = Some("TMDS".to_string());
+        let class = |edge_rate| synth_ir::NetClass {
+            name: "TMDS".to_string(),
+            trace_width: None,
+            clearance: None,
+            color: None,
+            impedance: None,
+            current: None,
+            plane: false,
+            via_diameter: None,
+            via_drill: None,
+            max_length: None,
+            max_skew: None,
+            edge_rate,
+            layers: Vec::new(),
+            source_span: synth_diagnostics::Span::new(0, 0),
+        };
+        board.netclasses = vec![class(None)];
+        assert!(
+            !super::return_path_medium_net_names(&board).contains(&name),
+            "a differential pin with no declared edge stays fast"
+        );
+        board.netclasses = vec![class(Some(synth_ir::EdgeRate::Medium))];
+        assert!(
+            super::return_path_medium_net_names(&board).contains(&name),
+            "a medium class answers for a differential pin"
+        );
+    }
+
+    fn synth_drc_critical(board: &Board) -> Vec<String> {
+        super::signal_integrity::return_path_critical_net_names(board)
+    }
+
+    #[test]
+    fn the_return_via_window_is_never_narrower_than_a_via_beside_a_via() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        board.stackup = Some(four_layer_stackup());
+        let stackup = StackupProfile::for_board(&board);
+        let ground = board
+            .nets
+            .iter()
+            .find(|net| super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a ground net")
+            .id;
+        let signal = board
+            .nets
+            .iter()
+            .find(|net| !super::signal_integrity::net_name_or_pin_is_ground(&board, net))
+            .expect("env_logger must have a signal net")
+            .id;
+        let via = |net: NetId, x: i64| synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(x, 0),
+            drill_nm: 200_000,
+            pad_diameter_nm: 600_000,
+        };
+        // The stackup's thickest dielectric is 0.64 mm, and a 0.6 mm via with
+        // 0.2 mm of clearance cannot sit nearer than 0.8 mm to another: a
+        // ground via at 0.75 mm is as close as the process allows only if the
+        // window reaches it, and 0.9 mm is outside.
+        assert_eq!(
+            super::signal_integrity::return_via_window_nm(640_000, 600_000),
+            800_000
+        );
+        let at = |x: i64| Routing {
+            vias: vec![via(signal, 0), via(ground, x)],
+            ..Routing::default()
+        };
+        assert!(
+            super::signal_integrity::check_return_path_vias(&board, &at(790_000), &stackup)
+                .is_empty()
+        );
+        assert_eq!(
+            super::signal_integrity::check_return_path_vias(&board, &at(900_000), &stackup).len(),
+            1
+        );
+        // A thick dielectric keeps its own, larger window.
+        assert_eq!(
+            super::signal_integrity::return_via_window_nm(1_530_000, 600_000),
+            1_530_000
+        );
+    }
+
     #[test]
     fn a_rail_dropping_more_than_the_budget_is_warned() {
         let mut board = load_board("../../examples/env_logger/env_logger.synth");
@@ -878,6 +1368,8 @@ mod tests {
             via_drill: None,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -903,13 +1395,15 @@ mod tests {
             segments: vec![straight(net, 1_000_000, 0, 5_000_000)],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_ir_drop(
-            &board,
-            &short,
-            &ManufacturerProfile::jlc_standard(),
-            &stackup
-        )
-        .is_empty());
+        assert!(
+            super::signal_integrity::check_ir_drop(
+                &board,
+                &short,
+                &ManufacturerProfile::jlc_standard(),
+                &stackup
+            )
+            .is_empty()
+        );
 
         // A 45-degree diagonal on the same copper: 12 mm by 12 mm is 16.97 mm
         // of track (about 41 mV, within budget). Manhattan distance — abs(dx) +
@@ -924,13 +1418,15 @@ mod tests {
             }],
             ..Routing::default()
         };
-        assert!(super::signal_integrity::check_ir_drop(
-            &board,
-            &diagonal,
-            &ManufacturerProfile::jlc_standard(),
-            &stackup
-        )
-        .is_empty());
+        assert!(
+            super::signal_integrity::check_ir_drop(
+                &board,
+                &diagonal,
+                &ManufacturerProfile::jlc_standard(),
+                &stackup
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -949,6 +1445,8 @@ mod tests {
             via_drill: None,
             max_length: Some(synth_ir::Length::from_mm(10.0)),
             max_skew: None,
+            edge_rate: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -977,8 +1475,10 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: Some(synth_ir::Length::from_mm(1.0)),
+            edge_rate: None,
             via_diameter: None,
             via_drill: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -1010,6 +1510,109 @@ mod tests {
     }
 
     #[test]
+    fn a_net_routed_off_its_pinned_layers_blocks() {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        let mut class = bus_class("ETH");
+        class.max_skew = None;
+        class.layers = vec!["F.Cu".to_string()];
+        board.netclasses.push(class);
+        board.nets[0].netclass = Some("ETH".to_string());
+        let net = board.nets[0].id;
+
+        let mut inner = straight(net, 127_000, 0, 10_000_000);
+        inner.layer = synth_geometry::Layer::Inner1;
+        let off = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000), inner],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &off);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "E-SYNTH-DRC-023");
+        assert!(flagged[0].is_blocking());
+        assert!(
+            flagged[0].message.contains("In1.Cu"),
+            "{}",
+            flagged[0].message
+        );
+
+        let on = Routing {
+            segments: vec![straight(net, 127_000, 0, 10_000_000)],
+            ..Routing::default()
+        };
+        assert!(super::signal_integrity::check_layer_pins(&board, &on).is_empty());
+    }
+
+    fn through_via(net: NetId) -> synth_pcb::Via {
+        synth_pcb::Via {
+            net,
+            at: synth_geometry::Point::new(5_000_000, 0),
+            drill_nm: 300_000,
+            pad_diameter_nm: 600_000,
+        }
+    }
+
+    /// A board whose first net is in class `ETH`, pinned to `layers`.
+    fn pinned_board(layers: &[&str]) -> (synth_ir::Board, NetId) {
+        let mut board = load_board("../../examples/env_logger/env_logger.synth");
+        let mut class = bus_class("ETH");
+        class.max_skew = None;
+        class.layers = layers.iter().map(|l| (*l).to_string()).collect();
+        board.netclasses.push(class);
+        board.nets[0].netclass = Some("ETH".to_string());
+        let net = board.nets[0].id;
+        (board, net)
+    }
+
+    #[test]
+    fn a_via_on_a_single_layer_class_blocks() {
+        let (board, net) = pinned_board(&["F.Cu"]);
+        // Every segment on F.Cu, so only the via is wrong.
+        let routing = Routing {
+            segments: vec![straight(net, 127_000, 0, 10_000_000)],
+            vias: vec![through_via(net)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &routing);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert_eq!(flagged[0].code, "E-SYNTH-DRC-023");
+        assert!(flagged[0].is_blocking());
+        assert!(flagged[0].message.contains("via"), "{}", flagged[0].message);
+    }
+
+    #[test]
+    fn a_via_between_the_two_allowed_layers_passes() {
+        let (board, net) = pinned_board(&["F.Cu", "B.Cu"]);
+        let mut bottom = straight(net, 127_000, 0, 10_000_000);
+        bottom.layer = synth_geometry::Layer::Bottom;
+        let routing = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000), bottom],
+            vias: vec![through_via(net)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &routing);
+        assert!(flagged.is_empty(), "{flagged:?}");
+    }
+
+    #[test]
+    fn an_off_layer_segment_on_a_two_layer_class_still_blocks() {
+        let (board, net) = pinned_board(&["F.Cu", "B.Cu"]);
+        let mut inner = straight(net, 127_000, 0, 10_000_000);
+        inner.layer = synth_geometry::Layer::Inner2;
+        let routing = Routing {
+            segments: vec![straight(net, 127_000, 0, 5_000_000), inner],
+            vias: vec![through_via(net)],
+            ..Routing::default()
+        };
+        let flagged = super::signal_integrity::check_layer_pins(&board, &routing);
+        assert_eq!(flagged.len(), 1, "{flagged:?}");
+        assert!(
+            flagged[0].message.contains("In2.Cu"),
+            "{}",
+            flagged[0].message
+        );
+    }
+
+    #[test]
     fn too_much_current_per_via_is_flagged() {
         let mut board = load_board("../../examples/env_logger/env_logger.synth");
         board.nets[0].netclass = Some("PWR".to_string());
@@ -1023,8 +1626,10 @@ mod tests {
             plane: false,
             max_length: None,
             max_skew: None,
+            edge_rate: None,
             via_diameter: None,
             via_drill: None,
+            layers: Vec::new(),
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;

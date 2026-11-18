@@ -31,10 +31,12 @@ fn pin(name: &str, et: ElectricalType) -> Pin {
         electrical_type: et,
         capabilities: Vec::new(),
         required: false,
+        footprint_only: false,
         unit: None,
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
     }
 }
 
@@ -56,6 +58,7 @@ fn part(kind: &str, pins: Vec<Pin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -69,6 +72,7 @@ fn component(id: u32, refdes: &str, p: Part) -> Component {
         dnp: false,
         properties: std::collections::BTreeMap::new(),
         placement_hint: None,
+        escape: None,
         group: None,
         sheet: None,
         source_span: synth_diagnostics::Span::new(0, 0),
@@ -96,6 +100,7 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
 
 fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),

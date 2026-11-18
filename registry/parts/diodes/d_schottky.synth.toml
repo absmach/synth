@@ -1,8 +1,8 @@
 id = "d_schottky"
 kind = "diode"
-description = "Generic Schottky diode (SS14-class), low forward voltage"
-mpn = "1N5819"
-lcsc_pn = "C8224"
+description = "Diodes Inc. 1N5819HW-7-F, 40 V 1 A Schottky diode, SOD-123, low forward voltage"
+mpn = "1N5819HW-7-F"
+lcsc_pn = "C82544"
 kicad_symbol = "Device:D_Schottky"
 kicad_footprint = "Diode_SMD:D_SOD-123"
 
@@ -12,8 +12,15 @@ height_mm = 1.2
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-max_voltage_v = 100.0
+max_voltage_v = 40.0
 max_current_ma = 1000.0
+forward_voltage_v = 0.45
+forward_current_ma = 100.0
+
+[provenance]
+datasheet_url = "https://www.diodes.com/datasheet/download/1N5819HW.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-01"
 
 [[pins]]
 name = "anode"

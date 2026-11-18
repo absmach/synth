@@ -33,7 +33,7 @@ pub struct ManufacturerProfile {
     /// board outline, in nanometers.
     pub min_copper_to_edge_nm: i64,
     /// Minimum drilled hole diameter (vias + through-hole pad
-    /// drills), in nanometers. JLC's standard tier is 0.3 mm;
+    /// drills), in nanometers. JLC's standard tier is 0.2 mm;
     /// going below that incurs the "min hole size 0.2 mm"
     /// surcharge.
     pub min_drill_diameter_nm: i64,
@@ -45,6 +45,40 @@ pub struct ManufacturerProfile {
     /// Minimum clearance from any drilled hole's edge to copper
     /// belonging to a different net, in nanometers.
     pub min_drill_to_copper_nm: i64,
+    /// For the DFM floors below, 0 (also what a TOML profile that omits them
+    /// reads) means the profile has no published figure and the rule is not run.
+    ///
+    /// Minimum gap between a silkscreen stroke's edge and a pad on the
+    /// same side, in nanometers. JLCPCB's published figure is 0.15 mm.
+    #[serde(default)]
+    pub min_silk_to_pad_nm: i64,
+    /// Minimum gap between a silkscreen stroke's edge and a drilled hole,
+    /// on either side of the board, in nanometers. JLCPCB does not publish
+    /// this figure; 0.15 mm is assumed, to be calibrated against its DFM tool.
+    #[serde(default)]
+    pub min_silk_to_hole_nm: i64,
+    /// Minimum silkscreen stroke width, in nanometers. JLCPCB's published
+    /// figure is 0.15 mm; its DFM tool grades thinner silk a Warning.
+    #[serde(default)]
+    pub min_silk_width_nm: i64,
+    /// Minimum copper gap between pads (and vias) on the same side, in
+    /// nanometers, whatever their nets. JLCPCB's published figure is 0.15 mm.
+    #[serde(default)]
+    pub min_pad_to_pad_nm: i64,
+    /// Pad spacing below this is a Danger; from here up to `min_pad_to_pad_nm`
+    /// it is a Warning. JLCDFM's scale is 0.10 mm and 0.15 mm.
+    #[serde(default)]
+    pub pad_to_pad_danger_nm: i64,
+    /// Copper of one net with a gap under this (`gap < value`) is treated as one
+    /// merged object, not as two objects with a gap. Different nets are never
+    /// merged. Read from JLCDFM on one board, which lists no
+    /// spacing under 0.07 mm; to be calibrated.
+    #[serde(default = "default_copper_merge_below_nm")]
+    pub copper_merge_below_nm: i64,
+    /// Minimum gap from a plated hole's edge to a trace of another net, in
+    /// nanometers. JLCPCB's published minimum is 0.28 mm.
+    #[serde(default)]
+    pub min_pth_to_trace_nm: i64,
     /// Dielectric heights of parallel run two traces must share before
     /// `W-SYNTH-DRC-013` calls it edge coupling. A process-neutral default;
     /// tighter than this and ordinary boards warn.
@@ -69,6 +103,105 @@ pub struct ManufacturerProfile {
     /// via-in-pad; this says whether the tier offers it.
     #[serde(default)]
     pub via_in_pad: bool,
+    /// How far a filled and capped via's land exceeds its drill, in
+    /// nanometers, or `0` where the process does not offer via-in-pad.
+    ///
+    /// JLCPCB's via-in-pad guide gives the minimum pad as the drill plus
+    /// 0.15 mm. A capped via is the pad's own copper, so the ring that rule
+    /// leaves (0.075 mm) is not the plated-barrel ring the plain via floor
+    /// [`Self::min_annular_ring_nm`] protects. The two floors are different
+    /// questions, and a via no wider than this land is judged by the guide.
+    #[serde(default)]
+    pub via_in_pad_land_extra_nm: i64,
+    /// Layer counts this process is offered for, or empty for any.
+    ///
+    /// A surcharged tier is quoted against a stackup, not sold outright:
+    /// JLCPCB offers the 0.2 mm drill on its 4- and 6-layer builds and not on
+    /// a 2-layer one. Without this the name alone selected the process, so a
+    /// 2-layer board could declare `jlc-advanced`, clear the 0.2 mm and
+    /// via-in-pad checks against a floor no fabricator had agreed to, and be
+    /// reported fabrication-ready. The capability descriptor advertised the
+    /// restriction; nothing enforced it.
+    #[serde(default)]
+    pub supported_layers: Vec<u32>,
+}
+
+impl ManufacturerProfile {
+    /// Whether this process is offered for a board of `layers`.
+    ///
+    /// A profile that names no layer counts is offered for all of them, which
+    /// is every stock tier: the floors they carry are the fabricator's
+    /// baseline and do not depend on the stackup.
+    #[must_use]
+    pub fn supports_layers(&self, layers: u32) -> bool {
+        self.supported_layers.is_empty() || self.supported_layers.contains(&layers)
+    }
+
+    /// The widest via, in nanometers, that is judged as a filled and capped
+    /// via-in-pad rather than against the plain via ring floor: the minimum
+    /// drill plus the process's land allowance. `None` where the process
+    /// does not offer via-in-pad.
+    #[must_use]
+    pub fn via_in_pad_land_nm(&self) -> Option<i64> {
+        (self.via_in_pad && self.via_in_pad_land_extra_nm > 0)
+            .then_some(self.min_drill_diameter_nm + self.via_in_pad_land_extra_nm)
+    }
+}
+
+fn default_copper_merge_below_mm() -> f64 {
+    0.07
+}
+
+fn default_copper_merge_below_nm() -> i64 {
+    mm_to_nm(default_copper_merge_below_mm())
+}
+
+fn default_pad_to_pad_danger_mm() -> f64 {
+    0.10
+}
+
+fn default_pad_to_pad_danger_nm() -> i64 {
+    mm_to_nm(default_pad_to_pad_danger_mm())
+}
+
+fn default_min_pad_to_pad_mm() -> f64 {
+    0.15
+}
+
+fn default_min_pad_to_pad_nm() -> i64 {
+    mm_to_nm(default_min_pad_to_pad_mm())
+}
+
+fn default_min_pth_to_trace_mm() -> f64 {
+    0.28
+}
+
+fn default_min_pth_to_trace_nm() -> i64 {
+    mm_to_nm(default_min_pth_to_trace_mm())
+}
+
+fn default_min_silk_width_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_width_nm() -> i64 {
+    mm_to_nm(default_min_silk_width_mm())
+}
+
+fn default_min_silk_to_pad_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_to_hole_mm() -> f64 {
+    0.15
+}
+
+fn default_min_silk_to_hole_nm() -> i64 {
+    mm_to_nm(default_min_silk_to_hole_mm())
+}
+
+fn default_min_silk_to_pad_nm() -> i64 {
+    mm_to_nm(default_min_silk_to_pad_mm())
 }
 
 const fn default_crosstalk_run_multiple() -> i64 {
@@ -86,23 +219,35 @@ const fn default_ir_drop_budget_mv() -> i64 {
 impl ManufacturerProfile {
     /// JLCPCB's standard hobbyist tier (no surcharge):
     /// 0.127 mm trace, 0.127 mm clearance, 0.3 mm board edge,
-    /// 0.3 mm drill, 0.13 mm annular ring, 0.2 mm drill-to-
-    /// copper. V1's default; the `synth drc` CLI uses this
+    /// 0.2 mm drill (JLCPCB's preferred minimum via hole on two layers; its
+    /// capabilities page allows 0.15 mm), 0.13 mm annular ring, 0.2 mm
+    /// drill-to-copper. V1's default; the `synth drc` CLI uses this
     /// when no `--profile <path>` flag is supplied.
     #[must_use]
     pub fn jlc_standard() -> Self {
         Self {
             name: "jlc-standard".to_string(),
+            // A stock tier is the fabricator's baseline and is offered on
+            // every stackup.
+            supported_layers: Vec::new(),
             min_trace_width_nm: mm_to_nm(0.127),
             min_copper_clearance_nm: mm_to_nm(0.127),
             min_copper_to_edge_nm: mm_to_nm(0.3),
-            min_drill_diameter_nm: mm_to_nm(0.3),
+            min_drill_diameter_nm: mm_to_nm(0.2),
             min_annular_ring_nm: mm_to_nm(0.13),
             min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_silk_to_pad_nm: default_min_silk_to_pad_nm(),
+            min_silk_to_hole_nm: default_min_silk_to_hole_nm(),
+            min_silk_width_nm: default_min_silk_width_nm(),
+            min_pad_to_pad_nm: default_min_pad_to_pad_nm(),
+            pad_to_pad_danger_nm: default_pad_to_pad_danger_nm(),
+            copper_merge_below_nm: default_copper_merge_below_nm(),
+            min_pth_to_trace_nm: default_min_pth_to_trace_nm(),
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
             via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
         }
     }
 
@@ -111,18 +256,34 @@ impl ManufacturerProfile {
     /// 0.3 mm drill, 0.15 mm annular ring, 0.2 mm drill-to-copper.
     #[must_use]
     pub fn pcbway_standard() -> Self {
+        let drill_to_copper_nm = mm_to_nm(0.2);
         Self {
             name: "pcbway-standard".to_string(),
+            // A stock tier is the fabricator's baseline and is offered on
+            // every stackup.
+            supported_layers: Vec::new(),
             min_trace_width_nm: mm_to_nm(0.15),
             min_copper_clearance_nm: mm_to_nm(0.15),
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.3),
             min_annular_ring_nm: mm_to_nm(0.15),
-            min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_drill_to_copper_nm: drill_to_copper_nm,
+            // The silk and pad-spacing figures are JLCPCB's and JLCDFM's. This
+            // fab's are not known here, so the DFM rules are not run (0) rather
+            // than graded against another fab's number. Plated hole to trace
+            // uses the fab's own drill-to-copper floor.
+            min_silk_to_pad_nm: 0,
+            min_silk_to_hole_nm: 0,
+            min_silk_width_nm: 0,
+            min_pad_to_pad_nm: 0,
+            pad_to_pad_danger_nm: 0,
+            copper_merge_below_nm: default_copper_merge_below_nm(),
+            min_pth_to_trace_nm: drill_to_copper_nm,
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
             via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
         }
     }
 
@@ -131,18 +292,31 @@ impl ManufacturerProfile {
     /// 0.25 mm drill, 0.125 mm annular ring, 0.2 mm drill-to-copper.
     #[must_use]
     pub fn oshpark_4layer() -> Self {
+        let drill_to_copper_nm = mm_to_nm(0.2);
         Self {
             name: "oshpark-4layer".to_string(),
+            // A stock tier is the fabricator's baseline and is offered on
+            // every stackup.
+            supported_layers: Vec::new(),
             min_trace_width_nm: mm_to_nm(0.125),
             min_copper_clearance_nm: mm_to_nm(0.125),
             min_copper_to_edge_nm: mm_to_nm(0.3),
             min_drill_diameter_nm: mm_to_nm(0.25),
             min_annular_ring_nm: mm_to_nm(0.125),
-            min_drill_to_copper_nm: mm_to_nm(0.2),
+            min_drill_to_copper_nm: drill_to_copper_nm,
+            // DFM floors unknown for this fab: not run, as in pcbway_standard.
+            min_silk_to_pad_nm: 0,
+            min_silk_to_hole_nm: 0,
+            min_silk_width_nm: 0,
+            min_pad_to_pad_nm: 0,
+            pad_to_pad_danger_nm: 0,
+            copper_merge_below_nm: default_copper_merge_below_nm(),
+            min_pth_to_trace_nm: drill_to_copper_nm,
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
             via_in_pad: false,
+            via_in_pad_land_extra_nm: 0,
         }
     }
 
@@ -160,7 +334,43 @@ impl ManufacturerProfile {
         Self {
             name: "jlc-filled-via".to_string(),
             via_in_pad: true,
+            via_in_pad_land_extra_nm: mm_to_nm(0.15),
+            // JLCPCB offers the filled-via process on 2- and 4-layer builds.
+            supported_layers: vec![2, 4],
             ..Self::jlc_standard()
+        }
+    }
+
+    /// The built-in profiles that offer via-in-pad, by the name a board writes
+    /// in `manufacturer "<name>"`. The test beside this keeps it true.
+    pub const OFFERING_VIA_IN_PAD: &'static [&'static str] = &["jlc-filled-via", "jlc-advanced"];
+
+    /// JLCPCB's advanced tier: the filled-via process plus the 0.2 mm
+    /// minimum via hole, which JLCPCB offers on four- and six-layer builds
+    /// at a surcharge.
+    ///
+    /// Only the drill moves. The trace, clearance, edge and annular-ring
+    /// floors stay where [`Self::jlc_standard`] put them, for the same
+    /// reason [`Self::jlc_filled_via`] does not widen them: a board that
+    /// names this tier to reach a finer hole is not also granted geometry it
+    /// never paid for.
+    ///
+    /// What needs it: a module whose stock footprint drills its own thermal
+    /// vias finer than the standard floor. Every KiCad ESP32-WROOM-32
+    /// variant does — twelve 0.2 mm holes in the ground paddle, and because
+    /// they sit inside pad 39 they also need the fill, which is why this
+    /// builds on the filled-via tier rather than on the plain one. Their
+    /// pads are 0.6 mm across, so the 0.13 mm ring floor is already clear
+    /// and does not have to move with the drill.
+    #[must_use]
+    pub fn jlc_advanced() -> Self {
+        Self {
+            name: "jlc-advanced".to_string(),
+            min_drill_diameter_nm: mm_to_nm(0.2),
+            // Quoted on the 4- and 6-layer builds only, which is what the
+            // capability descriptor has always advertised.
+            supported_layers: vec![4, 6],
+            ..Self::jlc_filled_via()
         }
     }
 
@@ -168,20 +378,77 @@ impl ManufacturerProfile {
     ///
     /// The fabricator tiers match on a substring, because a board writes a
     /// vendor's name loosely ("pcbway", "PCBWay standard") and the tier is the
-    /// same either way. `jlc-filled-via` does not: it is matched exactly,
-    /// because it is one named process option rather than a vendor, and a
-    /// substring would hand it to any future profile whose name happened to
-    /// contain the word. A name this does not recognise falls back to
+    /// same either way. `jlc-filled-via` and `jlc-advanced` do not: each is
+    /// one named process option rather than a vendor, so each is matched
+    /// exactly. A substring would hand a surcharged process to any future
+    /// profile whose name happened to contain the word, and a board gets the
+    /// tier it named or the conservative floor, never a better one by
+    /// accident. A name this does not recognise falls back to
     /// `jlc-standard`, the most conservative floor.
     #[must_use]
     pub fn from_name(name: &str) -> Self {
         let lower = name.to_ascii_lowercase();
-        if lower == Self::jlc_filled_via().name {
+        if lower == Self::jlc_advanced().name {
+            Self::jlc_advanced()
+        } else if lower == Self::jlc_filled_via().name {
             Self::jlc_filled_via()
         } else if lower.contains("pcbway") {
             Self::pcbway_standard()
         } else if lower.contains("oshpark") {
             Self::oshpark_4layer()
+        } else {
+            Self::jlc_standard()
+        }
+    }
+
+    /// Whether [`Self::from_name`] resolves `name` on purpose.
+    ///
+    /// A name it does not recognise is not refused, it takes the
+    /// `jlc-standard` floor, so a misspelled tier (`jlcpcb_advanced` for
+    /// `jlc-advanced`) is judged against a floor the author did not choose
+    /// and nothing says so. This is the question a validator asks to say so.
+    /// A vendor written loosely (`jlcpcb`, `PCBWay standard`) is recognised:
+    /// that is the case the substring matching exists for.
+    #[must_use]
+    pub fn recognises_name(name: &str) -> bool {
+        let lower = name.to_ascii_lowercase();
+        [
+            Self::jlc_advanced().name,
+            Self::jlc_filled_via().name,
+            Self::jlc_standard().name,
+        ]
+        .contains(&lower)
+            || lower == "jlcpcb"
+            || lower == "jlc"
+            || lower.contains("pcbway")
+            || lower.contains("oshpark")
+    }
+
+    /// Resolve a declared manufacturer for a board of `layers`, refusing to
+    /// hand back a process the fabricator does not sell for that stackup.
+    ///
+    /// [`Self::from_name`] answers "what is this name", which is the right
+    /// question when printing a catalogue and the wrong one when deciding
+    /// what geometry a board may be judged against. `E-SYNTH-PROCESS-006`
+    /// reports the mismatch, but it only fires through the validator: every
+    /// other consumer -- the exporter's rule file, `synth route`, `synth
+    /// export-kicad`, the MCP signal-integrity tool -- called `from_name` and
+    /// took the floors it returned. A 2-layer board declaring `jlc-advanced`
+    /// was therefore judged against a 0.2 mm drill and via-in-pad on the
+    /// direct DRC path, and could be reported fabrication-ready against a
+    /// process no fabricator had agreed to.
+    ///
+    /// An unsupported pairing falls back to [`Self::jlc_standard`], the most
+    /// conservative floor, for the same reason an unrecognised name does: a
+    /// board gets the tier it can actually buy or the conservative one, never
+    /// a better one by accident. The fallback is visible rather than silent,
+    /// because `DrcReport` carries the profile's name and it will read
+    /// `jlc-standard` where the board said otherwise.
+    #[must_use]
+    pub fn for_layers(name: &str, layers: u32) -> Self {
+        let named = Self::from_name(name);
+        if named.supports_layers(layers) {
+            named
         } else {
             Self::jlc_standard()
         }
@@ -205,16 +472,25 @@ impl ManufacturerProfile {
         let raw: TomlProfile = toml::from_str(text).map_err(ProfileError::Parse)?;
         Ok(Self {
             name: raw.name,
+            supported_layers: raw.supported_layers,
             min_trace_width_nm: mm_to_nm(raw.min_trace_width_mm),
             min_copper_clearance_nm: mm_to_nm(raw.min_copper_clearance_mm),
             min_copper_to_edge_nm: mm_to_nm(raw.min_copper_to_edge_mm),
             min_drill_diameter_nm: mm_to_nm(raw.min_drill_diameter_mm),
             min_annular_ring_nm: mm_to_nm(raw.min_annular_ring_mm),
             min_drill_to_copper_nm: mm_to_nm(raw.min_drill_to_copper_mm),
+            min_silk_to_pad_nm: mm_to_nm(raw.min_silk_to_pad_mm),
+            min_silk_to_hole_nm: mm_to_nm(raw.min_silk_to_hole_mm),
+            min_silk_width_nm: mm_to_nm(raw.min_silk_width_mm),
+            min_pad_to_pad_nm: mm_to_nm(raw.min_pad_to_pad_mm),
+            pad_to_pad_danger_nm: mm_to_nm(raw.pad_to_pad_danger_mm),
+            copper_merge_below_nm: mm_to_nm(raw.copper_merge_below_mm),
+            min_pth_to_trace_nm: mm_to_nm(raw.min_pth_to_trace_mm),
             crosstalk_run_multiple: raw.crosstalk_run_multiple,
             ampacity_delta_t_milli_c: raw.ampacity_delta_t_milli_c,
             ir_drop_budget_mv: raw.ir_drop_budget_mv,
             via_in_pad: raw.via_in_pad,
+            via_in_pad_land_extra_nm: mm_to_nm(raw.via_in_pad_land_extra_mm),
         })
     }
 }
@@ -228,6 +504,20 @@ struct TomlProfile {
     min_drill_diameter_mm: f64,
     min_annular_ring_mm: f64,
     min_drill_to_copper_mm: f64,
+    #[serde(default)]
+    min_silk_to_pad_mm: f64,
+    #[serde(default)]
+    min_silk_to_hole_mm: f64,
+    #[serde(default)]
+    min_silk_width_mm: f64,
+    #[serde(default)]
+    min_pad_to_pad_mm: f64,
+    #[serde(default)]
+    pad_to_pad_danger_mm: f64,
+    #[serde(default = "default_copper_merge_below_mm")]
+    copper_merge_below_mm: f64,
+    #[serde(default)]
+    min_pth_to_trace_mm: f64,
     #[serde(default = "default_crosstalk_run_multiple")]
     crosstalk_run_multiple: i64,
     #[serde(default = "default_ampacity_delta_t_milli_c")]
@@ -238,6 +528,13 @@ struct TomlProfile {
     /// existed, and absence means the process does not offer it.
     #[serde(default)]
     via_in_pad: bool,
+    /// Absent means no via-in-pad land allowance.
+    #[serde(default)]
+    via_in_pad_land_extra_mm: f64,
+    /// Layer counts the process is offered for; absent means any, which is
+    /// what every profile written before this field meant.
+    #[serde(default)]
+    supported_layers: Vec<u32>,
 }
 
 #[derive(Debug, Error)]
@@ -256,13 +553,185 @@ pub enum ProfileError {
 mod tests {
     use super::*;
 
+    /// The tier is quoted against a stackup, so the profile has to say which
+    /// ones and every stock tier has to stay unconstrained.
+    #[test]
+    fn jlc_advanced_is_offered_on_four_and_six_layers_only() {
+        let advanced = ManufacturerProfile::jlc_advanced();
+        assert_eq!(advanced.supported_layers, vec![4, 6]);
+        assert!(advanced.supports_layers(4));
+        assert!(advanced.supports_layers(6));
+        assert!(
+            !advanced.supports_layers(2),
+            "a 2-layer board cannot buy the 0.2 mm drill at any price"
+        );
+
+        for stock in [
+            ManufacturerProfile::jlc_standard(),
+            ManufacturerProfile::pcbway_standard(),
+            ManufacturerProfile::oshpark_4layer(),
+        ] {
+            assert!(
+                stock.supported_layers.is_empty() && stock.supports_layers(2),
+                "{} is a baseline floor and does not depend on the stackup",
+                stock.name
+            );
+        }
+    }
+
+    /// `jlc-filled-via` is only offered on 2- and 4-layer builds, so a 6-layer
+    /// board must not receive its via-in-pad capability.
+    #[test]
+    fn jlc_filled_via_is_offered_on_two_and_four_layers_only() {
+        let filled = ManufacturerProfile::jlc_filled_via();
+        assert_eq!(filled.supported_layers, vec![2, 4]);
+        assert!(filled.supports_layers(2));
+        assert!(filled.supports_layers(4));
+        assert!(!filled.supports_layers(6));
+
+        let standard = ManufacturerProfile::jlc_standard();
+        let resolved = ManufacturerProfile::for_layers("jlc-filled-via", 6);
+        assert_eq!(resolved.name, standard.name);
+        assert!(!resolved.via_in_pad);
+    }
+
+    /// The direct DRC path must not grant a process the board cannot buy.
+    ///
+    /// `E-SYNTH-PROCESS-006` reports the mismatch, but it only fires through
+    /// the validator. Every other consumer -- the exporter's rule file,
+    /// `synth route`, `synth export-kicad`, the MCP signal-integrity tool --
+    /// resolves the profile for itself, so the refusal has to live in
+    /// resolution rather than in a rule they do not run.
+    #[test]
+    fn an_unsupported_stackup_resolves_to_the_conservative_floor() {
+        let standard = ManufacturerProfile::jlc_standard();
+
+        let refused = ManufacturerProfile::for_layers("jlc-advanced", 2);
+        assert_eq!(
+            refused.name, standard.name,
+            "a 2-layer board cannot buy the advanced tier"
+        );
+        assert_eq!(
+            refused.min_drill_diameter_nm,
+            standard.min_drill_diameter_nm
+        );
+        assert!(
+            !refused.via_in_pad,
+            "nor the fill that tier is the only way to get"
+        );
+
+        for layers in [4_u32, 6] {
+            let granted = ManufacturerProfile::for_layers("jlc-advanced", layers);
+            assert_eq!(granted.name, "jlc-advanced");
+            assert_eq!(granted.min_drill_diameter_nm, mm_to_nm(0.2));
+            assert!(granted.via_in_pad);
+        }
+    }
+
+    /// A stock tier is the fabricator's baseline and resolves the same on any
+    /// stackup, so this must not start downgrading boards that were building
+    /// before the restriction existed.
+    #[test]
+    fn a_stock_tier_resolves_unchanged_on_every_stackup() {
+        for name in [
+            "jlcpcb",
+            "jlc-standard",
+            "pcbway",
+            "oshpark",
+            "unrecognised",
+        ] {
+            for layers in [2_u32, 4, 6] {
+                assert_eq!(
+                    ManufacturerProfile::for_layers(name, layers).name,
+                    ManufacturerProfile::from_name(name).name,
+                    "{name} on {layers} layers"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn jlc_advanced_moves_the_drill_and_nothing_else() {
+        let standard = ManufacturerProfile::jlc_standard();
+        let advanced = ManufacturerProfile::jlc_advanced();
+
+        // The one thing it buys, plus the fill those holes need because they
+        // sit inside a pad.
+        assert_eq!(advanced.min_drill_diameter_nm, mm_to_nm(0.2));
+        assert!(advanced.via_in_pad);
+
+        // Everything else stays on the conservative floor. A finer hole is
+        // not a licence to draw a narrower track.
+        assert_eq!(advanced.min_trace_width_nm, standard.min_trace_width_nm);
+        assert_eq!(
+            advanced.min_copper_clearance_nm,
+            standard.min_copper_clearance_nm
+        );
+        assert_eq!(
+            advanced.min_copper_to_edge_nm,
+            standard.min_copper_to_edge_nm
+        );
+        assert_eq!(advanced.min_annular_ring_nm, standard.min_annular_ring_nm);
+        assert_eq!(
+            advanced.min_drill_to_copper_nm,
+            standard.min_drill_to_copper_nm
+        );
+    }
+
+    #[test]
+    fn the_esp32_module_paddle_vias_fit_both_jlc_tiers() {
+        // Every KiCad ESP32-WROOM-32 variant drills twelve 0.2 mm holes in
+        // the ground paddle, on 0.6 mm pads. The standard tier takes the 0.2 mm
+        // drill its capabilities page prefers, so the paddle fits it too.
+        let paddle_drill = mm_to_nm(0.2);
+        let paddle_ring = mm_to_nm((0.6 - 0.2) / 2.0);
+
+        for profile in [
+            ManufacturerProfile::jlc_standard(),
+            ManufacturerProfile::jlc_advanced(),
+        ] {
+            assert!(
+                paddle_drill >= profile.min_drill_diameter_nm,
+                "{}",
+                profile.name
+            );
+            assert!(
+                paddle_ring >= profile.min_annular_ring_nm,
+                "{}",
+                profile.name
+            );
+        }
+    }
+
+    #[test]
+    fn a_surcharged_tier_is_never_reached_by_a_loose_name() {
+        // Exact names get their tier.
+        assert_eq!(
+            ManufacturerProfile::from_name("jlc-advanced").name,
+            "jlc-advanced"
+        );
+        assert_eq!(
+            ManufacturerProfile::from_name("JLC-Advanced").name,
+            "jlc-advanced"
+        );
+
+        // A board writing the vendor loosely gets the conservative floor,
+        // not the process it did not order.
+        for loose in ["jlcpcb", "JLCPCB advanced", "jlc", "jlcpcb-advanced"] {
+            let p = ManufacturerProfile::from_name(loose);
+            assert_eq!(p.name, "jlc-standard", "{loose} should not buy a tier");
+            assert!(!p.via_in_pad);
+            assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.2));
+        }
+    }
+
     #[test]
     fn jlc_standard_constants_match_jlc_docs() {
         let p = ManufacturerProfile::jlc_standard();
         assert_eq!(p.min_trace_width_nm, mm_to_nm(0.127));
         assert_eq!(p.min_copper_clearance_nm, mm_to_nm(0.127));
         assert_eq!(p.min_copper_to_edge_nm, mm_to_nm(0.3));
-        assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.3));
+        assert_eq!(p.min_drill_diameter_nm, mm_to_nm(0.2));
         assert_eq!(p.min_annular_ring_nm, mm_to_nm(0.13));
         assert_eq!(p.min_drill_to_copper_nm, mm_to_nm(0.2));
     }
@@ -291,6 +760,28 @@ min_drill_to_copper_mm = 0.25
     /// Via-in-pad is a paid process option, so no standard tier may
     /// grant it by default: a board that has not asked for it and a
     /// fab that has not sold it must both read as "no".
+    /// Every name the list gives is a profile that really offers it, and no
+    /// built-in profile that offers it is missing from the list.
+    #[test]
+    fn the_list_of_profiles_offering_via_in_pad_is_true() {
+        for name in ManufacturerProfile::OFFERING_VIA_IN_PAD {
+            assert!(ManufacturerProfile::from_name(name).via_in_pad, "{name}");
+        }
+        for profile in [
+            ManufacturerProfile::jlc_standard(),
+            ManufacturerProfile::pcbway_standard(),
+            ManufacturerProfile::oshpark_4layer(),
+            ManufacturerProfile::jlc_filled_via(),
+        ] {
+            assert_eq!(
+                profile.via_in_pad,
+                ManufacturerProfile::OFFERING_VIA_IN_PAD.contains(&profile.name.as_str()),
+                "{}",
+                profile.name
+            );
+        }
+    }
+
     #[test]
     fn the_standard_tiers_do_not_offer_via_in_pad() {
         for profile in [
@@ -389,6 +880,32 @@ min_drill_to_copper_mm = 0.25
         assert!(!p.via_in_pad);
     }
 
+    /// A profile TOML that omits the DFM floors runs no DFM rule: another
+    /// fab's figures are never inherited from JLCPCB.
+    #[test]
+    fn a_profile_toml_without_the_dfm_floors_runs_no_dfm_rule() {
+        let text = r#"
+name = "legacy"
+min_trace_width_mm = 0.15
+min_copper_clearance_mm = 0.2
+min_copper_to_edge_mm = 0.5
+min_drill_diameter_mm = 0.4
+min_annular_ring_mm = 0.15
+min_drill_to_copper_mm = 0.25
+"#;
+        let p = ManufacturerProfile::from_toml_str(text).expect("parse");
+        assert_eq!(p.min_silk_to_pad_nm, 0);
+        assert_eq!(p.min_silk_to_hole_nm, 0);
+        assert_eq!(p.min_silk_width_nm, 0);
+        assert_eq!(p.min_pad_to_pad_nm, 0);
+        assert_eq!(p.pad_to_pad_danger_nm, 0);
+        assert_eq!(p.min_pth_to_trace_nm, 0);
+        // The JLC built-ins set their figures explicitly.
+        let jlc = ManufacturerProfile::jlc_standard();
+        assert_eq!(jlc.min_silk_to_pad_nm, mm_to_nm(0.15));
+        assert_eq!(jlc.min_pth_to_trace_nm, mm_to_nm(0.28));
+    }
+
     #[test]
     fn a_profile_toml_can_declare_the_capability() {
         let text = r#"
@@ -403,5 +920,22 @@ via_in_pad = true
 "#;
         let p = ManufacturerProfile::from_toml_str(text).expect("parse");
         assert!(p.via_in_pad);
+    }
+
+    #[test]
+    fn other_fabs_do_not_inherit_jlc_dfm_floors() {
+        for p in [
+            ManufacturerProfile::pcbway_standard(),
+            ManufacturerProfile::oshpark_4layer(),
+        ] {
+            assert_eq!(p.min_silk_to_pad_nm, 0, "{}", p.name);
+            assert_eq!(p.min_pad_to_pad_nm, 0, "{}", p.name);
+            // Plated hole to trace follows the fab's own drill-to-copper floor.
+            assert_eq!(
+                p.min_pth_to_trace_nm, p.min_drill_to_copper_nm,
+                "{}",
+                p.name
+            );
+        }
     }
 }

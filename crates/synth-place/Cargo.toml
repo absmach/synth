@@ -22,6 +22,7 @@ synth-layout = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+serde_json = { workspace = true }
 synth-parser = { workspace = true }
 synth-ir = { workspace = true }
 synth-registry = { workspace = true }

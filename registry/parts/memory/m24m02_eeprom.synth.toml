@@ -1,7 +1,6 @@
 id = "m24m02_eeprom"
 kind = "memory"
 description = "STM M24M02 256KB I²C EEPROM"
-kicad_symbol = "Memory_EEPROM:M24M02-DR"
 kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
 
 [footprint_dimensions]
@@ -14,30 +13,69 @@ min_voltage_v = 1.8
 max_voltage_v = 3.6
 max_current_ma = 50.0
 
+[provenance]
+source = "authored"
+datasheet_url = "https://www.st.com/resource/en/datasheet/m24m02-dr.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-05"
+
+# Pins are ST's SO8N pinout for the M24M02-DR (DS7025): 1 DU, 2 DU, 3 E2,
+# 4 VSS, 5 SDA, 6 SCL, 7 WC, 8 VCC, cross-checked against the 8 pads of the
+# footprint. A DU pin takes no signal and, if connected, goes to VSS; only E2
+# is a chip-enable, since the 2-Mbit array uses the other two address bits.
+# KiCad 10 ships no M24M02 symbol, so none is named and the exporter draws one
+# from these pins: a stock 24LCxx symbol would print A0 and A1 on the two DU
+# pins and invite a board to strap them high.
+#
+# The previous map had `vdd` on pad 1, `gnd` on 2, `sda` on 3 and `scl` on 4.
+# On this package those four pads are A0, A1, A2 and GND, so a board wired to
+# this part put its supply on an address pin and its ground on another. The
+# four names keep their meaning and move to the pads that carry it.
+
 [[pins]]
-name = "vdd"
+name = "du"
 number = "1"
-electrical_type = "power_input"
-required = true
+electrical_type = "passive"
+
+[[pins]]
+name = "du_2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "e2"
+number = "3"
+electrical_type = "input"
 
 [[pins]]
 name = "gnd"
-number = "2"
+number = "4"
 electrical_type = "power_input"
 required = true
 
 [[pins]]
 name = "sda"
-number = "3"
+number = "5"
 electrical_type = "bidirectional"
 capabilities = ["i2c_sda"]
 required = true
 
 [[pins]]
 name = "scl"
-number = "4"
-electrical_type = "bidirectional"
+number = "6"
+electrical_type = "input"
 capabilities = ["i2c_scl"]
+required = true
+
+[[pins]]
+name = "wp"
+number = "7"
+electrical_type = "input"
+
+[[pins]]
+name = "vdd"
+number = "8"
+electrical_type = "power_input"
 required = true
 
 [[required_decoupling]]

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::capability::{ElectricalType, PinCapability};
@@ -96,6 +98,10 @@ pub struct Part {
     #[serde(default)]
     pub operating_conditions: Option<OperatingConditions>,
 
+    /// Vendor or hand-written SPICE subcircuit attached to this part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spice: Option<SpiceModel>,
+
     /// Curation/trust metadata (Phase 15, R15.3). Absent for legacy
     /// seed parts — treated as `source = "seed"` for back-compat, which
     /// is considered verified (proof-read by the core team). Generated,
@@ -155,14 +161,52 @@ pub enum ProvenanceSource {
     Authored,
 }
 
+/// A SPICE subcircuit attached to a registry part.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpiceModel {
+    /// Model file path, relative to a registry directory.
+    pub file: String,
+    /// Subcircuit name, without the leading `.subckt`.
+    pub subckt: String,
+    /// Pin names in subcircuit terminal order.
+    pub pin_order: Vec<String>,
+    /// Subcircuit parameters written on the `X` line.
+    #[serde(default)]
+    pub params: BTreeMap<String, String>,
+    /// Vendor dialect `ngbehavior` mode; all parts in a run must agree.
+    #[serde(default)]
+    pub dialect: Option<SpiceDialect>,
+}
+
+/// The vendor dialect a model file was written for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SpiceDialect {
+    Ps,
+    Lt,
+    Ltps,
+}
+
+impl SpiceDialect {
+    /// The `ngbehavior` value and the TOML spelling.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ps => "ps",
+            Self::Lt => "lt",
+            Self::Ltps => "ltps",
+        }
+    }
+}
+
 impl Part {
-    /// A part is unverified when it carries provenance (i.e. it is a
-    /// Tier-2 user/generated entry) but has no `reviewed_by` reviewer.
-    /// Legacy seed parts without a `[provenance]` section are trusted.
+    /// A part is unverified unless its provenance names a reviewer. An
+    /// absent `[provenance]` section is the most unverified state of all:
+    /// nothing records who checked the part against its datasheet.
     pub fn is_unverified(&self) -> bool {
         match &self.provenance {
-            None => false,
-            Some(p) => p.reviewed_by.as_deref().unwrap_or("").is_empty(),
+            None => true,
+            Some(p) => p.reviewed_by.as_deref().unwrap_or("").trim().is_empty(),
         }
     }
 }
@@ -213,7 +257,7 @@ pub enum MatingFace {
     Left,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OperatingConditions {
     #[serde(default)]
     pub min_voltage_v: Option<f64>,
@@ -221,6 +265,23 @@ pub struct OperatingConditions {
     pub max_voltage_v: Option<f64>,
     #[serde(default)]
     pub max_current_ma: Option<f64>,
+
+    /// Whether [`Self::max_current_ma`] is a budget for a rail this part
+    /// supplies, rather than a consumption limit. `None` (the default)
+    /// means "decide from the pin map": a part with a `power_output` pin
+    /// is treated as supplying a rail. `Some(false)` explicitly opts out,
+    /// e.g. an internal LDO decoupling tap. `Some(true)` forces it in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_budget: Option<bool>,
+    /// Forward voltage at [`Self::forward_current_ma`], in volts. A
+    /// diode or LED with both fields gets a built-in SPICE model;
+    /// without them it needs a registry `[spice]` model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_voltage_v: Option<f64>,
+    /// Forward current at which [`Self::forward_voltage_v`] is quoted,
+    /// in milliamps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_current_ma: Option<f64>,
     /// Worst-case power the part dissipates, in milliwatts. With
     /// [`Self::thermal_resistance_c_per_w`] this drives the thermal check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -228,6 +289,18 @@ pub struct OperatingConditions {
     /// Junction-to-ambient thermal resistance, in degrees C per watt.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thermal_resistance_c_per_w: Option<f64>,
+    /// Reverse breakdown (zener) voltage in volts, where the voltage is the
+    /// part's function: nominal, and the datasheet's minimum and maximum,
+    /// all at [`Self::breakdown_test_current_ma`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown_voltage_v: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown_voltage_min_v: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown_voltage_max_v: Option<f64>,
+    /// The current the breakdown voltage is specified at, in milliamps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub breakdown_test_current_ma: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -248,6 +321,24 @@ pub struct Pin {
     #[serde(default)]
     pub required: bool,
 
+    /// `true` for a copper pad the footprint has and the symbol does not:
+    /// an exposed thermal pad, a mounting lug, a shield tab.
+    ///
+    /// Such a pad is real copper and must be declared, or it is copper under
+    /// the package that no pin map accounts for -- `E-SYNTH-QUAL-002`. But it
+    /// has no symbol pin to agree with, so the usual rule that every declared
+    /// number exists on the symbol cannot apply to it. Both checks skip these
+    /// pins; the pad checks do not.
+    ///
+    /// `tmp117_temperature` is why this exists: its package is a WSON-6 whose
+    /// pad 7 is the thermal pad, and the stock `TMP117xxDRV` symbol extends
+    /// `TMP102xxDRL`, which stops at pin 6. Before this the part could name
+    /// the right footprint or declare every pad, but not both.
+    ///
+    /// Not serialised when false, so adding it moved no IR snapshot.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub footprint_only: bool,
+
     /// Unit or gate identifier for multi-unit components (e.g. `"A"`, `"B"` for dual op-amps).
     #[serde(default)]
     pub unit: Option<String>,
@@ -263,6 +354,32 @@ pub struct Pin {
     /// Nominal operating voltage for this pin (e.g., `3.3` or `5.0`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voltage_nominal_v: Option<f64>,
+
+    /// Datasheet output-drive levels and current limits, for an output pin
+    /// the simulation may drive as a DC source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drive: Option<PinDrive>,
+}
+
+/// Datasheet output-drive data for an IC pin. Every numeric field is required;
+/// `datasheet_ref` is required whenever the block is present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinDrive {
+    /// High output level at no load, in volts.
+    pub high_v: f64,
+    /// Low output level at no load, in volts.
+    pub low_v: f64,
+    /// Maximum current the pin may source, in milliamps.
+    pub max_source_ma: f64,
+    /// Maximum current the pin may sink, in milliamps.
+    pub max_sink_ma: f64,
+    /// Series output resistance, in ohms. Absent means an ideal source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_resistance_ohm: Option<f64>,
+    /// Datasheet page or table the values came from.
+    #[serde(default)]
+    pub datasheet_ref: Option<String>,
 }
 
 impl Pin {
@@ -283,6 +400,17 @@ pub struct RequiredDecoupling {
     pub count: u32,
     #[serde(default)]
     pub max_distance_mm: Option<f64>,
+    /// The pin whose net the capacitors' other terminal joins, for a
+    /// capacitor that does not go to ground: a buck's bootstrap capacitor
+    /// runs from `bs` to `sw`. `None` means the usual decoupling capacitor
+    /// on the net named by `net`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    /// The kind of two-pin part between the pin named by `net` and the net
+    /// the capacitors sit on: a buck's output capacitor is on the far side of
+    /// the inductor from `sw`, so `net = "sw"`, `through = "inductor"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub through: Option<String>,
 }
 
 impl Part {

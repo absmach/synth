@@ -1,0 +1,78 @@
+id = "w25q128_flash_208mil"
+kind = "memory"
+description = "Winbond W25Q128JVSIQ 128Mbit SPI NOR flash, SOIC-8 208 mil (5.28 mm body, 7.9 mm lead span)"
+mpn = "W25Q128JVSIQ"
+lcsc_pn = "C97521"
+kicad_symbol = "Memory_Flash:W25Q128JVS"
+kicad_footprint = "Package_SO:SOIC-8_5.3x5.3mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 8.8
+height_mm = 4.46
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.7
+max_voltage_v = 3.6
+max_current_ma = 50.0
+
+[[pins]]
+name = "cs"
+number = "1"
+electrical_type = "input"
+capabilities = ["spi_cs"]
+required = true
+
+[[pins]]
+name = "io1"
+number = "2"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso", "spi_mosi"]
+required = true
+
+[[pins]]
+name = "io2"
+number = "3"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso", "spi_mosi"]
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "io0"
+number = "5"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso", "spi_mosi"]
+required = true
+
+[[pins]]
+name = "clk"
+number = "6"
+electrical_type = "input"
+capabilities = ["spi_sck"]
+required = true
+
+[[pins]]
+name = "io3"
+number = "7"
+electrical_type = "bidirectional"
+capabilities = ["spi_miso", "spi_mosi"]
+
+[[pins]]
+name = "vcc"
+number = "8"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[provenance]
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-05"

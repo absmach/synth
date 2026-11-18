@@ -17,10 +17,10 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+tracing = { workspace = true }
 tokio = { workspace = true }
 schemars = { workspace = true }
 axum = { workspace = true }
-tower-http = { workspace = true }
 synth-diagnostics = { workspace = true }
 synth-geometry = { workspace = true }
 synth-ast = { workspace = true }
@@ -33,6 +33,7 @@ synth-layout = { workspace = true }
 synth-place = { workspace = true }
 synth-pcb = { workspace = true }
 synth-router = { workspace = true }
+synth-sim = { workspace = true }
 synth-drc = { workspace = true }
 synth-kicad = { workspace = true }
 synth-render = { workspace = true }

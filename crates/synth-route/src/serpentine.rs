@@ -9,8 +9,8 @@
 use synth_geometry::Point;
 use synth_ir::NetId;
 
-use crate::diff_pair::PairReport;
 use crate::Segment;
+use crate::diff_pair::PairReport;
 
 /// Maximum allowed skew tolerance in nanometers (2.0 mm = 2,000,000 nm).
 pub const DEFAULT_MAX_SKEW_NM: i64 = 2_000_000;
