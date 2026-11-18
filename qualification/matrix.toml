@@ -32,9 +32,9 @@ path = "fixtures/designs/hello.synth"
 fixture_sha256 = "a1047d5b79020d3b100c389ff4e97ebce5d15cf9badad9b15b41ab6d2b474706"
 class = "A"
 status = "experimental"
-expect = "unknown"
+expect = "pass"
 expect_fab = "unestablished"
-rationale = "`board \"hello\" { layers 2 }` — no components, no nets. The source stage passes, so the release command runs end to end, but the route stage exits 1 on a board with nothing to route; DRC is `unknown` and the gate is `unknown` rather than a pass. A board with nothing to route should route trivially; see #98."
+rationale = "`board \"hello\" { layers 2 }` — no components, no nets. A board with nothing to route now routes trivially (#98): the empty route goes through the same repair and independent validation, and kicad-cli DRC runs on it, so source and DRC pass and the gate is `pass`."
 
 [[board]]
 id = "env_logger"
