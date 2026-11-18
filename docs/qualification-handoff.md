@@ -22,7 +22,8 @@ and edit `matrix.toml` second.
 
 ### Where the corpus stands
 
-The corpus is 18 boards. **Three clear the source/DRC gate** — `buck`,
+The corpus has 19 rows: 18 measured boards plus the skipped `usb-uart` row.
+**Three clear the source/DRC gate** — `buck`,
 `protected_power_entry` and `multirail_compute` — on the pinned environment (KiCad 10.0 with
 KiCadRoutingTools v0.23.0). Clearing the gate is a measurement, not an
 approval: both are still `experimental`, and the table further down is what a
