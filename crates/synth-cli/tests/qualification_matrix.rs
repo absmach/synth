@@ -20,7 +20,13 @@ struct BoardSpec {
     path: String,
     class: String,
     status: String,
+    /// Empty only on a row with a [`BoardSpec::skip_reason`].
+    #[serde(default)]
     expect: String,
+    /// Why a declared board is not run yet. A skipped row keeps its place in
+    /// the corpus without asserting a verdict nobody has measured.
+    #[serde(default)]
+    skip_reason: Option<String>,
     /// Expected result of the manufacturing stage, which asks a different
     /// question from the source/DRC gate: a board can be electrically sound
     /// and still be unable to produce a fab package. Only consulted when the
@@ -459,6 +465,7 @@ fn reference_boards_match_their_declared_qualification() {
     let boards: Vec<BoardResult> = matrix
         .board
         .iter()
+        .filter(|spec| spec.skip_reason.is_none())
         .map(|spec| run_board(spec, fab))
         .collect();
 
@@ -570,6 +577,19 @@ fn the_matrix_is_well_formed() {
             spec.id,
             spec.path
         );
+        assert!(
+            !spec.rationale.trim().is_empty(),
+            "{}: every board needs a rationale, so a later reader knows why it is in the corpus",
+            spec.id
+        );
+        if let Some(reason) = &spec.skip_reason {
+            assert!(
+                !reason.trim().is_empty(),
+                "{}: a skipped row must say why it is not run",
+                spec.id
+            );
+            continue;
+        }
         // An edit to a board's source or layout sidecars makes every verdict
         // on its row a claim about a different board. Checked here, in the
         // normal shards, so an accidental fixture change fails on the pull
@@ -587,11 +607,6 @@ fn the_matrix_is_well_formed() {
             "{}: expect must be pass, fail, unknown or unestablished, found {}",
             spec.id,
             spec.expect
-        );
-        assert!(
-            !spec.rationale.trim().is_empty(),
-            "{}: every board needs a rationale, so a later reader knows why it is in the corpus",
-            spec.id
         );
         // Declared `unsupported` is what makes a board a negative test, not
         // `expect = "fail"`. A positive board's gate can fail at DRC with the
@@ -662,4 +677,30 @@ fn the_matrix_is_well_formed() {
         matrix.board.iter().any(|b| b.status == "unsupported"),
         "the corpus needs at least one negative case"
     );
+}
+
+/// The Class-B board rows are in the qualification matrix and point at the
+/// checked-in board and its evidence (#66, #67).
+#[test]
+fn the_usb_uart_and_buck_boards_are_matrix_rows() {
+    let root = workspace_root();
+    let matrix = load_matrix();
+    for id in ["usb-uart", "buck"] {
+        let row = matrix
+            .board
+            .iter()
+            .find(|row| row.id == id)
+            .unwrap_or_else(|| panic!("{id} is a matrix row"));
+        assert_eq!(row.class, "B", "{id}");
+        assert!(
+            root.join(&row.path).is_file(),
+            "{id}: matrix source `{}` exists",
+            row.path
+        );
+        assert!(
+            root.join(format!("qualification/class-b/{id}")).is_dir(),
+            "{id}: evidence directory exists"
+        );
+        assert!(!row.rationale.is_empty(), "{id}: rationale");
+    }
 }

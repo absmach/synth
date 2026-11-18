@@ -117,7 +117,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 [[board]]
 id = "i2c_sensor_node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
-fixture_sha256 = "b48d1eaaafe6de004197ba49d192c07660b4c564d58e656320aa3c64f578f4c0"
+fixture_sha256 = "5412928222a4b4074ed57aba55e69dcc8143a977e96e7885c828cf81e700a232"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -127,7 +127,7 @@ rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environment
 [[board]]
 id = "irrigation_controller"
 path = "qualification/class-a/irrigation-controller/irrigation_controller.synth"
-fixture_sha256 = "9e4a87d7ed7f4830940917a55ac0a77403ee537859c0b2b3ffe512a627957b95"
+fixture_sha256 = "f3ebbdf419ba15f5f329b985d0c71289fc2feeba0b9dbce2f6c74fffb5724fe9"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -198,7 +198,7 @@ rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an
 [[board]]
 id = "sdram_memory"
 path = "qualification/class-c/sdram-memory/sdram_memory.synth"
-fixture_sha256 = "b5933d95cb70f7f95e318644284d5081fb39c64f721087b26232579103209c4e"
+fixture_sha256 = "685c439dd382e27a5f6aff1eba5f25475fcf5ab100e53f0612fdf23eb89a94fd"
 class = "C"
 status = "experimental"
 expect = "unknown"
