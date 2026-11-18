@@ -11,7 +11,7 @@
 //! The split plans the page boundaries first, then lays each non-empty
 //! partition out as its own small board through the single-sheet
 //! pipeline. A page therefore chooses the smallest standard sheet its
-//! own content needs and its regions tile that page, instead of
+//! own content needs and packs its regions on that page, instead of
 //! inheriting the long strip the global layout gave them. Cross-sheet
 //! wires become [`HierarchicalLabel`] stubs, and captions, boxes,
 //! legends, and notes are recomputed per sheet. A design with
@@ -1480,9 +1480,9 @@ mod tests {
         );
     }
 
-    /// Region boxes fill the page out to the sheet border, so a layout whose
-    /// boxes end inside the border fits the largest single page, however
-    /// close that leaves them to the edge.
+    /// A region box may reach close to the sheet border, so a layout whose box
+    /// ends inside the border must fit the largest single page rather than be
+    /// reported as overflow.
     #[test]
     fn region_boxes_out_to_the_sheet_border_do_not_overflow() {
         let two = || vec![pin("p1"), pin("p2")];

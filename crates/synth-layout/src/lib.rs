@@ -451,8 +451,9 @@ const GROUP_TITLE_GAP: f64 = 2.54;
 pub const GROUP_TITLE_BAND_MM: f64 = GROUP_CAPTION_INSET + GROUP_CAPTION_SIZE + GROUP_TITLE_GAP;
 /// Width (mm) of a group box's outline stroke.
 const GROUP_LINE_MM: f64 = 0.254;
-/// Gap (mm) left between two group boxes once they are stretched to meet:
-/// one line wide, so neighbours show a single border.
+/// Gap (mm) kept between two packed region boxes, and the clearance two boxes
+/// need before they count as apart: one line wide, so a neighbour's stroke
+/// never reads as part of this box's own outline.
 const GROUP_TILE_GAP: f64 = GROUP_LINE_MM;
 /// Half the height of a pin line and its number, in mm.
 const PIN_TEXT_HALF_MM: f64 = 1.3;
@@ -1154,8 +1155,7 @@ fn uses_groups(board: &Board) -> bool {
 ///
 /// Such a part has no net, so its region carries no connectivity and is laid
 /// out apart from the circuit regions: [`MECHANICAL_PITCH`] apart in one row,
-/// packed last, and, when the boxes are tiled by their content rather than cut
-/// from a floorplan, never stretched to fill free area.
+/// packed last, and never grown beyond the box its content gives it.
 fn mechanical_groups(board: &Board) -> std::collections::HashSet<&str> {
     let pinless = |id: ComponentId| {
         board
@@ -2541,9 +2541,9 @@ fn bounds_of(board: &Board, layout: &Layout, with_boxes: bool) -> Option<(f64, f
 }
 
 /// The page the layout needs: its content clear of the margin, and its region
-/// boxes out to the sheet border, since they are meant to fill the page.
+/// boxes clear of the sheet edge.
 fn page_needs(board: &Board, layout: &Layout) -> Option<(f64, f64)> {
-    // Content inside region boxes sits on the sheet border, not the wider
+    // Content inside region boxes starts at the sheet border, not the wider
     // page margin, so only the far edges need room.
     let boxed = !layout.group_boxes.is_empty();
     let mut need = bounds_of(board, layout, false).map(|(min_x, max_x, min_y, max_y)| {
@@ -4767,6 +4767,16 @@ struct RegionLayout {
     min_box_width: f64,
 }
 
+/// Body box of one placement: `(min_x, max_x, min_y, max_y)`.
+fn body_extent(board: &Board, placement: &ComponentPlacement) -> (f64, f64, f64, f64) {
+    let (cx, cy) = placement.center_mm;
+    let (bw, bh) = board
+        .component(placement.id)
+        .and_then(|c| c.part.as_ref())
+        .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+    (cx - bw / 2.0, cx + bw / 2.0, cy - bh / 2.0, cy + bh / 2.0)
+}
+
 /// Body bounding box of a set of placements, in the same frame as
 /// their centres: `(min_x, max_x, min_y, max_y)`, or `None` when
 /// empty. Shared by the per-region measurement (Phase C1) and the
@@ -4778,15 +4788,11 @@ fn body_bbox_of(board: &Board, placements: &[ComponentPlacement]) -> Option<(f64
     let mut min_y = f64::INFINITY;
     let mut max_y = f64::NEG_INFINITY;
     for placement in placements {
-        let (cx, cy) = placement.center_mm;
-        let (bw, bh) = board
-            .component(placement.id)
-            .and_then(|c| c.part.as_ref())
-            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
-        min_x = min_x.min(cx - bw / 2.0);
-        max_x = max_x.max(cx + bw / 2.0);
-        min_y = min_y.min(cy - bh / 2.0);
-        max_y = max_y.max(cy + bh / 2.0);
+        let (x0, x1, y0, y1) = body_extent(board, placement);
+        min_x = min_x.min(x0);
+        max_x = max_x.max(x1);
+        min_y = min_y.min(y0);
+        max_y = max_y.max(y1);
     }
     min_x.is_finite().then_some((min_x, max_x, min_y, max_y))
 }
@@ -4795,27 +4801,22 @@ fn body_bbox_of(board: &Board, placements: &[ComponentPlacement]) -> Option<(f64
 /// a single long row (or a ragged column) scores worse than the balanced
 /// grid that holds the same parts, so the fitting sweep can prefer it.
 fn region_body_area(board: &Board, placements: &[ComponentPlacement]) -> f64 {
-    let mut bounds: std::collections::HashMap<&str, (f64, f64, f64, f64)> =
-        std::collections::HashMap::new();
+    let mut bounds: HashMap<&str, (f64, f64, f64, f64)> = HashMap::new();
     for placement in placements {
         let Some(group) = effective_group(board, placement.id) else {
             continue;
         };
-        let (cx, cy) = placement.center_mm;
-        let (bw, bh) = board
-            .component(placement.id)
-            .and_then(|c| c.part.as_ref())
-            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        let (x0, x1, y0, y1) = body_extent(board, placement);
         let entry = bounds.entry(group).or_insert((
             f64::INFINITY,
             f64::NEG_INFINITY,
             f64::INFINITY,
             f64::NEG_INFINITY,
         ));
-        entry.0 = entry.0.min(cx - bw / 2.0);
-        entry.1 = entry.1.max(cx + bw / 2.0);
-        entry.2 = entry.2.min(cy - bh / 2.0);
-        entry.3 = entry.3.max(cy + bh / 2.0);
+        entry.0 = entry.0.min(x0);
+        entry.1 = entry.1.max(x1);
+        entry.2 = entry.2.min(y0);
+        entry.3 = entry.3.max(y1);
     }
     bounds
         .values()
@@ -5692,9 +5693,8 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
                 .iter()
                 .any(|ep| region_of(ep.component) != first);
         let label_it = if has_regions {
-            // Region crossing is the only test: regions fill the page, so a
-            // net can run far inside one, and the router flags a net it
-            // cannot draw.
+            // Region crossing is the only test: a net can run far inside
+            // one region, so the router flags only a net it cannot draw.
             crosses
         } else {
             net.endpoints.len() >= LABEL_MIN_ENDPOINTS_MULTIDROP || spans_far
