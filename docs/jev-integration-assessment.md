@@ -89,7 +89,7 @@ The diagram shows responsibility boundaries, not a guarantee that every export p
 | Structured schematic edits            | [`synth-layout/src/ops.rs`](../crates/synth-layout/src/ops.rs)       |
 | PCB placement and semantic hints      | [`synth-place/src/lib.rs`](../crates/synth-place/src/lib.rs)         |
 | Coarse placement optimization         | [`synth-place/src/cem.rs`](../crates/synth-place/src/cem.rs)         |
-| PCB maze routing                      | [`synth-route/src/maze.rs`](../crates/synth-route/src/maze.rs)       |
+| PCB maze routing (removed since)      | [`synth-route/src/maze.rs`](https://github.com/absmach/synth/blob/27284cee678d12db541cca2ac4b7ca699cebd20d/crates/synth-route/src/maze.rs)       |
 | Manufacturer-profile DRC              | [`synth-drc`](../crates/synth-drc/src/lib.rs)                        |
 | Export repair orchestration           | [`synth-kicad/src/export.rs`](../crates/synth-kicad/src/export.rs)   |
 | Agent-facing operations               | [`synth-mcp/src/tools.rs`](../crates/synth-mcp/src/tools.rs)         |
@@ -192,7 +192,7 @@ The scorer exists, but it is not the export loop's `physical_score`. An experime
 
 ### 7.1 Keep hosted calls outside cell expansion
 
-[`CongestionAdvisor`](../crates/synth-route/src/advisor.rs) is an active extension point. Its `evaluate_cell_cost` method is called during A* neighbor expansion in [`maze.rs`](../crates/synth-route/src/maze.rs).
+[`CongestionAdvisor`](https://github.com/absmach/synth/blob/27284cee678d12db541cca2ac4b7ca699cebd20d/crates/synth-route/src/advisor.rs) is an active extension point. Its `evaluate_cell_cost` method is called during A* neighbor expansion in [`maze.rs`](https://github.com/absmach/synth/blob/27284cee678d12db541cca2ac4b7ca699cebd20d/crates/synth-route/src/maze.rs).
 
 A hosted request at that boundary would add network latency to repeated local search operations. Use a local cost lookup there. If an outer selector chooses a regional guidance policy, prepare and freeze its local cost representation before starting the routing pass.
 
@@ -204,7 +204,7 @@ Potential outer-loop choices include routing priority presets, recovery effort, 
 
 Prefer model decisions for uncertain strategy choices. Use exact code for track clearance, coordinate transforms, collision checks, path lengths, and already-defined net priorities.
 
-[`Routing`](../crates/synth-route/src/lib.rs) already includes segments, vias, differential-pair reports, unrouted witnesses, and `cells_expanded`. These support both input summaries and outcome measurement. Add pass-level timing and recovery-attempt traces if needed; they are proposed instrumentation.
+[`Routing`](https://github.com/absmach/synth/blob/27284cee678d12db541cca2ac4b7ca699cebd20d/crates/synth-route/src/lib.rs) already includes segments, vias, differential-pair reports, unrouted witnesses, and `cells_expanded`. These support both input summaries and outcome measurement. Add pass-level timing and recovery-attempt traces if needed; they are proposed instrumentation.
 
 ## 8. Schematic generation and readability
 

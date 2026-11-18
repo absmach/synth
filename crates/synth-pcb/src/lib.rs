@@ -6,9 +6,8 @@
 //! them into a `.kicad_pcb`, the DRC engine checks them, and an external
 //! router's output is read back into them.
 //!
-//! They deliberately live apart from any router implementation. The native
-//! maze router in `synth-route` is one *producer* of this shape and the
-//! external routers are another, so a consumer that only needs to describe
+//! They deliberately live apart from any router implementation. The
+//! external routers are the producers of this shape, so a consumer that only needs to describe
 //! copper should not have to depend on the code that produces it. Keeping
 //! the value separate from the producer is what lets the production export
 //! path emit an un-routed board without pulling in a router it will not use.

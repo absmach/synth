@@ -2329,7 +2329,6 @@ dependencies = [
  "synth-pcb",
  "synth-place",
  "synth-registry",
- "synth-route",
  "thiserror 2.0.21",
  "toml",
 ]
@@ -2508,25 +2507,6 @@ dependencies = [
  "image",
  "resvg",
  "serde",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "synth-route"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "insta",
- "serde",
- "serde_json",
- "synth-diagnostics",
- "synth-geometry",
- "synth-ir",
- "synth-layout",
- "synth-parser",
- "synth-pcb",
- "synth-place",
- "synth-registry",
  "thiserror 2.0.21",
 ]
 
