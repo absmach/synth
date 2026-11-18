@@ -2220,6 +2220,11 @@ impl ErcRule for KeepoutWithoutAnchorRule {
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for ko in &board.keepouts {
+            // An explicit coordinate is geometry of its own; the exporter
+            // places it, so there is nothing missing to warn about.
+            if ko.at.is_some() {
+                continue;
+            }
             let anchor = ko.anchor.as_deref().unwrap_or(ko.name.as_str());
             let anchored = board.components.iter().any(|component| {
                 component.refdes.eq_ignore_ascii_case(anchor)

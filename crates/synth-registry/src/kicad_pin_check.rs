@@ -314,14 +314,15 @@ fn collect_pin_names(
     true
 }
 
-/// Lowercase a pin name to its letters and digits only: case, punctuation
-/// and KiCad's overbar markers (`~{...}`) all go away, so `~{RESET}` and
-/// `reset` compare equal and KiCad's unnamed marker `~` normalizes to the
-/// empty string.
+/// Lowercase a pin name to its letters, digits and polarity signs: case,
+/// other punctuation and KiCad's overbar markers (`~{...}`) go away, so
+/// `~{RESET}` and `reset` compare equal and KiCad's unnamed marker `~`
+/// normalizes to the empty string. `+` and `-` are kept, because `V+`/`V-`
+/// and `D+`/`D-` are different pads.
 #[must_use]
 pub fn normalize_pin_name(name: &str) -> String {
     name.chars()
-        .filter(char::is_ascii_alphanumeric)
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '+' || *c == '-')
         .flat_map(char::to_lowercase)
         .collect()
 }
@@ -462,6 +463,15 @@ fn pin_blocks(block: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn polarity_signs_distinguish_two_pads() {
+        assert!(pin_names_match("V+", "V+"));
+        assert!(!pin_names_match("V+", "V-"));
+        assert!(!pin_names_match("D+", "D-"));
+        // KiCad's overbar still normalizes away; a sign does not.
+        assert!(pin_names_match("~{RESET}", "reset"));
+    }
 
     #[test]
     fn pin_types_are_read_with_their_own_numbers() {

@@ -71,9 +71,10 @@ fn at_three_point_three_volts_the_vcc_capacitor_covers_v3() {
   layers 2
   component U1: ic "ch340c"
   component C1: capacitor "c_generic_0603" value "100nf"
-  power "+3V3" 3.3v { U1.vcc U1.v3 }
+  power "+3V3" 3.3v { U1.vcc C1.p1 }
+  // V3 is on its own, uncapped net: only the conditional rule can excuse it.
+  power "V3_3V3" 3.3v { U1.v3 }
   power "GND" 0v { U1.gnd C1.p2 }
-  connect U1.vcc -> C1.p1
 }"#;
     let diags = validate(src);
     assert!(

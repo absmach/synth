@@ -1068,9 +1068,9 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "diff_pair USB_DP USB_DN { impedance 90ohm }"
                 },
                 {
-                    "form": "keepout <name> { radius <value><unit> }",
-                    "description": "Declares a circular routing keepout zone (e.g. under an antenna).",
-                    "example": "keepout antenna { radius 15mm }"
+                    "form": "keepout <name> { radius <value><unit> [anchor \"<REFDES>\"] [at <x><unit> <y><unit>] [layers \"<layer>\", …] [allow \"<NET>\", …] }",
+                    "description": "Declares a circular routing rule area. Centre it on a component with `anchor \"REFDES\"` or on an explicit `at x y` board coordinate; without either, the keepout name must match a component's refdes or kind or it cannot be exported (E-SYNTH-KEEPOUT-003). `layers` limits the copper. `allow` makes it a corridor: the listed nets' tracks and vias may pass, every other net is excluded by the exported `.kicad_dru` rules.",
+                    "example": "keepout antenna { radius 15mm anchor \"U3\" layers \"F.Cu\", \"B.Cu\" }"
                 },
                 {
                     "form": "stackup { copper <thickness><unit> | insulator <thickness><unit> er <number> [material \"<name>\"] ... }",

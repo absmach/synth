@@ -1,6 +1,6 @@
 # E-SYNTH-QUAL-017 — declared pin name exists on no KiCad symbol pad
 
-**Severity:** error
+**Severity:** warning (review finding, not blocking)
 **Stage:** mfg — registry qualification
 
 ## What this means
@@ -11,7 +11,9 @@ no spelling the synonym table in `crates/synth-registry/src/kicad_pin_check.rs`
 recognizes. The symbol therefore verifies nothing about that pin: the
 swapped-name check (`E-SYNTH-QUAL-005`) only fires when the declared name
 shows up somewhere else, so without this finding an unprovable name
-passed silently.
+passed silently. The part still qualifies structurally — the name may be a
+legitimate alias the table does not know yet — but the finding stays in the
+review record.
 
 ## Minimal reproduction
 
@@ -33,6 +35,6 @@ electrical_type = "passive"
 
 Spell the pin the way the symbol prints it, or — when the spelling is a
 real datasheet alias — add it to the documented synonym group it belongs
-to. A name that stays unverifiable keeps the part out of the clean
-qualification list, which is the point: the check cannot be defeated by
-an unusual pin name.
+to. A name that stays unverifiable keeps the part out of a clean
+qualification report, which is the point: the check cannot be defeated by
+an unusual pin name. It does not block a fab submission on its own.

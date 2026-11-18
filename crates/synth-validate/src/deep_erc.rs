@@ -559,6 +559,20 @@ impl ErcRule for PullupRailMismatchRule {
 /// pull-ups, `009` at regulator inputs, `010` at regulator budgets. A part
 /// without `operating_conditions` has nothing declared to violate, so it
 /// stays out of the rule rather than being guessed at.
+fn part_is_zener(part: &Part) -> bool {
+    let id = part.id.as_str().to_ascii_lowercase();
+    let description = part
+        .description
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let mpn = part.mpn.as_deref().unwrap_or_default().to_ascii_lowercase();
+    id.contains("zener")
+        || description.contains("zener")
+        || mpn.contains("zener")
+        || mpn.starts_with("bzt52")
+}
+
 pub(crate) struct OperatingEnvelopeRule;
 
 impl OperatingEnvelopeRule {
@@ -567,6 +581,12 @@ impl OperatingEnvelopeRule {
     /// connector is the failure that started the check), so only the kinds
     /// a review actually rates are compared.
     fn in_scope(part: &Part) -> bool {
+        // A zener's inverse breakdown voltage is its function, not a rail it
+        // must stand off: D9 on the protected power entry clamps a gate at a
+        // rail the diode is meant to exceed.
+        if part_is_zener(part) {
+            return false;
+        }
         matches!(
             part.kind.to_ascii_lowercase().as_str(),
             "connector" | "diode" | "transistor"
@@ -582,7 +602,11 @@ impl OperatingEnvelopeRule {
         part: &Part,
     ) -> Option<String> {
         for (idx, _pin) in part.pins.iter().enumerate() {
-            let net_id = pin_net(board, component.id, PinId(idx as u32))?;
+            // One floating pin must not end the scan: a later connected pin
+            // can still be overstressed.
+            let Some(net_id) = pin_net(board, component.id, PinId(idx as u32)) else {
+                continue;
+            };
             let Some(net) = board.net(net_id) else {
                 continue;
             };
