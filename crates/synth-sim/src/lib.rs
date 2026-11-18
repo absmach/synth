@@ -1978,6 +1978,25 @@ fn upward_crossing(
     Err(format!("no rising crossing of {threshold} in the window"))
 }
 
+/// Trapezoidal time-weighted mean of `f(value)` over `times`.
+fn time_weighted(times: &[f64], values: &[f64], f: impl Fn(f64) -> f64) -> f64 {
+    let count = || f64::from(u32::try_from(values.len()).unwrap_or(u32::MAX));
+    if times.len() < 2 {
+        return values.iter().map(|v| f(*v)).sum::<f64>() / count().max(1.0);
+    }
+    let mut area = 0.0;
+    for index in 0..times.len() - 1 {
+        let dt = times[index + 1] - times[index];
+        area += f64::midpoint(f(values[index]), f(values[index + 1])) * dt;
+    }
+    let span = times[times.len() - 1] - times[0];
+    if span > 0.0 {
+        area / span
+    } else {
+        values.iter().map(|v| f(*v)).sum::<f64>() / count()
+    }
+}
+
 /// The transient value of one measure over its window.
 fn transient_value(
     measure: &Measure,
@@ -1991,13 +2010,14 @@ fn transient_value(
     }
     match measure.kind {
         MeasureKind::Average => {
-            let count = values.len();
-            Ok(values.iter().sum::<f64>() / f64::from(u32::try_from(count).unwrap_or(u32::MAX)))
+            // ngspice's transient timepoints are adaptive, so a plain sample
+            // mean weighs a dense switching region more than a long flat one.
+            // Integrate over time instead.
+            Ok(time_weighted(&times, &values, |v| v))
         }
         MeasureKind::Rms => {
-            let count = values.len();
-            let squares = values.iter().map(|value| value * value).sum::<f64>();
-            Ok((squares / f64::from(u32::try_from(count).unwrap_or(u32::MAX))).sqrt())
+            let mean_square = time_weighted(&times, &values, |v| v * v);
+            Ok(mean_square.max(0.0).sqrt())
         }
         MeasureKind::PeakToPeak => {
             let min = values.iter().copied().fold(f64::INFINITY, f64::min);
@@ -3996,4 +4016,40 @@ fn exponent(value: f64) -> String {
 /// digits carry more than ngspice's six-digit print precision.
 fn model_parameter(value: f64) -> String {
     format!("{value:.8e}")
+}
+
+#[cfg(test)]
+mod time_weighted_tests {
+    use super::time_weighted;
+
+    /// A 0.8 s low region sampled densely, then a 0.2 s high region sampled
+    /// twice. ngspice's adaptive timepoints can look like this around a
+    /// switching edge; a sample mean would call the signal almost zero.
+    fn densely_sampled_low_region() -> (Vec<f64>, Vec<f64>) {
+        let mut times: Vec<f64> = (0..=80).map(|step| f64::from(step) * 0.01).collect();
+        let mut values = vec![0.0; times.len()];
+        times.extend([0.800_000_001, 1.0]);
+        values.extend([1.0, 1.0]);
+        (times, values)
+    }
+
+    #[test]
+    fn an_adaptive_timepoint_average_weights_by_time_not_by_sample() {
+        let (times, values) = densely_sampled_low_region();
+        let sample_mean =
+            values.iter().sum::<f64>() / f64::from(u32::try_from(values.len()).unwrap_or(u32::MAX));
+        let weighted = time_weighted(&times, &values, |v| v);
+        assert!((weighted - 0.2).abs() < 1e-6, "{weighted}");
+        assert!(
+            sample_mean < 0.05,
+            "the dense low region dominates a plain sample mean: {sample_mean}"
+        );
+    }
+
+    #[test]
+    fn an_adaptive_timepoint_rms_integrates_the_square_over_time() {
+        let (times, values) = densely_sampled_low_region();
+        let rms = time_weighted(&times, &values, |v| v * v).max(0.0).sqrt();
+        assert!((rms - 0.2_f64.sqrt()).abs() < 1e-6, "{rms}");
+    }
 }

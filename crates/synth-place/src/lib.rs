@@ -5576,9 +5576,11 @@ fn tht_smd_clearance_warnings(board: &Board, placement: &Placement) -> Vec<Strin
                     .map_or_else(|| "?".to_string(), |c| c.refdes.clone())
             };
             warnings.push(format!(
-                "{} (through-hole) and {} (SMD) sit {:.2} mm apart, under the {:.1} mm through-hole-to-SMD clearance the DFM check grades a Danger; move one of them, or move the hinted pair apart in the placement sidecar",
+                "{} ({}) and {} ({}) sit {:.2} mm apart, under the {:.1} mm through-hole-to-SMD clearance the DFM check grades a Danger; move one of them, or move the hinted pair apart in the placement sidecar",
                 refdes(a),
+                kinds[a].role_against(kinds[b]),
                 refdes(b),
+                kinds[b].role_against(kinds[a]),
                 gap,
                 compact_gaps::THT_SMD_GAP_MM
             ));
@@ -9738,6 +9740,20 @@ board "near" {
         assert!(
             warning.contains("J1") && warning.contains("R1"),
             "the warning names the pair: {warning}"
+        );
+        // Each side carries its own role; the connector is the through-hole
+        // part and the resistor the SMD one, whichever order they were placed
+        // in. A fixed "(through-hole)" then "(SMD)" would mislabel a pair
+        // whose SMD part came first.
+        let j1_is_first = warning.find("J1").unwrap_or(0) < warning.find("R1").unwrap_or(0);
+        let expected = if j1_is_first {
+            "J1 (through-hole) and R1 (SMD)"
+        } else {
+            "R1 (SMD) and J1 (through-hole)"
+        };
+        assert!(
+            warning.contains(expected),
+            "each side is named by its own pad kind: {warning}"
         );
         assert!(
             warning.contains("move one of them"),

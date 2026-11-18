@@ -151,15 +151,27 @@ fn each_rail_microvia_spans_to_the_layer_that_rail_is_poured_on() {
     let result = synth_kicad::export(&board, &out).expect("the under-pad balls are stitched");
     let pcb = fs::read_to_string(&result.pcb_path).expect("pcb");
     let _ = fs::remove_dir_all(&out);
+    let first_via = |kind: &str, plane: &str| -> Option<&str> {
+        pcb.split("(via").skip(1).find(|chunk| {
+            chunk.split_whitespace().next() == Some(kind)
+                && chunk.contains(plane)
+                && chunk.contains("F.Cu")
+        })
+    };
+    // One dielectric of span is a microvia, with the process's 0.25 mm land.
+    let in1 =
+        first_via("micro", "In1.Cu").expect("the In1 rail needs a microvia that stops on In1");
     assert!(
-        pcb.contains("(layers \"F.Cu\" \"In1.Cu\")")
-            || pcb.contains("(layers \"In1.Cu\" \"F.Cu\")"),
-        "the In1 rail needs a microvia that stops on In1"
+        in1.contains("(size 0.25)"),
+        "the microvia takes the 0.25 mm microvia land: {in1}"
     );
+    // Two dielectrics is a blind via. It cannot use the 0.10 mm microvia drill
+    // or its land; it takes the filled-and-capped through land instead.
+    let in2 =
+        first_via("blind", "In2.Cu").expect("the In2 rail needs a blind via that reaches In2");
     assert!(
-        pcb.contains("(layers \"F.Cu\" \"In2.Cu\")")
-            || pcb.contains("(layers \"In2.Cu\" \"F.Cu\")"),
-        "the In2 rail needs a via that reaches In2, not one that stops on In1"
+        in2.contains("(size 0.35)"),
+        "the blind via takes the filled-in-pad land, not the microvia land: {in2}"
     );
 }
 

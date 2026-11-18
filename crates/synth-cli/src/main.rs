@@ -885,6 +885,22 @@ impl From<ExternalRouter> for synth_router::RouterEngine {
     }
 }
 
+/// Whether a validate child's stdout is a complete, clean JSON verdict.
+///
+/// The child is asked for JSON, so a truncated line (the stage was killed
+/// mid-write) or an unparseable one is a failed stage. Treating it as a pass
+/// with no diagnostics would let the rest of `check` grade a board it never
+/// validated. A `parse_error` the child reports inside otherwise valid JSON is
+/// the same failure.
+fn validate_stdout_passed(stdout: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(stdout).is_ok_and(|json| {
+        !json
+            .get("parse_error")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    })
+}
+
 impl ExternalRouter {
     fn as_str(self) -> &'static str {
         synth_router::RouterEngine::from(self).as_str()
@@ -1653,9 +1669,13 @@ fn check(
     }
     let budget = check_stage_budget_secs();
     let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, budget)?;
+    // Truncated or unparseable stdout is not a pass, and a reported parse
+    // error inside otherwise valid JSON is not one either.
+    let validate_parse_ok = validate_stdout_passed(&validate_output.stdout);
     let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
-    let validate_pass = !validate_timed_out && validate_output.status.success();
+    let validate_pass =
+        !validate_timed_out && validate_output.status.success() && validate_parse_ok;
 
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
@@ -7023,5 +7043,15 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
         assert!(findings[0].is_blocking());
+    }
+
+    #[test]
+    fn a_truncated_or_unparseable_validate_stdout_is_not_a_pass() {
+        assert!(validate_stdout_passed(br#"{"diagnostics": []}"#));
+        assert!(!validate_stdout_passed(br#"{"diagnostics": [{"code":"E-"#));
+        assert!(!validate_stdout_passed(b""));
+        assert!(!validate_stdout_passed(
+            br#"{"diagnostics": [], "parse_error": true}"#
+        ));
     }
 }

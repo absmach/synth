@@ -584,6 +584,7 @@ pub fn build_pcb(
     // The land of a via filled and capped in a pad, where the process offers one
     // and a component declares the under-pad escape that makes it legal.
     let pad_via = PlaneVia::for_via_in_pad(&process);
+    let filled_via = PlaneVia::for_filled_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -697,34 +698,57 @@ pub fn build_pcb(
                         .into());
                     }
                 };
-                let used = land;
-                placed_vias.push((via, used.pad_radius_nm));
                 // A microvia must land on the rail's own layer. Hard-coding
                 // F.Cu-In1.Cu left a rail on In2 unconnected: the via stopped
                 // one dielectric short. Span from the ball's outer layer to the
-                // layer this zone is poured on.
+                // layer this zone is poured on. Only a span to the adjacent
+                // inner layer is a microvia; a deeper rail is a blind via with
+                // the through land, because a 0.10 mm microvia drill is below
+                // the through-via floor and cannot reach it.
                 let outer = match pad_layer {
                     Layer::Bottom => "B.Cu",
                     _ => "F.Cu",
                 };
-                let span: &[&str] = match rail_microvia_layer {
-                    Some(plane_layer)
-                        if Some(&used) == pad_via.as_ref()
-                            && process.microvia_drill_nm > 0
-                            && process.microvia_diameter_nm > 0
-                            && board.layers >= 4
-                            && plane_layer != outer =>
-                    {
-                        // Borrow a local pair for the call below.
-                        &[outer, plane_layer]
-                    }
-                    _ => &THROUGH_VIA_LAYERS,
+                let inner_layers = inner_plane_layers(board.layers);
+                let adjacent = if outer == "F.Cu" {
+                    "In1.Cu"
+                } else {
+                    inner_layers.last().copied().unwrap_or("B.Cu")
                 };
+                let span_buf: [&str; 2];
+                let (used, span, kind): (PlaneVia, &[&str], Option<&str>) = if Some(&land)
+                    == pad_via.as_ref()
+                    && process.microvia_drill_nm > 0
+                    && process.microvia_diameter_nm > 0
+                    && board.layers >= 4
+                {
+                    match rail_microvia_layer {
+                        Some(plane_layer) if plane_layer == adjacent => {
+                            span_buf = [outer, plane_layer];
+                            (land, &span_buf, Some("micro"))
+                        }
+                        Some(plane_layer) => {
+                            span_buf = [outer, plane_layer];
+                            match filled_via {
+                                Some(filled) => (filled, &span_buf, Some("blind")),
+                                None => (land, &THROUGH_VIA_LAYERS, None),
+                            }
+                        }
+                        None => match filled_via {
+                            Some(filled) => (filled, &THROUGH_VIA_LAYERS, None),
+                            None => (land, &THROUGH_VIA_LAYERS, None),
+                        },
+                    }
+                } else {
+                    (land, &THROUGH_VIA_LAYERS, None)
+                };
+                placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
                     &used,
                     span,
+                    kind,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -1007,6 +1031,16 @@ impl PlaneVia {
                 drill_nm: profile.microvia_drill_nm,
             });
         }
+        profile.via_in_pad_land_nm().map(|land_nm| Self {
+            pad_radius_nm: (land_nm + 1) / 2,
+            drill_nm: profile.min_drill_diameter_nm,
+        })
+    }
+
+    /// The filled and capped land for a *through* via in a pad, on a tier that
+    /// also offers a microvia. The microvia's 0.10 mm drill is below the
+    /// through-via floor, so a deeper rail must use the through land.
+    fn for_filled_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
         profile.via_in_pad_land_nm().map(|land_nm| Self {
             pad_radius_nm: (land_nm + 1) / 2,
             drill_nm: profile.min_drill_diameter_nm,
@@ -1368,30 +1402,34 @@ fn plane_via_in_pad(
 
 /// A through via beside a power pad, joining the outer pad (through the fanout
 /// stub) to the inner power plane.
+#[allow(clippy::too_many_arguments)] // x, y, land, span kind, net, project and index are all separate facts
 fn build_plane_via(
     x_nm: i64,
     y_nm: i64,
     via: &PlaneVia,
     layers: &[&str],
+    kind: Option<&str>,
     pcb_net: u32,
     project: &Uuid,
     idx: usize,
 ) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "plane-via", &idx.to_string());
-    Sexp::list(
-        "via",
-        vec![
-            Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
-            Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
-            Sexp::list(
-                "layers",
-                layers.iter().map(|layer| Sexp::str(*layer)).collect(),
-            ),
-            Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
-            str_pair("uuid", via_uuid.to_string()),
-        ],
-    )
+    let mut children = Vec::new();
+    if let Some(kind) = kind {
+        children.push(Sexp::atom(kind));
+    }
+    children.extend([
+        Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
+        Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
+        Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
+        Sexp::list(
+            "layers",
+            layers.iter().map(|layer| Sexp::str(*layer)).collect(),
+        ),
+        Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
+        str_pair("uuid", via_uuid.to_string()),
+    ]);
+    Sexp::list("via", children)
 }
 
 /// The copper span of a through via: the two outer layers.

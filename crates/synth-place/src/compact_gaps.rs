@@ -72,6 +72,23 @@ impl PadKinds {
     pub(crate) fn tht_smd_pair(self, other: Self) -> bool {
         (self.through_hole && other.smd) || (self.smd && other.through_hole)
     }
+
+    /// How to name this part in a through-hole-to-SMD finding: the side of the
+    /// pair it takes. A part with both pad kinds takes whichever side its
+    /// partner leaves, so the finding never calls both sides through-hole.
+    pub(crate) fn role_against(self, other: Self) -> &'static str {
+        if self.through_hole && self.smd {
+            match (other.through_hole, other.smd) {
+                (true, true) => "through-hole and SMD",
+                (true, false) => "SMD",
+                _ => "through-hole",
+            }
+        } else if self.through_hole {
+            "through-hole"
+        } else {
+            "SMD"
+        }
+    }
 }
 
 /// Read what pads each placed part has: through-hole, SMD, or both.
@@ -961,6 +978,29 @@ mod tests {
         assert!((tht.gap_mm(tht, 0.3) - 0.3).abs() < 1e-9);
         // A wider ordinary spacing is kept.
         assert!((tht.gap_mm(smd, 3.0) - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_pair_is_named_by_each_parts_own_role() {
+        let tht = PadKinds {
+            through_hole: true,
+            smd: false,
+        };
+        let smd = PadKinds {
+            through_hole: false,
+            smd: true,
+        };
+        let mixed = PadKinds {
+            through_hole: true,
+            smd: true,
+        };
+        // Either order names the same part types, not a fixed side.
+        assert_eq!(tht.role_against(smd), "through-hole");
+        assert_eq!(smd.role_against(tht), "SMD");
+        // A mixed part takes the side its partner leaves open.
+        assert_eq!(mixed.role_against(smd), "through-hole");
+        assert_eq!(mixed.role_against(tht), "SMD");
+        assert_eq!(mixed.role_against(mixed), "through-hole and SMD");
     }
 
     fn load_board(path: &str) -> Board {

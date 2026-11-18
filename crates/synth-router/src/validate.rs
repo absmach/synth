@@ -1088,6 +1088,7 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
 /// skipped with it — a pair that did not route is the connectivity pass's
 /// finding, not this one.
 #[must_use]
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 pub fn check_diff_pair_skew(
     board: &PcbBoard,
     pairs: &[crate::contract::DiffPairRequest],
@@ -1105,10 +1106,9 @@ pub fn check_diff_pair_skew(
                 name == Some(net)
             })
             .map(|segment| {
-                // The routed segments are axis-aligned, so this is Manhattan
-                // length, the same way the router's own pair reports measure.
-                (segment.end.x_nm - segment.start.x_nm).abs()
-                    + (segment.end.y_nm - segment.start.y_nm).abs()
+                let dx = (segment.end.x_nm - segment.start.x_nm) as f64;
+                let dy = (segment.end.y_nm - segment.start.y_nm) as f64;
+                dx.hypot(dy).round() as i64
             })
             .sum()
     };
@@ -2191,6 +2191,27 @@ mod diff_pair_skew_tests {
         let board = routed_board(10.0, 10.4);
         let pairs = [pair("DP", "DN", 150_000)];
         assert!(check_diff_pair_skew(&board, &pairs).is_empty());
+    }
+
+    #[test]
+    fn skew_uses_the_segments_euclidean_length_not_manhattan() {
+        // A 10 x 10 mm diagonal carries 14.142 mm of copper, not the 20 mm
+        // Manhattan measuring would call it. The negative half is 15 mm
+        // straight, so the halves are 0.858 mm apart and inside a 1 mm
+        // budget; a Manhattan count would report 5 mm of skew.
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (generator "synth-eda")
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (net 0 "") (net 1 "USB_DP") (net 2 "USB_DN")
+          (segment (start 10 10) (end 20 20) (width 0.25) (layer "F.Cu") (net 1))
+          (segment (start 10 12) (end 25 12) (width 0.25) (layer "F.Cu") (net 2))
+          (gr_line (start 0 0) (end 40 40) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let board = PcbBoard::parse(text).expect("fixture parses");
+        let pairs = [pair("USB_DP", "USB_DN", 1_000_000)];
+        let findings = check_diff_pair_skew(&board, &pairs);
+        assert!(findings.is_empty(), "{findings:?}");
     }
 
     #[test]

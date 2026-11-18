@@ -4,6 +4,7 @@
 
 use axum::{
     Json, Router,
+    http::HeaderMap,
     response::{
         IntoResponse, Response,
         sse::{Event, Sse},
@@ -285,6 +286,12 @@ struct Job {
     reply: Reply,
 }
 
+/// Key an in-flight call by connection and JSON-RPC id, so ids from two
+/// HTTP clients do not collide.
+fn in_flight_key(connection: &str, request_id: &str) -> String {
+    format!("{connection}\u{1f}{request_id}")
+}
+
 /// The one tool worker both transports share, plus the in-flight table.
 ///
 /// Tool calls run one at a time, in arrival order, on a single worker thread:
@@ -349,13 +356,14 @@ impl Dispatcher {
         (self.handle)(req)
     }
 
-    /// Cancels the call with this JSON-RPC request id, if one is in flight.
-    fn cancel(&self, request_id: &str) {
+    /// Cancels the call with this connection and JSON-RPC request id.
+    fn cancel(&self, connection: &str, request_id: &str) {
+        let key = in_flight_key(connection, request_id);
         let flag = self
             .in_flight
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(request_id)
+            .get(&key)
             .cloned();
         if let Some(flag) = flag {
             flag.cancel();
@@ -369,11 +377,12 @@ impl Dispatcher {
     fn submit(
         &self,
         req: Value,
+        connection: &str,
         cancelled: synth_router::process::CancelToken,
         progress: Option<Progress>,
         reply: Reply,
     ) {
-        let key = req["id"].to_string();
+        let key = in_flight_key(connection, &req["id"].to_string());
         self.in_flight
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -408,7 +417,13 @@ impl Dispatcher {
                 write(&serde_json::to_string(&resp_val).unwrap_or_default());
             }
         });
-        self.submit(req, cancelled, Some(Arc::clone(&self.write)), reply);
+        self.submit(
+            req,
+            "stdio",
+            cancelled,
+            Some(Arc::clone(&self.write)),
+            reply,
+        );
     }
 }
 
@@ -465,7 +480,7 @@ async fn serve<R, W, H>(
         };
 
         if req_val["method"] == "notifications/cancelled" {
-            dispatcher.cancel(&req_val["params"]["requestId"].to_string());
+            dispatcher.cancel("stdio", &req_val["params"]["requestId"].to_string());
             continue;
         }
 
@@ -548,7 +563,7 @@ impl futures_core::Stream for CallStream {
 /// stream: progress events while the tool runs, the final JSON-RPC response as
 /// the last event. The handler returns at once, so the connection stays open
 /// while the worker runs the tool.
-fn streaming_call(dispatcher: &Dispatcher, req: Value) -> Response {
+fn streaming_call(dispatcher: &Dispatcher, connection: &str, req: Value) -> Response {
     let id = req["id"].clone();
     let (events, receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
     let cancelled = synth_router::process::CancelToken::new();
@@ -560,14 +575,14 @@ fn streaming_call(dispatcher: &Dispatcher, req: Value) -> Response {
     let reply: Reply = Box::new(move |resp_val| {
         let _ = events.send(http_reply(&reply_cancelled, &id, &resp_val));
     });
-    dispatcher.submit(req, cancelled, Some(progress), reply);
+    dispatcher.submit(req, connection, cancelled, Some(progress), reply);
     Sse::new(CallStream(receiver)).into_response()
 }
 
 /// Runs a `tools/call` that carried no `progressToken` and answers with plain
 /// JSON as before — but on the shared worker, so `notifications/cancelled`
 /// reaches it. A cancelled call answers with the spec's cancellation error.
-async fn plain_call(dispatcher: &Dispatcher, req: Value) -> Response {
+async fn plain_call(dispatcher: &Dispatcher, connection: &str, req: Value) -> Response {
     let id = req["id"].clone();
     let (reply_tx, reply_rx) = tokio::sync::oneshot::channel::<Value>();
     let cancelled = synth_router::process::CancelToken::new();
@@ -579,7 +594,7 @@ async fn plain_call(dispatcher: &Dispatcher, req: Value) -> Response {
             resp_val
         });
     });
-    dispatcher.submit(req, cancelled, None, reply);
+    dispatcher.submit(req, connection, cancelled, None, reply);
     let resp_val = reply_rx.await.unwrap_or_else(|_| cancelled_error(&id));
     Json(resp_val).into_response()
 }
@@ -595,11 +610,20 @@ async fn plain_call(dispatcher: &Dispatcher, req: Value) -> Response {
 #[allow(clippy::needless_pass_by_value)]
 async fn handle_http_rpc(
     axum::extract::State(dispatcher): axum::extract::State<Arc<Dispatcher>>,
+    headers: HeaderMap,
     Json(payload): Json<Value>,
 ) -> Response {
+    // Requests on one client connection share a key, so two clients using the
+    // same JSON-RPC id cannot cancel each other. A client that needs a stable
+    // key behind a shared egress sets `x-mcp-connection-id`.
+    let connection = headers
+        .get("x-mcp-connection-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("http");
     // A cancellation notification: drop the in-flight token, send nothing back.
     if payload["method"] == "notifications/cancelled" {
-        dispatcher.cancel(&payload["params"]["requestId"].to_string());
+        dispatcher.cancel(connection, &payload["params"]["requestId"].to_string());
         return Json(Value::Null).into_response();
     }
 
@@ -608,9 +632,9 @@ async fn handle_http_rpc(
     }
 
     if progress_token(&payload).is_some() {
-        streaming_call(&dispatcher, payload)
+        streaming_call(&dispatcher, connection, payload)
     } else {
-        plain_call(&dispatcher, payload).await
+        plain_call(&dispatcher, connection, payload).await
     }
 }
 
@@ -756,6 +780,46 @@ mod heartbeat_tests {
         let msgs = run(input, 80, 10);
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0]["id"], 1);
+    }
+
+    #[test]
+    fn cancelling_one_connection_does_not_stop_another_with_the_same_id() {
+        // Two HTTP clients both use JSON-RPC id 1. A cancellation keyed only
+        // by the id would let one client stop the other's call.
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let wait = Arc::new(Mutex::new(wait));
+        let dispatcher = Dispatcher::new(
+            Arc::new(move |_req| {
+                let _ = wait.lock().unwrap().recv();
+                Value::Null
+            }),
+            Duration::from_millis(10),
+            Arc::new(|_: &str| {}),
+        );
+        let token = synth_router::process::CancelToken::new();
+        let watched = token.clone();
+        let reply: Reply = Box::new(|_| {});
+        dispatcher.submit(
+            serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call"}),
+            "client-a",
+            token,
+            None,
+            reply,
+        );
+
+        dispatcher.cancel("client-b", "1");
+        assert!(
+            !watched.is_cancelled(),
+            "another connection's id must not cancel this call"
+        );
+        dispatcher.cancel("client-a", "1");
+        assert!(
+            watched.is_cancelled(),
+            "the owning connection cancels its own call"
+        );
+
+        drop(release);
+        drop(dispatcher);
     }
 
     #[test]
