@@ -361,14 +361,18 @@ enum Command {
         pretty: bool,
     },
 
-    /// Route a design with an external router and dump the routing run
-    /// record — router identity and version, settings, input hash, retained
-    /// artifacts, and the terminal state — as JSON to stdout.
+    /// Route a design and dump the routing run record — router identity and
+    /// version, settings, input hash, retained artifacts, and the terminal
+    /// state — as JSON to stdout.
     ///
-    /// Synth does not generate copper. The run record is the answer, and
-    /// exit code 0 means the board was independently validated rather than
-    /// that a router exited successfully. See `synth routers` for what is
-    /// installed.
+    /// The selected external router generates the copper. When no external
+    /// engine is installed, this command falls back to the workspace's own
+    /// deterministic router and names it as the engine in the run record;
+    /// `export-kicad` never falls back, so a fabricable package always carries
+    /// copper from a validated external route. The run record is the answer,
+    /// and exit code 0 means the board was independently validated rather
+    /// than that a router exited successfully. See `synth routers` for what
+    /// is installed.
     Route {
         /// Path to a `.synth` source file.
         input: PathBuf,
@@ -426,12 +430,14 @@ enum Command {
         pretty: bool,
     },
 
-    /// Route a design externally and report the independent physical checks:
-    /// topology against the baseline the router was given, connectivity
-    /// re-derived from copper, and `kicad-cli pcb drc` with zones refilled.
+    /// Route a design and report the independent physical checks: topology
+    /// against the baseline the router was given, connectivity re-derived
+    /// from copper, and `kicad-cli pcb drc` with zones refilled.
     ///
-    /// Dumps the routing run record as JSON to stdout, and exits with the
-    /// validation error code unless the board is fabrication-ready.
+    /// The selected external router generates the copper, falling back to the
+    /// workspace's own router when none is installed. Dumps the routing run
+    /// record as JSON to stdout, and exits with the validation error code
+    /// unless the board is fabrication-ready.
     Drc {
         /// Path to a `.synth` source file.
         input: PathBuf,
@@ -3939,12 +3945,23 @@ fn route_design(
         board.manufacturer.as_deref().unwrap_or("jlc-standard"),
         board.layers,
     );
-    let delivered = report
+    // Signal integrity is about the copper the router produced. When a
+    // candidate was rejected, `delivered` is the untouched baseline; reading
+    // that would make every SI rule no-op on exactly the board under review.
+    let si_board = report
         .artifacts
-        .delivered
+        .candidate
         .clone()
+        .filter(|path| path.exists())
+        .or_else(|| {
+            report
+                .artifacts
+                .delivered
+                .clone()
+                .filter(|path| path.exists())
+        })
         .unwrap_or_else(|| result.pcb_path.clone());
-    let signal_integrity = synth_drc_on_routed(board, &delivered, &profile);
+    let signal_integrity = synth_drc_on_routed(board, &si_board, &profile);
     Ok((report, signal_integrity))
 }
 
@@ -4556,7 +4573,13 @@ fn export_kicad(
         .delivered
         .clone()
         .unwrap_or_else(|| result.pcb_path.clone());
-    let synth_violations = synth_drc_on_routed(board, &delivered, &drc_profile);
+    let si_board = routing
+        .artifacts
+        .candidate
+        .clone()
+        .filter(|path| path.exists())
+        .unwrap_or_else(|| delivered.clone());
+    let synth_violations = synth_drc_on_routed(board, &si_board, &drc_profile);
     let blocking = print_signal_integrity(&synth_violations);
     if blocking > 0 && !force {
         error!(

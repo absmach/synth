@@ -103,6 +103,60 @@ pub struct Routing {
     pub pad_escape_rejections: usize,
 }
 
+/// Dijkstra from `start`, returning the distance to every node it reaches.
+fn distances(
+    graph: &CopperGraph,
+    start: (i64, i64),
+) -> std::collections::BTreeMap<(i64, i64), i64> {
+    use std::cmp::Reverse;
+    use std::collections::{BTreeMap, BinaryHeap};
+    let mut dist: BTreeMap<(i64, i64), i64> = BTreeMap::new();
+    let mut heap: BinaryHeap<Reverse<(i64, (i64, i64))>> = BinaryHeap::new();
+    dist.insert(start, 0);
+    heap.push(Reverse((0, start)));
+    while let Some(Reverse((distance, node))) = heap.pop() {
+        if dist.get(&node).is_some_and(|known| *known < distance) {
+            continue;
+        }
+        for (next, weight) in graph.get(&node).into_iter().flatten() {
+            let candidate = distance.saturating_add(*weight);
+            if dist.get(next).is_none_or(|known| candidate < *known) {
+                dist.insert(*next, candidate);
+                heap.push(Reverse((candidate, *next)));
+            }
+        }
+    }
+    dist
+}
+
+/// Whether `p` lies on the closed segment `a`-`b`, exactly.
+fn point_lies_on_segment(p: (i64, i64), a: (i64, i64), b: (i64, i64)) -> bool {
+    let (bx, by) = (i128::from(b.0 - a.0), i128::from(b.1 - a.1));
+    let (px, py) = (i128::from(p.0 - a.0), i128::from(p.1 - a.1));
+    if bx * py - by * px != 0 {
+        return false;
+    }
+    let dot = px * bx + py * by;
+    let len2 = bx * bx + by * by;
+    (0..=len2).contains(&dot)
+}
+
+/// The longest distance Dijkstra from `start` finds, in nm.
+fn longest_from(graph: &CopperGraph, start: (i64, i64)) -> i64 {
+    distances(graph, start).into_values().max().unwrap_or(0)
+}
+
+/// The node `start` is farthest from, by the shortest-path metric.
+fn farthest_node(graph: &CopperGraph, start: (i64, i64)) -> (i64, i64) {
+    distances(graph, start)
+        .into_iter()
+        .max_by_key(|(node, distance)| (*distance, *node))
+        .map_or(start, |(node, _distance)| node)
+}
+
+/// Undirected point-to-point copper graph of one net, with Euclidean weights.
+type CopperGraph = std::collections::BTreeMap<(i64, i64), Vec<((i64, i64), i64)>>;
+
 impl Routing {
     /// True when nothing was routed.
     ///
@@ -112,18 +166,79 @@ impl Routing {
         self.segments.is_empty() && self.vias.is_empty()
     }
 
-    /// Sum of segment lengths attributed to `net`, in nm.
+    /// Length of the longest routed path on `net`, in nm.
+    ///
+    /// A delay budget is about the path from a driver to the farthest load,
+    /// not the sum of every branch: a T-shaped clock with two loads has two
+    /// paths, and the longer one is the delay. The copper is treated as an
+    /// undirected weighted graph of segment endpoints; the result is its
+    /// diameter. Physical (Euclidean) length is used, so diagonal copper is
+    /// not overstated by Manhattan arithmetic.
+    ///
+    /// Two farthest-point sweeps are the exact diameter of a tree, which is
+    /// what normal routing is. Copper can also close a loop or split into
+    /// more than one island, and there a sweep from one node can miss a
+    /// longer shortest path the sweep never starts from — so a graph that is
+    /// not a single tree is measured from every node instead.
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn length_for_net(&self, net: NetId) -> i64 {
-        self.segments
+        let mut graph: CopperGraph = std::collections::BTreeMap::new();
+        let segments: Vec<_> = self.segments.iter().filter(|s| s.net == net).collect();
+        // Every endpoint can be a T-junction on another segment. Without
+        // splitting there, a branch that meets the middle of a track is a
+        // separate graph component and its length is undercounted.
+        let endpoints: Vec<(i64, i64)> = segments
             .iter()
-            .filter(|s| s.net == net)
-            .map(|s| {
-                let dx = (s.end.x_nm - s.start.x_nm).abs();
-                let dy = (s.end.y_nm - s.start.y_nm).abs();
-                dx + dy
-            })
-            .sum()
+            .flat_map(|s| [(s.start.x_nm, s.start.y_nm), (s.end.x_nm, s.end.y_nm)])
+            .collect();
+        for segment in &segments {
+            let a = (segment.start.x_nm, segment.start.y_nm);
+            let b = (segment.end.x_nm, segment.end.y_nm);
+            let mut breaks: Vec<(i64, i64)> = endpoints
+                .iter()
+                .copied()
+                .filter(|p| point_lies_on_segment(*p, a, b))
+                .collect();
+            breaks.sort_by_key(|p| {
+                let dx = p.0 - a.0;
+                let dy = p.1 - a.1;
+                dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+            });
+            breaks.dedup();
+            for pair in breaks.windows(2) {
+                let (from, to) = (pair[0], pair[1]);
+                if from == to {
+                    continue;
+                }
+                let dx = (to.0 - from.0) as f64;
+                let dy = (to.1 - from.1) as f64;
+                let length = dx.hypot(dy).round() as i64;
+                graph.entry(from).or_default().push((to, length));
+                graph.entry(to).or_default().push((from, length));
+            }
+        }
+        let Some(start) = graph.keys().next().copied() else {
+            return 0;
+        };
+        // An undirected graph is a single spanning tree exactly when it
+        // holds `nodes - 1` edges and one Dijkstra reaches every node; two
+        // sweeps are its exact diameter. Anything else — a loop, or more
+        // than one island — is measured from every node, because a sweep
+        // can miss a longest shortest path it never starts from.
+        let nodes = graph.len();
+        let edges = graph.values().map(Vec::len).sum::<usize>() / 2;
+        let reached = distances(&graph, start).len();
+        if edges == nodes.saturating_sub(1) && reached == nodes {
+            let far = farthest_node(&graph, start);
+            return longest_from(&graph, far);
+        }
+        graph
+            .keys()
+            .copied()
+            .map(|node| longest_from(&graph, node))
+            .max()
+            .unwrap_or(0)
     }
 
     /// Convert every [`UnroutedNet`] into an `E-SYNTH-ROUTE-001` diagnostic.
@@ -165,6 +280,132 @@ mod tests {
         assert!(routing.is_empty());
         assert!(routing.unrouted_nets.is_empty());
         assert!(routing.to_diagnostics("board.synth").is_empty());
+    }
+
+    #[test]
+    fn a_diagonal_track_is_its_physical_length_not_manhattan() {
+        let routing = Routing {
+            segments: vec![Segment {
+                net: NetId(1),
+                layer: Layer::Top,
+                start: Point::new(0, 0),
+                end: Point::new(3_000_000, 4_000_000),
+                width_nm: 127_000,
+            }],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 5_000_000);
+    }
+
+    #[test]
+    fn a_branched_net_is_measured_by_its_longest_path_not_its_sum() {
+        // 0 -> 10 mm -> 20 mm (20 mm path), with a 5 mm spur at the middle.
+        // Summing every branch would report 25 mm; the delay is 20 mm.
+        let routing = Routing {
+            segments: vec![
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 0),
+                    end: Point::new(20_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 0),
+                    end: Point::new(10_000_000, 5_000_000),
+                    width_nm: 127_000,
+                },
+            ],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 20_000_000);
+    }
+
+    #[test]
+    fn a_looped_net_is_measured_by_the_longest_path_the_loop_carries() {
+        // A square loop of 10 mm sides with a diagonal chord: the longest
+        // shortest path runs from one far corner to the other, 20 mm along
+        // the loop's rim. Sweeps from a corner only ever reach the chord's
+        // far end, 14.14 mm, which would understate the delay the loop
+        // carries.
+        let routing = Routing {
+            segments: vec![
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 0),
+                    end: Point::new(10_000_000, 10_000_000),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(10_000_000, 10_000_000),
+                    end: Point::new(0, 10_000_000),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 10_000_000),
+                    end: Point::new(0, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 10_000_000),
+                    width_nm: 127_000,
+                },
+            ],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 20_000_000);
+    }
+
+    #[test]
+    fn a_branch_meeting_a_track_mid_span_splits_the_track() {
+        // A 10 mm horizontal track with a 100 mm branch at its midpoint.
+        // The longest path is 5 + 100 mm from an end to the branch tip; the
+        // branch endpoint is not a node of the horizontal segment unless it
+        // is split there.
+        let routing = Routing {
+            segments: vec![
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(0, 0),
+                    end: Point::new(10_000_000, 0),
+                    width_nm: 127_000,
+                },
+                Segment {
+                    net: NetId(1),
+                    layer: Layer::Top,
+                    start: Point::new(5_000_000, 0),
+                    end: Point::new(5_000_000, 100_000_000),
+                    width_nm: 127_000,
+                },
+            ],
+            ..Routing::default()
+        };
+        assert_eq!(routing.length_for_net(NetId(1)), 105_000_000);
     }
 
     #[test]
