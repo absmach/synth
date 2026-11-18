@@ -168,6 +168,85 @@ fn covered(lines: &[(Segment, Vec<f64>)], x: f64, y: f64) -> bool {
     })
 }
 
+/// The boxes hug their content, stay inside the page frame, never overlap and
+/// leave a visible gap between neighbours that share a row or column.
+fn assert_boxes_hug_and_clear(layout: &synth_layout::Layout, width: f64, height: f64) {
+    // The whole cut is packed at the frame's top-left and leaves most of the
+    // sheet unused, rather than being stretched over the page.
+    let mut hull = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for b in &layout.group_boxes {
+        let (x0, y0) = b.min_mm;
+        let (x1, y1) = b.max_mm;
+        assert!(
+            x0 >= BORDER_MM - JOIN_MM
+                && y0 >= BORDER_MM - JOIN_MM
+                && x1 <= width - BORDER_MM + JOIN_MM
+                && y1 <= height - BORDER_MM + JOIN_MM,
+            "box {:?} at ({x0:.1},{y0:.1})-({x1:.1},{y1:.1}) leaves the frame",
+            b.group
+        );
+        hull.0 = hull.0.min(x0);
+        hull.1 = hull.1.min(y0);
+        hull.2 = hull.2.max(x1);
+        hull.3 = hull.3.max(y1);
+    }
+    // A stretched layout filled the frame; a hugging one leaves the page's
+    // spare room outside the packed boxes.
+    assert!(
+        hull.2 < width - BORDER_MM - 20.0 && hull.3 < height - BORDER_MM - 20.0,
+        "the boxes still fill the frame: hull ({:.1},{:.1})-({:.1},{:.1})",
+        hull.0,
+        hull.1,
+        hull.2,
+        hull.3
+    );
+    // ... and the packed hull starts at the frame's top-left, within a grid
+    // step.
+    assert!(
+        (hull.0 - BORDER_MM).abs() <= 2.54 && (hull.1 - BORDER_MM).abs() <= 2.54,
+        "the packed boxes start at ({:.1},{:.1}), not the frame's top-left",
+        hull.0,
+        hull.1
+    );
+    // No two boxes overlap, and neighbours that share a row or column keep a
+    // visible gap instead of touching.
+    for (i, a) in layout.group_boxes.iter().enumerate() {
+        for c in &layout.group_boxes[i + 1..] {
+            let (ax0, ay0) = a.min_mm;
+            let (ax1, ay1) = a.max_mm;
+            let (cx0, cy0) = c.min_mm;
+            let (cx1, cy1) = c.max_mm;
+            let overlap = ax0 < cx1 && cx0 < ax1 && ay0 < cy1 && cy0 < ay1;
+            assert!(!overlap, "{} and {} overlap", a.group, c.group);
+            let share_rows = ay0 < cy1 - JOIN_MM && cy0 < ay1 - JOIN_MM;
+            let share_cols = ax0 < cx1 - JOIN_MM && cx0 < ax1 - JOIN_MM;
+            let gap_x = (cx0 - ax1).max(ax0 - cx1);
+            let gap_y = (cy0 - ay1).max(ay0 - cy1);
+            if share_rows && gap_x < 10.0 {
+                assert!(
+                    gap_x >= 0.5,
+                    "{} and {} are {gap_x:.2} mm apart",
+                    a.group,
+                    c.group
+                );
+            }
+            if share_cols && gap_y < 10.0 {
+                assert!(
+                    gap_y >= 0.5,
+                    "{} and {} are {gap_y:.2} mm apart",
+                    a.group,
+                    c.group
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn the_region_boxes_read_as_one_box_cut_into_sections() {
     let board = load_board(SOURCE);
@@ -212,7 +291,6 @@ fn the_region_boxes_read_as_one_box_cut_into_sections() {
         width - OUTER_LINE_MM - TITLE_BLOCK_W,
         height - OUTER_LINE_MM - TITLE_BLOCK_H,
     );
-    let mut reaches_the_bottom = false;
     for b in &layout.group_boxes {
         let (x0, y0) = b.min_mm;
         let (x1, y1) = b.max_mm;
@@ -222,7 +300,6 @@ fn the_region_boxes_read_as_one_box_cut_into_sections() {
                 b.group
             ));
         }
-        reaches_the_bottom |= near(y1, height - BORDER_MM);
         let mut at = 0.0;
         while at <= 1.0 {
             let (x, y) = (x0 + (x1 - x0) * at, y0 + (y1 - y0) * at);
@@ -250,12 +327,7 @@ fn the_region_boxes_read_as_one_box_cut_into_sections() {
             at += 0.05;
         }
     }
-    if !reaches_the_bottom {
-        found.push(format!(
-            "no box reaches the frame at y {}",
-            height - BORDER_MM
-        ));
-    }
+    assert_boxes_hug_and_clear(&layout, width, height);
     found.sort();
     found.dedup();
     assert!(found.is_empty(), "region outline:\n{}", found.join("\n"));

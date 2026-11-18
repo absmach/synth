@@ -9319,6 +9319,44 @@ mod documentation_tests {
         assert!(layout.wires.iter().all(|w| w.net != NetId(0)));
     }
 
+    /// Frozen from upstream e1b66459: an ungrouped board takes the old sort
+    /// key (`region_area` is 0), so this change must not move it at all.
+    #[test]
+    fn an_ungrouped_board_keeps_the_pre_change_layout() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            (0..4)
+                .map(|i| component(i, &format!("R{i}"), r(), None))
+                .collect(),
+            vec![
+                net(0, "A", &[(0, 1), (1, 0)]),
+                net(1, "B", &[(1, 1), (2, 0), (3, 0)]),
+                net(2, "C", &[(2, 1), (3, 1)]),
+            ],
+            vec![],
+        );
+        let layout = layout(&b);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
+        let want = [
+            (0, 30.48, 27.94),
+            (1, 30.48, 99.06),
+            (2, 91.44, 27.94),
+            (3, 91.44, 99.06),
+        ];
+        for (id, x, y) in want {
+            let p = layout
+                .components
+                .iter()
+                .find(|p| p.id.0 == id)
+                .expect("the placement");
+            assert!(
+                (p.center_mm.0 - x).abs() < 1e-6 && (p.center_mm.1 - y).abs() < 1e-6,
+                "R{id} moved to {:?}, upstream was ({x}, {y})",
+                p.center_mm
+            );
+        }
+    }
+
     #[test]
     fn ungrouped_board_has_no_boxes() {
         let b = board_with_notes(
@@ -9917,6 +9955,164 @@ mod documentation_tests {
     }
 
     #[test]
+    fn one_and_two_cell_regions_hold_every_cell() {
+        for count in [1_u32, 2] {
+            let b = parallel_grid(&[("Grid", count), ("Extra", 1)]);
+            let layout = layout(&b);
+            let positions = group_positions(&b, &layout, "Grid");
+            assert_eq!(positions.len(), count as usize);
+            let (cols, rows, row_counts) = grid_shape(&positions);
+            assert_eq!(cols * rows, count as usize);
+            assert!(row_counts.iter().all(|&n| n > 0), "{row_counts:?}");
+            let box_ = box_of(&layout, "Grid");
+            assert!(
+                box_.min_mm.0 < box_.max_mm.0 && box_.min_mm.1 < box_.max_mm.1,
+                "a {count}-cell box has no area"
+            );
+        }
+    }
+
+    #[test]
+    fn a_region_of_wide_cells_keeps_them_clear_of_each_other() {
+        let wide = |id: u32, refdes: &str| {
+            let pins = (0..8)
+                .map(|i| RegPin {
+                    electrical_type: ElectricalType::PowerInput,
+                    ..pin(&format!("p{i}"))
+                })
+                .collect();
+            component(id, refdes, part("ic", pins), Some("Wide"))
+        };
+        let b = board_with_notes(
+            vec![
+                wide(0, "U1"),
+                wide(1, "U2"),
+                component(
+                    2,
+                    "R1",
+                    part("resistor", vec![pin("p1"), pin("p2")]),
+                    Some("Extra"),
+                ),
+            ],
+            vec![],
+            vec![],
+        );
+        let layout = layout(&b);
+        let wide_parts: Vec<ComponentPlacement> = layout
+            .components
+            .iter()
+            .filter(|p| p.id.0 < 2)
+            .copied()
+            .collect();
+        assert_eq!(wide_parts.len(), 2);
+        let a = body_extent(&b, &wide_parts[0]);
+        let c = body_extent(&b, &wide_parts[1]);
+        assert!(
+            a.1 <= c.0 + 1e-6 || c.1 <= a.0 + 1e-6 || a.3 <= c.2 + 1e-6 || c.3 <= a.2 + 1e-6,
+            "wide cells overlap: {a:?} {c:?}"
+        );
+        let box_ = box_of(&layout, "Wide");
+        for p in &wide_parts {
+            assert!(
+                p.center_mm.0 > box_.min_mm.0
+                    && p.center_mm.0 < box_.max_mm.0
+                    && p.center_mm.1 > box_.min_mm.1
+                    && p.center_mm.1 < box_.max_mm.1,
+                "a wide cell is outside its box"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_group_draws_no_box() {
+        let mut b = board_with_notes(
+            vec![component(
+                0,
+                "R1",
+                part("resistor", vec![pin("p1"), pin("p2")]),
+                Some("Filled"),
+            )],
+            vec![],
+            vec![],
+        );
+        b.groups.push(synth_ir::Group {
+            name: "Empty".to_string(),
+            title: None,
+            color: None,
+            region: None,
+            source_span: Span::new(0, 0),
+        });
+        let layout = layout(&b);
+        assert_eq!(layout.group_boxes.len(), 1);
+        assert_eq!(layout.group_boxes[0].group, "Filled");
+    }
+
+    #[test]
+    fn a_note_taller_than_its_content_still_fits_the_box() {
+        let lines: Vec<String> = (0..12).map(|i| format!("Note line {i}")).collect();
+        let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", r(), Some("Filter")),
+                component(1, "R2", r(), Some("Other")),
+            ],
+            vec![net(0, "sig", &[(0, 0), (1, 0)])],
+            vec![note("Filter", &refs)],
+        );
+        let layout = layout(&b);
+        let box_ = box_of(&layout, "Filter");
+        let content_h = group_bounds(&b, &layout)
+            .into_iter()
+            .find(|(g, ..)| g == "Filter")
+            .map(|(_, _, _, min_y, max_y)| max_y - min_y)
+            .expect("the filter content");
+        assert!(
+            (box_.max_mm.1 - box_.min_mm.1) - content_h > 12.0 * NOTE_LINE_PITCH,
+            "the box is not taller than its content by the note strip"
+        );
+        for line in &lines {
+            let y = layout
+                .annotations
+                .iter()
+                .find(|a| &a.text == line)
+                .expect("a note line")
+                .at_mm
+                .1;
+            assert!(y < box_.max_mm.1, "{line} hangs below the box");
+        }
+    }
+
+    #[test]
+    fn hierarchy_and_hugging_never_exceed_the_requested_page() {
+        let mut b = resistor_groups(
+            &[
+                ("A", 12),
+                ("B", 12),
+                ("C", 12),
+                ("D", 12),
+                ("E", 12),
+                ("F", 12),
+            ],
+            0,
+        );
+        b.schematic_overflow = Some(synth_ir::SchematicOverflow::Hierarchy);
+        b.schematic_paper = Some(synth_ir::SchematicPaper::A4);
+        let layout = layout(&b);
+        assert_eq!(layout.sheet_size, SheetSize::A4);
+        let sheets = sheets::layout_sheets(&b, layout, None);
+        assert!(sheets.len() > 1, "the design has to split into more sheets");
+        for sheet in &sheets {
+            let (w, h) = sheet.layout.sheet_size.dims_mm();
+            assert!(
+                w <= 297.0 + 1e-6 && h <= 210.0 + 1e-6,
+                "{} is {w} x {h}, past the requested A4",
+                sheet.name.as_deref().unwrap_or("root")
+            );
+        }
+    }
+
+    #[test]
     fn a_twelve_cell_region_lays_out_as_a_balanced_grid() {
         let b = parallel_grid(&[("Grid", 12), ("Extra", 1)]);
         let layout = layout(&b);
@@ -9946,22 +10142,85 @@ mod documentation_tests {
                 cols * rows >= count as usize,
                 "{count} cells do not fit a {cols} × {rows} grid: {row_counts:?}"
             );
-            // A prime count cannot fill every slot; the grid may be short by
-            // part of one row, never a whole empty column.
+            // Spec: the last row is no more than one short of the others.
+            let shortest = row_counts.iter().copied().min().unwrap_or(0);
+            let tallest = row_counts.iter().copied().max().unwrap_or(0);
             assert!(
-                cols * rows - (count as usize) < rows,
-                "{count} cells leave {} empty slots in a {cols} × {rows} grid",
-                cols * rows - (count as usize)
-            );
-            assert!(
-                row_counts.iter().all(|&n| n > 0),
-                "{count} cells: an empty row in {row_counts:?}"
+                tallest - shortest <= 1,
+                "{count} cells: rows {row_counts:?} in a {cols} × {rows} grid"
             );
             assert!(
                 (0.4..=4.0).contains(&(cols as f64 / rows as f64)),
                 "{count} cells: a {cols} × {rows} grid is a strip"
             );
         }
+    }
+
+    /// A sensor-node-shaped bank: a 20-pin connector with twelve protected
+    /// lines (series R + grounded zener), plus a second region.
+    fn clamp_bank_board() -> Board {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let dz = || part("diode", vec![pin("a"), pin("k")]);
+        let connector_pins: Vec<_> = (0..20).map(|i| pin(&format!("p{}", i + 1))).collect();
+        let mut components = vec![component(
+            0,
+            "J4",
+            part("connector", connector_pins),
+            Some("CLAMPS"),
+        )];
+        let mut nets = Vec::new();
+        let mut gnd = Vec::new();
+        for i in 0..12_u32 {
+            let r_id = 1 + 2 * i;
+            let dz_id = 2 + 2 * i;
+            components.push(component(r_id, &format!("RG{i}"), r(), Some("CLAMPS")));
+            components.push(component(dz_id, &format!("DZ{i}"), dz(), Some("CLAMPS")));
+            nets.push(net(i, &format!("LINE{i}"), &[(0, i), (r_id, 0)]));
+            nets.push(net(100 + i, &format!("MID{i}"), &[(r_id, 1), (dz_id, 0)]));
+            gnd.push((dz_id, 1));
+        }
+        nets.push(net(200, "GND", &gnd));
+        components.push(component(25, "R_EXTRA", r(), Some("EXTRA")));
+        board_with_notes(components, nets, vec![])
+    }
+
+    #[test]
+    fn a_clamp_bank_and_its_connector_fit_a3() {
+        let b = clamp_bank_board();
+        let layout = layout(&b);
+        let (w, h) = layout.sheet_size.dims_mm();
+        assert!(
+            w <= 420.0 && h <= 297.0,
+            "the grouped page is {w} x {h}, larger than A3"
+        );
+        let grid: Vec<(f64, f64)> = layout
+            .components
+            .iter()
+            .filter(|p| p.id.0 % 2 == 1 && p.id.0 < 25)
+            .map(|p| {
+                (
+                    (p.center_mm.0 * 100.0).round() / 100.0,
+                    (p.center_mm.1 * 100.0).round() / 100.0,
+                )
+            })
+            .collect();
+        assert_eq!(grid.len(), 12);
+        let (cols, rows, row_counts) = grid_shape(&grid);
+        assert!(
+            cols * rows == 12 && row_counts.iter().all(|&n| n == cols),
+            "the bank is a {cols} x {rows} grid with rows {row_counts:?}"
+        );
+        let min_y = grid.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+        let connector = layout
+            .components
+            .iter()
+            .find(|p| p.id.0 == 0)
+            .expect("the connector");
+        assert!(
+            connector.center_mm.1 >= min_y - 1e-6,
+            "the connector y {} is above the bank row {min_y}",
+            connector.center_mm.1
+        );
     }
 
     #[test]
