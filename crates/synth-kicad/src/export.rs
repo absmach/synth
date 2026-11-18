@@ -391,7 +391,7 @@ fn export_inner(
         String::new(),
     ]];
     if sheets.len() > 1 {
-        for (uuid, file) in crate::multisheet::sheet_files(&stem, &project_namespace, &sheets) {
+        for (_, uuid, file) in crate::multisheet::sheet_files(&stem, &project_namespace, &sheets) {
             sheet_entries.push(vec![uuid.to_string(), file]);
         }
     }
@@ -703,7 +703,7 @@ pub fn export_schematic_only(
         String::new(),
     ]];
     if sheets.len() > 1 {
-        for (uuid, file) in crate::multisheet::sheet_files(&stem, &project_namespace, &sheets) {
+        for (_, uuid, file) in crate::multisheet::sheet_files(&stem, &project_namespace, &sheets) {
             sheet_entries.push(vec![uuid.to_string(), file]);
         }
     }
