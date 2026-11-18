@@ -2175,6 +2175,13 @@ enum FeatureSlot {
 }
 
 impl FeatureSlot {
+    fn is_corner(self) -> bool {
+        matches!(
+            self,
+            Self::TopLeft | Self::TopRight | Self::BottomLeft | Self::BottomRight
+        )
+    }
+
     /// The point on the envelope this slot aims at: a corner, or the middle
     /// of an edge.
     fn anchor(self, envelope: Rect) -> Point {
@@ -2219,6 +2226,76 @@ fn hinted_feature_slot(hint: &synth_ir::PlacementConstraint) -> Option<FeatureSl
         PlacementEdge::Bottom => Some(FeatureSlot::BottomMid),
         PlacementEdge::Left => Some(FeatureSlot::LeftMid),
         PlacementEdge::Right => Some(FeatureSlot::RightMid),
+    }
+}
+
+/// Move each net-less board feature that asked for a corner into that corner
+/// of the *final* outline, when the spot is free.
+///
+/// Features are placed into the corner of the circuit envelope as it stood
+/// after the solver. Later passes (seeded candidates, connector docking, the
+/// export's tight rim) can still move parts and refit the outline, which left
+/// a mounting hole 16 mm along the bottom edge of the I2C sensor node with its
+/// own corner empty. Run once the outline is final: a hole whose corner is
+/// free goes there; one whose corner is taken keeps its place.
+pub fn snap_features_to_corners(board: &Board, placement: &mut Placement, edge_margin_mm: f64) {
+    let outline = placement.board_outline;
+    let margin_nm = mm_to_nm(edge_margin_mm);
+    for index in 0..placement.components.len() {
+        let placed = placement.components[index];
+        if !is_netless_board_feature(board, placed.id) {
+            continue;
+        }
+        let Some(component) = board.component(placed.id) else {
+            continue;
+        };
+        let Some(slot) = component
+            .placement_hint
+            .as_ref()
+            .and_then(hinted_feature_slot)
+            .filter(|slot| slot.is_corner())
+        else {
+            continue;
+        };
+        let rect = sidecar_courtyard_rect(board, component, &placed);
+        let half_w = rect.width_nm() / 2;
+        let half_h = rect.height_nm() / 2;
+        // Courtyard centre relative to the placement origin (a hole's is zero).
+        let off_x = i64::midpoint(rect.min.x_nm, rect.max.x_nm) - placed.center.x_nm;
+        let off_y = i64::midpoint(rect.min.y_nm, rect.max.y_nm) - placed.center.y_nm;
+        let left = outline.min.x_nm + margin_nm + half_w;
+        let right = outline.max.x_nm - margin_nm - half_w;
+        let top = outline.min.y_nm + margin_nm + half_h;
+        let bottom = outline.max.y_nm - margin_nm - half_h;
+        if left > right || top > bottom {
+            continue;
+        }
+        let corner = match slot {
+            FeatureSlot::TopLeft => Point::new(left, top),
+            FeatureSlot::TopRight => Point::new(right, top),
+            FeatureSlot::BottomLeft => Point::new(left, bottom),
+            _ => Point::new(right, bottom),
+        };
+        let mut candidate = placed;
+        candidate.center = Point::new(corner.x_nm - off_x, corner.y_nm - off_y);
+        let moved = sidecar_courtyard_rect(board, component, &candidate);
+        let distance = |p: &ComponentPlacement| {
+            let r = sidecar_courtyard_rect(board, component, p);
+            (i64::midpoint(r.min.x_nm, r.max.x_nm) - corner.x_nm).abs()
+                + (i64::midpoint(r.min.y_nm, r.max.y_nm) - corner.y_nm).abs()
+        };
+        if distance(&placed) <= mm_to_nm(1.0) {
+            continue;
+        }
+        let blocked = placement.components.iter().any(|other| {
+            other.id != placed.id
+                && board.component(other.id).is_some_and(|other_component| {
+                    moved.intersects(&sidecar_courtyard_rect(board, other_component, other))
+                })
+        });
+        if !blocked {
+            placement.components[index] = candidate;
+        }
     }
 }
 
@@ -2341,15 +2418,7 @@ fn place_board_features(
                 continue;
             }
             let anchor = slot.anchor(envelope);
-            for ring in 0..2 {
-                let search = if ring == 0 {
-                    envelope
-                } else {
-                    Rect::new(
-                        Point::new(envelope.min.x_nm - band_nm, envelope.min.y_nm - band_nm),
-                        Point::new(envelope.max.x_nm + band_nm, envelope.max.y_nm + band_nm),
-                    )
-                };
+            let band_candidates = |search: Rect| -> Vec<Point> {
                 let mut candidates: Vec<Point> = Vec::new();
                 let mut y = search.min.y_nm + half_h;
                 while y <= search.max.y_nm - half_h {
@@ -2366,6 +2435,27 @@ fn place_board_features(
                     }
                     y += step_nm;
                 }
+                candidates
+            };
+            let outer = Rect::new(
+                Point::new(envelope.min.x_nm - band_nm, envelope.min.y_nm - band_nm),
+                Point::new(envelope.max.x_nm + band_nm, envelope.max.y_nm + band_nm),
+            );
+            // An edge slot keeps the inner ring first: a feature slides along
+            // the edge rather than growing the board. A corner is different. A
+            // mounting hole is only useful in its corner, so when the circuit
+            // took that corner the hole steps just outside it (the board grows
+            // by one band) instead of settling tens of millimetres along an
+            // edge, where it no longer holds the board square. Both rings are
+            // searched together, nearest the corner first.
+            let rings: Vec<Vec<Point>> = if slot.is_corner() {
+                let mut both = band_candidates(envelope);
+                both.extend(band_candidates(outer));
+                vec![both]
+            } else {
+                vec![band_candidates(envelope), band_candidates(outer)]
+            };
+            for mut candidates in rings {
                 candidates.sort_by_key(|point| {
                     (
                         (point.x_nm - anchor.x_nm).abs() + (point.y_nm - anchor.y_nm).abs(),
