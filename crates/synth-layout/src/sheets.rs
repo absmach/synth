@@ -1402,6 +1402,9 @@ mod tests {
             .iter()
             .find(|s| s.name.as_deref() == Some("S"))
             .expect("the S sheet");
+        // The smallest standard sheet that holds the content; A5 is not on
+        // the ladder.
+        assert_eq!(sheet.layout.sheet_size, SheetSize::A4);
         let (min_x, max_x, min_y, max_y) =
             crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
         let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
@@ -1459,10 +1462,10 @@ mod tests {
             .iter()
             .find(|s| s.name.as_deref() == Some("S"))
             .expect("the S sheet");
-        assert_ne!(
+        assert_eq!(
             sheet.layout.sheet_size,
-            SheetSize::A0,
-            "the S page is still the global strip"
+            SheetSize::A4,
+            "the S page is the smallest ladder page, not the global strip"
         );
         let (min_x, max_x, min_y, max_y) =
             crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");

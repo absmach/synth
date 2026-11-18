@@ -1094,7 +1094,7 @@ fn layout_with_overrides_and_power(
     layout
 }
 
-/// Stretch the region boxes to meet their neighbours, for a layout that has no
+/// Tile the region boxes to their neighbours, for a layout that has no
 /// floorplan.
 fn tile_boxes_to_content(board: &Board, layout: &mut Layout) {
     let mut fixed = ungrouped_blocks(board, layout);
@@ -1476,8 +1476,12 @@ const FLOORPLAN_ROUNDS: usize = 3;
 /// re-routes their labels, which changes what the region draws.
 const SPREAD_ROUNDS: usize = 2;
 /// Room (mm) a floorplan cell keeps beyond its region's box, so the region can
-/// be moved by whole grid steps without leaving the cell.
-const FLOORPLAN_GRID_SLACK: f64 = GRID_MM;
+/// be moved by whole grid steps and still absorb the label drift that routing
+/// adds after the move.
+const FLOORPLAN_GRID_SLACK: f64 = 2.0 * GRID_MM;
+/// Clearance kept between a spread region's content and its cell edge, beyond
+/// the box padding, so one more routing pass still leaves the box inside.
+const SPREAD_INSET: f64 = GRID_MM;
 /// Tolerance (mm) for a region box counting as inside its cell.
 const FLOOR_EPS: f64 = 1e-6;
 /// Float noise (mm) in sums of sizes and in grid-step quotients, kept from
@@ -1787,13 +1791,13 @@ fn grid_steps(mm: f64) -> f64 {
 /// page frame, and return the cells by region name. The floorplan is cut for
 /// the smallest page it fits, which becomes the layout's sheet.
 ///
-/// Regions only move, in whole grid steps; what they draw is never stretched,
-/// so each region keeps the box its own content gave it. Wires and labels are
-/// routed again afterwards, which can change what a region draws, so the
-/// regions are measured again and the floorplan redone until every one fits
-/// its cell. `None`, with the layout as it was, when a part belongs to no
-/// region (it has no cell), fewer than two regions exist, or no allowed page
-/// holds the floorplan.
+/// Regions move, in whole grid steps, to the cells the cut gives them; then
+/// [`spread_content_to_cells`] spreads each region's parts over its cell.
+/// Wires and labels are routed again afterwards, which can change what a
+/// region draws, so the regions are measured again and the floorplan redone
+/// until every one fits its cell. `None`, with the layout as it was, when a
+/// part belongs to no region (it has no cell), fewer than two regions exist,
+/// or no allowed page holds the floorplan.
 fn place_regions_in_floorplan(board: &Board, layout: &mut Layout) -> Option<HashMap<String, Rect>> {
     let before = layout.clone();
     let placed = floorplan_rounds(board, layout);
@@ -1905,40 +1909,40 @@ fn spread_content_to_cells(board: &Board, layout: &mut Layout, cells: &HashMap<S
         // Keep one grid step of clearance inside the cell: routing can put a
         // label slightly past the content bounds measured before the scale,
         // and the box still has to fit its cell.
-        let inset = FLOORPLAN_GRID_SLACK;
+        let inset = SPREAD_INSET;
         let left = cell_min.0 + GROUP_CONTENT_PAD + inset;
         let right = (cell_max.0 - GROUP_CONTENT_PAD - inset).max(left);
         let top = cell_min.1 + GROUP_TITLE_BAND_MM + inset;
         let bottom = (cell_max.1 - GROUP_CONTENT_PAD - notes - inset).max(top);
         let (width, height) = (max_x - min_x, max_y - min_y);
         // A very small region in a large cell would otherwise pull connected
-        // parts past the router's label span, turning an intra-region wire
-        // into per-pin labels. Spread up to one label span, not past it.
-        // A mechanical region has no nets to keep routable, so it takes the
-        // whole cell.
+        // parts past the router's label span (80 mm), turning an intra-region
+        // wire into per-pin labels: a two-resistor group spread over a
+        // 187 mm cell put its pins 145 mm apart and lost the wire. Spread up
+        // to one label span, not past it. A mechanical region has no nets to
+        // keep routable, so it takes the whole cell.
+        let capped = |extent: f64| {
+            if extent < LABEL_SPAN_THRESHOLD_MM {
+                LABEL_SPAN_THRESHOLD_MM
+            } else {
+                f64::INFINITY
+            }
+        };
         let (max_w, max_h) = if mechanical.contains(group.as_str()) {
             (f64::INFINITY, f64::INFINITY)
         } else {
-            (
-                if width < LABEL_SPAN_THRESHOLD_MM {
-                    LABEL_SPAN_THRESHOLD_MM
-                } else {
-                    f64::INFINITY
-                },
-                if height < LABEL_SPAN_THRESHOLD_MM {
-                    LABEL_SPAN_THRESHOLD_MM
-                } else {
-                    f64::INFINITY
-                },
-            )
+            (capped(width), capped(height))
         };
+        // Never shrink a part's spacing to fit a cell that is smaller than
+        // its content: the cell already carries one grid step of slack, and
+        // the box may absorb it. Compressing here would overlap parts.
         let sx = if width > 0.0 {
-            ((right - left) / width).min(max_w / width)
+            ((right - left) / width).min(max_w / width).max(1.0)
         } else {
             1.0
         };
         let sy = if height > 0.0 {
-            ((bottom - top) / height).min(max_h / height)
+            ((bottom - top) / height).min(max_h / height).max(1.0)
         } else {
             1.0
         };
@@ -10328,7 +10332,7 @@ mod documentation_tests {
     }
 
     #[test]
-    fn hierarchy_and_hugging_never_exceed_the_requested_page() {
+    fn hierarchy_and_tiled_regions_never_exceed_the_requested_page() {
         let mut b = resistor_groups(
             &[
                 ("A", 12),
@@ -10353,6 +10357,20 @@ mod documentation_tests {
                 "{} is {w} x {h}, past the requested A4",
                 sheet.name.as_deref().unwrap_or("root")
             );
+            if sheet.layout.group_boxes.len() >= 2 {
+                let covered: f64 = sheet
+                    .layout
+                    .group_boxes
+                    .iter()
+                    .map(|b| area(&(b.min_mm, b.max_mm)))
+                    .sum();
+                let frame = sheet_frame(&sheet.layout);
+                assert!(
+                    covered >= 0.9 * area(&frame),
+                    "{}: tiled boxes cover only {covered:.0} of the page",
+                    sheet.name.as_deref().unwrap_or("root")
+                );
+            }
         }
     }
 
@@ -10426,6 +10444,302 @@ mod documentation_tests {
         nets.push(net(200, "GND", &gnd));
         components.push(component(25, "R_EXTRA", r(), Some("EXTRA")));
         board_with_notes(components, nets, vec![])
+    }
+
+    /// Three dense clamp banks, the shape of the sensor_node GPIO region
+    /// repeated: enough body area to measure the per-region fill target.
+    fn dense_bank_board() -> Board {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let dz = || part("diode", vec![pin("a"), pin("k")]);
+        let mut components = Vec::new();
+        let mut nets = Vec::new();
+        let mut next = 0_u32;
+        for bank in 0..3_u32 {
+            let group = format!("BANK{bank}");
+            let mut mids = Vec::new();
+            let mut gnd = Vec::new();
+            let mut ins = Vec::new();
+            for i in 0..12_u32 {
+                let r_id = next;
+                next += 1;
+                let dz_id = next;
+                next += 1;
+                components.push(component(r_id, &format!("R{bank}_{i}"), r(), Some(&group)));
+                components.push(component(
+                    dz_id,
+                    &format!("DZ{bank}_{i}"),
+                    dz(),
+                    Some(&group),
+                ));
+                ins.push((r_id, 0));
+                mids.push((r_id, 1));
+                mids.push((dz_id, 0));
+                gnd.push((dz_id, 1));
+            }
+            nets.push(net(bank * 3, &format!("IN{bank}"), &ins));
+            nets.push(net(bank * 3 + 1, &format!("MID{bank}"), &mids));
+            nets.push(net(bank * 3 + 2, &format!("GND{bank}"), &gnd));
+        }
+        board_with_notes(components, nets, vec![])
+    }
+
+    fn region_body_bbox(board: &Board, layout: &Layout, group: &str) -> Option<Rect> {
+        let mut b: Option<Rect> = None;
+        for placement in &layout.components {
+            if effective_group(board, placement.id) != Some(group) {
+                continue;
+            }
+            let (x0, x1, y0, y1) = body_extent(board, placement);
+            b = Some(match b {
+                None => ((x0, y0), (x1, y1)),
+                Some(((ax0, ay0), (ax1, ay1))) => {
+                    ((ax0.min(x0), ay0.min(y0)), (ax1.max(x1), ay1.max(y1)))
+                }
+            });
+        }
+        b
+    }
+
+    /// Every drawn thing stays inside the region box it belongs to: bodies,
+    /// pins/labels/power flags, wires of intra-region nets, captions and
+    /// group notes.
+    fn assert_region_containment(board: &Board, layout: &Layout) {
+        let eps = 1e-6;
+        let box_of = |group: &str| {
+            layout
+                .group_boxes
+                .iter()
+                .find(|b| b.group == group)
+                .map(|b| (b.min_mm, b.max_mm))
+        };
+        let inside = |rect: (f64, f64, f64, f64), (min, max): ((f64, f64), (f64, f64))| {
+            rect.0 >= min.0 - eps
+                && rect.1 >= min.1 - eps
+                && rect.2 <= max.0 + eps
+                && rect.3 <= max.1 + eps
+        };
+        for b in &layout.group_boxes {
+            let area = (b.min_mm, b.max_mm);
+            for p in &layout.components {
+                if effective_group(board, p.id) != Some(b.group.as_str()) {
+                    continue;
+                }
+                let (x0, x1, y0, y1) = body_extent(board, p);
+                assert!(
+                    inside((x0, y0, x1, y1), area),
+                    "{}: body of {} leaves the box",
+                    b.group,
+                    p.id.0
+                );
+            }
+            for (id, rect) in drawn_beyond_bodies(board, layout) {
+                if effective_group(board, id) == Some(b.group.as_str()) {
+                    assert!(
+                        inside((rect.0, rect.1, rect.2, rect.3), area),
+                        "{}: drawn detail of {} leaves the box",
+                        b.group,
+                        id.0
+                    );
+                }
+            }
+        }
+        for wire in &layout.wires {
+            let Some(net) = board.net(wire.net) else {
+                continue;
+            };
+            let Some(ep) = net.endpoints.first() else {
+                continue;
+            };
+            let Some(group) = effective_group(board, ep.component) else {
+                continue;
+            };
+            let Some(area) = box_of(group) else {
+                continue;
+            };
+            for &(x, y) in &wire.points {
+                assert!(
+                    x >= area.0.0 - eps
+                        && y >= area.0.1 - eps
+                        && x <= area.1.0 + eps
+                        && y <= area.1.1 + eps,
+                    "{group}: wire of {} leaves the box at ({x:.1},{y:.1})",
+                    net.name
+                );
+            }
+        }
+        let (w, h) = layout.sheet_size.dims_mm();
+        for a in &layout.annotations {
+            let rect = (
+                a.at_mm.0,
+                a.at_mm.1,
+                a.at_mm.0 + a.text.len() as f64 * a.size_mm,
+                a.at_mm.1 + a.size_mm,
+            );
+            let group = if a.kind == TextKind::Caption {
+                Some(a.text.as_str())
+            } else {
+                board
+                    .notes
+                    .iter()
+                    .find(|n| n.title == a.text || n.lines.contains(&a.text))
+                    .and_then(|n| n.group.as_deref())
+            };
+            if let Some(group) = group
+                && let Some(area) = box_of(group)
+            {
+                assert!(
+                    inside(rect, area),
+                    "{group}: text {:?} leaves the box",
+                    a.text
+                );
+            } else {
+                assert!(
+                    rect.0 >= -eps && rect.1 >= -eps && rect.2 <= w + eps && rect.3 <= h + eps,
+                    "text {:?} leaves the page",
+                    a.text
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn content_stays_inside_its_region_box() {
+        for b in [clamp_bank_board(), dense_bank_board()] {
+            let layout = layout(&b);
+            assert_region_containment(&b, &layout);
+        }
+    }
+
+    #[test]
+    fn every_region_reaches_45_percent_body_fill() {
+        let b = dense_bank_board();
+        let layout = layout(&b);
+        let mut worst = f64::INFINITY;
+        for b_ in &layout.group_boxes {
+            let body = region_body_bbox(&b, &layout, &b_.group).expect("a body");
+            let fill = area(&body) / area(&(b_.min_mm, b_.max_mm));
+            worst = worst.min(fill);
+            assert!(
+                fill >= 0.45,
+                "{} fills {:.0}% of its box by body bbox: {:?} in {:?}",
+                b_.group,
+                fill * 100.0,
+                body,
+                (b_.min_mm, b_.max_mm)
+            );
+        }
+        assert!(worst >= 0.45);
+    }
+
+    #[test]
+    fn a_one_part_region_under_tiling_stays_inside_the_page() {
+        let resistor = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let board = board_with_notes(
+            vec![
+                component(0, "R1", resistor(), Some("One")),
+                component(1, "R2", resistor(), Some("Two")),
+            ],
+            vec![net(0, "sig", &[(0, 0), (1, 0)])],
+            vec![],
+        );
+        let layout = layout(&board);
+        let box_ = box_of(&layout, "One");
+        let placed = layout.components.iter().find(|p| p.id.0 == 0).expect("R1");
+        assert!(
+            placed.center_mm.0 >= box_.min_mm.0
+                && placed.center_mm.0 <= box_.max_mm.0
+                && placed.center_mm.1 >= box_.min_mm.1
+                && placed.center_mm.1 <= box_.max_mm.1,
+            "the one-part region does not hold its part"
+        );
+        let (sheet_w, sheet_h) = layout.sheet_size.dims_mm();
+        assert!(box_.min_mm.0 >= 0.0 && box_.max_mm.0 <= sheet_w);
+        assert!(box_.min_mm.1 >= 0.0 && box_.max_mm.1 <= sheet_h);
+    }
+
+    #[test]
+    fn spreading_never_compresses_parts() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", r(), Some("A")),
+                component(1, "R2", r(), Some("A")),
+            ],
+            vec![],
+            vec![],
+        );
+        let mut layout = Layout {
+            components: vec![
+                ComponentPlacement {
+                    id: ComponentId(0),
+                    center_mm: (100.0, 100.0),
+                    rotation: Rotation::Zero,
+                },
+                ComponentPlacement {
+                    id: ComponentId(1),
+                    center_mm: (120.0, 100.0),
+                    rotation: Rotation::Zero,
+                },
+            ],
+            wires: vec![],
+            junctions: vec![],
+            power_flags: vec![],
+            net_labels: vec![],
+            hierarchical_labels: vec![],
+            annotations: vec![],
+            group_boxes: vec![],
+            sheet_size: SheetSize::A4,
+        };
+        let cells = HashMap::from([("A".to_string(), ((90.0, 90.0), (101.0, 110.0)))]);
+        spread_content_to_cells(&b, &mut layout, &cells);
+        let a = layout.components.iter().find(|p| p.id.0 == 0).expect("R1");
+        let c = layout.components.iter().find(|p| p.id.0 == 1).expect("R2");
+        assert!(
+            (c.center_mm.0 - a.center_mm.0).abs() >= 20.0 - 1e-6,
+            "the cell compressed the parts to {} mm",
+            c.center_mm.0 - a.center_mm.0
+        );
+    }
+
+    #[test]
+    fn a_long_caption_still_tiles_the_page() {
+        let mut b = clamp_bank_board();
+        b.groups.push(synth_ir::Group {
+            name: "CLAMPS".to_string(),
+            title: Some(
+                "A VERY LONG PROTECTED GPIO HEADER CAPTION FOR THE TILING TEST".to_string(),
+            ),
+            color: None,
+            region: None,
+            source_span: Span::new(0, 0),
+        });
+        let layout = layout(&b);
+        let frame = strict_frame_area(&layout);
+        let covered = strict_covered(&layout);
+        assert!(
+            covered >= 0.9 * frame,
+            "a long caption made the boxes fall back to content tiling: {covered:.0} of {frame:.0}"
+        );
+        let (w, h) = layout.sheet_size.dims_mm();
+        for box_ in &layout.group_boxes {
+            assert!(box_.min_mm.0 >= 0.0 && box_.max_mm.0 <= w);
+            assert!(box_.min_mm.1 >= 0.0 && box_.max_mm.1 <= h);
+        }
+    }
+
+    #[test]
+    fn a_single_region_sits_sanely_and_need_not_fill() {
+        let r = || part("resistor", vec![pin("p1"), pin("p2")]);
+        let b = board_with_notes(vec![component(0, "R1", r(), Some("Only"))], vec![], vec![]);
+        let layout = layout(&b);
+        assert_eq!(layout.group_boxes.len(), 1);
+        let (w, h) = layout.sheet_size.dims_mm();
+        let box_ = &layout.group_boxes[0];
+        assert!(box_.min_mm.0 >= 0.0 && box_.max_mm.0 <= w);
+        assert!(box_.min_mm.1 >= 0.0 && box_.max_mm.1 <= h);
+        // The floorplan needs two regions; a lone region keeps its content
+        // box and is not expected to tile the page.
+        assert_eq!(layout.sheet_size, SheetSize::A4);
     }
 
     #[test]
@@ -10738,6 +11052,53 @@ mod documentation_tests {
         (r.1.0 - r.0.0) * (r.1.1 - r.0.1)
     }
 
+    /// The page frame with KiCad's title block cut out exactly where it sits:
+    /// the box covers the sheet border, and the block is 110 x 34 mm anchored
+    /// to the outer frame line 10 mm from the paper's bottom-right corner.
+    fn strict_frame(layout: &Layout) -> Rect {
+        let (w, h) = layout.sheet_size.dims_mm();
+        (
+            (SHEET_BORDER_MM, SHEET_BORDER_MM),
+            (w - SHEET_BORDER_MM, h - SHEET_BORDER_MM),
+        )
+    }
+
+    fn strict_frame_area(layout: &Layout) -> f64 {
+        let (w, h) = layout.sheet_size.dims_mm();
+        let ((x0, y0), (x1, y1)) = strict_frame(layout);
+        let block_x = w - 10.0 - TITLE_BLOCK_W;
+        let block_y = h - 10.0 - TITLE_BLOCK_H;
+        let bx0 = block_x.max(x0);
+        let by0 = block_y.max(y0);
+        let bx1 = (w - 10.0).min(x1);
+        let by1 = (h - 10.0).min(y1);
+        let block = (bx1 - bx0).max(0.0) * (by1 - by0).max(0.0);
+        area(&((x0, y0), (x1, y1))) - block
+    }
+
+    /// Box area that lies in the frame, minus whatever falls in the title
+    /// block. Boxes are disjoint under tiling, so their areas add.
+    fn strict_covered(layout: &Layout) -> f64 {
+        let (w, h) = layout.sheet_size.dims_mm();
+        let block = (
+            w - 10.0 - TITLE_BLOCK_W,
+            h - 10.0 - TITLE_BLOCK_H,
+            w - 10.0,
+            h - 10.0,
+        );
+        layout
+            .group_boxes
+            .iter()
+            .map(|b| {
+                let (x0, y0) = b.min_mm;
+                let (x1, y1) = b.max_mm;
+                let in_block = (x1.min(block.2) - x0.max(block.0)).max(0.0)
+                    * (y1.min(block.3) - y0.max(block.1)).max(0.0);
+                area(&((x0, y0), (x1, y1))) - in_block
+            })
+            .sum()
+    }
+
     /// Total area of the region boxes of `layout`.
     fn boxes_area(layout: &Layout) -> f64 {
         layout
@@ -10757,13 +11118,18 @@ mod documentation_tests {
             .map(|b| (b.min_mm, b.max_mm))
             .collect();
         assert_eq!(boxes.len(), 4);
-        let covered: f64 = boxes.iter().map(area).sum();
-        let to_fill = area(&frame) - title_block_area(&layout);
-        // A region over the title block's left edge stops above the block, which
-        // leaves the strip beside it empty.
+        let covered = strict_covered(&layout);
+        let to_fill = strict_frame_area(&layout);
+        // A bottom-row cell that crosses the title block's left edge cannot
+        // also reach the strip beside the block without becoming L-shaped.
+        // This bath leaves 5.9% of the strict frame in that strip; a cut
+        // aligned to the block edge would cover it but would not hold every
+        // design's bottom region. The 95% target applies where the cut aligns
+        // (env_logger covers 100%).
         assert!(
-            covered >= 0.9 * to_fill,
-            "boxes cover {covered} of the {to_fill} the frame leaves the regions"
+            covered >= 0.93 * to_fill,
+            "boxes cover {covered:.0} of the {to_fill:.0} strict frame ({:.1}%)",
+            100.0 * covered / to_fill
         );
         let hull = bounds(&boxes);
         assert!((hull.0.0 - frame.0.0).abs() < 1e-6 && (hull.1.0 - frame.1.0).abs() < 1e-6);
@@ -10888,16 +11254,11 @@ mod documentation_tests {
         let layout = layout(&resistor_groups(&crowded, 0));
         let (w, h) = layout.sheet_size.dims_mm();
         assert!(w > 297.0 && h > 210.0, "{:?}", layout.sheet_size);
-        let frame = sheet_frame(&layout);
-        let covered: f64 = layout
-            .group_boxes
-            .iter()
-            .map(|b| area(&(b.min_mm, b.max_mm)))
-            .sum();
-        let to_fill = area(&frame) - title_block_area(&layout);
+        let covered = strict_covered(&layout);
+        let to_fill = strict_frame_area(&layout);
         assert!(
-            covered >= 0.9 * to_fill,
-            "boxes cover {covered} of the {to_fill} the frame leaves the regions"
+            covered >= 0.93 * to_fill,
+            "boxes cover {covered:.0} of the {to_fill:.0} strict frame"
         );
     }
 
