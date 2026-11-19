@@ -22,7 +22,7 @@ use crate::floorplan::{self, BoardEdge};
 use crate::judge::{JudgeMetric, PlacementJudgement};
 use crate::{
     ComponentPlacement, Placement, describe_placement, fit_outline_docked, fitted_edge_margin_nm,
-    flush_edge_index, hole_rim_nm, sidecar_courtyard_rect,
+    flush_edge_index, hole_rim_nm, placement_spacing_mm, sidecar_courtyard_rect, spacing_gap_mm,
 };
 
 /// Courtyard clearance a rule leaves when it pushes a part off another.
@@ -365,11 +365,17 @@ pub(crate) fn review_group_boxes(
 }
 
 /// `(gap_nm, infl, group_gap_nm)` for a board.
-///
-/// No board-level spacing is read here yet: the spacing statement lands in the
-/// next change, which replaces this body with the `spacing_gap_mm` read.
-fn spacing_gaps(_board: &Board) -> (i64, i64, i64) {
-    (mm_to_nm(RULE_GAP_MM), 0, mm_to_nm(GROUP_GAP_MM))
+fn spacing_gaps(board: &Board) -> (i64, i64, i64) {
+    match (spacing_gap_mm(board), placement_spacing_mm(board)) {
+        (Some(gap), Some(raw)) => (
+            mm_to_nm(gap),
+            mm_to_nm(gap) / 2,
+            // Groups sit at least as far apart as parts do, or the push-apart
+            // that keeps the part gap would shove the groups into each other.
+            mm_to_nm((raw + 1.0).max(GROUP_GAP_MM).max(gap)),
+        ),
+        _ => (mm_to_nm(RULE_GAP_MM), 0, mm_to_nm(GROUP_GAP_MM)),
+    }
 }
 
 /// Apply the three rules to `placement`, refitting the outline if any moved a part.

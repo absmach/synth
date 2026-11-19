@@ -1653,6 +1653,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -1743,6 +1744,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2223,6 +2225,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2597,6 +2600,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2759,6 +2763,7 @@ mod tests {
         let b = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

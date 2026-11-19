@@ -100,6 +100,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
     synth_ir::Board {
         outline: None,
         schematic_overflow: None,
+        placement_spacing_nm: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,

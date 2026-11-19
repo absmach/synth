@@ -23,6 +23,7 @@ fn create_dummy_board(name: &str, connector_refdes: &str) -> Board {
 
     Board {
         schematic_overflow: None,
+        placement_spacing_nm: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
