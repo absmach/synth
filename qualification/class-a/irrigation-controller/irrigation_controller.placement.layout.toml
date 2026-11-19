@@ -901,3 +901,57 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+
+[components.R_SH1]
+x = 50.5
+y = 14.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_IS1]
+x = 55.0
+y = 22.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C_IS1]
+x = 55.0
+y = 24.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_SH2]
+x = 61.5
+y = 14.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_IS2]
+x = 65.0
+y = 22.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C_IS2]
+x = 66.0
+y = 19.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0

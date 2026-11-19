@@ -77,7 +77,7 @@ board "irrigation_controller" {
     component TP_SWCLK: testpoint "testpoint_pad_1_5"
     notes "" {
       "J_SWD pin1 +3V3, pin2 SWDIO, pin3 GND, pin4 SWCLK, pin5 NRST. No USB bootloader; program over SWD."
-      "LSE 32.768 kHz on PC14/PC15 (OSC32_IN/OSC32_OUT): the LQFP-32 STM32G030K8 has no HSE crystal oscillator (HSE runs only in bypass mode), so the system clock is HSI16 and the crystal feeds the RTC. Crystal Epson FC-135 32.7680KF-AG0 (LCSC C7275974), CL 7 pF, R1 70 kOhm typ, C0 1.0 pF typ (Epson FC-135 datasheet Ver 2.0). CL = (C1 x C2)/(C1 + C2) + Cstray with Cstray 5 pF, so C1 = C2 = 2 x (7 - 5) = 4 pF. Nearest standard value (E24) 4.3 pF: CL = 4.3/2 + 5 = 7.15 pF, 0.15 pF from 7 pF. Cstray 5 pF is an assumption, not measured. Crystal critical transconductance gm_crit = 4 x R1 x (2 pi f)^2 x (C0 + CL)^2 = 4 x 70 kOhm x (2.059e5)^2 x (8.15 pF)^2 = 0.79 uA/V; the STM32G030 LSE drive setting (LSEDRV) must be chosen so its maximum critical transconductance is at least 5 x this value, which was not checked here because DS12991 was not read."
+      "LSE 32.768 kHz on PC14/PC15 (OSC32_IN/OSC32_OUT): the LQFP-32 STM32G030K8 has no HSE crystal oscillator (HSE runs only in bypass mode), so the system clock is HSI16 and the crystal feeds the RTC. Crystal Epson FC-135 32.7680KF-AG0 (LCSC C7275974), CL 7 pF, R1 70 kOhm typ, C0 1.0 pF typ (Epson FC-135 datasheet Ver 2.0). CL = (C1 x C2)/(C1 + C2) + Cstray with Cstray 5 pF, so C1 = C2 = 2 x (7 - 5) = 4 pF. Nearest standard value (E24) 4.3 pF: CL = 4.3/2 + 5 = 7.15 pF, 0.15 pF from 7 pF. Cstray 5 pF is an assumption, not measured. Crystal critical transconductance gm_crit = 4 x R1 x (2 pi f)^2 x (C0 + CL)^2 = 4 x 70 kOhm x (2.059e5)^2 x (8.15 pF)^2 = 0.79 uA/V; DS12991 gives a maximum crystal Gm_crit of 0.5, 0.75, 1.7 and 2.7 uA/V for LSEDRV low, medium low, medium high and high (as relayed in the maintainer review; the datasheet itself was not retrieved here), which already carry the safety margin, so 0.79 uA/V needs LSEDRV medium high (1.7 uA/V). The 70 kOhm ESR is the Epson datasheet's typical value and the LCSC listing's figure; the datasheet states no maximum."
       "Boot: PA14 (SWCLK) is BOOT0; default option bytes boot from flash."
     }
   }
@@ -89,11 +89,15 @@ board "irrigation_controller" {
     component R_G1: resistor "r_generic_0603" value "100"
     component R_PD1: resistor "r_generic_0603" value "100k"
     component D_FLY1: diode "d_schottky"
+    component R_SH1: resistor "r_generic_1206" value "0.1"
+    component R_IS1: resistor "r_generic_0603" value "1k"
+    component C_IS1: capacitor "c_generic_0603" value "10nF"
     component R_SN1: resistor "r_generic_0603" value "100"
     component C_SN1: capacitor "c_generic_0603" value "10nF"
     component TP_V1: testpoint "testpoint_pad_1_5"
     notes "" {
       "J_VALVE1 pin1 +12V_VALVE, pin2 VALVE1_SW (low-side). Flyback cathode to +12V_VALVE."
+      "Short-circuit sensing: R_SH1 0.1 ohm 1 W (FOJAN FRM121WFR100TM) sits in the source of Q_V1; the sensed voltage is I x 0.1 ohm, 50 mV at the 0.5 A coil current and 0.15 V at the 1.5 A hold current of F1, read on PA1 through R_IS1 1 k and C_IS1 10 nF. Firmware turns the valve off when the sensed voltage exceeds 0.1 V (1.0 A, twice the coil current); a shorted coil cable then no longer holds the rail across Q_V1 until F1 trips. R_SH1 dissipates 0.225 W at 1.5 A, against its 1 W rating."
       "Load: 12 V DC solenoid, coil current at most 0.5 A. AO3400A carries 0.5 A (rated far above, needs datasheet value sourcing for the exact figure), flyback diode 1N5819-class (1 A class), VALVE1_SW is class PWR12 (0.8 mm, about 8x the width a 0.5 A / 10 C rise needs)."
     }
   }
@@ -103,11 +107,15 @@ board "irrigation_controller" {
     component R_G2: resistor "r_generic_0603" value "100"
     component R_PD2: resistor "r_generic_0603" value "100k"
     component D_FLY2: diode "d_schottky"
+    component R_SH2: resistor "r_generic_1206" value "0.1"
+    component R_IS2: resistor "r_generic_0603" value "1k"
+    component C_IS2: capacitor "c_generic_0603" value "10nF"
     component R_SN2: resistor "r_generic_0603" value "100"
     component C_SN2: capacitor "c_generic_0603" value "10nF"
     component TP_V2: testpoint "testpoint_pad_1_5"
     notes "" {
       "J_VALVE2 pin1 +12V_VALVE, pin2 VALVE2_SW (low-side). Flyback cathode to +12V_VALVE."
+      "Short-circuit sensing: R_SH2 0.1 ohm 1 W (FOJAN FRM121WFR100TM) sits in the source of Q_V2; the sensed voltage is I x 0.1 ohm, 50 mV at the 0.5 A coil current and 0.15 V at the 1.5 A hold current of F1, read on PA0 through R_IS2 1 k and C_IS2 10 nF. Firmware turns the valve off when the sensed voltage exceeds 0.1 V (1.0 A, twice the coil current); a shorted coil cable then no longer holds the rail across Q_V2 until F1 trips. R_SH2 dissipates 0.225 W at 1.5 A, against its 1 W rating."
       "Load: 12 V DC solenoid, coil current at most 0.5 A. Same checks as valve 1: MOSFET, flyback diode and PWR12 tracks carry 0.5 A."
       "R_SN2 100 ohm in series with C_SN2 10 nF is an RC snubber across the valve 2 coil connector. TP_V2 probes VALVE2_SW."
     }
@@ -125,7 +133,7 @@ board "irrigation_controller" {
     component D_ESD_S1: diode "prtr5v0u2x" { placement_hint { near: "J_SOIL1" priority: hard } }
     component TP_SOIL1: testpoint "testpoint_pad_1_5"
     notes "" {
-      "J_SOIL1 pin1 and pin2 are the probe, pin3 GND. AC excitation: the probe is driven with alternating polarity from two GPIOs through R_S1 and R_D1 (10 k each), so it never sees DC. Firmware: phase 1 drives pin 1 high and pin 2 low and samples SOIL1_ADC_B; phase 2 reverses the drive and samples SOIL1_ADC_A; the two readings are averaged. V(sampled node) = 3.3 V x 10 k / (10 k + Rprobe + 10 k): 2.75 V at 1 k, 0.16 V at 200 k. R_F1 and R_F1B 1 k with C_F1 and C_F1B 10 nF filter the ADC inputs. D_ESD_S1 (PRTR5V0U2X) protects the connector pins."
+      "J_SOIL1 pin1 and pin2 are the probe, pin3 GND. AC excitation: the probe is driven with alternating polarity from two GPIOs through R_S1 and R_D1 (10 k each), so it never sees DC. Firmware: in each phase both nodes are sampled (SOIL1_ADC_A and SOIL1_ADC_B) with one pin driven high and the other low; phase 2 reverses the drive. With Vd = V(A) - V(B) in a phase, I = 3.3 V / (20 k + Rprobe) and Vd = 3.3 V x Rprobe / (20 k + Rprobe), so Rprobe = 20 k x Vd / (3.3 V - Vd), which cancels the drive level and the 10 k tolerances; Vd is 0.157 V at 1 k and 3.0 V at 200 k. Between measurements both drive pins are set low or to Hi-Z, so the probe sees no DC.  R_F1 and R_F1B 1 k with C_F1 and C_F1B 10 nF filter the ADC inputs. D_ESD_S1 (PRTR5V0U2X) protects the connector pins."
     }
   }
   group "SOIL 2" color "#166534" {
@@ -139,7 +147,7 @@ board "irrigation_controller" {
     component D_ESD_S2: diode "prtr5v0u2x" { placement_hint { near: "J_SOIL2" priority: hard } }
     component TP_SOIL2: testpoint "testpoint_pad_1_5"
     notes "" {
-      "J_SOIL2 pin1 and pin2 are the probe, pin3 GND. AC excitation: the probe is driven with alternating polarity from two GPIOs through R_S2 and R_D2 (10 k each), so it never sees DC. Firmware: phase 1 drives pin 1 high and pin 2 low and samples SOIL2_ADC_B; phase 2 reverses the drive and samples SOIL2_ADC_A; the two readings are averaged. V(sampled node) = 3.3 V x 10 k / (10 k + Rprobe + 10 k): 2.75 V at 1 k, 0.16 V at 200 k. R_F2 and R_F2B 1 k with C_F2 and C_F2B 10 nF filter the ADC inputs. D_ESD_S2 (PRTR5V0U2X) protects the connector pins."
+      "J_SOIL2 pin1 and pin2 are the probe, pin3 GND. AC excitation: the probe is driven with alternating polarity from two GPIOs through R_S2 and R_D2 (10 k each), so it never sees DC. Firmware: in each phase both nodes are sampled (SOIL2_ADC_A and SOIL2_ADC_B) with one pin driven high and the other low; phase 2 reverses the drive. With Vd = V(A) - V(B) in a phase, I = 3.3 V / (20 k + Rprobe) and Vd = 3.3 V x Rprobe / (20 k + Rprobe), so Rprobe = 20 k x Vd / (3.3 V - Vd), which cancels the drive level and the 10 k tolerances; Vd is 0.157 V at 1 k and 3.0 V at 200 k. Between measurements both drive pins are set low or to Hi-Z, so the probe sees no DC.  R_F2 and R_F2B 1 k with C_F2 and C_F2B 10 nF filter the ADC inputs. D_ESD_S2 (PRTR5V0U2X) protects the connector pins."
     }
   }
 
@@ -208,7 +216,7 @@ board "irrigation_controller" {
     J1.p2 D_TVS.anode C_BULK.p2 U_IDEAL.gnd C_VIN.p2 C_IN1.p2 C_IN2.p2 U1.gnd U1.gnd_ep C_OUT1.p2 C_OUT2.p2 R_FBB.p2 C_COMP.p2 C_SS.p2
     TP_GND.p1
     U2.VSS C_VDD1.p2 C_VDD2.p2 C_X1.p2 C_X2.p2 C_NRST.p2 SW_RESET.p2 J_SWD.p3
-    Q_V1.s Q_V2.s R_PD1.p2 R_PD2.p2
+    R_PD1.p2 R_PD2.p2 R_SH1.p2 R_SH2.p2 C_IS1.p2 C_IS2.p2
     J_SOIL1.p3 C_F1.p2 C_F1B.p2 D_ESD_S1.gnd J_SOIL2.p3 C_F2.p2 C_F2B.p2 D_ESD_S2.gnd
     J_FLOW.p2 C_FL.p2 D_FZ.anode D_ESD_FL.anode D_ESD_I2C.gnd
     U4.GND U4.ADR_SEL C_U4.p2 U5.vss U5.a0 U5.a1 U5.a2 U5.wp C_U5.p2 J_I2C.p1
@@ -262,25 +270,29 @@ board "irrigation_controller" {
   // Valves (gates on the MCU top side, facing the valve drivers)
   net "VALVE1_GATE" class "SIG" { U2.PB3 R_G1.p1 }
   net "VALVE1_GATE_Q" class "SIG" { R_G1.p2 Q_V1.g R_PD1.p1 }
+  net "VALVE1_ISENSE" class "PWR12" { Q_V1.s R_SH1.p1 R_IS1.p1 }
+  net "VALVE1_IS_ADC" class "SIG" { R_IS1.p2 C_IS1.p1 U2.PA1 }
   net "VALVE1_SW" class "PWR12" { Q_V1.d D_FLY1.anode J_VALVE1.p2 C_SN1.p2 TP_V1.p1 }
   net "VALVE2_GATE" class "SIG" { U2.PB4 R_G2.p1 }
   net "VALVE2_GATE_Q" class "SIG" { R_G2.p2 Q_V2.g R_PD2.p1 }
+  net "VALVE2_ISENSE" class "PWR12" { Q_V2.s R_SH2.p1 R_IS2.p1 }
+  net "VALVE2_IS_ADC" class "SIG" { R_IS2.p2 C_IS2.p1 U2.PA0 }
   net "VALVE2_SW" class "PWR12" { Q_V2.d D_FLY2.anode J_VALVE2.p2 C_SN2.p2 TP_V2.p1 }
 
-  // Soil 1: the probe is driven with alternating polarity from two GPIOs (PA4, PB0) through 10 k, and both probe nodes are sampled (PA2, PA1)
+  // Soil 1: the probe is driven with alternating polarity from two GPIOs (PA4, PA8) through 10 k, and both probe nodes are sampled (PA2, PB0)
   net "SOIL1_DRV_A" class "SIG" { U2.PA4 R_S1.p1 }
   net "SOIL1_A" class "SIG" { R_S1.p2 J_SOIL1.p1 R_F1.p1 D_ESD_S1.io1 }
-  net "SOIL1_DRV_B" class "SIG" { U2.PB0 R_D1.p1 }
+  net "SOIL1_DRV_B" class "SIG" { U2.PA8 R_D1.p1 }
   net "SOIL1_B" class "SIG" { R_D1.p2 J_SOIL1.p2 R_F1B.p1 D_ESD_S1.io2 }
   net "SOIL1_ADC_A" class "SIG" { R_F1.p2 C_F1.p1 U2.PA2 TP_SOIL1.p1 }
-  net "SOIL1_ADC_B" class "SIG" { R_F1B.p2 C_F1B.p1 U2.PA1 }
-  // Soil 2: the probe is driven with alternating polarity from two GPIOs (PA5, PB1) through 10 k, and both probe nodes are sampled (PA3, PA0)
+  net "SOIL1_ADC_B" class "SIG" { R_F1B.p2 C_F1B.p1 U2.PB0 }
+  // Soil 2: the probe is driven with alternating polarity from two GPIOs (PA5, PA15) through 10 k, and both probe nodes are sampled (PA3, PB1)
   net "SOIL2_DRV_A" class "SIG" { U2.PA5 R_S2.p1 }
   net "SOIL2_A" class "SIG" { R_S2.p2 J_SOIL2.p1 R_F2.p1 D_ESD_S2.io1 }
-  net "SOIL2_DRV_B" class "SIG" { U2.PB1 R_D2.p1 }
+  net "SOIL2_DRV_B" class "SIG" { U2.PA15 R_D2.p1 }
   net "SOIL2_B" class "SIG" { R_D2.p2 J_SOIL2.p2 R_F2B.p1 D_ESD_S2.io2 }
   net "SOIL2_ADC_A" class "SIG" { R_F2.p2 C_F2.p1 U2.PA3 TP_SOIL2.p1 }
-  net "SOIL2_ADC_B" class "SIG" { R_F2B.p2 C_F2B.p1 U2.PA0 }
+  net "SOIL2_ADC_B" class "SIG" { R_F2B.p2 C_F2B.p1 U2.PB1 }
 
   // Flow
   net "FLOW_IN" class "SIG" { J_FLOW.p3 R_FPU.p2 R_FS.p1 D_ESD_FL.cathode }
