@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 72.0 x 67.0 mm, 4,823 mm2, 82 parts (73 excluding mounting holes and test points) |
+| Outline | 72.0 x 67.0 mm, 4,823 mm2, 83 parts (74 excluding mounting holes and test points) |
 | Courtyard fill | **28.4 %** of the board area, measured on the exported board (`layout_metrics.py`); the Class C target is 30 %, which at this outline needs about 1,447 mm2 of courtyard against about 1,370 mm2 now |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"`, JLCPCB's `JLC06161H-3313` stackup as declared in the source (prepreg 3313 0.0994 mm er 4.1, core 0.55 mm er 4.6, prepreg 2116 0.1088 mm er 4.16; outer copper 35 um, inner 15.2 um; [JLCPCB impedance tool](https://jlcpcb.com/impedance)), 1.47 mm in the STEP model |
 | Routing | 60 of 60 nets, 924 segments, 182 vias (0.46/0.2 mm: 68, 0.6/0.3 mm: 114), 1785.8 mm of track; the router's report and the delivered board agree (the delivered-board count) |
@@ -36,13 +36,28 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 
 The 64 vias on the SDRAM signal nets: every `SD_DQ` via is within 0.76 mm of a ground via, the clock vias within 0.73 mm, and the address and control vias within 5.08 mm (median over all 64: 2.2 mm). Ground is poured on all six layers (a `GND` zone on each), and the supply nets are routed as tracks. The supply and configuration nets named in the table carry no fast edge (the net classes `PWR33`, `PWR12` and `LOWSPD` declare `edge_rate slow`), so their findings are advisories, with the nearest ground via at the distances listed.
 
+## 3.3 V regulator budget and input surge
+
+`U1` (AP7361C-33E, SOT-223; Diodes DS37274 Rev. 5-2: 1 A output, 360 mV typical dropout at 1 A, input 2.2 to 6.0 V recommended and 6.5 V absolute maximum, SOT223 `RθJA = 110 °C/W`) carries every load on `+3V3`. Known loads, as datasheet or source maxima:
+
+| Load on `+3V3` | Current used | Source |
+|---|---|---|
+| `U2` TLV70012 1.2 V core regulator | 200 mA (its rated output current; a linear regulator draws its output current from the input) | TI TLV700 datasheet SBVS173, recommended operating conditions IOUT 0 to 200 mA |
+| `U5` W25Q128JV | 25 mA (page program and erase, `ICC5` and `ICC7` maximum) | Winbond W25Q128JV datasheet, DC Electrical Characteristics |
+| Three LEDs, 1 k | 10 mA (3.3 V / 1 k each, which ignores the LED forward drop) | the design's own arithmetic |
+| Total known | 235 mA | |
+
+The SDRAM's active current, the FPGA's 3.3 V I/O bank current and the oscillator's supply current are not counted: the IS42S16400J current figures and the oscillator's were not read, so the budget is not closed for them. At the 5.25 V maximum VBUS the regulator dissipates 1.95 V x 0.235 A = 0.46 W, a 50 &deg;C rise: Tj is 75 &deg;C at 25 &deg;C ambient and 120 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.95 = 0.47 A` in total at 25 &deg;C ambient, which leaves 0.23 A for the uncounted loads, and at `(125 - 70) / 110 / 1.95 = 0.26 A` at 70 &deg;C ambient, which leaves 0.02 A: at 70 &deg;C the budget does not show room for the SDRAM. Dropout: 360 mV typical at 1 A, so at the 4.6 V worst-case rail the output stays in regulation with more than 1 V to spare.
+
+`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.25 V maximum VBUS, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input, so a surge that drives `D1` into breakdown (6.67 V at the least) exceeds the regulator's rating by 0.17 V at the least and by about 3.8 V at the full clamp. No TVS with a standoff above 5.25 V clamps below 6.5 V, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at their input, so the board does not meet that margin; the surge is limited upstream by `F1` and the source, not by the regulator rating.
+
 ## Layout and fill
 
 The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdram_node.placement.layout.toml): the SDRAM and the FPGA face each other, the series resistors between them, the USB-C receptacle and the power chain along the bottom, the flash and the programming header on the right. The header `J2` has its courtyard 0.98 mm from the screw-head keepout of mounting hole `H2` (a 5.5 mm square around the hole) and 1.57 mm inside the board's right edge. The courtyard fill of 28.4 % and the outline are measured on the exported board; the parts occupy a 70.4 x 51.5 mm box (75 % of the board) and 9 of the 42 10 x 10 mm cells are empty.
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 82 lines: 73 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
+[`fab/bom.csv`](fab/bom.csv) has 83 lines: 74 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
 
 ## Fabrication package
 

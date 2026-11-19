@@ -55,6 +55,7 @@ board "ice40_sdram_node" {
     component R3: resistor "r_generic_0603" value "5.1k"
     component F1: fuse "polyfuse_1r1a"
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1.p2" priority: hard } }
+    component D5: diode "prtr5v0u2x" { placement_hint { near: "J1" priority: hard } }
     component RPD1: resistor "r_generic_0603" value "10k"
     component RCB1: resistor "r_generic_0402" value "10k"
     component RCB2: resistor "r_generic_0402" value "10k"
@@ -83,7 +84,7 @@ board "ice40_sdram_node" {
 
   // ---- 3.3 V and 1.2 V rails ------------------------------------------------
   group "3V3 RAIL" color "#b45309" {
-    component U1: regulator "lp5907_3v3" value "LP5907-3.3"
+    component U1: regulator "ap7361c_33e" value "AP7361C-33E"
     component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
     component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
     component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vout" priority: hard } }
@@ -195,7 +196,7 @@ board "ice40_sdram_node" {
   power "GND" 0v class "GNDC" {
     J1.gnd J1.gnd_b12 J1.gnd_a12 J1.gnd_b1 J1.shld R2.p2 R3.p2
     D1.anode C1.p2 RPD1.p2 RPD2.p2 RPD3.p2 RPD4.p2 RPD5.p2 RPD6.p2 RPD7.p2 RPD8.p2
-    U1.gnd C2.p2 C3.p2 C4.p2 C5.p2
+    U1.gnd C2.p2 C3.p2 C4.p2 C5.p2 D5.gnd
     U2.gnd C6.p2 C7.p2
     U3.gnd U3.gnd_2 U3.gnd_3 U3.gnd_4 U3.gnd_5 U3.gnd_6 U3.gnd_7 U3.gnd_8 U3.gnd_9 U3.gndpll0 U3.gndpll1
     RCB1.p2 RCB2.p2
@@ -209,9 +210,9 @@ board "ice40_sdram_node" {
 
   net "VIN_RAW" class "PWR5" { J1.vbus J1.vbus_b4 J1.vbus_a9 J1.vbus_b9 F1.p1 }
   // USB-C is a 5 V power sink only: 5.1 k pull-downs on CC1/CC2, D+/D-/SBU left open.
-  net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 }
-  net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 }
-  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode C1.p1 U1.vin U1.en C2.p1 C3.p1 TP1.p1 }
+  net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 D5.io1 }
+  net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 D5.io2 }
+  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode D5.vcc C1.p1 U1.vin C2.p1 C3.p1 TP1.p1 }
 
   power "+3V3" 3.3v class "PWR33" {
     U1.vout C4.p1 C5.p1 U2.vin C6.p1 U2.en
@@ -288,7 +289,7 @@ board "ice40_sdram_node" {
   // (the IS42S16400J ignores a masked byte on a write and drives it high-impedance on a read), so they carry no signal.
   net "CBSEL0" class "LOWSPD" { U3.iob_103_cbsel0 RCB1.p1 }
   net "CBSEL1" class "LOWSPD" { U3.iob_104_cbsel1 RCB2.p1 }
-  net "CLK25" class "SDADDR" { X1.out U3.iot_197_gbin1 }
+  net "CLK25" class "SDCLK" { X1.out U3.iot_197_gbin1 }
   net "SD_DQ0" class "LOWSPD" { U4.dq0 RPD1.p1 }
   net "SD_DQ1" class "LOWSPD" { U4.dq1 RPD2.p1 }
   net "SD_DQ2" class "LOWSPD" { U4.dq2 RPD3.p1 }
