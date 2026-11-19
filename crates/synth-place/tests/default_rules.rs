@@ -504,9 +504,40 @@ fn default_path_does_not_stretch_the_board() {
     check_shape("default", synth_place::place);
 }
 
+#[test]
+#[ignore = "R4c routes clean (0 open, 633 mm) at 2825 mm2; 2750 mm2 needs a tighter rim, which fails routing (R4d)"]
+fn replace_path_stays_within_the_measured_area() {
+    let board = rtd_afe();
+    let (w, h) = outline_mm(&synth_place::place_with_replace(&board).expect("place"));
+    assert!(w * h <= 2750.0, "{:.0} mm2", w * h);
+    assert!((1.0..=1.8).contains(&(w / h)), "aspect {:.2}", w / h);
+}
+
 /// Round 14: pack the groups into their own body box first, then fit the
 /// outline round it. The measured export must drop 5% from the round-13
 /// 3005.6 mm2, which reserved the hole corners inside the packing.
+#[test]
+fn replace_export_sizes_the_outline_round_the_packed_groups() {
+    let board = rtd_afe();
+    let placement = exported(&board, synth_place::place_with_replace(&board));
+    let (w, h) = outline_mm(&placement);
+    eprintln!("round-14 export: {w:.2}x{h:.2}={:.1} mm2", w * h);
+    assert!(
+        w * h <= 0.95 * 3005.6,
+        "{:.1} mm2 is not 5% under the round-13 3005.6 mm2",
+        w * h
+    );
+}
+
+#[test]
+fn replace_path_applies_all_three_rules() {
+    let board = rtd_afe();
+    let placement = synth_place::place_with_replace(&board).expect("place");
+    check_holes(&board, &placement);
+    check_usb(&board, &placement);
+    check_groups(&board, &placement);
+}
+
 fn load_source(name: &str, source: &str) -> Board {
     let dir = std::env::temp_dir().join(format!(
         "synth-place-default-rules-{name}-{}",
@@ -719,6 +750,24 @@ fn default_path_snaps_parts_to_the_grid_without_breaking_rules() {
 
 /// Docking a connector flush must not leave a blocked escape corridor (J1 to
 /// the VQFN-32 U1 had three blockers) that the undocked layout did not have.
+#[test]
+fn docking_leaves_no_blocked_escape_corridor() {
+    let board = rtd_afe();
+    for (label, placed) in [
+        ("default", synth_place::place(&board)),
+        ("replace", synth_place::place_with_replace(&board)),
+    ] {
+        let placement = exported(&board, placed);
+        let findings = synth_place::describe_placement(&board, &placement)
+            .visual_review
+            .findings;
+        assert!(
+            findings.iter().all(|f| !f.contains("escape corridor")),
+            "{label}: {findings:?}"
+        );
+    }
+}
+
 fn rtd_afe_with_parts() -> Board {
     load_with(
         &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rtd_afe.synth"),
@@ -769,6 +818,16 @@ fn default_path_centres_the_big_chips() {
     let placement = synth_place::place_with_export_sweep(&board).expect("place");
     check_chips_central("default", &board, &placement, 0.25);
     check_groups(&board, &exported(&board, Ok(placement)));
+}
+
+#[test]
+fn replace_path_centres_the_big_chips() {
+    let board = rtd_afe_with_parts();
+    let placement = synth_place::place_with_replace(&board).expect("place");
+    // The replace board is 58x33 mm, so its chips cannot sit as near the middle.
+    // With the ADC part loaded that path keeps no group gap (0.65 mm, as before
+    // this rule), so groups are not checked here.
+    check_chips_central("replace", &board, &placement, 0.3);
 }
 
 /// Non-connector parts with at least 16 pins (the main chips), by refdes.
@@ -865,6 +924,20 @@ fn default_path_balances_the_board() {
     );
 }
 
+#[test]
+fn replace_path_balances_the_board() {
+    let board = rtd_afe_with_parts();
+    let placement = synth_place::place_with_replace(&board).expect("place");
+    check_balance("replace", &board, &placement);
+    let (w, h) = outline_mm(&exported(&board, Ok(placement)));
+    assert!(
+        w * h <= 1.15 * 1949.0,
+        "{:.0} mm2 grew past round 10 + 15%",
+        w * h
+    );
+    assert!((1.0..=1.8).contains(&(w / h)), "aspect {:.2}", w / h);
+}
+
 /// Mean pad-to-pad distance (mm) from each decoupling or load cap to the pin it serves.
 fn support_mean_mm(board: &Board, placement: &Placement) -> f64 {
     synth_place::fitness(board, placement)
@@ -909,11 +982,104 @@ fn default_path_keeps_the_outline_with_edge_connectors_flush() {
     check_edge_rows("default", &board, &placement, 2373.0);
 }
 
+#[test]
+fn replace_path_keeps_the_outline_with_edge_connectors_flush() {
+    let board = rtd_afe();
+    let placement = synth_place::place_with_replace(&board).expect("place");
+    check_edge_rows("replace", &board, &placement, 3007.0);
+}
+
+/// Round 18: the USB connector's group frame. The offsets are the ones the
+/// USB block has before any connector move (measured from the packing the
+/// round-16 re-seat replaced); a move must translate them, not re-fold them.
+const USB_FRAME_MM: [(&str, f64, f64); 8] = [
+    ("R_CC1", 7.52, -0.21),
+    ("R_CC2", -7.48, -2.21),
+    ("R_DP", 7.52, 1.79),
+    ("R_DN", -7.48, -0.21),
+    ("D1", 7.52, 4.29),
+    ("D2", -7.48, 2.29),
+    ("C_L1", -7.48, 4.79),
+    ("C_L2", 12.02, 3.29),
+];
+
 fn centre_mm(r: &Rect) -> (f64, f64) {
     (
         nm_to_mm(i64::midpoint(r.min.x_nm, r.max.x_nm)),
         nm_to_mm(i64::midpoint(r.min.y_nm, r.max.y_nm)),
     )
+}
+
+/// USB centring moves the passives with the connector: they keep the frame,
+/// are on both sides of it, and it lands within 0.5 mm of the edge midpoint.
+#[test]
+fn usb_centring_keeps_the_passives_frame() {
+    let board = rtd_afe_with_parts();
+    let placement = exported(&board, synth_place::place_with_replace(&board));
+    let parts = courtyards(&board, &placement);
+    let usb = rect_of(&parts, "J1");
+    let (ux, uy) = centre_mm(usb);
+    let o = placement.board_outline;
+    let gaps = [
+        (
+            usb.min.y_nm - o.min.y_nm,
+            (ux, nm_to_mm(i64::midpoint(o.min.x_nm, o.max.x_nm))),
+        ),
+        (
+            o.max.y_nm - usb.max.y_nm,
+            (ux, nm_to_mm(i64::midpoint(o.min.x_nm, o.max.x_nm))),
+        ),
+        (
+            usb.min.x_nm - o.min.x_nm,
+            (nm_to_mm(i64::midpoint(o.min.y_nm, o.max.y_nm)), uy),
+        ),
+        (
+            o.max.x_nm - usb.max.x_nm,
+            (nm_to_mm(i64::midpoint(o.min.y_nm, o.max.y_nm)), uy),
+        ),
+    ];
+    let (_, (mid, got)) = *gaps.iter().min_by_key(|g| g.0).expect("four edges");
+    assert!(
+        (mid - got).abs() <= 0.5,
+        "USB is {:.2} mm from the edge midpoint",
+        (mid - got).abs()
+    );
+    let mut left = 0;
+    let mut right = 0;
+    for (refdes, dx, dy) in USB_FRAME_MM {
+        let r = rect_of(&parts, refdes);
+        let (cx, cy) = centre_mm(r);
+        assert!(
+            (cx - ux - dx).abs() <= 0.01 && (cy - uy - dy).abs() <= 0.01,
+            "{refdes} offset ({:.2},{:.2}) does not match the frame ({dx:.2},{dy:.2})",
+            cx - ux,
+            cy - uy
+        );
+        left += usize::from(cx < ux);
+        right += usize::from(cx > ux);
+    }
+    assert!(left > 0 && right > 0, "USB passives on both sides");
+}
+
+/// A docked connector keeps a cap that hugs it at the same offset: J2 is flush
+/// on its edge and C_CM2 is 0.98 mm from its courtyard before and after.
+#[test]
+fn docked_connector_keeps_a_hugging_cap_offset() {
+    let board = rtd_afe_with_parts();
+    let placement = exported(&board, synth_place::place_with_replace(&board));
+    let parts = courtyards(&board, &placement);
+    let j2 = rect_of(&parts, "J2");
+    let (gap, _) = edge_gap_mm(&placement, j2);
+    assert!(gap.abs() <= 0.3, "J2 is {gap:.2} mm from its edge");
+    let (jx, jy) = centre_mm(j2);
+    let cap = rect_of(&parts, "C_CM2");
+    let (cx, cy) = centre_mm(cap);
+    assert!(
+        (cx - jx - 4.23).abs() <= 0.01 && (cy - jy - -0.9).abs() <= 0.01,
+        "C_CM2 offset ({:.2},{:.2}) is not the packed frame (4.23,-0.90)",
+        cx - jx,
+        cy - jy
+    );
 }
 
 // ---- Round 19: dock order, reserved envelopes, edge headers -----------------
@@ -1320,6 +1486,17 @@ fn hinted_header_rotation_is_left_alone() {
 
 // ---- Round 21: compression pass --------------------------------------------
 
+fn judge_metric<'a>(
+    report: &'a synth_place::PlacementJudgement,
+    key: &str,
+) -> &'a synth_place::JudgeMetric {
+    report
+        .metrics
+        .iter()
+        .find(|metric| metric.key == key)
+        .unwrap_or_else(|| panic!("missing judge metric {key}"))
+}
+
 /// The cap-only fixture with a chosen outline: the tight cap box plus `slack`
 /// on the right.
 fn cap_with_right_slack(slack_mm: f64) -> (Board, Placement) {
@@ -1412,6 +1589,56 @@ fn compression_leaves_a_tight_board_unchanged() {
 }
 
 #[test]
+fn compression_keeps_the_usb_centred() {
+    let _guard = lock_compress_env();
+    let board = rtd_afe_with_parts();
+    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let mut placement = head_outline(&board, &raw);
+    placement.board_outline.min.x_nm -= mm_to_nm(6.0);
+
+    let before = synth_place::judge(&board, &placement);
+    assert!(
+        judge_metric(&before, "usb_offset").measured > 0.5,
+        "the fixture starts with the USB off centre"
+    );
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = synth_place::judge(&board, &placement);
+    assert!(
+        judge_metric(&after, "usb_offset").measured <= 0.5,
+        "USB offset after compression is {}",
+        judge_metric(&after, "usb_offset").measured
+    );
+    assert!(after.passed, "compression broke a gate: {after:?}");
+}
+
+#[test]
+fn compression_keeps_holes_three_point_five_mm_from_the_corners() {
+    let _guard = lock_compress_env();
+    let board = rtd_afe_with_parts();
+    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let mut placement = head_outline(&board, &raw);
+    placement.board_outline.max.y_nm += mm_to_nm(6.0);
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let parts = courtyards(&board, &placement);
+    let outline = placement.board_outline;
+    for hole in ["H1", "H2", "H3", "H4"] {
+        let rect = *rect_of(&parts, hole);
+        let cx = rect.min.x_nm / 2 + rect.max.x_nm / 2;
+        let cy = rect.min.y_nm / 2 + rect.max.y_nm / 2;
+        let inset_x = nm_to_mm((cx - outline.min.x_nm).min(outline.max.x_nm - cx));
+        let inset_y = nm_to_mm((cy - outline.min.y_nm).min(outline.max.y_nm - cy));
+        assert!(
+            (inset_x - 3.5).abs() <= 0.3 && (inset_y - 3.5).abs() <= 0.3,
+            "{hole} inset {inset_x:.2} x {inset_y:.2} mm"
+        );
+    }
+}
+
+#[test]
 fn wall_jump_closes_six_mm_of_right_slack_in_one_jump() {
     let trace =
         std::env::temp_dir().join(format!("synth-compress-jump-{}.tsv", std::process::id()));
@@ -1450,6 +1677,115 @@ fn wall_jump_closes_six_mm_of_right_slack_in_one_jump() {
 }
 
 #[test]
+fn compression_keeps_a_grouped_holes_corner_gate() {
+    // Jeff's mounting holes are declared inside "TEST POINTS AND MOUNTING", so
+    // the judge's group box spans the board. A wall step used to settle that
+    // group and pull the holes off their corners (r24b Jeff trace: a step that
+    // starts with only group_gap failing ends with hole_corner too). The same
+    // shape here: put the fixture's holes in the MCU group and give the board
+    // slack on every side.
+    if reexec(
+        "compression_keeps_a_grouped_holes_corner_gate",
+        None,
+        &[("SYNTH_PLACE_REFINE", std::ffi::OsStr::new("0"))],
+    ) {
+        return;
+    }
+    let _guard = lock_compress_env();
+    let mut board = rtd_afe_with_parts();
+    for component in &mut board.components {
+        if component.kind == "mounting_hole" {
+            component.group = Some("MCU".into());
+        }
+    }
+    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let mut placement = head_outline(&board, &raw);
+    placement.board_outline.min.x_nm -= mm_to_nm(10.0);
+    placement.board_outline.min.y_nm -= mm_to_nm(10.0);
+    placement.board_outline.max.x_nm += mm_to_nm(10.0);
+    placement.board_outline.max.y_nm += mm_to_nm(10.0);
+    // The rules place the holes in the corners before the outline grows; put
+    // them back so the fixture starts where a finished board does.
+    let outline = placement.board_outline;
+    for (refdes, left, top) in [
+        ("H1", true, true),
+        ("H2", false, true),
+        ("H3", true, false),
+        ("H4", false, false),
+    ] {
+        let component = board
+            .components
+            .iter()
+            .find(|component| component.refdes == refdes)
+            .expect("hole");
+        let placed = placement
+            .components
+            .iter_mut()
+            .find(|placed| placed.id == component.id)
+            .expect("placed hole");
+        placed.center = Point::new(
+            if left {
+                outline.min.x_nm + mm_to_nm(3.5)
+            } else {
+                outline.max.x_nm - mm_to_nm(3.5)
+            },
+            if top {
+                outline.min.y_nm + mm_to_nm(3.5)
+            } else {
+                outline.max.y_nm - mm_to_nm(3.5)
+            },
+        );
+    }
+
+    let before = synth_place::judge(&board, &placement);
+    assert_eq!(
+        judge_metric(&before, "hole_corner").failures,
+        0,
+        "the fixture starts with the holes in their corners"
+    );
+    let before_area = judge_metric(&before, "outline_area").measured;
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = synth_place::judge(&board, &placement);
+    let after_area = judge_metric(&after, "outline_area").measured;
+    assert!(
+        after_area < before_area,
+        "compression did not shrink the board: {before_area:.1} -> {after_area:.1} mm2"
+    );
+    assert_eq!(
+        judge_metric(&after, "hole_corner").failures,
+        0,
+        "a wall step took a grouped hole out of its corner: {after:?}"
+    );
+    assert!(
+        judge_metric(&after, "hole_corner").measured <= 5.5,
+        "hole corner {} mm",
+        judge_metric(&after, "hole_corner").measured
+    );
+}
+
+#[test]
+fn compression_flag_off_matches_the_head_outline() {
+    if reexec(
+        "compression_flag_off_matches_the_head_outline",
+        None,
+        &[("SYNTH_PLACE_COMPRESS", std::ffi::OsStr::new("0"))],
+    ) {
+        return;
+    }
+    let board = rtd_afe_with_parts();
+    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let baseline = head_outline(&board, &raw);
+
+    let _guard = lock_compress_env();
+    let mut actual = raw;
+    synth_place::finish_outline(&board, &mut actual);
+
+    assert_eq!(actual, baseline, "the flag off must keep HEAD's outline");
+}
+
+#[test]
 fn finish_outline_compresses_by_default() {
     if reexec(
         "finish_outline_compresses_by_default",
@@ -1471,6 +1807,55 @@ fn finish_outline_compresses_by_default() {
         actual, expected,
         "finish_outline must run the compression pass by default"
     );
+}
+
+#[test]
+fn compression_adds_no_visual_review_finding() {
+    let _guard = lock_compress_env();
+    let boards = [
+        (
+            "rtd",
+            load_with(
+                &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rtd_afe.synth"),
+                true,
+            ),
+        ),
+        (
+            "fpv",
+            load(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fpv_fc.synth")),
+        ),
+    ];
+    for (label, board) in boards {
+        let raw = synth_place::place_with_replace(&board).expect("replace places");
+        let head = head_outline(&board, &raw);
+        let mut compressed = head.clone();
+        synth_place::compress_outline(&board, &mut compressed);
+
+        let keys = |placement: &Placement| {
+            synth_place::describe_placement(&board, placement)
+                .visual_review
+                .findings
+                .into_iter()
+                .map(|finding| {
+                    finding
+                        .split(" has ")
+                        .next()
+                        .unwrap_or(&finding)
+                        .to_string()
+                })
+                .collect::<std::collections::BTreeSet<_>>()
+        };
+        let before = keys(&head);
+        let after = keys(&compressed);
+        let fresh: Vec<_> = after.difference(&before).collect();
+        assert!(fresh.is_empty(), "{label} added findings: {fresh:?}");
+
+        let report = synth_place::judge(&board, &compressed);
+        assert!(
+            report.passed,
+            "{label} compression broke a judge gate: {report:?}"
+        );
+    }
 }
 
 // ---- Round 22 feedback loop ----
@@ -1797,4 +2182,25 @@ fn compress_budget_zero_returns_the_input() {
     synth_place::compress_outline(&board, &mut placement);
 
     assert_eq!(placement, before, "a zero budget must not move the input");
+}
+
+#[test]
+fn refine_flag_off_matches_round_21() {
+    if reexec(
+        "refine_flag_off_matches_round_21",
+        None,
+        &[("SYNTH_PLACE_REFINE", std::ffi::OsStr::new("0"))],
+    ) {
+        return;
+    }
+    let _guard = lock_compress_env();
+    let board = rtd_afe_with_parts();
+    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let mut expected = head_outline(&board, &raw);
+    synth_place::compress_outline(&board, &mut expected);
+
+    let mut actual = raw;
+    synth_place::finish_outline(&board, &mut actual);
+
+    assert_eq!(actual, expected, "refine off must match round 21");
 }

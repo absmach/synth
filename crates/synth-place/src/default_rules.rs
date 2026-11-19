@@ -2269,6 +2269,46 @@ fn centre_usb(state: &mut State<'_>) {
     }
 }
 
+/// Push apart any two parts closer than the board's spacing, leaving hinted
+/// parts where they are, then refit the outline. A no-op without a spacing.
+pub(crate) fn enforce_spacing(board: &Board, placement: &mut Placement) {
+    if board.placement_spacing_nm.is_none() {
+        return;
+    }
+    let (gap_nm, infl, group_gap_nm) = spacing_gaps(board);
+    let pinned: Vec<bool> = placement
+        .components
+        .iter()
+        .map(|placed| {
+            board
+                .component(placed.id)
+                .is_none_or(|component| component.placement_hint.is_some())
+        })
+        .collect();
+    let mut state = State {
+        board,
+        anchored: pinned.clone(),
+        pinned,
+        placed: placement.components.clone(),
+        outline: placement.board_outline,
+        keep_clean: false,
+        known: Vec::new(),
+        usb_only: false,
+        gap_nm,
+        infl,
+        group_gap_nm,
+        rim: rim_nm(board, &placement.components, true),
+        reserved: Vec::new(),
+        spread_keep: Vec::new(),
+    };
+    state.relax();
+    state.space_groups();
+    if state.placed != placement.components {
+        placement.components = state.placed;
+        fit_outline_docked(board, placement, state.rim);
+    }
+}
+
 fn is_usb_connector(component: &Component) -> bool {
     component.part.as_ref().is_some_and(|part| {
         let id = part.id.0.to_ascii_lowercase();
