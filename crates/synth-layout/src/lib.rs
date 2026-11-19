@@ -2787,22 +2787,37 @@ fn page_needs(board: &Board, layout: &Layout) -> Option<(f64, f64)> {
     // Content inside region boxes starts at the sheet border, not the wider
     // page margin, so only the far edges need room.
     let boxed = !layout.group_boxes.is_empty();
+    // The page the need will be tested against is the smallest standard page
+    // that holds the width. Its title block decides whether a box can run on
+    // beside it or has to stop above it. A page chosen later for its height is
+    // wider, so its block starts further right; assuming the smaller page's
+    // block here can only over-reserve, never let content slide under one.
+    let block_x_for = |width: f64| {
+        let page_w = crate::sheet_size_for(width, 0.0).dims_mm().0;
+        title_block_origin((page_w, 0.0)).0
+    };
     let mut need = bounds_of(board, layout, false).map(|(min_x, max_x, min_y, max_y)| {
         if boxed {
-            (
-                max_x + SHEET_BORDER_MM,
-                max_y + TITLE_BLOCK_H + TEXT_MARGIN_Y,
-            )
+            let need_w = max_x + SHEET_BORDER_MM;
+            let bottom = if max_x <= block_x_for(need_w) + GROUP_TILE_GAP {
+                max_y + SHEET_BORDER_MM
+            } else {
+                max_y + TITLE_BLOCK_H + TEXT_MARGIN_Y
+            };
+            (need_w, bottom)
         } else {
             sheet_needs(min_x, max_x, min_y, max_y)
         }
     });
     for box_ in &layout.group_boxes {
         let (w, h) = need.unwrap_or((0.0, 0.0));
-        need = Some((
-            w.max(box_.max_mm.0 + SHEET_BORDER_MM),
-            h.max(box_.max_mm.1 + FRAME_INSET + TITLE_BLOCK_H),
-        ));
+        let need_w = w.max(box_.max_mm.0 + SHEET_BORDER_MM);
+        let bottom = if box_.max_mm.0 <= block_x_for(need_w) + GROUP_TILE_GAP {
+            box_.max_mm.1 + SHEET_BORDER_MM
+        } else {
+            box_.max_mm.1 + FRAME_INSET + TITLE_BLOCK_H
+        };
+        need = Some((need_w, h.max(bottom)));
     }
     need
 }
@@ -8801,6 +8816,23 @@ mod text_overlap_tests {
         grow_sheet_to_fit(&board, &mut layout);
         settle_sheet_size(&board, &mut layout);
         assert_eq!(layout.sheet_size, SheetSize::A2);
+    }
+
+    #[test]
+    fn compaction_does_not_slide_a_box_under_the_title_block() {
+        // The box clears A3's title block but would sit under A4's, so the
+        // page must not compact to A4 around it.
+        let board = empty_board();
+        let mut layout = empty_layout(vec![], SheetSize::A3);
+        layout.group_boxes.push(GroupBox {
+            group: "Filter".to_string(),
+            min_mm: (150.0, 150.0),
+            max_mm: (250.0, 190.0),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        compact_sheet_to_fit(&board, &mut layout);
+        assert_eq!(layout.sheet_size, SheetSize::A3);
     }
 
     fn overflow_board(paper: Option<SchematicPaper>, overflow: Option<SchematicOverflow>) -> Board {

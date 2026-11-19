@@ -1506,6 +1506,34 @@ mod tests {
         );
     }
 
+    /// The bottom row runs on beside the title block, so a box whose right
+    /// edge clears the block may reach the sheet border; that is not overflow.
+    #[test]
+    fn a_box_beside_the_title_block_reaches_the_sheet_border() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        b.schematic_overflow = Some(synth_ir::SchematicOverflow::Hierarchy);
+        let (ceiling_w, ceiling_h) = crate::max_single_sheet(&b).dims_mm();
+        let (block_x, _) = crate::title_block_origin((ceiling_w, ceiling_h));
+        // The part sits in the bottom-left corner of the frame, like a tiled
+        // region that runs on beside the title block.
+        let mut layout = layout(vec![placed(0, 40.0, ceiling_h - 30.0)], Vec::new());
+        layout.group_boxes.push(crate::GroupBox {
+            group: "Filter".to_string(),
+            min_mm: (SHEET_BORDER_MM, 60.0),
+            max_mm: (block_x - 10.0, ceiling_h - SHEET_BORDER_MM),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        assert!(
+            !sheet_overflow(&b, &layout),
+            "a box beside the title block may reach the sheet border"
+        );
+    }
+
     /// A design whose bodies fit the largest single page, but whose pin ends
     /// and fields hang past it, still has to split into sheets.
     #[test]
