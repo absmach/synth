@@ -1,5 +1,5 @@
 // iCE40HX4K BGA node with a USB-C input and a companion MCU (Class C case 1, issue #328 under #40)
-//   USB-C VBUS -> polyfuse -> TVS -> P-FET reverse stage -> +5V
+//   USB-C VBUS -> polyfuse -> TVS -> +5V
 //   +5V -> AMS1117-3.3 -> +3V3 (I/O banks, SPI flash, header, MCU)
 //   +3V3 -> TLV70012 -> +1V2 (FPGA core) -> ferrite -> VCCPLL
 //   The FPGA boots in master SPI mode from a W25Q128 flash that the STM32F103C8 MCU programs over USB.
@@ -43,11 +43,11 @@ board "ice40_bga_node" {
     component R_CC2: resistor "r_generic_0402" value "5.1k" { placement_hint { near: "J1" priority: hard } }
     component F1: fuse "polyfuse_500ma" { placement_hint { near: "J1" priority: hard } }
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1" priority: hard } }
-    component Q1: transistor "p_mosfet_si2301" { placement_hint { near: "D1" priority: hard } }
-    component R3: resistor "r_generic_0603" value "100k" { placement_hint { near: "Q1.g" priority: hard } }
-    component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "Q1.s" priority: hard } }
+    component D7: diode "prtr5v0u2x" value "TVS" { placement_hint { near: "J1" priority: hard } }
+    component D8: diode "prtr5v0u2x" value "TVS" { placement_hint { near: "J1" priority: hard } }
+    component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "F1" priority: hard } }
     notes "" {
-      "USB-C VBUS 5 V max 5.25 V. Order: fuse (0.5 A hold) -> TVS (6.0 V standoff) -> P-FET reverse stage."
+      "USB-C VBUS 5 V max 5.25 V. Order: fuse (0.5 A hold) -> TVS (6.0 V standoff) -> +5V. No reverse-polarity stage: a Type-C receptacle cannot be mated reversed, and one would only add drop ahead of the LDO. D7 and D8 are ESD arrays on the data and CC lines."
       "CC1 and CC2 each 5.1k to ground: sink, 5 V only."
     }
   }
@@ -56,8 +56,10 @@ board "ice40_bga_node" {
   group "USB INPUT" color "#c2410c" {
     component R25: resistor "r_generic_0402" value "22" { placement_hint { near: "U5.pa12" priority: hard } }
     component R26: resistor "r_generic_0402" value "22" { placement_hint { near: "U5.pa11" priority: hard } }
+    component R40: resistor "r_generic_0402" value "1.5k" { placement_hint { near: "U5.pa12" priority: hard } }
     notes "" {
       "D+ and D- from the receptacle through 22 ohm series resistors to PA12 and PA11."
+      "R40 1.5k pulls D+ (MCU side) to 3V3: the STM32F103 USB peripheral has no internal pull-up, and the host detects a full-speed device only through it."
     }
   }
 
@@ -116,6 +118,14 @@ board "ice40_bga_node" {
     }
   }
 
+  group "FPGA CLOCK" color "#6d28d9" {
+    component X1: crystal "osc_smd_25mhz" value "25MHz" { placement_hint { near: "U1.iot_197_gbin1" priority: hard } }
+    component C41: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "X1.vcc" priority: hard } }
+    notes "" {
+      "The iCE40HX has no internal oscillator. 25 MHz 3.3 V oscillator on global buffer input GBIN1 (iot_197_gbin1); OE tied high."
+    }
+  }
+
   group "FPGA DECOUPLING" color "#7c3aed" {
     component C9: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc" priority: hard } }
     component C10: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U1.vcc_2" priority: hard } }
@@ -167,12 +177,13 @@ board "ice40_bga_node" {
     component D2: led "led_green_0603"
     component R8: resistor "r_generic_0603" value "1k"
     component D3: led "led_amber_0603"
+    component Q2: transistor "ao3400a_nmos" { placement_hint { near: "D3" priority: hard } }
     component R9: resistor "r_generic_0603" value "1k"
     component D4: led "led_red_0603"
     component R10: resistor "r_generic_0603" value "1k"
     component D6: led "led_red_0603"
     notes "" {
-      "Power, CDONE and two user LEDs, 1k each: about 1.3 mA at 3.3 V."
+      "Power, CDONE and two user LEDs, 1k each: about 1.3 mA at 3.3 V. The CDONE LED is driven through N-FET Q2 (gate on CDONE), so the open-drain CDONE net sees only a gate, not the LED."
     }
   }
 
@@ -189,7 +200,7 @@ board "ice40_bga_node" {
   }
 
   group "TEST POINTS" color "#525252" {
-    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "Q1.s" priority: hard } }
+    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "F1" priority: hard } }
     component TP2: testpoint "testpoint_pad_1_5" { placement_hint { near: "U3.vout" priority: hard } }
     component TP3: testpoint "testpoint_pad_1_5" { placement_hint { near: "U4.vout" priority: hard } }
     component TP4: testpoint "testpoint_pad_1_5"
@@ -208,7 +219,7 @@ board "ice40_bga_node" {
   }
 
   // ---- Power nets ----------------------------------------------------------
-  power "+5V" 5v class "PWR_5V" { Q1.s C1.p1 U3.vin C2.p1 C3.p1 TP1.p1 }
+  power "+5V" 5v class "PWR_5V" { F1.p2 D1.cathode C1.p1 U3.vin C2.p1 C3.p1 TP1.p1 }
   // MCU supply additions are appended to +3V3 below
   power "+3V3" 3.3v class "PWR_3V3" {
     U3.vout C4.p1 C5.p1 U4.vin U4.en C6.p1
@@ -216,37 +227,39 @@ board "ice40_bga_node" {
     C13.p1 C14.p1 C15.p1 C16.p1 C17.p1 C18.p1 C19.p1
     U2.vcc C26.p1 R19.p1 R20.p1 R4.p1 R5.p2
     R7.p1 J3.p1 TP2.p1
+    X1.vcc X1.oe C41.p1 R8.p1
     FB2.p1 R21.p1 J4.p1
   }
-  net "+3V3_MCU" class "PWR_MCU" { FB2.p2 U5.vdd U5.vdd_2 U5.vdd_3 U5.vdda U5.vbat C27.p1 C28.p1 C29.p1 C30.p1 C31.p1 C32.p1 }
+  net "+3V3_MCU" class "PWR_MCU" { R40.p2 FB2.p2 U5.vdd U5.vdd_2 U5.vdd_3 U5.vdda U5.vbat C27.p1 C28.p1 C29.p1 C30.p1 C31.p1 C32.p1 }
   power "+1V2" 1.2v class "PWR_CORE" {
     U4.vout C7.p1 C8.p1 U1.vcc U1.vcc_2 U1.vcc_3 U1.vcc_4
     C9.p1 C10.p1 C11.p1 C12.p1 FB1.p1 TP3.p1
   }
+  net "FPGA_CLK" class "FPGA_IO" { X1.out U1.iot_197_gbin1 }
   net "VCCPLL" class "PWR_PLL" { FB1.p2 U1.vccpll0 U1.vccpll1 C20.p1 C21.p1 C22.p1 }
 
   net "GND" class "GND" {
-    J1.gnd J1.gnd_a12 J1.gnd_b12 J1.gnd_b1 J1.shld R_CC1.p2 R_CC2.p2 D1.anode R3.p2 C1.p2
+    J1.gnd J1.gnd_a12 J1.gnd_b12 J1.gnd_b1 J1.shld R_CC1.p2 R_CC2.p2 D1.anode C1.p2
     U5.vss U5.vss_2 U5.vss_3 U5.vssa C27.p2 C28.p2 C29.p2 C30.p2 C31.p2 C32.p2 C33.p2 C34.p2 C35.p2
-    SW1.p2 R22.p2 Y1.gnd_2 Y1.gnd_4 J4.p5
+    SW1.p2 R22.p2 Y1.gnd_2 Y1.gnd_4 J4.p5 D7.gnd D8.gnd
     U3.gnd C2.p2 C3.p2 C4.p2 C5.p2 U4.gnd C6.p2 C7.p2 C8.p2
     U1.gnd U1.gnd_2 U1.gnd_3 U1.gnd_4 U1.gnd_5 U1.gnd_6 U1.gnd_7 U1.gnd_8 U1.gnd_9 U1.gnd_10
     U1.gndpll0 U1.gndpll1
     C9.p2 C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C21.p2 C22.p2
     U2.gnd C26.p2
-    D2.cathode D3.cathode D4.cathode D6.cathode
+    D2.cathode D4.cathode D6.cathode Q2.s X1.gnd C41.p2
     J3.p2
   }
 
   // ---- Input chain nets ----------------------------------------------------
-  net "VBUS" class "PWR_5V" { J1.vbus J1.vbus_a9 J1.vbus_b4 J1.vbus_b9 F1.p1 }
-  net "USB_CC1" class "STATIC" { J1.cc1 R_CC1.p1 }
-  net "USB_CC2" class "STATIC" { J1.cc2 R_CC2.p1 }
+  net "VBUS" class "PWR_5V" { J1.vbus J1.vbus_a9 J1.vbus_b4 J1.vbus_b9 F1.p1 D7.vcc D8.vcc }
+  net "USB_CC1" class "STATIC" { J1.cc1 R_CC1.p1 D8.io1 }
+  net "USB_CC2" class "STATIC" { J1.cc2 R_CC2.p1 D8.io2 }
 
   // ---- USB data and MCU ------------------------------------------------------
-  net "USB_DP_C" class "USB" { J1.dp J1.dp_b6 R25.p1 }
-  net "USB_DM_C" class "USB" { J1.dn J1.dn_b7 R26.p1 }
-  net "USB_DP" class "USB" { R25.p2 U5.pa12 }
+  net "USB_DP_C" class "USB" { J1.dp J1.dp_b6 R25.p1 D7.io1 }
+  net "USB_DM_C" class "USB" { J1.dn J1.dn_b7 R26.p1 D7.io2 }
+  net "USB_DP" class "USB" { R25.p2 U5.pa12 R40.p1 }
   net "USB_DM" class "USB" { R26.p2 U5.pa11 }
   diff_pair USB_DP USB_DM { impedance 90ohm }
   diff_pair USB_DP_C USB_DM_C { impedance 90ohm }
@@ -257,12 +270,10 @@ board "ice40_bga_node" {
   net "SWCLK" class "MCU_IO" { U5.pa14 J4.p3 }
   net "HSE_IN" class "MCU_IO" { U5.pd0 Y1.xtal_a C34.p1 }
   net "HSE_OUT" class "MCU_IO" { U5.pd1 Y1.xtal_b C35.p1 }
-  net "VBUS_F" class "PWR_5V" { F1.p2 D1.cathode Q1.d }
-  net "Q1_GATE" class "STATIC" { Q1.g R3.p1 }
 
   // ---- Configuration -------------------------------------------------------
   net "CRESET_B" class "CONFIG" { U1.creset R5.p1 TP4.p1 U5.pb0 }
-  net "CDONE" class "CONFIG" { U1.cdone R4.p2 TP5.p1 R8.p1 U5.pb1 }
+  net "CDONE" class "CONFIG" { U1.cdone R4.p2 TP5.p1 Q2.g U5.pb1 }
   net "CFG_SS_B" class "CONFIG" { U1.iob_108_ss U2.cs R20.p2 U5.pa4 }
   net "CFG_SCK" class "CONFIG" { U1.iob_107_sck U2.clk U5.pa5 }
   net "CFG_SDO" class "CONFIG" { U1.iob_105_sdo U2.io0 U5.pa7 }
@@ -272,6 +283,7 @@ board "ice40_bga_node" {
   // ---- LEDs ----------------------------------------------------------------
   net "LED_PWR" class "STATIC" { R7.p2 D2.anode }
   net "LED_CDONE" class "STATIC" { R8.p2 D3.anode }
+  net "LED_CDONE_K" class "STATIC" { D3.cathode Q2.d }
   net "LED_U1_R" class "FPGA_IO" { U1.iob_72 R9.p1 }
   net "LED_U1" class "STATIC" { R9.p2 D4.anode }
   net "LED_U2_R" class "FPGA_IO" { U1.iob_71 R10.p1 }
