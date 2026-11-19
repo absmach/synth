@@ -77,6 +77,7 @@ pub mod advisor;
 mod compact_gaps;
 pub use compact_gaps::{GapSpacing, compact_by_gaps, courtyard_rect_probe, hpwl_probe};
 mod alignment;
+mod analytic;
 pub mod board_family;
 pub mod cem;
 mod default_rules;
@@ -87,6 +88,8 @@ pub mod judge;
 pub mod modules;
 pub mod outline_packer;
 mod repeats;
+mod replace;
+pub mod replace_params;
 pub mod score;
 
 use serde::{Deserialize, Serialize};
@@ -1845,6 +1848,7 @@ pub fn place_with_tuning_and_sidecar_seeded<S: ::std::hash::BuildHasher>(
         sidecar_path,
         seed,
         true,
+        SeedMode::Cem,
     )
 }
 
@@ -1868,6 +1872,7 @@ pub fn place_with_tuning_and_sidecar_seeded_unruled<S: ::std::hash::BuildHasher>
         sidecar_path,
         seed,
         false,
+        SeedMode::Cem,
     )
 }
 
@@ -1878,6 +1883,7 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
     sidecar_path: Option<&std::path::Path>,
     seed: u64,
     rules: bool,
+    seed_mode: SeedMode,
 ) -> Result<Placement, PlaceError> {
     let has_sidecar = sidecar_path.is_some_and(std::path::Path::exists);
     let loaded = sidecar_path
@@ -1963,6 +1969,7 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
         seed,
         !has_sidecar,
         &pinned,
+        seed_mode,
     )?;
     crate::stage_trace::record_time("place_solve", solve_start.elapsed());
     if let Some(sidecar) = loaded.as_ref() {
@@ -2014,6 +2021,444 @@ pub fn finish_default_placement(board: &Board, placement: &mut Placement, has_si
     }
 }
 
+/// Which global seed the target-point search starts from.
+///
+/// `Cem` is the production default. `Analytic` is the opt-in quadratic
+/// wirelength seed; its `spacing_mm` carries the optional routing gap used by
+/// [`place_with_analytic_seed_spaced`]. Neither entry point is selected by
+/// [`place`] until the routed comparison proves it.
+#[derive(Clone, Copy)]
+enum SeedMode {
+    Cem,
+    Analytic { spacing_mm: f64 },
+}
+
+/// Place with the analytical quadratic-wirelength seed.
+///
+/// Same pipeline, legaliser and visual review as [`place`]; only the target
+/// hints differ. This is the A/B entry point for the analytical seed and is
+/// not the production default.
+pub fn place_with_analytic_seed(board: &Board) -> Result<Placement, PlaceError> {
+    place_with_analytic_seed_and_sidecar(board, None)
+}
+
+/// The analytical seed with the extra routing gap.
+///
+/// A candidate, not a replacement: the A/B showed the gap fixes
+/// `feather_m4_express` (6 -> 2 unrouted) while it hurts `secure_tracker`, so
+/// the caller (the route loop) must choose between this and the unspaced
+/// candidate. It is not wired into [`place`].
+pub fn place_with_analytic_seed_spaced(board: &Board) -> Result<Placement, PlaceError> {
+    place_with_analytic_seed_spaced_and_sidecar(board, None)
+}
+
+/// [`place_with_analytic_seed_spaced`] with the optional PCB-placement
+/// sidecar. The route loop uses this form so a pinned sidecar applies to both
+/// analytical candidates.
+pub fn place_with_analytic_seed_spaced_and_sidecar(
+    board: &Board,
+    sidecar_path: Option<&std::path::Path>,
+) -> Result<Placement, PlaceError> {
+    place_with_tuning_and_sidecar_seeded_impl(
+        board,
+        default_part_margin_mm(),
+        &default_rotation_overrides(board),
+        sidecar_path,
+        0,
+        true,
+        SeedMode::Analytic {
+            spacing_mm: analytic::ROUTING_GAP_MM,
+        },
+    )
+}
+
+/// [`place_with_analytic_seed`] with the optional PCB-placement sidecar.
+///
+/// Absolute sidecar entries are anchors for the analytical solve, exactly as
+/// they are constraints for the greedy search.
+pub fn place_with_analytic_seed_and_sidecar(
+    board: &Board,
+    sidecar_path: Option<&std::path::Path>,
+) -> Result<Placement, PlaceError> {
+    place_with_tuning_and_sidecar_seeded_impl(
+        board,
+        default_part_margin_mm(),
+        &default_rotation_overrides(board),
+        sidecar_path,
+        0,
+        true,
+        SeedMode::Analytic { spacing_mm: 0.0 },
+    )
+}
+
+/// Write one `REPLACE ...` outcome line, but only while the experiment seam is
+/// on. The experiment scorer reads these lines from stderr; a production run
+/// never sets `SYNTH_PLACE_REPLACE`, so it stays silent.
+fn replace_note(line: std::fmt::Arguments<'_>) {
+    replace_note_to(
+        &mut std::io::stderr(),
+        std::env::var_os("SYNTH_PLACE_REPLACE").is_some(),
+        line,
+    );
+}
+
+fn replace_note_to(out: &mut impl std::io::Write, enabled: bool, line: std::fmt::Arguments<'_>) {
+    if enabled {
+        let _ = writeln!(out, "{line}");
+    }
+}
+
+/// Squeeze the slack out of a RePlAce arrangement before the outline is fitted.
+///
+/// RePlAce optimises weighted wirelength with a bin-density force that only
+/// acts above `target_density`. On these boards the courtyards cover about a
+/// third of the usable box, so the density force never fires and the
+/// arrangement keeps the quadratic seed's spread. The export then draws the
+/// fitted courtyard envelope as the board, and the score charges four fifths
+/// of its value for that area, which the continuous solve never sees.
+///
+/// Each round scales every free part toward the envelope centre, separates
+/// what then overlaps and keeps the step only when the envelope really shrank,
+/// the wiring did not grow and nothing entered a keepout. Connectors stay
+/// docked: this pass never moves one, and nothing re-docks it afterwards.
+fn compact_replace_envelope(board: &Board, placement: &mut Placement, frozen: &[bool]) {
+    let mut sizes = courtyard_sizes(board, placement);
+    // With a spacing set, every part is squeezed as if it were that much bigger,
+    // which keeps the gap between any two of them.
+    if let Some(gap) = spacing_gap_mm(board) {
+        for size in &mut sizes {
+            *size = (size.0 + gap, size.1 + gap);
+        }
+    }
+    let fixed: Vec<bool> = placement
+        .components
+        .iter()
+        .zip(frozen)
+        .map(|(placed, frozen)| *frozen || flush_edge_index(board, placed.id).is_some())
+        .collect();
+    let no_row = |_id: ComponentId| None;
+    // Connectors are fixed for the band slide: it must never slide one off its
+    // edge, and a row of them is packed along the edge by the export anyway.
+    let movable: Vec<bool> = fixed.iter().map(|fixed| !fixed).collect();
+    let hits = keepout_overlaps(board, placement);
+    let hpwl = total_hpwl_nm(board, placement);
+    let mut current = placement.clone();
+    for _ in 0..COMPACT_ROUNDS {
+        let Some(envelope) = courtyard_envelope(&current, &sizes) else {
+            break;
+        };
+        let area = area_mm2(&envelope);
+        let middle = Point::new(
+            i64::midpoint(envelope.min.x_nm, envelope.max.x_nm),
+            i64::midpoint(envelope.min.y_nm, envelope.max.y_nm),
+        );
+        let mut accepted = false;
+        for permille in COMPACT_PERMILLE {
+            let mut candidate = current.clone();
+            squeeze(&mut candidate, permille, middle, &fixed, &no_row);
+            if !separate_overlaps(&mut candidate, &sizes, &fixed) {
+                continue;
+            }
+            let smaller = courtyard_envelope(&candidate, &sizes)
+                .is_some_and(|candidate_envelope| area_mm2(&candidate_envelope) < area);
+            if !smaller
+                || total_hpwl_nm(board, &candidate) > hpwl
+                || keepout_overlaps(board, &candidate) > hits
+            {
+                continue;
+            }
+            current = candidate;
+            accepted = true;
+            break;
+        }
+        // Uniform squeezing stalls as soon as one band fills its axis: the
+        // parts on the envelope edge are the ones that cannot come in any
+        // further. Sliding each part into the free band beside it (the same
+        // move the production compactor makes) closes those holes instead,
+        // which is where the dead corners and the excess width live.
+        if !accepted {
+            for &(along_y, toward_low) in
+                &[(true, true), (true, false), (false, true), (false, false)]
+            {
+                let mut candidate = current.clone();
+                slide_parts(
+                    &mut candidate,
+                    &sizes,
+                    &movable,
+                    along_y,
+                    toward_low,
+                    SLIDE_PITCH_MM,
+                );
+                if !separate_overlaps(&mut candidate, &sizes, &fixed) {
+                    continue;
+                }
+                let smaller = courtyard_envelope(&candidate, &sizes)
+                    .is_some_and(|candidate_envelope| area_mm2(&candidate_envelope) < area);
+                if !smaller
+                    || total_hpwl_nm(board, &candidate) > hpwl
+                    || keepout_overlaps(board, &candidate) > hits
+                {
+                    continue;
+                }
+                current = candidate;
+                accepted = true;
+                break;
+            }
+        }
+        if !accepted {
+            break;
+        }
+    }
+    let mut original = placement.clone();
+    tighten_outline_to_hints(board, &mut original);
+    tighten_outline_to_hints(board, &mut current);
+    *placement = keep_unless_worse(board, original, current);
+}
+
+/// Full RePlAce-style analytical placement.
+///
+/// The default [`place`] supplies the outline, usable rectangle and layers;
+/// the RePlAce solve (weighted-average wirelength plus bin density, optimised
+/// with Nesterov) owns the continuous geometry; the displacement-minimising
+/// legalizer makes it a valid PCB placement. This is an opt-in experiment,
+/// not the production default.
+pub fn place_with_replace(board: &Board) -> Result<Placement, PlaceError> {
+    let mut placement = place_with_replace_unspaced(board)?;
+    default_rules::enforce_spacing(board, &mut placement);
+    Ok(placement)
+}
+
+fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
+    use synth_layout::pcb_courtyard_geometry_for_part;
+
+    // Off: filling pockets walks the free passives off the rows they were laid
+    // in, and the packer then fits round the scatter. With the rows kept, the
+    // same groups pack a smaller outline (round 15).
+    const FILL_DEAD_POCKETS: bool = false;
+    let trace_start = std::time::Instant::now();
+
+    // The solve starts from the default arrangement without the group rule, so
+    // RePlAce sees the same envelope it would on an ungrouped board; the full
+    // `place()` result is what a rejected solve falls back to.
+    let fallback = place(board)?;
+    let baseline =
+        place_with_default_tuning(board, true, false, &default_rotation_overrides(board))?;
+    if !board.nets.iter().any(|net| net.endpoints.len() >= 2) {
+        return Ok(fallback);
+    }
+    let outline = baseline.board_outline;
+    let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
+        .components
+        .iter()
+        .map(|component| {
+            let (width, height) = component.part.as_ref().map_or_else(
+                || fallback_courtyard(&component.kind),
+                |part| pcb_courtyard_geometry_for_part(part).1,
+            );
+            (component.id, PLACEMENT_COURTYARD_OFFSET_MM, (width, height))
+        })
+        .collect();
+    let courtyard_lookup: std::collections::HashMap<ComponentId, (f64, f64)> = courtyards_mm
+        .iter()
+        .map(|(id, _, size)| (*id, *size))
+        .collect();
+    let baseline_sizes: Vec<(f64, f64)> = baseline
+        .components
+        .iter()
+        .map(|placed| {
+            courtyard_lookup
+                .get(&placed.id)
+                .copied()
+                .unwrap_or((10.0, 10.0))
+        })
+        .collect();
+    // Keep free parts inside the baseline non-connector envelope so a
+    // connector row stays the outermost feature on its edge.
+    let usable = non_connector_envelope(board, &baseline, &baseline_sizes).unwrap_or(outline);
+    let fp_targets = floorplan::compute_floorplan_targets(board, usable, &courtyard_lookup);
+    let rotation_overrides = default_rotation_overrides(board);
+    let pad_offsets = build_pad_offset_lookup(board);
+    let pinned = PinnedPlacements::new();
+    let mut params = crate::replace_params::RePlAceParams::default();
+    if let Some(gap) = spacing_gap_mm(board) {
+        params.legalizer_gap_mm = gap;
+    }
+    let continuous = crate::replace::continuous_replace(
+        board,
+        outline,
+        usable,
+        &baseline,
+        &fp_targets,
+        &rotation_overrides,
+        &pinned,
+        &courtyard_lookup,
+        &pad_offsets,
+        params,
+    );
+    let legalized = legalize_continuous(
+        board,
+        continuous.placement,
+        &continuous.frozen,
+        &courtyard_lookup,
+        usable,
+        params.legalizer_gap_mm,
+    );
+    let Ok(mut placement) = legalized else {
+        replace_note(format_args!(
+            "REPLACE fallback: legalizer failed ({:?})",
+            legalized.err()
+        ));
+        return Ok(fallback);
+    };
+    // The density force never fires on a board this sparse, so the legalised
+    // arrangement still holds the seed's spread; the fitted envelope it leaves
+    // is the board the export draws and most of the score. Close it here.
+    compact_replace_envelope(board, &mut placement, &continuous.frozen);
+    stage_trace::record("replace_result", board, &placement, trace_start.elapsed());
+    // The fitted outline follows the courtyard envelope, so a pocket left in a
+    // concavity costs dead space at no compensating area. Fill it with the
+    // smaller free parts before the envelope is measured.
+    let fill_sizes: Vec<(f64, f64)> = placement
+        .components
+        .iter()
+        .map(|placed| {
+            courtyard_lookup
+                .get(&placed.id)
+                .copied()
+                .unwrap_or((10.0, 10.0))
+        })
+        .collect();
+    // A part whose KiCad footprint is not installed exports no F.CrtYd, so the
+    // score counts everything but the pads beside it as dead. Its declared size
+    // is only an obstacle here, not coverage.
+    let cover_lookup: std::collections::HashMap<ComponentId, (f64, f64)> = board
+        .components
+        .iter()
+        .map(|component| {
+            let size = courtyard_lookup
+                .get(&component.id)
+                .copied()
+                .unwrap_or((10.0, 10.0));
+            let exported = component
+                .part
+                .as_ref()
+                .and_then(|part| part.kicad_footprint.as_deref())
+                .is_some_and(|footprint| {
+                    synth_layout::kicad_footprint_loader::courtyard_rect(footprint).is_some()
+                });
+            (component.id, if exported { size } else { (0.0, 0.0) })
+        })
+        .collect();
+    let fill_cover: Vec<(f64, f64)> = placement
+        .components
+        .iter()
+        .map(|placed| cover_lookup.get(&placed.id).copied().unwrap_or((0.0, 0.0)))
+        .collect();
+    if FILL_DEAD_POCKETS {
+        crate::replace::fill_dead_pockets(
+            &mut placement,
+            &fill_sizes,
+            &fill_cover,
+            &continuous.frozen,
+            params.legalizer_gap_mm,
+            usable,
+        );
+    }
+    // The default outline is fitted around the baseline; the RePlAce
+    // arrangement has its own envelope, so fit the outline before the visual
+    // review and HPWL comparison.
+    let pre_rules = placement.clone();
+    let mut with_groups = board.components.iter().any(|c| c.group.is_some());
+    loop {
+        placement = pre_rules.clone();
+        let stage_start = std::time::Instant::now();
+        tighten_outline_to_hints(board, &mut placement);
+        stage_trace::record(
+            "initial_outline_fit",
+            board,
+            &placement,
+            stage_start.elapsed(),
+        );
+        let stage_start = std::time::Instant::now();
+        default_rules::apply(board, &mut placement, with_groups);
+        stage_trace::record("dock", board, &placement, stage_start.elapsed());
+        let origin = placement.board_outline.min;
+        for placed in &mut placement.components {
+            placed.center = Point::new(
+                placed.center.x_nm - origin.x_nm,
+                placed.center.y_nm - origin.y_nm,
+            );
+        }
+        placement.board_outline = Rect::new(
+            Point::new(0, 0),
+            Point::new(
+                placement.board_outline.width_nm(),
+                placement.board_outline.height_nm(),
+            ),
+        );
+        if describe_placement(board, &placement)
+            .visual_review
+            .requires_revision
+        {
+            let stage_start = std::time::Instant::now();
+            let refined = refine_placement(board, &placement, &rotation_overrides, &pinned);
+            if !describe_placement(board, &refined)
+                .visual_review
+                .requires_revision
+            {
+                placement = refined;
+            }
+            stage_trace::record(
+                "replace_review_refine",
+                board,
+                &placement,
+                stage_start.elapsed(),
+            );
+        }
+        let baseline_hpwl = crate::score::score_placement(board, &baseline).hpwl_total_nm;
+        let placement_hpwl = crate::score::score_placement(board, &placement).hpwl_total_nm;
+        let review_failed = describe_placement(board, &placement)
+            .visual_review
+            .requires_revision;
+        // A spacing makes grouped blocks longer-wired by design, so only the
+        // review can send a grouped result back; the wire length cannot.
+        let wire_vetoed = placement_hpwl > baseline_hpwl * 3 / 2
+            && !(with_groups && board.placement_spacing_nm.is_some());
+        let review_vetoed = review_failed && board.placement_spacing_nm.is_none();
+        if (review_vetoed || wire_vetoed) && with_groups {
+            // Packing the groups can be what the review or the wire length objects
+            // to; try again with them left where RePlAce put them.
+            with_groups = false;
+            continue;
+        }
+        if review_vetoed || wire_vetoed {
+            // Wire costs 0.02 per millimetre, a fraction of a percent of the score,
+            // so the veto allows a placement to trade some wire for dead space and
+            // only catches one that never converged. The routed-export gates are
+            // the real safety net.
+            // The scorer reads this line so a board that did not exercise RePlAce
+            // is reported instead of silently scoring the default placement.
+            replace_note(format_args!(
+                "REPLACE fallback: {} (hpwl {:.1} vs baseline {:.1} mm)",
+                if review_failed {
+                    "visual review"
+                } else {
+                    "hpwl worse"
+                },
+                synth_geometry::nm_to_mm(placement_hpwl),
+                synth_geometry::nm_to_mm(baseline_hpwl)
+            ));
+            return Ok(fallback);
+        }
+        break;
+    }
+    let stage_start = std::time::Instant::now();
+    default_rules::close_edges(board, &mut placement);
+    stage_trace::record("close_edges", board, &placement, stage_start.elapsed());
+    replace_note(format_args!("REPLACE used"));
+    Ok(placement)
+}
+
 #[allow(clippy::too_many_lines)]
 pub fn place(board: &Board) -> Result<Placement, PlaceError> {
     place_with_default_tuning(board, true, true, &default_rotation_overrides(board))
@@ -2034,6 +2479,7 @@ fn place_with_default_tuning(
         0,
         compact,
         &PinnedPlacements::new(),
+        SeedMode::Cem,
     )?;
     crate::stage_trace::record_time("place_solve", solve_start.elapsed());
     // A declared outline is the author's frame; the rules' outline fit would
@@ -2087,6 +2533,7 @@ fn place_with_export_winner(
         seed,
         compact,
         &PinnedPlacements::new(),
+        SeedMode::Cem,
     ) {
         Ok(mut placement) => {
             if board.outline.is_none() {
@@ -2287,6 +2734,7 @@ fn place_with_dimensions_rotated(
         board_margin_mm(),
         0,
         &PinnedPlacements::new(),
+        SeedMode::Cem,
     )?;
 
     // `place_with_outline` tightens automatic outlines after solving. For an
@@ -2417,6 +2865,7 @@ pub fn place_with_tuning_seeded<S: ::std::hash::BuildHasher>(
         seed,
         true,
         &PinnedPlacements::new(),
+        SeedMode::Cem,
     )
 }
 
@@ -2431,6 +2880,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
     seed: u64,
     compact: bool,
     pinned: &PinnedPlacements,
+    seed_mode: SeedMode,
 ) -> Result<Placement, PlaceError> {
     use synth_layout::pcb_courtyard_geometry_for_part;
 
@@ -2472,6 +2922,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             COPPER_EDGE_CLEARANCE_MM,
             seed,
             pinned,
+            seed_mode,
         );
     }
 
@@ -2519,6 +2970,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             board_margin_mm(),
             seed,
             pinned,
+            seed_mode,
         ) {
             Ok(p) => {
                 let packed = if compact {
@@ -3200,6 +3652,7 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     usable_margin_mm: f64,
     seed: u64,
     pinned: &PinnedPlacements,
+    seed_mode: SeedMode,
 ) -> Result<Placement, PlaceError> {
     use synth_geometry::nm_to_mm;
     let mut resolved_rotation_overrides: std::collections::HashMap<
@@ -3376,7 +3829,22 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
             target.rotation = escape.rotation;
         }
     }
-    let region_hints = cem::cem_region_assign(board, usable);
+    // Shared by the analytical seed and pad-aware near placement: both need
+    // the same footprint geometry the router uses.
+    let pad_offsets = build_pad_offset_lookup(board);
+    let region_hints = match seed_mode {
+        SeedMode::Cem => cem::cem_region_assign(board, usable),
+        SeedMode::Analytic { spacing_mm } => analytic::region_assign(
+            board,
+            usable,
+            &fp_targets,
+            &resolved_rotation_overrides,
+            pinned,
+            &courtyard_lookup,
+            &pad_offsets,
+            spacing_mm,
+        ),
+    };
 
     // Child lookup for relative module offset placement and auto-rotation
     let mut child_module_map: std::collections::HashMap<
@@ -3391,11 +3859,6 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
             );
         }
     }
-
-    // Pad-aware near placement needs the same footprint geometry used by the
-    // router. Keeping this lookup here ensures a hard-near passive targets the
-    // actual anchor pad, not just the anchor courtyard centre.
-    let pad_offsets = build_pad_offset_lookup(board);
 
     let pitch_nm = mm_to_nm(GRID_PITCH_MM);
     let center_x = usable.min.x_nm + usable.width_nm() / 2;
@@ -3474,7 +3937,11 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
         // (11 at 1.5 and 2.0 mm, 12 at 0.5 mm, 13 at 1.0 mm) — 2.0 mm buys no
         // additional routability but costs ~9% more board area, so 1.5 mm
         // dominates it. This is an empirically tuned value, not a derived one.
-        let pad_extra_nm = if is_passive { mm_to_nm(1.5) } else { 0 };
+        let pad_extra_nm = if is_passive {
+            mm_to_nm(spacing_gap_mm(board).unwrap_or(default_part_margin_mm()))
+        } else {
+            0
+        };
         let (mut half_w, mut half_h) = match rotation {
             Rotation::Zero | Rotation::OneEighty => {
                 (unrot_half_w + pad_extra_nm, unrot_half_h + pad_extra_nm)
@@ -8930,6 +9397,178 @@ fn total_hpwl_nm(board: &Board, placement: &Placement) -> i64 {
         .sum()
 }
 
+/// Legalize a continuous placement without changing its rotations or layers.
+///
+/// Force-directed overlap removal preserves the arrangement; a deterministic
+/// greedy nearest-legal fallback handles the residual overlaps a dense board
+/// leaves. `frozen` is aligned with `placement.components`.
+fn legalize_continuous(
+    board: &Board,
+    mut placement: Placement,
+    frozen: &[bool],
+    courtyard_lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
+    usable: Rect,
+    gap_mm: f64,
+) -> Result<Placement, PlaceError> {
+    let sizes: Vec<(f64, f64)> = placement
+        .components
+        .iter()
+        .zip(frozen)
+        .map(|(placed, &is_frozen)| {
+            let (width, height) = courtyard_lookup
+                .get(&placed.id)
+                .copied()
+                .unwrap_or((10.0, 10.0));
+            if is_frozen {
+                (width, height)
+            } else {
+                (width + gap_mm, height + gap_mm)
+            }
+        })
+        .collect();
+    clamp_free(&mut placement, &sizes, frozen, usable);
+    for _ in 0..4 {
+        let clear = separate_overlaps(&mut placement, &sizes, frozen);
+        clamp_free(&mut placement, &sizes, frozen, usable);
+        if clear {
+            break;
+        }
+    }
+    if legalizer_overlaps(&placement, &sizes).is_some() {
+        greedy_legalize(&mut placement, &sizes, frozen, usable);
+    }
+    if let Some((first, _)) = legalizer_overlaps(&placement, &sizes) {
+        let refdes = board
+            .component(placement.components[first].id)
+            .map_or_else(|| "board".to_string(), |component| component.refdes.clone());
+        return Err(PlaceError::NoLegalPosition {
+            refdes,
+            board_w_mm: synth_geometry::nm_to_mm(placement.board_outline.width_nm()),
+            board_h_mm: synth_geometry::nm_to_mm(placement.board_outline.height_nm()),
+            tried: placement.components.len(),
+        });
+    }
+    Ok(placement)
+}
+
+fn legalizer_overlaps(placement: &Placement, sizes: &[(f64, f64)]) -> Option<(usize, usize)> {
+    for (first, placed) in placement.components.iter().enumerate() {
+        let a = rotated_courtyard_rect(placed, sizes[first]);
+        for (second, other) in placement.components.iter().enumerate().skip(first + 1) {
+            let b = rotated_courtyard_rect(other, sizes[second]);
+            if a.intersects(&b) {
+                return Some((first, second));
+            }
+        }
+    }
+    None
+}
+
+/// Clamp every free centre so its rotated courtyard stays inside `usable`.
+fn clamp_free(placement: &mut Placement, sizes: &[(f64, f64)], frozen: &[bool], usable: Rect) {
+    for (index, placed) in placement.components.iter_mut().enumerate() {
+        if frozen[index] {
+            continue;
+        }
+        let rect = rotated_courtyard_rect(placed, sizes[index]);
+        let half_w = rect.width_nm() / 2;
+        let half_h = rect.height_nm() / 2;
+        let min_x = usable.min.x_nm + half_w;
+        let max_x = usable.max.x_nm - half_w;
+        let min_y = usable.min.y_nm + half_h;
+        let max_y = usable.max.y_nm - half_h;
+        placed.center.x_nm = if min_x > max_x {
+            i64::midpoint(min_x, max_x)
+        } else {
+            placed.center.x_nm.clamp(min_x, max_x)
+        };
+        placed.center.y_nm = if min_y > max_y {
+            i64::midpoint(min_y, max_y)
+        } else {
+            placed.center.y_nm.clamp(min_y, max_y)
+        };
+    }
+}
+
+/// Place the remaining free parts one at a time at the nearest legal slot.
+fn greedy_legalize(placement: &mut Placement, sizes: &[(f64, f64)], frozen: &[bool], usable: Rect) {
+    let mut placed = frozen.to_vec();
+    let mut free: Vec<usize> = (0..placement.components.len())
+        .filter(|&index| !frozen[index])
+        .collect();
+    free.sort_by_key(|&index| {
+        (
+            std::cmp::Reverse(mm_to_nm(sizes[index].0).saturating_mul(mm_to_nm(sizes[index].1))),
+            placement.components[index].id,
+        )
+    });
+    for index in free {
+        let current = placement.components[index].center;
+        if candidate_is_legal(placement, index, &placed, sizes, usable, current) {
+            placed[index] = true;
+            continue;
+        }
+        if let Some(center) = nearest_legal_center(placement, index, &placed, sizes, usable) {
+            placement.components[index].center = center;
+        }
+        placed[index] = true;
+    }
+}
+
+fn nearest_legal_center(
+    placement: &Placement,
+    index: usize,
+    placed: &[bool],
+    sizes: &[(f64, f64)],
+    usable: Rect,
+) -> Option<Point> {
+    const MAX_STEPS: i64 = 80;
+    let step_nm = mm_to_nm(0.5);
+    let base = placement.components[index].center;
+    let mut offsets: Vec<(i64, i64)> = Vec::new();
+    for dx in -MAX_STEPS..=MAX_STEPS {
+        for dy in -MAX_STEPS..=MAX_STEPS {
+            offsets.push((dx, dy));
+        }
+    }
+    offsets.sort_by_key(|(dx, dy)| (dx * dx + dy * dy, *dx, *dy));
+    offsets.into_iter().find_map(|(dx, dy)| {
+        let center = Point::new(base.x_nm + dx * step_nm, base.y_nm + dy * step_nm);
+        candidate_is_legal(placement, index, placed, sizes, usable, center).then_some(center)
+    })
+}
+
+fn candidate_is_legal(
+    placement: &Placement,
+    index: usize,
+    placed: &[bool],
+    sizes: &[(f64, f64)],
+    usable: Rect,
+    center: Point,
+) -> bool {
+    let candidate = ComponentPlacement {
+        center,
+        ..placement.components[index]
+    };
+    let rect = rotated_courtyard_rect(&candidate, sizes[index]);
+    if rect.min.x_nm < usable.min.x_nm
+        || rect.min.y_nm < usable.min.y_nm
+        || rect.max.x_nm > usable.max.x_nm
+        || rect.max.y_nm > usable.max.y_nm
+    {
+        return false;
+    }
+    placement
+        .components
+        .iter()
+        .enumerate()
+        .all(|(other_index, other)| {
+            other_index == index
+                || !placed[other_index]
+                || !rect.intersects(&rotated_courtyard_rect(other, sizes[other_index]))
+        })
+}
+
 /// Move passives into under-occupied interior bins, then squeeze the passive
 /// band vertically. Opt-in experiment; [`place`] and the export path do not
 /// call it.
@@ -9771,6 +10410,16 @@ mod tests {
             auto_fit_courtyard_edge_inset_nm(hole),
             mm_to_nm(COPPER_EDGE_CLEARANCE_MM)
         );
+    }
+
+    #[test]
+    fn replace_notes_are_silent_unless_the_seam_is_on() {
+        let mut off = Vec::new();
+        super::replace_note_to(&mut off, false, format_args!("REPLACE used"));
+        assert!(off.is_empty());
+        let mut on = Vec::new();
+        super::replace_note_to(&mut on, true, format_args!("REPLACE used"));
+        assert_eq!(String::from_utf8(on).unwrap(), "REPLACE used\n");
     }
 
     use super::*;
@@ -11844,6 +12493,7 @@ board "near" {
             BOARD_MARGIN_MM,
             0,
             &PinnedPlacements::new(),
+            SeedMode::Cem,
         )
         .expect("place");
         let rects = authoritative_courtyards(&board, &placed);

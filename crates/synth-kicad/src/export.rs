@@ -156,6 +156,22 @@ pub fn export_with_sidecars(
     export_with_sidecars_and_routing_order(board, out_dir, sidecars, None)
 }
 
+/// [`export_with_sidecars`] with the default placement selection, even when
+/// the `SYNTH_PLACE_REPLACE` seam is enabled.
+///
+/// The routed-result gate uses this for its fallback: it needs the exact
+/// production placement without mutating the process environment.
+///
+/// # Errors
+/// Same as [`export`].
+pub fn export_with_sidecars_default(
+    board: &Board,
+    out_dir: &Path,
+    sidecars: &Sidecars,
+) -> Result<ExportResult, ExportError> {
+    export_inner(board, out_dir, sidecars, None, false)
+}
+
 /// Export with an optional agent-selected routing order, honouring a single
 /// **schematic** layout sidecar.
 ///
@@ -212,7 +228,7 @@ pub fn export_with_sidecars_and_routing_order(
     routing_order: Option<&[String]>,
 ) -> Result<ExportResult, ExportError> {
     let _ = routing_order;
-    export_inner(board, out_dir, sidecars, None)
+    export_inner(board, out_dir, sidecars, None, true)
 }
 
 /// Export using a caller-supplied placement instead of choosing one.
@@ -230,7 +246,7 @@ pub fn export_with_placement(
     sidecars: &Sidecars,
     placement: &synth_place::Placement,
 ) -> Result<ExportResult, ExportError> {
-    export_inner(board, out_dir, sidecars, Some(placement))
+    export_inner(board, out_dir, sidecars, Some(placement), false)
 }
 
 /// The placement [`export_with_sidecars`] would choose, without exporting.
@@ -244,18 +260,19 @@ pub fn placement_for_export(
     board: &Board,
     sidecars: &Sidecars,
 ) -> Result<synth_place::Placement, ExportError> {
-    place_for_export(board, sidecars.placement_path())
+    place_for_export(board, sidecars.placement_path(), true)
         .map_err(|source| ExportError::Placement { source })
 }
 
 /// Candidate placements for a caller that can route and wants to choose.
 ///
 /// A superset of what [`export_with_sidecars`] itself chooses among: the
-/// export's own winner plus a spread of placement-margin variants, so a
-/// place→route→re-place loop has genuinely different arrangements to route.
-/// Ordered deterministically, duplicates removed. The first entry is the
-/// export's route-free winner ([`placement_for_export`]); it leads so an
-/// equal route keeps the smaller board.
+/// export's own winner, a spread of placement-margin variants, and the
+/// unspaced/spaced analytical seeds, so a place→route→re-place loop has
+/// genuinely different arrangements to route. Ordered deterministically,
+/// duplicates removed. The first entry is the export's route-free winner
+/// ([`placement_for_export`]); it leads so an equal route keeps the smaller
+/// board.
 ///
 /// # Errors
 /// [`ExportError::Placement`] when the placer finds no legal placement.
@@ -280,9 +297,15 @@ pub fn placement_candidates(
             first_error = Some(error);
         }
     }
-    for (_source, candidate) in
-        place_candidates_with_margins(board, sidecars.placement_path(), &margins, &[1, 2], true)
-            .map_err(|source| ExportError::Placement { source })?
+    for (_source, candidate) in place_candidates_with_margins(
+        board,
+        sidecars.placement_path(),
+        &margins,
+        &[1, 2],
+        true,
+        true,
+    )
+    .map_err(|source| ExportError::Placement { source })?
     {
         if !candidates.contains(&candidate) {
             candidates.push(candidate);
@@ -336,6 +359,7 @@ fn export_inner(
     out_dir: &Path,
     sidecars: &Sidecars,
     placement_override: Option<&synth_place::Placement>,
+    allow_replace: bool,
 ) -> Result<ExportResult, ExportError> {
     std::fs::create_dir_all(out_dir).map_err(|source| ExportError::CreateDir {
         path: out_dir.to_path_buf(),
@@ -549,7 +573,7 @@ fn export_inner(
     // serialization boundary.
     let placement = match placement_override {
         Some(placement) => placement.clone(),
-        None => place_for_export(board, sidecars.placement_path())
+        None => place_for_export(board, sidecars.placement_path(), allow_replace)
             .map_err(|source| ExportError::Placement { source })?,
     };
     let fitness_path = out_dir.join(format!("{stem}.fitness.json"));
@@ -806,7 +830,19 @@ pub(crate) fn sanitize_filename(name: &str) -> String {
 fn place_for_export(
     board: &Board,
     sidecar: Option<&Path>,
+    allow_replace: bool,
 ) -> Result<synth_place::Placement, synth_place::PlaceError> {
+    // Local experiment seam for the RePlAce params loop; production never sets
+    // it. The route-free export still validates and fits the outline below.
+    if allow_replace
+        && std::env::var_os("SYNTH_PLACE_REPLACE").is_some()
+        && let Ok(mut placement) = synth_place::place_with_replace(board)
+    {
+        // Match the export candidate set: fit the tight rim before the
+        // PCB is serialized, or the score compares different outlines.
+        synth_place::finish_outline(board, &mut placement);
+        return Ok(placement);
+    }
     place_for_export_default(board, sidecar)
 }
 
@@ -864,6 +900,7 @@ fn place_candidates(
         &margins,
         &[1, 2, 3, 4, 5, 6, 7, 8],
         finish_rules,
+        false,
     )
 }
 
@@ -906,6 +943,7 @@ fn place_candidates_with_margins(
     extra_margins: &[f64],
     extra_seeds: &[u64],
     finish_rules: bool,
+    include_analytic: bool,
 ) -> Result<Vec<(Board, synth_place::Placement)>, synth_place::PlaceError> {
     // Match synth-place::place() and the MCP gates. Starting the export
     // with a different courtyard margin can select a different legal
@@ -999,6 +1037,22 @@ fn place_candidates_with_margins(
                 if let Ok(candidate) = place(board, relative_margin(-0.6), seed) {
                     candidates.push((board.clone(), candidate));
                 }
+            }
+        }
+    }
+
+    // The analytical seeds are route-loop candidates, not part of the
+    // route-free export choice. The local four-board A/B (#383) measured the
+    // unspaced seed on sensor_logger/secure_tracker and the spaced seed on
+    // feather_m4_express; a failure here must never remove the export's own
+    // candidates.
+    if include_analytic {
+        for place in [
+            synth_place::place_with_analytic_seed_and_sidecar,
+            synth_place::place_with_analytic_seed_spaced_and_sidecar,
+        ] {
+            if let Ok(candidate) = place(board, sidecar) {
+                candidates.push((board.clone(), candidate));
             }
         }
     }

@@ -10,6 +10,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+type PlaceWithSidecar =
+    fn(&synth_ir::Board, Option<&Path>) -> Result<synth_place::Placement, synth_place::PlaceError>;
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -492,6 +495,42 @@ fn crowded_source() -> String {
     }
     src.push_str("}\n");
     src
+}
+
+#[test]
+fn the_iteration_candidate_set_includes_the_analytical_seeds() {
+    let board = lower_source(&crowded_source(), "candidates.synth");
+    let sidecars = synth_kicad::Sidecars::default();
+    let candidates =
+        synth_kicad::placement_candidates(&board, &sidecars).expect("candidates must build");
+
+    let seeds: [(&str, PlaceWithSidecar); 2] = [
+        (
+            "unspaced",
+            synth_place::place_with_analytic_seed_and_sidecar,
+        ),
+        (
+            "spaced",
+            synth_place::place_with_analytic_seed_spaced_and_sidecar,
+        ),
+    ];
+    for (label, place) in seeds {
+        let mut expected = place(&board, None).unwrap_or_else(|error| panic!("{label}: {error:?}"));
+        // The candidate set fits every outline to the export margin before
+        // deduplicating, so compare on the same geometry: the tight rim with
+        // the smaller passive rim, then the trim.
+        synth_place::fit_outline_with_passive_margin_mm(
+            &board,
+            &mut expected,
+            synth_place::tight_edge_margin_mm(&board),
+            synth_place::passive_edge_margin_mm(&board),
+        );
+        synth_place::trim_outline_to_grid(&board, &mut expected);
+        assert!(
+            candidates.contains(&expected),
+            "the {label} analytical candidate is missing from the route-loop set"
+        );
+    }
 }
 
 #[test]

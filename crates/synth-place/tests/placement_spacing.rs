@@ -212,3 +212,12 @@ fn default_path_keeps_every_pair_at_4_0_mm() {
 fn default_path_keeps_every_pair_at_5_0_mm() {
     check_default_spacing(5.0);
 }
+
+#[test]
+fn replace_path_keeps_every_pair_at_the_spacing() {
+    for mm in spacings() {
+        let board = with_spacing_mm(mm);
+        let placement = synth_place::place_with_replace(&board).expect("place");
+        check_spacing("replace", &board, &placement, mm, true);
+    }
+}
