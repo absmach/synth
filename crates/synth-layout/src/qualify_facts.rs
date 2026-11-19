@@ -120,8 +120,7 @@ fn committed_step_models() -> &'static BTreeSet<String> {
     static NAMES: OnceLock<BTreeSet<String>> = OnceLock::new();
     NAMES.get_or_init(|| {
         let extra: Vec<PathBuf> = std::env::var_os(STEP_DIRS_ENV)
-            .map(|v| std::env::split_paths(&v).collect())
-            .unwrap_or_default();
+            .map_or_else(Vec::new, |v| std::env::split_paths(&v).collect());
         step_model_names(
             &repo_qualification_root().into_iter().collect::<Vec<_>>(),
             &extra,
