@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 72.0 x 67.0 mm, 4,823 mm2, 73 parts (64 excluding mounting holes and test points) |
+| Outline | 72.0 x 67.0 mm, 4,823 mm2, 82 parts (73 excluding mounting holes and test points) |
 | Courtyard fill | **28.4 %** of the board area, measured on the exported board (`layout_metrics.py`); the Class C target is 30 %, which at this outline needs about 1,447 mm2 of courtyard against about 1,370 mm2 now |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"`, JLCPCB's `JLC06161H-3313` stackup as declared in the source (prepreg 3313 0.0994 mm er 4.1, core 0.55 mm er 4.6, prepreg 2116 0.1088 mm er 4.16; outer copper 35 um, inner 15.2 um; [JLCPCB impedance tool](https://jlcpcb.com/impedance)), 1.47 mm in the STEP model |
 | Routing | 60 of 60 nets, 924 segments, 182 vias (0.46/0.2 mm: 68, 0.6/0.3 mm: 114), 1785.8 mm of track; the router's report and the delivered board agree (the delivered-board count) |
@@ -42,7 +42,7 @@ The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdra
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 73 lines: 64 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
+[`fab/bom.csv`](fab/bom.csv) has 82 lines: 73 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
 
 ## Fabrication package
 
