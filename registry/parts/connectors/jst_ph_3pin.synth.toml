@@ -17,10 +17,14 @@ courtyard_margin_mm = 0.25
 # pad row and the plug enters from that end, read from the footprint outline.
 mating_face = "bottom"
 
+# JST PH series ratings: 100 V AC/DC and 2 A (AWG #24 wire) as listed by distributors
+# (LCSC C131339, element14) and on a mirror of the JST PH series datasheet; the
+# JST datasheet itself was not retrieved. The earlier 1.8 to 5 V, 100 mA envelope
+# was not the connector's rating.
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+min_voltage_v = 0.0
+max_voltage_v = 100.0
+max_current_ma = 2000.0
 
 [[pins]]
 name = "p1"

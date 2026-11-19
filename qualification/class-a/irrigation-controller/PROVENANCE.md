@@ -14,7 +14,7 @@ The board is the output of an agent driving `synth mcp` from a prompt, followed 
 | Synth, final exports | `upstream/main` `be8a5b5a` (the merge of pull request #455, whose edge-track fix the router needs) plus the commits `62c4d661`, `7148b6ef` and `8be130f1` of Synth pull request #456, retrievable as `refs/pull/456/head` of `absmach/synth`; the last two move a pin-1 silkscreen marker clear of copper and of other parts' silkscreen instead of dropping it. `synth --version` prints `synth 0.1.2`; `synth mcp --stdio` is the same binary |
 | KiCadRoutingTools | `9399bfb2` |
 | KiCad | 10.0.6 (library tables for DRC and ERC) |
-| Registry inputs | `registry/parts/` of the repository: the shipped parts the board uses, and the added `lm74700_q1`, `dmt6007lfg` (the ideal-diode stage) and `xtal_8mhz_3225_jyje_4p` |
+| Registry inputs | `registry/parts/` of the repository: the shipped parts the board uses, and the added `lm74700_q1`, `dmt6007lfg` (the ideal-diode stage) and `xtal_32k768_fc135_7pf` |
 
 Synth findings from this board: #96 (missing symbols), #280 (ground-return vias at layer changes), #425 (silkscreen cut back from vias and pads), #426 (a label on a wire junction), #428 (flattened symbol).
 

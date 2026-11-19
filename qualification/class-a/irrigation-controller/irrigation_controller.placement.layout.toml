@@ -2,15 +2,6 @@ schema_version = 2
 forced_net_labels = []
 fit_sheet = false
 
-[components.R_B2]
-x = 54.5
-y = 37.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.J_I2C]
 x = 72.85
 y = 15.5
@@ -23,15 +14,6 @@ dy = 0.0
 [components.R_PD2]
 x = 62.5
 y = 22.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N6]
-x = 60.5
-y = 52.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -101,33 +83,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.Q_E2]
-x = 27.5
-y = 52.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N11]
-x = 56.5
-y = 28.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_B4]
-x = 53.8
-y = 34.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.TP_SOIL2]
 x = 32.0
 y = 46.5
@@ -155,15 +110,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.D_N2]
-x = 61.5
-y = 63.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.R_COMP]
 x = 36.5
 y = 19.5
@@ -176,15 +122,6 @@ dy = 0.0
 [components.U2]
 x = 32.5
 y = 35.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_B5]
-x = 60.5
-y = 32.2
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -272,15 +209,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.C_N3]
-x = 66.0
-y = 40.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.D_FLY2]
 x = 57.0
 y = 18.5
@@ -317,36 +245,9 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.C_N12]
-x = 70.0
-y = 38.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.R_FBB]
 x = 34.9
 y = 25.1
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.R_N6]
-x = 11.0
-y = 51.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_B8]
-x = 20.0
-y = 42.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -380,15 +281,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R_B3]
-x = 65.2
-y = 28.8
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.R_D2]
 x = 33.5
 y = 56.0
@@ -401,15 +293,6 @@ dy = 0.0
 [components.C_F1]
 x = 46.0
 y = 49.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N8]
-x = 32.5
-y = 42.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -434,27 +317,9 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R_B1]
-x = 42.30
-y = 4.50
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.Q_V1]
 x = 51.5
 y = 18.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_B3]
-x = 62.0
-y = 28.8
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -473,15 +338,6 @@ dy = 0.0
 [components.C_OUT1]
 x = 25.0
 y = 23.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.R_N5]
-x = 50.0
-y = 60.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -542,15 +398,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R_N2]
-x = 70.0
-y = 48.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.C_SN2]
 x = 65.2
 y = 25.2
@@ -596,15 +443,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.Q_E1]
-x = 39.5
-y = 52.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.Q1]
 x = 19.0
 y = 15.5
@@ -614,27 +452,9 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R_B4]
-x = 60.5
-y = 35.2
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.H4]
 x = 72.0
 y = 62.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N4]
-x = 52.5
-y = 27.5
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -704,24 +524,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.C_N1]
-x = 66.0
-y = 36.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N5]
-x = 60.5
-y = 55.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.C_COMP]
 x = 39.5
 y = 19.5
@@ -758,24 +560,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.C_N13]
-x = 52.50
-y = 39.00
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N2]
-x = 56.5
-y = 25.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.C_OUT2]
 x = 41.25
 y = 23.0
@@ -788,15 +572,6 @@ dy = 0.0
 [components.C_SN1]
 x = 42.3
 y = 12.8
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N10]
-x = 19.0
-y = 47.0
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -843,15 +618,6 @@ dy = 0.0
 x = 8.5
 y = 26.0
 rotation = 270
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N14]
-x = 58.5
-y = 48.0
-rotation = 0
 source = "agent"
 priority = "hard"
 dx = 0.0
@@ -1010,33 +776,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R_EPU2]
-x = 27.5
-y = 49.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N7]
-x = 31.0
-y = 22.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_B1]
-x = 42.3
-y = 7.6
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.C_U4]
 x = 51.62
 y = 41.78
@@ -1055,54 +794,9 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R_N4]
-x = 57.5
-y = 63.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_B2]
-x = 54.5
-y = 32.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.R_EN]
 x = 36.5
 y = 17.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.R_EPU1]
-x = 39.5
-y = 49.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.C_N9]
-x = 23.00
-y = 6.00
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.R_N1]
-x = 66.0
-y = 48.0
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -1130,6 +824,78 @@ dy = 0.0
 [components.C_VIN]
 x = 14.6
 y = 20.9
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D_ESD_S1]
+x = 42.5
+y = 58.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D_ESD_S2]
+x = 29.5
+y = 58.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D_ESD_FL]
+x = 13.0
+y = 59.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D_ESD_I2C]
+x = 69.0
+y = 15.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_F1B]
+x = 39.5
+y = 52.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C_F1B]
+x = 39.5
+y = 49.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_F2B]
+x = 27.5
+y = 52.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C_F2B]
+x = 27.5
+y = 49.5
 rotation = 0
 source = "agent"
 priority = "hard"
