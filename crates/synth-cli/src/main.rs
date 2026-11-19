@@ -919,9 +919,9 @@ fn pinned_engine(selected: ExternalRouter) -> ExternalRouter {
         Some(synth_router::RouterEngine::Freerouting) => ExternalRouter::FreeRouting,
         Some(synth_router::RouterEngine::KiCadRoutingTools) => ExternalRouter::KicadRoutingTools,
         Some(synth_router::RouterEngine::Fastroute) => ExternalRouter::Fastroute,
-        None => {
+        Some(synth_router::RouterEngine::Internal) | None => {
             warn!(
-                "SYNTH_QUALIFY_ROUTER={value} names no router (kicad-routing-tools, \
+                "SYNTH_QUALIFY_ROUTER={value} names no external router (kicad-routing-tools, \
                  freerouting or fastroute); the pin is ignored"
             );
             selected

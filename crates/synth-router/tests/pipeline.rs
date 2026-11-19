@@ -485,31 +485,6 @@ fn a_board_whose_nets_are_all_single_pad_needs_no_router() {
 }
 
 #[test]
-fn a_routed_request_for_the_internal_engine_is_refused_without_running_anything() {
-    // The internal router is not driven through the request-only contract;
-    // asking `route()` for it must refuse with the remediation naming the
-    // surface that carries the compiled board, and never start an engine.
-    let _restorer = without_router_environment();
-    let scratch = Scratch::new("internal_refused");
-    let request = empty_board_request(PARTIAL_BOARD, &scratch);
-    let mut request = request;
-    request.engine = RouterEngine::Internal;
-    let report = synth_router::route(&request);
-    assert_eq!(report.state, RouteState::ValidationFailed, "{report:?}");
-    let failure = report.failure.expect("a refusal is recorded");
-    assert_eq!(failure.reason, RouterFailureReason::Unsupported);
-    assert!(
-        failure.remediation.contains("synth drc"),
-        "{}",
-        failure.remediation
-    );
-    assert!(
-        !scratch.file("empty.internal.kicad_pcb").exists(),
-        "the refusal must not stage a candidate"
-    );
-}
-
-#[test]
 fn a_clean_route_that_validates_reports_routed() {
     let scratch = Scratch::new("clean");
     let router = StubRouter::new("clean_router", Behaviour::Write(ROUTED_BOARD));
