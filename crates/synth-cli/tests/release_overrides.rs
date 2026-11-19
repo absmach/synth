@@ -79,14 +79,14 @@ fn export(label: &str, part_dir: &str, part_id: &str, footprints: bool, extra: &
     // router. Without one the export stops at the routing gate and the test
     // would only ever be asserting that refusal, not the override behaviour
     // it is actually about.
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let cli = kicad_stub(&dir);
     let board = design(&dir, part_id);
     let out = dir.join("out");
 
     let mut command = Command::new(SYNTH);
     command
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(&board)
         .arg("--registry")
@@ -113,14 +113,11 @@ fn export(label: &str, part_dir: &str, part_id: &str, footprints: bool, extra: &
 }
 
 fn flags(manifest: &serde_json::Value) -> Vec<String> {
-    manifest["overrides"]
-        .as_array()
-        .map(|o| {
-            o.iter()
-                .map(|r| r["flag"].as_str().unwrap_or_default().to_string())
-                .collect()
-        })
-        .unwrap_or_default()
+    manifest["overrides"].as_array().map_or_default(|o| {
+        o.iter()
+            .map(|r| r["flag"].as_str().unwrap_or_default().to_string())
+            .collect()
+    })
 }
 
 #[test]
@@ -305,11 +302,11 @@ mod release_gate {
         let dir = scratch(label);
         // `check --fab` drives `export-kicad` as a subprocess, so the stub
         // has to be in the environment for both.
-        let _lock = stub_router::serialised();
-        let _router = stub_router::install(&dir);
+        let router = stub_router::install(&dir);
         let cli = kicad_stub(&dir);
         let board = design(&dir, part_id);
         let output = Command::new(SYNTH)
+            .envs(router.envs())
             .arg("check")
             .arg(&board)
             .arg("--registry")

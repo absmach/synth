@@ -37,11 +37,7 @@ impl Rect {
     fn overlap_area(&self, other: &Rect) -> f64 {
         let w = self.x1.min(other.x1) - self.x0.max(other.x0);
         let h = self.y1.min(other.y1) - self.y0.max(other.y0);
-        if w > 0.0 && h > 0.0 {
-            w * h
-        } else {
-            0.0
-        }
+        if w > 0.0 && h > 0.0 { w * h } else { 0.0 }
     }
 }
 

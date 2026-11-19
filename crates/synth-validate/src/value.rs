@@ -14,6 +14,7 @@
 //! | ------------ | --------------------------------------------------- | ------------- |
 //! | resistance   | `100`, `100R`, `4.7k`, `1M`, `10kΩ`, `2.2kOhm`       | ohms          |
 //! | capacitance  | `22`, `22p`, `18pF`, `100nF`, `0.1uF`, `10µF`, `10μF` | farads        |
+//! | inductance   | `10uH`, `4.7nH`, `1mH`, `2.2`                        | henries       |
 //!
 //! SI prefixes: `p`(1e-12) `n`(1e-9) `µ/u`(1e-6) `m`(1e-3) `k/K`(1e3)
 //! `M`(1e6) `G`(1e9); an absent prefix means base units. Both the micro
@@ -39,6 +40,12 @@ pub fn parse_capacitance(input: &str) -> Option<f64> {
 /// not a recognisable SI quantity (`"25V"`, `"6.3V"`, `"250mV"`).
 pub fn parse_voltage(input: &str) -> Option<f64> {
     parse_quantity(input, &["V"])
+}
+
+/// Parse an inductance value, returning henries, or `None` if the
+/// string is not a recognisable SI quantity.
+pub fn parse_inductance(input: &str) -> Option<f64> {
+    parse_quantity(input, &["H"])
 }
 
 /// Shared SI-quantity parser.
@@ -159,5 +166,38 @@ mod tests {
         assert!(parse_capacitance("").is_none());
         assert!(parse_capacitance("nope").is_none());
         assert!(parse_capacitance("18Fp").is_none());
+    }
+
+    #[test]
+    fn inductance_parsing() {
+        assert!(close(parse_inductance("10uH"), Some(10e-6)));
+        assert!(close(parse_inductance("4.7nH"), Some(4.7e-9)));
+        assert!(close(parse_inductance("1pH"), Some(1e-12)));
+        assert!(close(parse_inductance("1mH"), Some(1e-3)));
+        assert!(close(parse_inductance("1kH"), Some(1e3)));
+        assert!(close(parse_inductance("1MH"), Some(1e6)));
+        assert!(close(parse_inductance("2.2"), Some(2.2)));
+    }
+
+    #[test]
+    fn inductance_rejects_garbage() {
+        assert!(parse_inductance("").is_none());
+        assert!(parse_inductance("4k7").is_none());
+        assert!(parse_inductance("1H2").is_none());
+    }
+
+    /// `M` is mega, `m` is milli; both parsers must keep that split.
+    #[test]
+    fn si_prefixes_cover_k_mega_milli_micro_nano_pico() {
+        for (value, expected) in [
+            ("1k", 1e3),
+            ("1M", 1e6),
+            ("1m", 1e-3),
+            ("1u", 1e-6),
+            ("1n", 1e-9),
+            ("1p", 1e-12),
+        ] {
+            assert!(close(parse_resistance(value), Some(expected)), "{value}");
+        }
     }
 }

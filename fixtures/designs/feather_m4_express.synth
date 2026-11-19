@@ -11,7 +11,7 @@ board "feather_m4_express" {
   component U1: mcu "rp2350"
   component U2: regulator "ams1117_3v3"
   component U3: memory "w25q128_flash"
-  component U4: memory "24lc256_eeprom"
+  component U4: memory "24lc256_soic8"
   component U5: secure_element "atecc608"
 
   // Sensors

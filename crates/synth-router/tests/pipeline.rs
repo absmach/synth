@@ -26,28 +26,13 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, MutexGuard};
 
 use synth_router::{
+    ToolPaths,
     contract::{FabricationPolicy, RouteRequest, RouterEngine, RouterLimits},
     result::RouteState,
 };
 
-/// Serialises the tests that touch the process environment.
-///
-/// The adapters resolve the engine through environment variables and the
-/// stub engines are installed on `PATH`, so these tests are inherently
-/// process-global. Cargo runs tests on parallel threads within one process,
-/// so without this lock one test's stub `python3` would satisfy another
-/// test's engine lookup.
-fn serialised() -> MutexGuard<'static, ()> {
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-    ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-/// A scratch directory removed when the guard drops.
 struct Scratch {
     path: PathBuf,
 }
@@ -81,74 +66,17 @@ impl Drop for Scratch {
     }
 }
 
-/// Clear every router environment variable, returning a guard that puts
-/// them back.
-fn without_router_environment() -> EngineEnvRestorer {
-    EngineEnvRestorer::take()
+/// Tool locations that ignore the machine running the tests: nothing is
+/// configured and the conventional KiCadRoutingTools install is not searched,
+/// so an "unavailable" expectation cannot turn into a real run.
+fn without_router_environment() -> ToolPaths {
+    ToolPaths::default()
 }
 
-struct EngineEnvRestorer {
-    _lock: MutexGuard<'static, ()>,
-    saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
-    /// Empty data/home tree that hides a real KiCadRoutingTools install from
-    /// the conventional-location fallback while the guard is held.
-    empty_data: PathBuf,
-}
-
-impl EngineEnvRestorer {
-    fn take() -> Self {
-        let lock = serialised();
-        let mut saved: Vec<(&'static str, Option<std::ffi::OsString>)> = Vec::new();
-        for key in [
-            "SYNTH_FREEROUTING_JAR",
-            "SYNTH_FREEROUTING_JAVA",
-            "KICAD_ROUTING_TOOLS_REPO",
-            "SYNTH_KRT_PYTHON",
-        ] {
-            saved.push((key, std::env::var_os(key)));
-            std::env::remove_var(key);
-        }
-        // The resolver falls back to `$XDG_DATA_HOME|$HOME/.local/share/synth/
-        // kicad-routing-tools`; point both at an empty tree so a checkout that
-        // happens to be installed on the machine running the tests does not
-        // turn an "unavailable" expectation into a real run.
-        let empty_data =
-            std::env::temp_dir().join(format!("synth_router_empty_data_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&empty_data);
-        let _ = std::fs::create_dir_all(&empty_data);
-        for key in ["XDG_DATA_HOME", "HOME"] {
-            saved.push((key, std::env::var_os(key)));
-            std::env::set_var(key, &empty_data);
-        }
-        Self {
-            _lock: lock,
-            saved,
-            empty_data,
-        }
-    }
-}
-
-impl Drop for EngineEnvRestorer {
-    fn drop(&mut self) {
-        for (key, value) in &self.saved {
-            match value {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
-            }
-        }
-        let _ = std::fs::remove_dir_all(&self.empty_data);
-    }
-}
-
+/// Whether a real `kicad-cli` is on `PATH`, which is what a request runs when
+/// its tool paths name none (they ignore `KICAD_CLI` here).
 fn kicad_cli_available() -> bool {
-    which("kicad-cli").is_some()
-}
-
-fn which(binary: &str) -> Option<PathBuf> {
-    let path_var = std::env::var_os("PATH")?;
-    std::env::split_paths(&path_var)
-        .map(|dir| dir.join(binary))
-        .find(|candidate| candidate.is_file())
+    synth_router::capability::which("kicad-cli").is_some()
 }
 
 // ── Board fixtures ───────────────────────────────────────────────────────────
@@ -267,6 +195,9 @@ enum Behaviour {
     Write(&'static str),
     /// Exit 0 and write nothing — the signature "success with no board".
     Silent,
+    /// Exit 0 and write the baseline back as the candidate: a stub for boards
+    /// built at run time, which a `&'static str` cannot carry.
+    CopyBaseline,
     /// Exit non-zero without writing a board.
     Crash,
     /// Exit 0 after writing something that is not a board.
@@ -308,72 +239,22 @@ impl StubRouter {
         }
     }
 
-    /// Install the stub for the duration of one run.
+    /// The tool locations that make this stub the engine a request runs.
     ///
-    /// Takes the serialisation lock and restores `PATH` and every router
-    /// environment variable on drop, so a run cannot leak its stub into the
-    /// next test.
-    fn activate(&self, jar: &Path, java: &Path) -> EngineEnv {
-        // The lock is taken once and moved into the guard: taking it again
-        // inside `install` would self-deadlock on a non-reentrant mutex.
-        EngineEnv::install(serialised(), &self.command, jar, java)
-    }
-}
-
-/// The environment a stub engine runs under, restored on drop.
-struct EngineEnv {
-    _lock: MutexGuard<'static, ()>,
-    path: Option<std::ffi::OsString>,
-    keys: Vec<(&'static str, Option<std::ffi::OsString>)>,
-}
-
-impl EngineEnv {
-    fn install(lock: MutexGuard<'static, ()>, stub: &Path, jar: &Path, java: &Path) -> Self {
-        let previous_path = std::env::var_os("PATH");
-        let bin = stub.parent().expect("stub bin dir");
-        let joined = match &previous_path {
-            Some(existing) => {
-                use std::os::unix::ffi::OsStrExt as _;
-                format!("{}:{}", bin.display(), existing.as_bytes().escape_ascii())
-            }
-            None => bin.display().to_string(),
-        };
-        std::env::set_var("PATH", joined);
-
-        let mut keys = Vec::new();
-        for (key, value) in [
-            ("SYNTH_FREEROUTING_JAR", Some(jar.to_path_buf())),
-            ("SYNTH_FREEROUTING_JAVA", Some(java.to_path_buf())),
-            // Cleared so a developer's own kicad-cli cannot bypass the stub.
-            ("KICAD_CLI", None),
-        ] {
-            let saved = std::env::var_os(key);
-            match value {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
-            }
-            keys.push((key, saved));
-        }
-
-        Self {
-            _lock: lock,
-            path: previous_path,
-            keys,
-        }
-    }
-}
-
-impl Drop for EngineEnv {
-    fn drop(&mut self) {
-        for (key, value) in &self.keys {
-            match value {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
-            }
-        }
-        match &self.path {
-            Some(value) => std::env::set_var("PATH", value),
-            None => std::env::remove_var("PATH"),
+    /// The stub stands in for the helper's interpreter, so it is named as
+    /// the FreeRouting helper Python; the JAR and JVM are the stand-in files
+    /// the adapter insists exist. A `kicad-cli` stub installed beside it by
+    /// [`install_kicad_stub`] is used for zone fill and DRC; without one the
+    /// run uses whatever `kicad-cli` is on `PATH`. Nothing reaches the process
+    /// environment, so tests holding different stubs can run side by side.
+    fn activate(&self, jar: &Path, java: &Path) -> ToolPaths {
+        let kicad_cli = self.command.with_file_name("kicad-cli");
+        ToolPaths {
+            freerouting_jar: Some(jar.to_path_buf()),
+            freerouting_java: Some(java.to_path_buf()),
+            freerouting_python: Some(self.command.clone()),
+            kicad_cli: kicad_cli.is_file().then_some(kicad_cli),
+            ..ToolPaths::default()
         }
     }
 }
@@ -385,7 +266,7 @@ impl Drop for EngineEnv {
 /// stub that hard-coded its own would not test it.
 fn script_body(behaviour: Behaviour) -> String {
     let action = match behaviour {
-        Behaviour::Write(_) => "route",
+        Behaviour::Write(_) | Behaviour::CopyBaseline => "route",
         Behaviour::Silent => "silent",
         Behaviour::Crash => "crash",
         Behaviour::Malformed => "malformed",
@@ -397,14 +278,21 @@ fn script_body(behaviour: Behaviour) -> String {
         Behaviour::Write(board) => board.trim_end(),
         _ => "",
     };
+    let copy_baseline = if matches!(behaviour, Behaviour::CopyBaseline) {
+        "yes"
+    } else {
+        ""
+    };
     format!(
         r#"#!/bin/sh
-# Stub external router. Parses the argv the production adapter builds:
+# Stub external router. Parses the argv a real helper would:
 #   <helper> <baseline> <candidate> --jar <jar> --java <java> ...
 # Flag values are skipped, so the last positional really is the board this
 # engine must write — and the board it is handed is the baseline, never the
 # delivery path.
 POSITIONAL=""
+BASELINE=""
+POSITIONAL_COUNT=0
 REPORT=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -413,11 +301,18 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --*) shift ;;
-    *) POSITIONAL="$1"; shift ;;
+    *)
+      POSITIONAL_COUNT=$((POSITIONAL_COUNT + 1))
+      # The first positional is the helper itself, the second the baseline
+      # the engine was handed.
+      if [ "$POSITIONAL_COUNT" = 2 ]; then BASELINE="$1"; fi
+      POSITIONAL="$1"; shift
+      ;;
   esac
 done
 
 echo "stub-router argv: $*" >&2
+COPY_BASELINE="{copy_baseline}"
 
 if [ -n "$REPORT" ]; then
   printf '{{"router":"stub","jar":"stub-1.0.jar","java_version":"stub-jvm","imported_segments":1,"imported_vias":0,"notes":[]}}' > "$REPORT"
@@ -425,6 +320,10 @@ fi
 
 case "{action}" in
   route)
+    if [ -n "{copy_baseline}" ]; then
+      cp "$BASELINE" "$POSITIONAL"
+      exit 0
+    fi
     cat > "$POSITIONAL" <<'STUB_BOARD_EOF'
 {board}
 STUB_BOARD_EOF
@@ -451,9 +350,10 @@ esac
 }
 
 /// A request wired to a stub engine, with the baseline already preserved.
-fn request_for(scratch: &Scratch, timeout_secs: u64) -> RouteRequest {
+fn request_for(scratch: &Scratch, timeout_secs: u64, tools: ToolPaths) -> RouteRequest {
     let board = scratch.write("demo.kicad_pcb", PARTIAL_BOARD);
     let mut request = RouteRequest::new(&board, &scratch.path, RouterEngine::Freerouting);
+    request.tools = tools;
     request.stem = "demo".to_string();
     request.limits = RouterLimits::default().with_wall_clock(timeout_secs);
     request.policy = FabricationPolicy::default();
@@ -477,14 +377,121 @@ fn stub_engine_files(scratch: &Scratch) -> (PathBuf, PathBuf) {
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
+/// A board with no components and no nets: the `hello` fixture's shape.
+///
+/// There is nothing for any engine to route, so the run must not depend on
+/// one being installed.
+const EMPTY_BOARD: &str = r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#;
+
+/// A board whose every net ends on one pad: nothing to connect, so nothing
+/// to route either.
+const SINGLE_PAD_NET_BOARD: &str = r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "ONLY")
+  (footprint "Connector:Test"
+    (layer "F.Cu") (at 15 15)
+    (property "Reference" "J1" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd rect (at 0 0) (size 1 1)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "ONLY")))
+  (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#;
+
+fn empty_board_request(board: &str, scratch: &Scratch) -> RouteRequest {
+    let path = scratch.write("empty.kicad_pcb", board);
+    let mut request = RouteRequest::new(&path, &scratch.path, RouterEngine::KiCadRoutingTools);
+    request.stem = "empty".to_string();
+    request.limits = RouterLimits::default().with_wall_clock(120);
+    request.policy = FabricationPolicy::default();
+    request.input_hash = "test-input-hash".to_string();
+    request.profile_name = "jlc-standard".to_string();
+    request.preserve_baseline().expect("baseline preserved");
+    request
+}
+
+#[test]
+fn a_board_with_nothing_to_route_routes_trivially_without_an_engine() {
+    // #98: the empty `hello` board reported `router_unavailable` because no
+    // engine had anything to do and the pipeline read "no engine ran" as
+    // "the engine is missing". A board with no ratsnest is a completed
+    // empty route, whatever engines are installed — and with no `kicad-cli`
+    // on this machine the verdict is review, still never "unavailable".
+    let _restorer = without_router_environment();
+    let scratch = Scratch::new("trivial_empty");
+    let request = empty_board_request(EMPTY_BOARD, &scratch);
+    let report = synth_router::route(&request);
+
+    assert_ne!(
+        report.state,
+        RouteState::RouterUnavailable,
+        "nothing to route is not a missing engine: {report:?}"
+    );
+    assert!(
+        report.failure.is_none(),
+        "a trivial route carries no failure: {report:?}"
+    );
+    assert_eq!(report.statistics.segments, 0);
+    assert_eq!(report.statistics.open_nets, 0);
+    let validation = report.validation.as_ref().expect("validation present");
+    assert_eq!(validation.connectivity.open.len(), 0);
+    assert_eq!(validation.connectivity.unconnected_pads.len(), 0);
+    // The delivered board is the board itself, unchanged: an empty route
+    // installs nothing new.
+    assert_board(&scratch.file("empty.kicad_pcb"), EMPTY_BOARD);
+    if kicad_cli_available() {
+        // With KiCad present the trivial route is a real verdict with real
+        // counts, so the gate sees a DRC result and not an unknown.
+        assert_eq!(report.state, RouteState::Routed, "{report:?}");
+        assert!(
+            validation.kicad_drc.is_some(),
+            "a run DRC could perform reports its counts: {report:?}"
+        );
+    } else {
+        assert_eq!(
+            report.state,
+            RouteState::ReviewRequired,
+            "DRC that could not run is review, not a pass: {report:?}"
+        );
+    }
+}
+
+#[test]
+fn a_board_whose_nets_are_all_single_pad_needs_no_router() {
+    let _restorer = without_router_environment();
+    let scratch = Scratch::new("trivial_single_pad");
+    let request = empty_board_request(SINGLE_PAD_NET_BOARD, &scratch);
+    let report = synth_router::route(&request);
+    assert_ne!(
+        report.state,
+        RouteState::RouterUnavailable,
+        "a one-pad net has nothing to reach: {report:?}"
+    );
+}
+
 #[test]
 fn a_clean_route_that_validates_reports_routed() {
     let scratch = Scratch::new("clean");
     let router = StubRouter::new("clean_router", Behaviour::Write(ROUTED_BOARD));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_eq!(
         report.engine,
@@ -524,6 +531,10 @@ fn a_clean_route_that_validates_reports_routed() {
 
     assert!(scratch.file("demo.routing.json").is_file());
     assert!(scratch.file("demo.freerouting.log").is_file());
+    assert!(
+        scratch.file("demo.quality.json").is_file(),
+        "the quality verdict is written beside the run record"
+    );
 
     // The run record is the answer every layer reads, so it must say the
     // same thing the returned report says.
@@ -531,6 +542,16 @@ fn a_clean_route_that_validates_reports_routed() {
         .expect("run record parses");
     assert_eq!(reread.state, report.state);
     assert_eq!(reread.state.as_str(), report.state.as_str());
+    let quality_path = reread
+        .artifacts
+        .quality_report
+        .as_ref()
+        .expect("the run record names the quality artifact");
+    assert!(quality_path.is_file(), "{quality_path:?}");
+    let quality: synth_router::RouteQuality =
+        serde_json::from_str(&std::fs::read_to_string(quality_path).expect("quality report reads"))
+            .expect("quality report parses");
+    assert_eq!(quality.passed, report.is_fabrication_ready());
 
     // Whether this reaches `routed` depends on KiCad being installed:
     // an unperformed DRC is review, never a pass.
@@ -550,9 +571,9 @@ fn a_partial_route_is_never_reported_as_a_success() {
     let scratch = Scratch::new("partial");
     let router = StubRouter::new("partial_router", Behaviour::Write(PARTIAL_BOARD));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_eq!(report.state, RouteState::ValidationFailed);
     assert!(!report.is_fabrication_ready());
@@ -597,9 +618,9 @@ fn a_router_that_drops_a_footprint_fails_topology() {
     let scratch = Scratch::new("topology");
     let router = StubRouter::new("topology_router", Behaviour::Write(MISSING_FOOTPRINT_BOARD));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_eq!(report.state, RouteState::ValidationFailed);
     let validation = report.validation.expect("validation ran");
@@ -626,9 +647,9 @@ fn copper_below_the_fabrication_floor_is_rejected() {
     let scratch = Scratch::new("undersized");
     let router = StubRouter::new("undersized_router", Behaviour::Write(UNDERSIZED_BOARD));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_eq!(report.state, RouteState::ValidationFailed);
     let validation = report.validation.expect("validation ran");
@@ -654,9 +675,9 @@ fn an_engine_that_exits_zero_without_writing_a_board_is_a_failure() {
     let scratch = Scratch::new("silent");
     let router = StubRouter::new("silent_router", Behaviour::Silent);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_ne!(report.state, RouteState::Routed);
     assert!(!report.is_fabrication_ready());
@@ -672,9 +693,9 @@ fn a_crashed_engine_leaves_the_baseline_and_the_log() {
     let scratch = Scratch::new("crash");
     let router = StubRouter::new("crash_router", Behaviour::Crash);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_eq!(
         report.failure_reason(),
@@ -697,10 +718,10 @@ fn a_hung_engine_is_killed_at_the_budget() {
     let scratch = Scratch::new("hang");
     let router = StubRouter::new("hang_router", Behaviour::Hang);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
     let started = std::time::Instant::now();
-    let request = request_for(&scratch, 1);
+    let request = request_for(&scratch, 1, tools);
     let report = synth_router::route(&request);
     let elapsed = started.elapsed();
     assert_eq!(
@@ -721,9 +742,9 @@ fn an_unreadable_candidate_is_reported_as_an_unperformed_check() {
     let scratch = Scratch::new("malformed");
     let router = StubRouter::new("malformed_router", Behaviour::Malformed);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let request = request_for(&scratch, 120);
+    let request = request_for(&scratch, 120, tools);
     let report = synth_router::route(&request);
     assert_ne!(report.state, RouteState::Routed);
     let validation = report.validation.expect("validation was attempted");
@@ -749,9 +770,9 @@ fn a_label_the_router_left_on_a_pad_is_moved_before_the_board_is_judged() {
     );
     let router = StubRouter::new("label_on_pad_router", Behaviour::Write(on_pad));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let report = synth_router::route(&request_for(&scratch, 120));
+    let report = synth_router::route(&request_for(&scratch, 120, tools));
     if kicad_cli_available() {
         assert_eq!(report.state, RouteState::Routed, "{:?}", report.validation);
     } else {
@@ -788,9 +809,9 @@ fn a_rejected_candidate_is_judged_with_its_labels_already_off_the_pads() {
     );
     let router = StubRouter::new("label_on_pad_rejected_router", Behaviour::Write(on_pad));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let report = synth_router::route(&request_for(&scratch, 120));
+    let report = synth_router::route(&request_for(&scratch, 120, tools));
     assert_eq!(report.state, RouteState::ValidationFailed);
     let candidate = std::fs::read_to_string(scratch.file("demo.freerouting.kicad_pcb"))
         .expect("the rejected candidate is kept");
@@ -813,7 +834,7 @@ fn a_run_can_be_retried_after_a_failure_and_succeed() {
     let (jar, java) = stub_engine_files(&scratch);
     let failing = StubRouter::new("recovery_fail", Behaviour::Crash);
     {
-        let _env = failing.activate(&jar, &java);
+        request.tools = failing.activate(&jar, &java);
         let first = synth_router::route(&request);
         assert!(!first.is_fabrication_ready());
         assert_board(&scratch.file("demo.kicad_pcb"), PARTIAL_BOARD);
@@ -821,7 +842,7 @@ fn a_run_can_be_retried_after_a_failure_and_succeed() {
 
     let succeeding = StubRouter::new("recovery_ok", Behaviour::Write(ROUTED_BOARD));
     {
-        let _env = succeeding.activate(&jar, &java);
+        request.tools = succeeding.activate(&jar, &java);
         let second = synth_router::route(&request);
         if kicad_cli_available() {
             assert_eq!(second.state, RouteState::Routed, "{second:?}");
@@ -899,9 +920,9 @@ fn a_validated_board_is_delivered_with_its_zones_filled() {
     let router = StubRouter::new("zonefill_router", Behaviour::Write(with_zone));
     let marker = install_kicad_stub(&router, FILLED_SAVE);
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let report = synth_router::route(&request_for(&scratch, 120));
+    let report = synth_router::route(&request_for(&scratch, 120, tools));
     assert_eq!(report.state, RouteState::Routed, "{:?}", report.validation);
     assert!(marker.exists(), "the zones were never filled");
 
@@ -945,9 +966,9 @@ fn a_board_with_only_some_zones_filled_is_refilled_in_full() {
 SAVED_EOF"#,
     );
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let report = synth_router::route(&request_for(&scratch, 120));
+    let report = synth_router::route(&request_for(&scratch, 120, tools));
     assert_eq!(report.state, RouteState::Routed, "{:?}", report.validation);
     assert!(marker.exists(), "a half-filled board was not refilled");
 
@@ -971,9 +992,9 @@ fn a_fill_that_fails_blocks_the_board_because_islands_cannot_be_checked() {
     let router = StubRouter::new("zonefill_fail_router", Behaviour::Write(with_zone));
     let marker = install_kicad_stub(&router, "exit 1");
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let report = synth_router::route(&request_for(&scratch, 120));
+    let report = synth_router::route(&request_for(&scratch, 120, tools));
     assert_eq!(
         report.state,
         RouteState::ReviewRequired,
@@ -1000,9 +1021,9 @@ fn a_garbage_save_is_rejected_and_the_board_is_not_delivered() {
     let router = StubRouter::new("zonefill_garbage_router", Behaviour::Write(with_zone));
     let marker = install_kicad_stub(&router, "echo '(not a board' > \"$BOARD\"");
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let report = synth_router::route(&request_for(&scratch, 120));
+    let report = synth_router::route(&request_for(&scratch, 120, tools));
     assert_eq!(
         report.state,
         RouteState::ReviewRequired,
@@ -1045,9 +1066,9 @@ fn the_input_hash_identifies_the_board_the_engine_was_given() {
     let scratch = Scratch::new("input_hash");
     let router = StubRouter::new("hash_router", Behaviour::Write(ROUTED_BOARD));
     let (jar, java) = stub_engine_files(&scratch);
-    let _env = router.activate(&jar, &java);
+    let tools = router.activate(&jar, &java);
 
-    let mut request = request_for(&scratch, 120);
+    let mut request = request_for(&scratch, 120, tools);
     request
         .input_hash
         .clone_from(&sha256_of(&request.baseline_path()));
@@ -1080,11 +1101,10 @@ fn sha256_of(path: &Path) -> String {
 fn kicad_routing_tools_reports_a_capability_error_when_no_checkout_is_configured() {
     // The optional engine must fail with a capability error naming what to
     // install — never fall back to FreeRouting, and never report a pass.
-    let _restorer = without_router_environment();
-
     let scratch = Scratch::new("krt_absent");
     let board = scratch.write("demo.kicad_pcb", PARTIAL_BOARD);
-    let request = RouteRequest::new(&board, &scratch.path, RouterEngine::KiCadRoutingTools);
+    let mut request = RouteRequest::new(&board, &scratch.path, RouterEngine::KiCadRoutingTools);
+    request.tools = without_router_environment();
     let report = synth_router::route(&request);
 
     assert_eq!(report.state, RouteState::RouterUnavailable);
@@ -1107,15 +1127,15 @@ fn kicad_routing_tools_reports_a_capability_error_when_no_checkout_is_configured
 
 #[test]
 fn a_directory_without_the_krt_entrypoint_is_not_a_checkout() {
-    // Serialised: the checkout is configured through the environment, so
-    // this test cannot run beside one that clears it.
-    let _restorer = without_router_environment();
     let scratch = Scratch::new("krt_bogus");
     std::fs::create_dir_all(scratch.file("fake/py_router")).expect("fake checkout");
-    std::env::set_var("KICAD_ROUTING_TOOLS_REPO", scratch.file("fake"));
 
     let board = scratch.write("demo.kicad_pcb", PARTIAL_BOARD);
-    let request = RouteRequest::new(&board, &scratch.path, RouterEngine::KiCadRoutingTools);
+    let mut request = RouteRequest::new(&board, &scratch.path, RouterEngine::KiCadRoutingTools);
+    request.tools = ToolPaths {
+        krt_repo: Some(scratch.file("fake")),
+        ..without_router_environment()
+    };
     let report = synth_router::route(&request);
 
     assert_eq!(report.state, RouteState::RouterUnavailable);
@@ -1131,9 +1151,14 @@ fn a_directory_without_the_krt_entrypoint_is_not_a_checkout() {
 fn every_engine_reports_its_availability_without_being_run() {
     // Discovery must be cheap and side-effect free: it starts nothing and
     // writes nothing, so it is safe to call before every routing attempt.
-    let _restorer = without_router_environment();
     let scratch = Scratch::new("discovery");
-    let capabilities = synth_router::capability::discover_all_in_out_dir(&scratch.path);
+    let mut request = RouteRequest::new(
+        &scratch.file("board.kicad_pcb"),
+        &scratch.path,
+        RouterEngine::Freerouting,
+    );
+    request.tools = without_router_environment();
+    let capabilities = synth_router::capability::discover_all(&request);
     assert_eq!(capabilities.len(), RouterEngine::all().len());
     assert_eq!(capabilities[0].engine, RouterEngine::default());
     for capability in &capabilities {
@@ -1148,12 +1173,12 @@ fn every_engine_reports_its_availability_without_being_run() {
 
 #[test]
 fn a_second_run_against_the_same_candidate_is_refused_rather_than_racing() {
-    let _env = without_router_environment();
     // Two routers writing one candidate is silent corruption: both succeed
     // and the last rename wins. The refusal is the fix.
     let scratch = Scratch::new("duplicate");
     let board = scratch.write("demo.kicad_pcb", PARTIAL_BOARD);
     let mut request = RouteRequest::new(&board, &scratch.path, RouterEngine::Freerouting);
+    request.tools = without_router_environment();
     request.stem = "demo".to_string();
     request.preserve_baseline().expect("baseline");
 
@@ -1227,5 +1252,170 @@ fn an_unknown_engine_name_is_refused_rather_than_defaulted() {
     assert_eq!(
         RouterEngine::parse("kicad-routing-tools"),
         Some(RouterEngine::KiCadRoutingTools)
+    );
+}
+
+// ── Declared differential pairs (absmach/synth#447) ─────────────────────────
+
+/// A routed board carrying a declared pair's copper: `USB_DP` runs 11.65 mm
+/// and `USB_DN` runs `SKEW_MM` mm more, both fully connected. Written in the
+/// style of `ROUTED_BOARD` so the verdict under test does not depend on the
+/// exporter's output.
+fn diff_pair_board(dn_end: &str) -> String {
+    format!(
+        r#"(kicad_pcb
+  (version 20260206)
+  (generator "synth-eda")
+  (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+  (net 0 "")
+  (net 1 "USB_DP")
+  (net 2 "USB_DN")
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 10 20)
+    (property "Reference" "R1" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "USB_DP")))
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 20 20)
+    (property "Reference" "R2" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 1 "USB_DP")))
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 10 22)
+    (property "Reference" "R3" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at -0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "USB_DN")))
+  (footprint "Resistor_SMD:R_0603_1608Metric"
+    (layer "F.Cu") (at 20 22)
+    (property "Reference" "R4" (at 0 -1.5) (layer "F.SilkS"))
+    (pad "1" smd roundrect (at 0.825 0) (size 0.8 0.95)
+      (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "USB_DN")))
+  (segment (start 9.175 20) (end 20.825 20) (width 0.25) (layer "F.Cu") (net 1))
+  (segment (start 9.175 22) (end {dn_end} 22) (width 0.25) (layer "F.Cu") (net 2))
+  (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+  (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+)
+"#
+    )
+}
+
+/// The request for a stub run over `board`, with the declared pair carried.
+fn diff_pair_request(scratch: &Scratch, board: &str, max_skew_nm: i64) -> RouteRequest {
+    let board_path = scratch.write("demo.kicad_pcb", board);
+    let mut request = RouteRequest::new(&board_path, &scratch.path, RouterEngine::Freerouting);
+    request.stem = "demo".to_string();
+    request.limits = RouterLimits::default().with_wall_clock(120);
+    request.policy = FabricationPolicy::default();
+    request.input_hash = "test-input-hash".to_string();
+    request.profile_name = "jlc-standard".to_string();
+    request.diff_pairs = vec![synth_router::contract::DiffPairRequest {
+        positive: "USB_DP".to_string(),
+        negative: "USB_DN".to_string(),
+        max_skew_nm: Some(max_skew_nm),
+    }];
+    request.preserve_baseline().expect("baseline preserved");
+    request
+}
+
+/// A pair delivering more skew than its declared budget blocks the release,
+/// with a finding naming the pair — in the same verdict pipeline as the
+/// return-via blockers, not a silent release (absmach/synth#447).
+#[test]
+fn a_declared_pair_outside_its_skew_budget_blocks_the_release() {
+    let scratch = Scratch::new("skewed-pair");
+    // 12.05 mm against 11.65 mm: 0.4 mm of skew on a 0.15 mm budget.
+    let board = diff_pair_board("21.225");
+    // The board is built at run time, so the stub copies the baseline back
+    // as its candidate: the same copper the request was built from.
+    let router = StubRouter::new("skewed_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let tools = router.activate(&jar, &java);
+
+    let mut request = diff_pair_request(&scratch, &board, 150_000);
+    request.tools = tools;
+    let report = synth_router::route(&request);
+    assert_eq!(report.state, RouteState::ValidationFailed);
+    assert!(!report.is_fabrication_ready());
+    let validation = report.validation.expect("validation ran");
+    let finding = validation
+        .blocking_reasons
+        .iter()
+        .find(|reason| reason.contains("E-SYNTH-DRC-014"))
+        .expect("the skew finding must block");
+    assert!(finding.contains("pair `USB_DP`/`USB_DN`"), "{finding}");
+    assert!(finding.contains("0.400 mm"), "{finding}");
+    assert!(finding.contains("0.150 mm"), "{finding}");
+    // The unvalidated candidate is retained for review, never installed.
+    assert_eq!(
+        std::fs::read_to_string(scratch.file("demo.kicad_pcb")).unwrap(),
+        board,
+        "a blocked board must not be promoted"
+    );
+}
+
+/// A pair inside its budget releases exactly as a board without a declared
+/// pair does: measured, inside, no finding.
+#[test]
+fn a_declared_pair_inside_its_skew_budget_releases() {
+    let scratch = Scratch::new("matched-pair");
+    let board = diff_pair_board("20.825");
+    let router = StubRouter::new("matched_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let tools = router.activate(&jar, &java);
+
+    let mut request = diff_pair_request(&scratch, &board, 150_000);
+    request.tools = tools;
+    let report = synth_router::route(&request);
+    let validation = report.validation.as_ref();
+    assert!(
+        validation.is_none_or(|v| {
+            !v.blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("E-SYNTH-DRC-014"))
+        }),
+        "{:?}",
+        validation.map(|v| v.blocking_reasons.clone())
+    );
+    // Whatever the DRC gate says about KiCad's presence, the skew itself
+    // contributed nothing blocking.
+    if kicad_cli_available() {
+        assert_eq!(report.state, RouteState::Routed, "{:?}", report.validation);
+    }
+}
+
+/// A board with no declared pair is unchanged: the same copper with no
+/// `diff_pairs` on the request produces no skew finding at all.
+#[test]
+fn a_board_without_a_declared_pair_is_unchanged() {
+    let scratch = Scratch::new("no-pair");
+    let board = diff_pair_board("21.225");
+    let router = StubRouter::new("no-pair_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let tools = router.activate(&jar, &java);
+
+    let board_path = scratch.write("demo.kicad_pcb", &board);
+    let mut request = RouteRequest::new(&board_path, &scratch.path, RouterEngine::Freerouting);
+    request.stem = "demo".to_string();
+    request.limits = RouterLimits::default().with_wall_clock(120);
+    request.policy = FabricationPolicy::default();
+    request.input_hash = "test-input-hash".to_string();
+    request.profile_name = "jlc-standard".to_string();
+    request.tools = tools;
+    request.preserve_baseline().expect("baseline preserved");
+    let report = synth_router::route(&request);
+    let no_pair_finding = report.validation.as_ref().is_none_or(|v| {
+        !v.blocking_reasons
+            .iter()
+            .any(|reason| reason.contains("E-SYNTH-DRC-014"))
+    });
+    assert!(
+        no_pair_finding,
+        "no declared pair, no skew finding: {:?}",
+        report
+            .validation
+            .as_ref()
+            .map(|v| v.blocking_reasons.clone())
     );
 }

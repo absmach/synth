@@ -15,7 +15,6 @@ members = [
   "crates/synth-place",
   "crates/synth-pcb",
   "crates/synth-router",
-  "crates/synth-route",
   "crates/synth-drc",
   "crates/synth-mcp",
   "crates/synth-render",
@@ -23,12 +22,13 @@ members = [
   "crates/synth-connectivity",
   "crates/synth-supply",
   "crates/synth-cost",
+  "crates/synth-sim",
 ]
 
 [workspace.package]
-version = "0.1.2"
-edition = "2021"
-rust-version = "1.85"
+version = "0.1.4"
+edition = "2024"
+rust-version = "1.100"
 license = "Apache-2.0"
 repository = "https://github.com/synth-eda/synth"
 authors = ["The Synth Authors"]
@@ -52,6 +52,9 @@ cast_possible_truncation = "allow"
 return_self_not_must_use = "allow"
 # Exact float equality is required in serde round-trip and snapshot tests.
 float_cmp = "allow"
+# New in Rust 1.100. `assert!(x.is_empty())` reads better in tests than the
+# suggested `assert_eq!(x, [] as [T; 0])`.
+assert_is_empty = "allow"
 # Product/proper nouns (SynthSpec, KiCad, ...) are intentionally not
 # backticked in prose documentation.
 doc_markdown = "allow"
@@ -94,32 +97,30 @@ tokio = { version = "1", features = [
   "io-util",
 ] }
 axum = "0.8"
-tower-http = { version = "0.7", features = ["fs", "trace", "set-header"] }
 include_dir = "0.7"
 schemars = "1.2"
 
 # Workspace crates referenced by path
-synth-diagnostics = { path = "crates/synth-diagnostics", version = "0.1.2" }
-synth-ast = { path = "crates/synth-ast", version = "0.1.2" }
-synth-parser = { path = "crates/synth-parser", version = "0.1.2" }
-synth-ir = { path = "crates/synth-ir", version = "0.1.2" }
-synth-geometry = { path = "crates/synth-geometry", version = "0.1.2" }
-synth-layout = { path = "crates/synth-layout", version = "0.1.2" }
-synth-registry = { path = "crates/synth-registry", version = "0.1.2" }
-synth-knowledge = { path = "crates/synth-knowledge", version = "0.1.2" }
-synth-validate = { path = "crates/synth-validate", version = "0.1.2" }
-synth-kicad = { path = "crates/synth-kicad", version = "0.1.2" }
-synth-place = { path = "crates/synth-place", version = "0.1.2" }
-synth-route = { path = "crates/synth-route", version = "0.1.2" }
-synth-router = { path = "crates/synth-router", version = "0.1.2" }
-synth-pcb = { path = "crates/synth-pcb", version = "0.1.2" }
-synth-drc = { path = "crates/synth-drc", version = "0.1.2" }
-synth-mcp = { path = "crates/synth-mcp", version = "0.1.2" }
-synth-render = { path = "crates/synth-render", version = "0.1.2" }
-synth-smt = { path = "crates/synth-smt", version = "0.1.2" }
-synth-connectivity = { path = "crates/synth-connectivity", version = "0.1.2" }
-synth-supply = { path = "crates/synth-supply", version = "0.1.2" }
-synth-cost = { path = "crates/synth-cost", version = "0.1.2" }
+synth-diagnostics = { path = "crates/synth-diagnostics", version = "0.1.4" }
+synth-ast = { path = "crates/synth-ast", version = "0.1.4" }
+synth-parser = { path = "crates/synth-parser", version = "0.1.4" }
+synth-ir = { path = "crates/synth-ir", version = "0.1.4" }
+synth-geometry = { path = "crates/synth-geometry", version = "0.1.4" }
+synth-layout = { path = "crates/synth-layout", version = "0.1.4" }
+synth-registry = { path = "crates/synth-registry", version = "0.1.4" }
+synth-knowledge = { path = "crates/synth-knowledge", version = "0.1.4" }
+synth-validate = { path = "crates/synth-validate", version = "0.1.4" }
+synth-kicad = { path = "crates/synth-kicad", version = "0.1.4" }
+synth-place = { path = "crates/synth-place", version = "0.1.4" }
+synth-router = { path = "crates/synth-router", version = "0.1.4" }
+synth-pcb = { path = "crates/synth-pcb", version = "0.1.4" }
+synth-drc = { path = "crates/synth-drc", version = "0.1.4" }
+synth-mcp = { path = "crates/synth-mcp", version = "0.1.4" }
+synth-render = { path = "crates/synth-render", version = "0.1.4" }
+synth-smt = { path = "crates/synth-smt", version = "0.1.4" }
+synth-supply = { path = "crates/synth-supply", version = "0.1.4" }
+synth-cost = { path = "crates/synth-cost", version = "0.1.4" }
+synth-sim = { path = "crates/synth-sim", version = "0.1.4" }
 
 [profile.release]
 lto = "thin"

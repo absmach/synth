@@ -14,12 +14,12 @@ pub mod nexar;
 pub mod query;
 pub mod types;
 
-pub use cache::{load_env_file, SupplyCache};
+pub use cache::{SupplyCache, env_or_dotenv};
 pub use distributor::Distributor;
 pub use lcsc::LcscDistributor;
 pub use nexar::NexarDistributor;
 pub use query::SupplyEngine;
 pub use types::{
-    normalize_part_number, AssemblyEligibility, BomQueryEntry, LifecycleStatus, PriceTier,
-    PurchaseConstraints, StockStatus, SupplyError, SupplyStatus,
+    AssemblyEligibility, BomQueryEntry, LifecycleStatus, PriceTier, PurchaseConstraints,
+    StockStatus, SupplyError, SupplyStatus, normalize_part_number,
 };

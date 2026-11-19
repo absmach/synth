@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::capability::{ElectricalType, PinCapability};
@@ -96,6 +98,10 @@ pub struct Part {
     #[serde(default)]
     pub operating_conditions: Option<OperatingConditions>,
 
+    /// Vendor or hand-written SPICE subcircuit attached to this part.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spice: Option<SpiceModel>,
+
     /// Curation/trust metadata (Phase 15, R15.3). Absent for legacy
     /// seed parts — treated as `source = "seed"` for back-compat, which
     /// is considered verified (proof-read by the core team). Generated,
@@ -155,14 +161,52 @@ pub enum ProvenanceSource {
     Authored,
 }
 
+/// A SPICE subcircuit attached to a registry part.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpiceModel {
+    /// Model file path, relative to a registry directory.
+    pub file: String,
+    /// Subcircuit name, without the leading `.subckt`.
+    pub subckt: String,
+    /// Pin names in subcircuit terminal order.
+    pub pin_order: Vec<String>,
+    /// Subcircuit parameters written on the `X` line.
+    #[serde(default)]
+    pub params: BTreeMap<String, String>,
+    /// Vendor dialect `ngbehavior` mode; all parts in a run must agree.
+    #[serde(default)]
+    pub dialect: Option<SpiceDialect>,
+}
+
+/// The vendor dialect a model file was written for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SpiceDialect {
+    Ps,
+    Lt,
+    Ltps,
+}
+
+impl SpiceDialect {
+    /// The `ngbehavior` value and the TOML spelling.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Ps => "ps",
+            Self::Lt => "lt",
+            Self::Ltps => "ltps",
+        }
+    }
+}
+
 impl Part {
-    /// A part is unverified when it carries provenance (i.e. it is a
-    /// Tier-2 user/generated entry) but has no `reviewed_by` reviewer.
-    /// Legacy seed parts without a `[provenance]` section are trusted.
+    /// A part is unverified unless its provenance names a reviewer. An
+    /// absent `[provenance]` section is the most unverified state of all:
+    /// nothing records who checked the part against its datasheet.
     pub fn is_unverified(&self) -> bool {
         match &self.provenance {
-            None => false,
-            Some(p) => p.reviewed_by.as_deref().unwrap_or("").is_empty(),
+            None => true,
+            Some(p) => p.reviewed_by.as_deref().unwrap_or("").trim().is_empty(),
         }
     }
 }
@@ -229,6 +273,15 @@ pub struct OperatingConditions {
     /// e.g. an internal LDO decoupling tap. `Some(true)` forces it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub power_budget: Option<bool>,
+    /// Forward voltage at [`Self::forward_current_ma`], in volts. A
+    /// diode or LED with both fields gets a built-in SPICE model;
+    /// without them it needs a registry `[spice]` model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_voltage_v: Option<f64>,
+    /// Forward current at which [`Self::forward_voltage_v`] is quoted,
+    /// in milliamps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub forward_current_ma: Option<f64>,
     /// Worst-case power the part dissipates, in milliwatts. With
     /// [`Self::thermal_resistance_c_per_w`] this drives the thermal check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -301,6 +354,67 @@ pub struct Pin {
     /// Nominal operating voltage for this pin (e.g., `3.3` or `5.0`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voltage_nominal_v: Option<f64>,
+
+    /// Datasheet output-drive levels and current limits, for an output pin
+    /// the simulation may drive as a DC source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drive: Option<PinDrive>,
+
+    /// Datasheet PWM capability of an output pin, for a transient pulse
+    /// source in `synth sim`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pwm: Option<PinPwm>,
+
+    /// Datasheet gate data for a transistor's control pin: the input
+    /// capacitance that sets the gate edge the simulation measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<PinGate>,
+}
+
+/// Datasheet gate data for a transistor control pin. Every field is required
+/// whenever the block is present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinGate {
+    /// Small-signal input capacitance at the datasheet conditions
+    /// (`Ciss` for a MOSFET), in picofarads.
+    pub input_capacitance_pf: f64,
+    /// Datasheet page or table the value came from.
+    pub datasheet_ref: String,
+}
+
+/// Datasheet output-drive data for an IC pin. Every numeric field is required;
+/// `datasheet_ref` is required whenever the block is present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinDrive {
+    /// High output level at no load, in volts.
+    pub high_v: f64,
+    /// Low output level at no load, in volts.
+    pub low_v: f64,
+    /// Maximum current the pin may source, in milliamps.
+    pub max_source_ma: f64,
+    /// Maximum current the pin may sink, in milliamps.
+    pub max_sink_ma: f64,
+    /// Series output resistance, in ohms. Absent means an ideal source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_resistance_ohm: Option<f64>,
+    /// Datasheet page or table the values came from.
+    #[serde(default)]
+    pub datasheet_ref: Option<String>,
+}
+
+/// Datasheet PWM data for an IC output pin. `synth sim` uses it to decide
+/// that a pin's testbench source is a pulse and to pick a period the design
+/// can actually generate; every field is required whenever the block is
+/// present, like `[pins.drive]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinPwm {
+    /// Maximum PWM frequency the pin can toggle at, in hertz.
+    pub pwm_max_hz: f64,
+    /// Datasheet page or table the value came from.
+    pub datasheet_ref: String,
 }
 
 impl Pin {
@@ -332,6 +446,12 @@ pub struct RequiredDecoupling {
     /// the inductor from `sw`, so `net = "sw"`, `through = "inductor"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub through: Option<String>,
+    /// Only apply this rule when the part's supply rail is above this
+    /// voltage. A bridge whose V3 pin is an internal regulator tap needs the
+    /// V3 capacitor at 5 V but ties V3 to a 3.3 V supply directly; one rule
+    /// cannot say both without this condition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub when_supply_over_v: Option<f64>,
 }
 
 impl Part {

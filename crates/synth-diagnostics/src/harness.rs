@@ -141,11 +141,11 @@ impl AgentHarness {
 
             let mut applied_any = false;
             for patch in &patches {
-                if let Ok(next) = patch.apply(&current) {
-                    if next != current {
-                        current = next;
-                        applied_any = true;
-                    }
+                if let Ok(next) = patch.apply(&current)
+                    && next != current
+                {
+                    current = next;
+                    applied_any = true;
                 }
             }
 
@@ -197,21 +197,23 @@ mod tests {
             if src.contains('{') && src.contains('}') {
                 vec![]
             } else {
-                vec![crate::DiagnosticBuilder::new(
-                    "E-SYNTH-PARSE-003",
-                    Severity::Error,
-                    "expected {",
-                )
-                .suggested_fix(Patch {
-                    confidence: 0.9,
-                    rationale: None,
-                    patch_consequence_preview: None,
-                    kind: PatchKind::InsertAt {
-                        at: src.len() as u32,
-                        text: " {}\n".into(),
-                    },
-                })
-                .build()]
+                vec![
+                    crate::DiagnosticBuilder::new(
+                        "E-SYNTH-PARSE-003",
+                        Severity::Error,
+                        "expected {",
+                    )
+                    .suggested_fix(Patch {
+                        confidence: 0.9,
+                        rationale: None,
+                        patch_consequence_preview: None,
+                        kind: PatchKind::InsertAt {
+                            at: src.len() as u32,
+                            text: " {}\n".into(),
+                        },
+                    })
+                    .build(),
+                ]
             }
         });
 

@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_ir::ComponentId;
 
 /// Gap between a footprint's dimensions and its label, the long-standing default.
@@ -186,8 +186,8 @@ pub(crate) fn place_labels(
             let (dx, dy) = o.offset_mm?;
             let c = part.courtyard;
             let centre = Point::new(
-                (c.min.x_nm + c.max.x_nm) / 2 + mm_to_nm(dx),
-                (c.min.y_nm + c.max.y_nm) / 2 + mm_to_nm(dy),
+                i64::midpoint(c.min.x_nm, c.max.x_nm) + mm_to_nm(dx),
+                i64::midpoint(c.min.y_nm, c.max.y_nm) + mm_to_nm(dy),
             );
             Some(local_label(part, centre, o.angle_deg))
         });
@@ -257,8 +257,8 @@ fn side_candidate(part: &LabelPart, side: Side) -> LabelPos {
     let height = mm_to_nm(TEXT_HEIGHT_MM);
     let gap = mm_to_nm(SIDE_GAP_MM);
     let court = part.courtyard;
-    let mid_x = (court.min.x_nm + court.max.x_nm) / 2;
-    let mid_y = (court.min.y_nm + court.max.y_nm) / 2;
+    let mid_x = i64::midpoint(court.min.x_nm, court.max.x_nm);
+    let mid_y = i64::midpoint(court.min.y_nm, court.max.y_nm);
     let (x, y) = match side {
         Side::Above => (mid_x, court.min.y_nm - gap - height / 2),
         Side::Below => (mid_x, court.max.y_nm + gap + height / 2),
@@ -292,7 +292,10 @@ fn extra_candidates(part: &LabelPart) -> Vec<LabelPos> {
     let height = mm_to_nm(TEXT_HEIGHT_MM);
     let gap = mm_to_nm(SIDE_GAP_MM);
     let c = part.courtyard;
-    let (mid_x, mid_y) = ((c.min.x_nm + c.max.x_nm) / 2, (c.min.y_nm + c.max.y_nm) / 2);
+    let (mid_x, mid_y) = (
+        i64::midpoint(c.min.x_nm, c.max.x_nm),
+        i64::midpoint(c.min.y_nm, c.max.y_nm),
+    );
     let mut out = Vec::new();
     // Along a side: shifted toward either end by a third of the length, and by
     // half a text width past the corner.
@@ -417,8 +420,8 @@ fn pulled_inside(part: &LabelPart, outline: Rect, pos: LabelPos) -> LabelPos {
         return pos;
     }
     let centre = Point::new(
-        (b.min.x_nm + b.max.x_nm) / 2 + dx,
-        (b.min.y_nm + b.max.y_nm) / 2 + dy,
+        i64::midpoint(b.min.x_nm, b.max.x_nm) + dx,
+        i64::midpoint(b.min.y_nm, b.max.y_nm) + dy,
     );
     local_label(part, centre, pos.angle_deg)
 }
@@ -815,7 +818,10 @@ mod tests {
         let parts = std::slice::from_ref(&part);
         let pos = place_labels(parts, outline(), &overrides(1, soft((0.0, 3.0))), &[])[&part.id];
         let b = label_box(&part, pos);
-        let (mid_x, mid_y) = ((b.min.x_nm + b.max.x_nm) / 2, (b.min.y_nm + b.max.y_nm) / 2);
+        let (mid_x, mid_y) = (
+            i64::midpoint(b.min.x_nm, b.max.x_nm),
+            i64::midpoint(b.min.y_nm, b.max.y_nm),
+        );
         assert_eq!((mid_x, mid_y), (mm_to_nm(20.0), mm_to_nm(23.0)));
     }
 
@@ -845,7 +851,10 @@ mod tests {
         };
         let pos = place_labels(&parts, outline(), &overrides(1, hard), &[])[&part.id];
         let b = label_box(&part, pos);
-        let mid = ((b.min.x_nm + b.max.x_nm) / 2, (b.min.y_nm + b.max.y_nm) / 2);
+        let mid = (
+            i64::midpoint(b.min.x_nm, b.max.x_nm),
+            i64::midpoint(b.min.y_nm, b.max.y_nm),
+        );
         assert_eq!(mid, (mm_to_nm(20.0), mm_to_nm(23.0)));
     }
 
@@ -915,7 +924,7 @@ mod tests {
         let b = label_box(&part, pos);
         assert!(inside(outline(), b), "label {b:?} off the board");
         assert_eq!(
-            (b.min.x_nm + b.max.x_nm) / 2,
+            i64::midpoint(b.min.x_nm, b.max.x_nm),
             mm_to_nm(20.0),
             "only the offending axis moves"
         );
@@ -967,6 +976,6 @@ mod tests {
             mm_to_nm(0.2),
             "the sprawling default gives way to the board edge"
         );
-        assert_eq!((b.min.x_nm + b.max.x_nm) / 2, mm_to_nm(3.0));
+        assert_eq!(i64::midpoint(b.min.x_nm, b.max.x_nm), mm_to_nm(3.0));
     }
 }

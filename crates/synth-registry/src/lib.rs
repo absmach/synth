@@ -24,7 +24,7 @@
 
 mod capability;
 mod kicad_pin_check;
-pub use kicad_pin_check::kicad_pin_numbers;
+pub use kicad_pin_check::{kicad_pin_names, kicad_pin_numbers};
 mod loader;
 mod part;
 pub mod qualify;
@@ -33,13 +33,14 @@ pub mod vector_search;
 
 pub use capability::{ElectricalType, PinCapability};
 pub use loader::{
-    create_part_stub, embedded_registry, load_dir, load_from_strs, load_tiered, load_user_overlay,
-    shipped_registry_dir, user_registry_dir, write_embedded_seed, LoadError, LoadResult,
-    LoadWarning,
+    LoadError, LoadResult, LoadWarning, create_part_stub, embedded_registry, load_dir,
+    load_from_strs, load_tiered, load_user_overlay, shipped_registry_dir, user_registry_dir,
+    write_embedded_seed,
 };
 pub use part::{
     FootprintDimensions, LabelSide, Lifecycle, MatingFace, OperatingConditions, Part, PartId, Pin,
-    PinNumber, Provenance, ProvenanceSource, RequiredDecoupling,
+    PinDrive, PinGate, PinNumber, PinPwm, Provenance, ProvenanceSource, RequiredDecoupling,
+    SpiceDialect, SpiceModel,
 };
 
 /// Clean-room EasyEDA → KiCad footprint converter (Phase 15, R15.4).
@@ -47,15 +48,15 @@ pub mod easyeda;
 pub mod footprint_svg;
 pub mod overlay;
 pub use easyeda::{
-    extract_pins, generate_part_toml, parse_easyeda, to_kicad_mod, EasyEdaComponent,
+    EasyEdaComponent, extract_pins, generate_part_toml, parse_easyeda, to_kicad_mod,
 };
 pub use footprint_svg::{
-    parse_component_svg, to_kicad_mod as svg_to_kicad_mod, Pad, ParsedFootprint,
+    Pad, ParsedFootprint, parse_component_svg, to_kicad_mod as svg_to_kicad_mod,
 };
 pub use overlay::{part_to_toml, quoted};
 pub use qualify::{
-    qualify_part, qualify_registry, Check, CheckStatus, Finding, FindingLevel, FootprintFacts,
-    PadFacts, PadSide, PartQualification, QualificationReport, SymbolFacts,
+    Check, CheckStatus, Finding, FindingLevel, FootprintFacts, PadFacts, PadSide,
+    PartQualification, QualificationReport, SymbolFacts, qualify_part, qualify_registry,
 };
 pub use registry::Registry;
 pub use vector_search::{VectorSearchIndex, VectorSearchResult};

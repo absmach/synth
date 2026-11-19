@@ -25,6 +25,7 @@
 //! - `E-SYNTH-COMP-002` undefined pin
 //! - `E-SYNTH-COMP-003` duplicate refdes
 //! - `E-SYNTH-COMP-004` undefined component refdes
+//! - `E-SYNTH-COMP-005` obsolete registry part
 //! - `E-SYNTH-UNIT-001` value/unit conversion failure
 //!
 //! Net construction uses union-find on endpoints: every `connect`
@@ -36,18 +37,19 @@ use std::collections::HashMap;
 
 use synth_ast::{
     ComponentDeclAst, DiffPairAttr, DiffPairStmt, EndpointAst, EndpointRefKind, KeepoutAttr,
-    KeepoutStmt, NetclassStmt, ProgramAst, SchematicOverflowAst, SchematicPaperAst,
+    KeepoutStmt, NetclassStmt, OutlineStmt, ProgramAst, SchematicOverflowAst, SchematicPaperAst,
     StackupLayerAst, StackupStmt, StatementAst, ValueWithUnit,
 };
 use synth_diagnostics::{
     Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity, Span, SuggestedAction,
 };
-use synth_registry::{Part, PinCapability, Registry};
+use synth_registry::{Lifecycle, Part, PinCapability, Registry};
 
 use crate::board::{
-    Board, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net, NetClass, NetEndpoint,
-    NetId, Note, PinId, PlacementEdge, PlacementRegion, PlacementSide, ProcessRequirement,
-    SchematicOverflow, SchematicPaper, Stackup, StackupLayer, Variant,
+    Board, BoardOutline, Component, ComponentId, Couple, DiffPair, EdgeRate, Keepout, Net,
+    NetClass, NetEndpoint, NetId, NoConnect, Note, PinId, PlacementEdge, PlacementRegion,
+    PlacementSide, ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer,
+    Variant,
 };
 use crate::units::{ConversionError, Current, DielectricConstant, Impedance, Length, Voltage};
 
@@ -160,7 +162,9 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut diff_pair_stmts: Vec<DiffPairStmt> = Vec::new();
     let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
+    let mut no_connects: Vec<NoConnect> = Vec::new();
     let mut stackup: Option<Stackup> = None;
+    let mut outline: Option<BoardOutline> = None;
     let mut netclasses: Vec<NetClass> = Vec::new();
     // Declared `group` regions with their header attributes (Phase D1),
     // in first-declaration order.
@@ -172,6 +176,10 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // Schematic-quality plan Phase A3: connector pin legends are
     // opt-in (`legends on`), default off.
     let mut legends: bool = false;
+    // Board-level silkscreen labels are on by default; `labels off`
+    // suppresses the exporter-added reference/value text
+    // (absmach/synth#374).
+    let mut labels: bool = true;
     // Page size is design-wide: a `schematic { … }` nested in a group is
     // still a statement about the one rendered sheet, so it is honoured
     // wherever it appears rather than being scoped to its block.
@@ -202,6 +210,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Revision(r) => revision = Some(r.rev.clone()),
             StatementAst::Company(c) => company = Some(c.name.clone()),
             StatementAst::Legends(l) => legends = l.enabled,
+            StatementAst::Labels(l) => labels = l.enabled,
             StatementAst::Schematic(sc) => {
                 if let Some(paper) = sc.paper {
                     schematic_paper = Some(match paper {
@@ -252,7 +261,30 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                 );
             }
             StatementAst::Keepout(k) => keepouts.push(ctx.lower_keepout(k)),
+            StatementAst::NoConnect(n) => {
+                for pin in &n.pins {
+                    no_connects.push(NoConnect {
+                        refdes: pin.component.clone(),
+                        pin: pin.pin.clone(),
+                        source_span: pin.span,
+                    });
+                }
+            }
             StatementAst::Stackup(st) => stackup = Some(ctx.lower_stackup(st)),
+            StatementAst::Outline(st) => {
+                // A board can declare one exact outline. A second `outline`
+                // is an error, not a silent replacement, and a first outline
+                // survives a later one that fails its unit check: a bad
+                // literal must not undo the size the board already declared.
+                let lowered = ctx.lower_outline(st);
+                if let Some(new) = lowered {
+                    if let Some(first) = &outline {
+                        ctx.emit_duplicate_outline(first.source_span, st.span);
+                    } else {
+                        outline = Some(new);
+                    }
+                }
+            }
             StatementAst::Netclass(n) => netclasses.push(ctx.lower_netclass(n)),
             StatementAst::Group(g) => {
                 if !groups.iter().any(|existing| existing.name == g.name) {
@@ -368,8 +400,85 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         }
     }
 
+    // A `no_connect` that names no component pin is a typo, not permission to
+    // ignore a floating input. It is an error so the mistake cannot silently
+    // suppress nothing.
+    //
+    // A `no_connect` on a pin that is also wired is a contradiction: the
+    // design says the pin is intentionally unused *and* connects it. The
+    // wiring wins, so the suppression would hide a live finding; lowering
+    // refuses the statement instead.
+    for declared in &no_connects {
+        let component = components
+            .iter()
+            .find(|component| component.refdes.eq_ignore_ascii_case(&declared.refdes));
+        let pin_index = component.as_ref().and_then(|component| {
+            component.part.as_ref().and_then(|part| {
+                part.pins.iter().position(|pin| {
+                    pin.name.eq_ignore_ascii_case(&declared.pin)
+                        || pin.number.0.eq_ignore_ascii_case(&declared.pin)
+                })
+            })
+        });
+        if let (Some(component), Some(pin_index)) = (component.as_ref(), pin_index) {
+            let pin = PinId(pin_index as u32);
+            if nets.iter().any(|net| {
+                net.endpoints
+                    .iter()
+                    .any(|e| e.component == component.id && e.pin == pin)
+            }) {
+                ctx.diagnostics.push(
+                    DiagnosticBuilder::new(
+                        "E-SYNTH-COMP-007",
+                        Severity::Error,
+                        "no_connect on a wired pin",
+                    )
+                    .location(Location::from_span(
+                        ctx.file.to_string(),
+                        declared.source_span,
+                    ))
+                    .expected("a `no_connect` pin that no net or connect reaches")
+                    .found(format!(
+                        "`{}.{}` is also an endpoint of a net",
+                        declared.refdes, declared.pin
+                    ))
+                    .message(
+                        "A pin cannot be both intentionally unused and wired. Remove the \
+                         `no_connect` and let ERC judge the wired pin, or remove the wire.",
+                    )
+                    .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-007")
+                    .build(),
+                );
+            }
+            continue;
+        }
+        ctx.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-COMP-006",
+                Severity::Error,
+                "no_connect names an unknown pin",
+            )
+            .location(Location::from_span(
+                ctx.file.to_string(),
+                declared.source_span,
+            ))
+            .expected("a declared component and a pin the registry part has")
+            .found(format!(
+                "`{}.{}` does not resolve",
+                declared.refdes, declared.pin
+            ))
+            .message(
+                "A `no_connect` must name a component and pin that exist; otherwise it \
+                 suppresses nothing and hides the typo.",
+            )
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-006")
+            .build(),
+        );
+    }
+
     let board = Board {
         legends,
+        labels,
         schematic_paper,
         schematic_overflow,
         name: ast.board.name.clone(),
@@ -382,7 +491,9 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         diff_pairs,
         notes,
         keepouts,
+        no_connects,
         stackup,
+        outline,
         netclasses,
         buses,
         modules,
@@ -524,6 +635,7 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn lower_component(
         &mut self,
         decl: &ComponentDeclAst,
@@ -542,6 +654,44 @@ impl<'a> LowerCtx<'a> {
             if let Some(v) = decl.properties.get("mpn") {
                 part.mpn = Some(v.clone());
             }
+        }
+
+        if let Some(obsolete) = part.as_ref().filter(|p| p.lifecycle == Lifecycle::Obsolete) {
+            // Selecting an obsolete entry must not silently use a stale pin
+            // model. Name the live replacement; the issue asks for an explicit
+            // migration rather than a quiet fallback.
+            let replacement = if obsolete.substitutes.is_empty() {
+                "a supported replacement".to_string()
+            } else {
+                format!(
+                    "`{}`",
+                    obsolete
+                        .substitutes
+                        .iter()
+                        .map(synth_registry::PartId::as_str)
+                        .collect::<Vec<_>>()
+                        .join("`, `")
+                )
+            };
+            self.diagnostics.push(
+                DiagnosticBuilder::new(
+                    "E-SYNTH-COMP-005",
+                    Severity::Error,
+                    "obsolete registry part",
+                )
+                .location(Location::from_span(self.file.to_string(), decl.span))
+                .expected(format!(
+                    "a live part; migrate {} to {replacement}",
+                    decl.refdes
+                ))
+                .found(format!("`{part_id}` is marked obsolete in the registry"))
+                .message(format!(
+                    "`{part_id}` is obsolete and must not be used for a new design. \
+                     Replace it with {replacement} and re-check the pin map."
+                ))
+                .explanation_url("synth.docs/diagnostics/E-SYNTH-COMP-005")
+                .build(),
+            );
         }
 
         if part.is_none() {
@@ -993,6 +1143,30 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    /// Lower a declared board rectangle. A dimension with the wrong unit is
+    /// reported here; the parser already rejected a non-positive literal.
+    fn lower_outline(&mut self, st: &OutlineStmt) -> Option<BoardOutline> {
+        let width = match Length::try_from(&st.width) {
+            Ok(width) => width,
+            Err(e) => {
+                self.emit_unit_error(&e, "outline width");
+                return None;
+            }
+        };
+        let height = match Length::try_from(&st.height) {
+            Ok(height) => height,
+            Err(e) => {
+                self.emit_unit_error(&e, "outline height");
+                return None;
+            }
+        };
+        Some(BoardOutline {
+            width,
+            height,
+            source_span: st.span,
+        })
+    }
+
     fn lower_stackup(&mut self, st: &StackupStmt) -> Stackup {
         let mut layers = Vec::new();
         for layer in &st.layers {
@@ -1047,17 +1221,39 @@ impl<'a> LowerCtx<'a> {
 
     fn lower_keepout(&mut self, k: &KeepoutStmt) -> Keepout {
         let mut radius: Option<Length> = None;
+        let mut anchor: Option<String> = None;
+        let mut at: Option<(Length, Length)> = None;
+        let mut layers: Vec<String> = Vec::new();
+        let mut allowed_nets: Vec<String> = Vec::new();
         for attr in &k.attrs {
-            if let KeepoutAttr::Radius(v) = attr {
-                match Length::try_from(v) {
+            match attr {
+                KeepoutAttr::Radius(v) => match Length::try_from(v) {
                     Ok(l) => radius = Some(l),
                     Err(e) => self.emit_unit_error(&e, "keepout radius"),
+                },
+                KeepoutAttr::Anchor { component, .. } => anchor = Some(component.clone()),
+                KeepoutAttr::At { x, y } => {
+                    let x = Length::try_from(x);
+                    let y = Length::try_from(y);
+                    match (x, y) {
+                        (Ok(x), Ok(y)) => at = Some((x, y)),
+                        (Err(e), _) | (_, Err(e)) => self.emit_unit_error(&e, "keepout at"),
+                    }
                 }
+                KeepoutAttr::Layers(names) => layers.extend(names.iter().cloned()),
+                KeepoutAttr::Allow { nets, .. } => allowed_nets.extend(nets.iter().cloned()),
+                // Non-exhaustive: a future keepout attribute is ignored here
+                // until lowering learns what it means.
+                _ => {}
             }
         }
         Keepout {
             name: k.name.clone(),
             radius,
+            anchor,
+            at,
+            layers,
+            allowed_nets,
             source_span: k.span,
         }
     }
@@ -1209,10 +1405,10 @@ impl<'a> LowerCtx<'a> {
             // one of the two fires.
             let mut functions: Vec<PinCapability> = Vec::new();
             for (n, _) in &distinct_names {
-                if let Some(f) = PinCapability::from_net_name(n) {
-                    if !functions.contains(&f) {
-                        functions.push(f);
-                    }
+                if let Some(f) = PinCapability::from_net_name(n)
+                    && !functions.contains(&f)
+                {
+                    functions.push(f);
                 }
             }
             if functions.len() > 1 {
@@ -1638,6 +1834,31 @@ impl<'a> LowerCtx<'a> {
             pin: pid,
             source_span: ep.span,
         })
+    }
+
+    /// A second `outline` statement on the board. The first one stands; the
+    /// duplicate is reported so the design fixes its size instead of the
+    /// later statement silently winning (E-SYNTH-BOARD-003).
+    fn emit_duplicate_outline(
+        &mut self,
+        first: synth_diagnostics::Span,
+        again: synth_diagnostics::Span,
+    ) {
+        self.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-BOARD-003",
+                Severity::Error,
+                "duplicate outline statement",
+            )
+            .location(Location::from_span(self.file.to_string(), first))
+            .expected("a board declares one `outline` statement at most")
+            .found(format!(
+                "a second `outline` at bytes {}..{}; the first one stands",
+                again.byte_start, again.byte_end
+            ))
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-BOARD-003")
+            .build(),
+        );
     }
 
     fn emit_duplicate_refdes(
@@ -2402,10 +2623,12 @@ mod tests {
             let back: Net = serde_json::from_str(&serde_json::to_string(net).unwrap()).unwrap();
             assert_eq!(&back, net, "{} must round-trip", net.name);
         }
-        assert!(board
-            .nets
-            .iter()
-            .any(|n| n.name == "net_7" && !n.auto_named));
+        assert!(
+            board
+                .nets
+                .iter()
+                .any(|n| n.name == "net_7" && !n.auto_named)
+        );
     }
 
     #[test]
@@ -2604,6 +2827,30 @@ mod tests {
     }
 
     #[test]
+    fn test_labels_flag_lowered_default_on() {
+        let board = lower_ok(
+            r#"board "b" {
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(board.labels, "labels default on");
+        let board = lower_ok(
+            r#"board "b" {
+                labels off
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(!board.labels, "labels off lowers to false");
+        let board = lower_ok(
+            r#"board "b" {
+                labels on
+                component U1: regulator "ams1117_3v3"
+            }"#,
+        );
+        assert!(board.labels, "labels on lowers to true");
+    }
+
+    #[test]
     fn test_dnp_flag_lowered() {
         let board = lower_ok(
             r#"board "b" {
@@ -2671,9 +2918,11 @@ mod tests {
                 requires via_in_pad
             }"#,
         );
-        assert!(board
-            .required_processes
-            .contains(&ProcessRequirement::ViaInPad));
+        assert!(
+            board
+                .required_processes
+                .contains(&ProcessRequirement::ViaInPad)
+        );
     }
 
     /// A board that says nothing must not read as a board that asked, which

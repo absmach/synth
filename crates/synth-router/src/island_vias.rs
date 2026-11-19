@@ -20,7 +20,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write as _;
 use std::path::Path;
 
-use crate::pcb_read::{mm_to_nm, PcbBoard, Point, NM_PER_MM};
+use crate::pcb_read::{NM_PER_MM, PcbBoard, Point, mm_to_nm};
 
 /// The via a net takes when it has none to copy: the Default net class.
 const DEFAULT_VIA_SIZE_NM: i64 = 600_000;
@@ -114,11 +114,17 @@ pub struct TieOutcome {
 /// as well as by name; a net whose name does not say so, such as `POWER_RETURN`,
 /// is ground only if it is listed. The name rule still applies on top.
 ///
+/// `kicad_cli` is the binary that fills the zones.
+///
 /// # Errors
 /// Returns why the board could not be filled, read or written. A caller must
 /// treat that as the repair not having run, never as nothing to repair.
-pub fn tie_islands(candidate: &Path, ground_nets: &[String]) -> Result<TieOutcome, String> {
-    tie_islands_for(candidate, &Ground::new(ground_nets))
+pub fn tie_islands(
+    candidate: &Path,
+    ground_nets: &[String],
+    kicad_cli: &str,
+) -> Result<TieOutcome, String> {
+    tie_islands_for(candidate, &Ground::new(ground_nets), kicad_cli)
 }
 
 /// [`tie_islands`] for a [`Ground`] that may also say which nets must keep a
@@ -126,9 +132,13 @@ pub fn tie_islands(candidate: &Path, ground_nets: &[String]) -> Result<TieOutcom
 ///
 /// # Errors
 /// As [`tie_islands`].
-pub fn tie_islands_for(candidate: &Path, ground: &Ground) -> Result<TieOutcome, String> {
+pub fn tie_islands_for(
+    candidate: &Path,
+    ground: &Ground,
+    kicad_cli: &str,
+) -> Result<TieOutcome, String> {
     tie_islands_with(candidate, ground, &mut |path| {
-        crate::zone_fill::filled_text(path)
+        crate::zone_fill::filled_text(path, kicad_cli)
     })
 }
 
@@ -1396,11 +1406,10 @@ fn declared_via_size(candidate: &Path, net: &str) -> Option<(i64, i64)> {
             if let (Some(name), Some(pattern)) = (
                 pat.get("netclass").and_then(|v| v.as_str()),
                 pat.get("pattern").and_then(|v| v.as_str()),
-            ) {
-                if net == pattern || net.contains(pattern) {
-                    class_name = name.to_string();
-                    break;
-                }
+            ) && (net == pattern || net.contains(pattern))
+            {
+                class_name = name.to_string();
+                break;
             }
         }
     }
@@ -1490,10 +1499,10 @@ fn best_spot(
             while y <= a.max.1 - need {
                 let mut x = a.min.0 + need;
                 while x <= a.max.0 - need {
-                    if let Some(margin) = margin_at(a, (x, y)) {
-                        if found.is_none_or(|(m, _)| margin > m) {
-                            found = Some((margin, (x, y)));
-                        }
+                    if let Some(margin) = margin_at(a, (x, y))
+                        && found.is_none_or(|(m, _)| margin > m)
+                    {
+                        found = Some((margin, (x, y)));
                     }
                     x += step;
                 }
@@ -1512,11 +1521,11 @@ fn best_spot(
                             point.0 + f64::from(ix) * fine,
                             point.1 + f64::from(iy) * fine,
                         );
-                        if let Some(m) = margin_at(a, p) {
-                            if m > margin {
-                                margin = m;
-                                point = p;
-                            }
+                        if let Some(m) = margin_at(a, p)
+                            && m > margin
+                        {
+                            margin = m;
+                            point = p;
                         }
                     }
                 }
@@ -1623,15 +1632,13 @@ fn dielectric_reach_mm(text: &str, copper_layers: usize) -> f64 {
         let dielectric = layer.contains("dielectric")
             || layer.contains("(type \"core\")")
             || layer.contains("(type \"prepreg\")");
-        if dielectric {
-            if let Some(at) = layer.find("(thickness ") {
-                let number: String = layer[at + "(thickness ".len()..]
-                    .chars()
-                    .take_while(|c| c.is_ascii_digit() || *c == '.')
-                    .collect();
-                if let Ok(value) = number.parse::<f64>() {
-                    dielectrics.push(value);
-                }
+        if dielectric && let Some(at) = layer.find("(thickness ") {
+            let number: String = layer[at + "(thickness ".len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            if let Ok(value) = number.parse::<f64>() {
+                dielectrics.push(value);
             }
         }
         rest = &rest[index + layer.len().max(1)..];
@@ -2149,6 +2156,17 @@ pub fn move_vias_off_pads(candidate: &Path) -> Result<usize, String> {
 /// escape and stays, and a via in any other pad is moved off it, since only that
 /// land is sized for the filled and capped via and exempt from the plain ring.
 ///
+/// A declared escape is not a licence to take the whole pad field. W-SYNTH-DRC-016
+/// demands a ground return via within its window of every layer change, and on a
+/// dense-pitch part the gaps between pads are narrower than that via, so a via
+/// in every pad leaves the return vias nowhere to sit and the board blocks
+/// (absmach/synth#439). So an in-pad via on a dense-pitch declared component
+/// stays only where a return via can still sit beside it within the rule's
+/// window; where it cannot, the via prefers a non-pad layer change and is moved
+/// off the pad like any other. A sparse part's in-pad vias are never probed and
+/// stay as they did, and a grid array whose pads leave no off-pad room keeps its
+/// in-pad vias either way.
+///
 /// # Errors
 /// As [`move_vias_off_pads`].
 pub fn move_vias_off_component_pads(
@@ -2157,6 +2175,148 @@ pub fn move_vias_off_component_pads(
 ) -> Result<usize, String> {
     move_vias_off_pads_with(candidate, underpad)
 }
+
+/// The in-pad budget for one candidate: whether a via in a pad of a declared
+/// under-pad component may stay, judged by whether the ground return via
+/// W-SYNTH-DRC-016 will demand for that layer change has somewhere to sit
+/// within the rule's window.
+///
+/// The probe searches the same offsets, at the same spacing and with the same
+/// clearance the return-via stitcher will use, so a kept in-pad via is one whose
+/// return the stitcher can place — the one thing the probe cannot see is the
+/// pour itself, which does not exist until the fill runs after this pass. A
+/// missing pour blocks the board later for its own reason, the same as it would
+/// have without the budget.
+struct ReturnBudget {
+    /// The return via the probe reserves room for: the size the stitcher will
+    /// give it, so the probe's arithmetic is the stitcher's.
+    size_nm: i64,
+    keepout: Keepout,
+    /// Offsets searched around a signal via, nearest first, one per window.
+    offsets: Vec<(f64, f64)>,
+    /// Return-via spots the budget has already promised to kept in-pad vias.
+    /// Later probes keep off them, so the promises do not collide.
+    reserved: Vec<(f64, f64)>,
+    /// Copper-to-board-edge gap the return via keeps.
+    edge_gap_mm: f64,
+    /// The board's outline, as `(start, end)` millimetre segments, so the probe
+    /// can hold a spot off the edge the way the stitcher's own check does.
+    edge_cuts: Vec<((f64, f64), (f64, f64))>,
+}
+
+impl ReturnBudget {
+    /// The budget for `candidate`, read from the board and the project beside
+    /// it. `None` when the board names no return-via window at all, which the
+    /// window computation never does in practice; a `None` budget leaves every
+    /// in-pad via where it is, the pre-budget behaviour.
+    fn read(candidate: &Path, board: &PcbBoard, text: &str) -> Option<Self> {
+        let declared = declared_vias(candidate, board);
+        let ground_sizes: Vec<(i64, i64)> = board
+            .vias
+            .iter()
+            .filter(|via| {
+                net_of(board, via.net, via.net_name.as_ref())
+                    .is_some_and(|net| synth_drc::is_ground_name(&net))
+            })
+            .map(|via| (via.size_nm, via.drill_nm))
+            .collect();
+        let (size_nm, drill_nm) =
+            usual_via(&ground_sizes, (DEFAULT_VIA_SIZE_NM, DEFAULT_VIA_DRILL_NM));
+        let reach_mm = return_via_window_mm(text, board);
+        let window = reach_mm - REACH_MARGIN_MM;
+        if window <= 0.0 {
+            return None;
+        }
+        Some(Self {
+            size_nm,
+            // The ground net is named after the vias are known, so the probe
+            // keeps every pad as an obstacle: a return via beside a dense pad
+            // field fits in the gaps, not on the pads. That is stricter than
+            // the stitcher, which may yet take a declared ground pad —
+            // strictness here only moves a via it need not have.
+            keepout: Keepout::from_board(board, "", declared.return_gap_mm(size_nm, drill_nm)),
+            offsets: return_offsets(window),
+            reserved: Vec::new(),
+            edge_gap_mm: declared.edge_gap_mm(),
+            edge_cuts: board
+                .edge_cuts
+                .iter()
+                .map(|(a, b)| ((a.x_mm(), a.y_mm()), (b.x_mm(), b.y_mm())))
+                .collect(),
+        })
+    }
+
+    /// The pitch under which a footprint is dense for the return-via window:
+    /// the least centre-to-centre spacing at which a return via of the probe's
+    /// own geometry still fits between two adjacent pads. Below it the gaps
+    /// cannot hold one, so every in-pad via competes for the space around the
+    /// field and the budget applies.
+    fn dense_pitch_nm(&self) -> i64 {
+        self.size_nm + 2 * synth_drc::RETURN_VIA_CLEARANCE_NM
+    }
+
+    /// The least centre-to-centre pad spacing of `footprint`.
+    fn min_pitch_mm(footprint: &crate::pcb_read::Footprint) -> Option<f64> {
+        let centres: Vec<(f64, f64)> = footprint
+            .pads
+            .iter()
+            .map(|pad| (pad.at.x_mm(), pad.at.y_mm()))
+            .collect();
+        let mut best: Option<f64> = None;
+        for (i, a) in centres.iter().enumerate() {
+            for b in centres.iter().skip(i + 1) {
+                let distance = (a.0 - b.0).hypot(a.1 - b.1);
+                if distance < COINCIDENT_PAD_MM {
+                    // The same electrical pin modelled twice is one pad.
+                    continue;
+                }
+                best = Some(match best {
+                    Some(best) => best.min(distance),
+                    None => distance,
+                });
+            }
+        }
+        best
+    }
+
+    /// Whether a return via for a layer change at `from` has a spot within the
+    /// window, clear of every pad, track and via, of the vias this pass has
+    /// moved, of the outline, and of the spots already reserved. When it does,
+    /// the spot is reserved and the in-pad via may stay.
+    fn reserve(&mut self, from: (f64, f64), taken: &[((f64, f64), f64)]) -> bool {
+        let radius = nm_to_mm(self.size_nm) / 2.0;
+        let gap = self.keepout.gap_mm;
+        let apart = nm_to_mm(self.size_nm) + gap;
+        let spot =
+            self.offsets
+                .iter()
+                .map(|&(dx, dy)| (from.0 + dx, from.1 + dy))
+                .find(|&p| {
+                    self.keepout.clear(p, radius)
+                        && self.edge_cuts.iter().all(|(a, b)| {
+                            point_segment(p, *a, *b) >= radius + self.edge_gap_mm - EPS
+                        })
+                        && taken.iter().all(|(at, other)| {
+                            (at.0 - p.0).hypot(at.1 - p.1) >= radius + other + gap - EPS
+                        })
+                        && self
+                            .reserved
+                            .iter()
+                            .all(|at| (at.0 - p.0).hypot(at.1 - p.1) >= apart - EPS)
+                });
+        match spot {
+            Some(p) => {
+                self.reserved.push(p);
+                true
+            }
+            None => false,
+        }
+    }
+}
+
+/// Pad centres closer than this are coincident, not a pitch: a footprint models
+/// the same electrical pin twice, and the duplicate is one pad.
+const COINCIDENT_PAD_MM: f64 = 0.05;
 
 #[allow(clippy::cast_precision_loss, clippy::too_many_lines)]
 fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result<usize, String> {
@@ -2169,19 +2329,53 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
     // The tracks this pass has added, which the board parsed at the start does
     // not hold: a stub to a moved via, and the far end of a track taken along.
     let mut added: Vec<AddedTrack> = Vec::new();
+    // The return-via budget for declared under-pad components: dense-pitch parts
+    // keep an in-pad via only where the return via the rule demands for it has
+    // somewhere to sit. Every spare footprint's pitch is read once, here, so the
+    // per-via decision below is a lookup.
+    let mut budget = ReturnBudget::read(candidate, &board, &text);
+    let dense_pitch = budget
+        .as_ref()
+        .map_or(i64::MAX, ReturnBudget::dense_pitch_nm);
+    let pitches: BTreeMap<String, i64> = board
+        .footprints
+        .iter()
+        .filter_map(|footprint| {
+            ReturnBudget::min_pitch_mm(footprint)
+                .map(|pitch| (footprint.reference.clone(), (pitch * NM_PER_MM) as i64))
+        })
+        .collect();
     for via in &board.vias {
         let Some(net) = net_of(&board, via.net, via.net_name.as_ref()) else {
             continue;
         };
         let host = board.pads().find(|pad| {
             pad.net == via.net
-                && !spare.contains(&pad.footprint)
                 && (pad.kind == "thru_hole" || pad.layers.iter().any(|l| via.layers.contains(l)))
                 && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
         });
         let Some(host) = host else {
             continue;
         };
+        if spare.contains(&host.footprint) {
+            // A ground via in a pad is a return via itself, not a layer change
+            // that needs one, so it is never budgeted. A declared under-pad
+            // escape keeps it, unless the part is dense enough that the escape
+            // starves the return-via window and the budget finds no room: then
+            // the via prefers a non-pad layer change and moves like any other.
+            let ground = synth_drc::is_ground_name(&net);
+            let dense = !ground
+                && pitches
+                    .get(&host.footprint)
+                    .is_some_and(|&pitch| pitch < dense_pitch);
+            let keep = !dense
+                || budget
+                    .as_mut()
+                    .is_some_and(|b| b.reserve((via.at.x_mm(), via.at.y_mm()), &taken));
+            if keep {
+                continue;
+            }
+        }
         // A surface pad whose only link was the via keeps one: a short track from
         // the pad's centre to where the via goes.
         let stub_layer = stub_layer_of(host, via);
@@ -2205,6 +2399,13 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
             })
             .collect();
         let others: Vec<((f64, f64), f64)> = taken.clone();
+        // Spots the return-via budget reserved for in-pad vias that stay: a
+        // moved via must not take the spot another via's return is promised.
+        let reserved: Vec<(f64, f64)> = budget
+            .as_ref()
+            .map_or_else(Vec::new, |b| b.reserved.clone());
+        let return_radius = budget.as_ref().map_or(0.0, |b| nm_to_mm(b.size_nm) / 2.0);
+        let gap_of = budget.as_ref().map_or(VIA_GAP_MM, |b| b.keepout.gap_mm);
         // A via moved earlier in the pass is not in the parsed board where it now
         // sits, so a track must keep off it as it keeps off any via.
         let moved_clear = |q: (f64, f64), need: f64| {
@@ -2227,6 +2428,9 @@ fn move_vias_off_pads_with(candidate: &Path, spare: &BTreeSet<String>) -> Result
                         && earlier(at, STUB_WIDTH_MM / 2.0 + TRACK_GAP_MM)
                 });
             earlier(p, radius + VIA_GAP_MM)
+                && reserved.iter().all(|at| {
+                    (at.0 - p.0).hypot(at.1 - p.1) >= radius + return_radius + gap_of - EPS
+                })
                 && stub_clear
                 && attached.iter().all(|segment| {
                     let far = if near(segment.start, from) {
@@ -2579,12 +2783,13 @@ fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
             if let Some(after) = rest.strip_prefix(tag) {
                 let close = after.find(')').unwrap_or(after.len());
                 let mut numbers = after[..close].split_whitespace().map(str::parse::<f64>);
-                if let (Some(Ok(x)), Some(Ok(y))) = (numbers.next(), numbers.next()) {
-                    if (x - from.0).abs() < 0.002 && (y - from.1).abs() < 0.002 {
-                        let _ = write!(out, "{tag}{:.6} {:.6}", to.0, to.1);
-                        rest = &after[close..];
-                        continue 'scan;
-                    }
+                if let (Some(Ok(x)), Some(Ok(y))) = (numbers.next(), numbers.next())
+                    && (x - from.0).abs() < 0.002
+                    && (y - from.1).abs() < 0.002
+                {
+                    let _ = write!(out, "{tag}{:.6} {:.6}", to.0, to.1);
+                    rest = &after[close..];
+                    continue 'scan;
                 }
             }
         }
@@ -2608,7 +2813,7 @@ fn rewrite_points(block: &str, from: (f64, f64), to: (f64, f64)) -> String {
 /// # Errors
 /// Returns why the board could not be read or written.
 #[allow(clippy::cast_precision_loss)]
-pub fn drop_dangling_stubs(candidate: &Path) -> Result<usize, String> {
+pub fn drop_dangling_stubs(candidate: &Path) -> Result<DanglingOutcome, String> {
     let text = std::fs::read_to_string(candidate)
         .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
     let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
@@ -2657,7 +2862,51 @@ pub fn drop_dangling_stubs(candidate: &Path) -> Result<usize, String> {
         std::fs::write(candidate, out)
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
     }
-    Ok(count)
+    // A long track with one end in nothing is not a sliver: it carries a
+    // dangling branch. Report it with enough detail to find it, and let the
+    // caller block promotion rather than deliver copper that ends in space.
+    let remaining = board
+        .segments
+        .iter()
+        .enumerate()
+        .filter(|(i, segment)| {
+            alive[*i]
+                && (segment.end.x_mm() - segment.start.x_mm())
+                    .hypot(segment.end.y_mm() - segment.start.y_mm())
+                    >= nm_to_mm(segment.width_nm)
+        })
+        .filter(|(i, segment)| {
+            let (a, b) = (
+                (segment.start.x_mm(), segment.start.y_mm()),
+                (segment.end.x_mm(), segment.end.y_mm()),
+            );
+            end_touches_copper(&board, &alive, *i, a) != end_touches_copper(&board, &alive, *i, b)
+        })
+        .map(|(_, segment)| {
+            format!(
+                "net {:?} on {:?} from ({:.3}, {:.3}) to ({:.3}, {:.3}) ends in nothing",
+                segment.net,
+                segment.layer,
+                segment.start.x_mm(),
+                segment.start.y_mm(),
+                segment.end.x_mm(),
+                segment.end.y_mm()
+            )
+        })
+        .collect();
+    Ok(DanglingOutcome {
+        dropped: count,
+        remaining,
+    })
+}
+
+/// What [`drop_dangling_stubs`] did and what it could not fix.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DanglingOutcome {
+    /// Slivers shorter than their own width that were removed.
+    pub dropped: usize,
+    /// Track segments that still end in nothing after the prune.
+    pub remaining: Vec<String>,
 }
 
 /// A track of a ground net whose copper comes closer to the board outline than the
@@ -2779,10 +3028,10 @@ fn remove_segment_in_text(text: &str, ends: ((f64, f64), (f64, f64)), layer: &st
         let same = numbers("(start ")
             .zip(numbers("(end "))
             .is_some_and(|(a, b)| {
-                (a.0 - ends.0 .0).abs() < 0.002
-                    && (a.1 - ends.0 .1).abs() < 0.002
-                    && (b.0 - ends.1 .0).abs() < 0.002
-                    && (b.1 - ends.1 .1).abs() < 0.002
+                (a.0 - ends.0.0).abs() < 0.002
+                    && (a.1 - ends.0.1).abs() < 0.002
+                    && (b.0 - ends.1.0).abs() < 0.002
+                    && (b.1 - ends.1.1).abs() < 0.002
             })
             && body.contains(&format!("\"{layer}\""));
         if same {
@@ -4597,13 +4846,28 @@ mod tests {
         )
     }
 
+    #[test]
+    fn a_long_track_that_ends_in_nothing_is_reported_not_dropped() {
+        let text =
+            stub_text(r#"(segment (start 5 5) (end 9 5) (width 0.4) (layer "F.Cu") (net 1))"#);
+        let dir =
+            std::env::temp_dir().join(format!("stub-remaining-{}-{}", std::process::id(), "long"));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("board.kicad_pcb");
+        std::fs::write(&path, text).unwrap();
+        let outcome = drop_dangling_stubs(&path).unwrap();
+        assert_eq!(outcome.remaining.len(), 1, "{outcome:?}");
+        assert!(outcome.remaining[0].contains("ends in nothing"));
+        assert_eq!(outcome.dropped, 0);
+    }
+
     /// The segments left in `text` after the prune, and how many it dropped.
     fn pruned(text: &str, name: &str) -> (usize, usize) {
         let dir = std::env::temp_dir().join(format!("stub-prune-{}-{name}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("board.kicad_pcb");
         std::fs::write(&path, text).unwrap();
-        let dropped = drop_dangling_stubs(&path).unwrap();
+        let dropped = drop_dangling_stubs(&path).unwrap().dropped;
         let after = PcbBoard::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
         (dropped, after.segments.len())
     }
@@ -4684,5 +4948,245 @@ mod tests {
                (segment (start 3 0.2) (end 0 0.2) (width 0.4) (layer "F.Cu") (net 1))"#,
         );
         assert_eq!(pruned(&bridge, "bridge"), (0, 3));
+    }
+
+    // ── Per-component via-in-pad budget (absmach/synth#439) ──────────────────
+
+    /// A TSOP-like row of `count` pads at `pitch`, each pad its own signal net
+    /// with the engine-written via in it, declared as a under-pad escape. The
+    /// board declares a stackup whose thickest dielectric is `dielectric`, which
+    /// sets the return-via window, and both outer layers pour a full-covering
+    /// ground zone, so a return via has somewhere to sit wherever the pads do
+    /// not crowd it out.
+    fn dense_row(count: usize, pitch: f64, dielectric: &str) -> String {
+        let mut pads = String::new();
+        for i in 0..count {
+            let x = 10.0 + f64::from(u32::try_from(i).unwrap()) * pitch;
+            let net = i + 2;
+            let _ = write!(
+                pads,
+                "(pad \"{n}\" smd rect (at {x} 10) (size 0.3 1.2) (layers \"F.Cu\") (net {net} \"D{i}\"))",
+                n = i + 1
+            );
+            pads.push('\n');
+        }
+        let mut vias = String::new();
+        for i in 0..count {
+            let x = 10.0 + f64::from(u32::try_from(i).unwrap()) * pitch;
+            let net = i + 2;
+            let _ = write!(
+                vias,
+                "(via (at {x} 10) (size 0.6) (drill 0.3) (layers \"F.Cu\" \"B.Cu\") (net {net}))"
+            );
+            vias.push('\n');
+        }
+        let mut nets = String::new();
+        for i in 0..count {
+            let _ = write!(nets, "(net {} \"D{i}\")", i + 2);
+            nets.push('\n');
+        }
+        format!(
+            r#"(kicad_pcb
+              (version 20260206)
+              (generator "synth-eda")
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+              (stackup
+                (layer "F.Cu" (type "copper") (thickness 0.035))
+                (layer "dielectric 1" (type "core") (thickness {dielectric}))
+                (layer "B.Cu" (type "copper") (thickness 0.035)))
+              (net 0 "") (net 1 "GND")
+              {nets}
+              (footprint "Package_SO:TSOP" (at 0 0) (layer "F.Cu")
+                (property "Reference" "U1" (at 0 -2) (layer "F.SilkS"))
+                {pads})
+              {vias}
+              (zone (net 1) (net_name "GND") (layer "F.Cu") (fill yes)
+                (polygon (pts (xy 0 0) (xy 40 0) (xy 40 30) (xy 0 30)))
+                (filled_polygon (layer "F.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 30) (xy 0 30))))
+              (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+                (polygon (pts (xy 0 0) (xy 40 0) (xy 40 30) (xy 0 30)))
+                (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 30) (xy 0 30))))
+              (gr_line (start 0 0) (end 40 0) (layer "Edge.Cuts") (width 0.1))
+              (gr_line (start 40 0) (end 40 30) (layer "Edge.Cuts") (width 0.1))
+              (gr_line (start 40 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
+              (gr_line (start 0 30) (end 0 0) (layer "Edge.Cuts") (width 0.1))
+            )"#
+        )
+    }
+
+    /// The in-pad vias of a board text, as their positions in millimetres.
+    #[allow(clippy::cast_precision_loss)]
+    fn in_pad_via_positions(text: &str) -> Vec<(f64, f64)> {
+        let board = PcbBoard::parse(text).expect("board parses");
+        board
+            .vias
+            .iter()
+            .filter(|via| {
+                board.pads().any(|pad| {
+                    pad.net == via.net
+                        && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
+                })
+            })
+            .map(|via| (via.at.x_mm(), via.at.y_mm()))
+            .collect()
+    }
+
+    /// Every signal via of the routed board has a ground return via within the
+    /// rule's window, per axis, the way W-SYNTH-DRC-016 measures it.
+    fn every_return_placed(text: &str) -> bool {
+        let board = PcbBoard::parse(text).expect("board parses");
+        let window = return_via_window_mm(text, &board);
+        let is_ground = |net: Option<u32>| net == Some(1);
+        let returns: Vec<(f64, f64)> = board
+            .vias
+            .iter()
+            .filter(|via| is_ground(via.net))
+            .map(|via| (via.at.x_mm(), via.at.y_mm()))
+            .collect();
+        board
+            .vias
+            .iter()
+            .filter(|via| !is_ground(via.net))
+            .all(|via| {
+                let (vx, vy) = (via.at.x_mm(), via.at.y_mm());
+                returns
+                    .iter()
+                    .any(|&(gx, gy)| (gx - vx).abs() <= window && (gy - vy).abs() <= window)
+            })
+    }
+
+    /// A dense-pitch under-pad part whose window cannot hold a return via
+    /// beside every pad: the budget prefers a non-pad layer change, so the
+    /// in-pad vias whose return does not fit move off their pads, and the ones
+    /// it can serve stay with their return spot reserved.
+    #[test]
+    fn a_dense_under_pad_part_keeps_only_the_in_pad_vias_its_window_can_serve() {
+        // 0.3 mm of core puts the window at the 0.8 mm floor: the gaps between
+        // the long pads and the 0.8 mm pitch leave almost nothing inside it.
+        let text = dense_row(8, 0.8, "0.3");
+        let path = scratch_file("dense-moves", &text);
+        let underpad = std::collections::BTreeSet::from(["U1".to_string()]);
+        let moved = move_vias_off_component_pads(&path, &underpad).expect("the repair runs");
+        assert!(moved > 0, "a starved window must move some in-pad vias");
+        let routed = std::fs::read_to_string(&path).expect("read back");
+        let kept = in_pad_via_positions(&routed);
+        assert_eq!(
+            kept.len(),
+            8 - moved,
+            "every kept via is one the budget kept"
+        );
+        // A kept in-pad via is one whose return the probe could place: replay
+        // the probe over the kept vias and it must reserve every one.
+        let board = PcbBoard::parse(&text).expect("parses");
+        let mut budget = ReturnBudget::read(&path, &board, &text).expect("budget");
+        for &(x, y) in &kept {
+            assert!(
+                budget.reserve((x, y), &[]),
+                "the in-pad via at ({x}, {y}) has no return spot within the window"
+            );
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// And the layer changes that stay are served: each one has the ground
+    /// return via W-SYNTH-DRC-016 demands within its window, in the room the
+    /// budget accounted for, so the board no longer blocks for the rule.
+    #[test]
+    fn a_dense_part_with_moved_vias_ends_with_every_return_via_placed() {
+        let text = dense_row(8, 0.8, "0.3");
+        let path = scratch_file("dense-returns", &text);
+        let underpad = std::collections::BTreeSet::from(["U1".to_string()]);
+        move_vias_off_component_pads(&path, &underpad).expect("the repair runs");
+        let ground = Ground::new(&["GND".to_string()]);
+        let outcome = tie_islands_with(&path, &ground, &mut |path| {
+            Ok(Some(std::fs::read_to_string(path).expect("read")))
+        })
+        .expect("the fill runs");
+        assert!(
+            outcome.unresolved.is_empty(),
+            "no signal via may be left without a return: {outcome:?}"
+        );
+        let routed = std::fs::read_to_string(&path).expect("read back");
+        assert!(
+            every_return_placed(&routed),
+            "every layer change must have a ground return via within the window"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A dense part whose window is wide enough keeps its in-pad layer changes,
+    /// but only where a return via can still sit beside each one: the budget
+    /// reserves the spots, and the stitcher places the returns there.
+    #[test]
+    fn a_dense_part_with_room_keeps_in_pad_vias_and_reserves_a_return_spot_each() {
+        // 1.2 mm of core widens the window past the 0.8 mm a return via needs
+        // from the signal via and past the 1.1 mm the long pads leave.
+        let text = dense_row(8, 0.8, "1.2");
+        let path = scratch_file("dense-keeps", &text);
+        let underpad = std::collections::BTreeSet::from(["U1".to_string()]);
+        let moved = move_vias_off_component_pads(&path, &underpad).expect("the repair runs");
+        assert_eq!(moved, 0, "a kept in-pad via is one whose return fits");
+        let ground = Ground::new(&["GND".to_string()]);
+        let outcome = tie_islands_with(&path, &ground, &mut |path| {
+            Ok(Some(std::fs::read_to_string(path).expect("read")))
+        })
+        .expect("the fill runs");
+        assert!(
+            outcome.unresolved.is_empty(),
+            "the reserved return spots must be placeable: {outcome:?}"
+        );
+        assert!(
+            outcome.added > 0,
+            "the reserved return spots were not placed"
+        );
+        let routed = std::fs::read_to_string(&path).expect("read back");
+        assert!(
+            every_return_placed(&routed),
+            "every kept in-pad via must be served within the window"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A sparse part keeps its in-pad vias whatever the window: the budget
+    /// never applies to it, and the board text is untouched.
+    #[test]
+    fn a_sparse_part_keeps_its_in_pad_vias_untouched() {
+        let text = dense_row(6, 1.27, "0.3");
+        let path = scratch_file("sparse-keeps", &text);
+        let underpad = std::collections::BTreeSet::from(["U1".to_string()]);
+        let moved = move_vias_off_component_pads(&path, &underpad).expect("the repair runs");
+        assert_eq!(moved, 0, "the budget does not apply to a sparse part");
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read back"),
+            text,
+            "an unaffected part leaves the candidate as it was"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A ball grid keeps its in-pad vias: the budget probes them and finds the
+    /// pockets between the balls, but a ground via in a pad is a return via
+    /// itself and is never budgeted; and the part still routes.
+    #[test]
+    fn a_ball_grid_that_declares_the_escape_keeps_its_in_pad_vias() {
+        let text = dense_row(6, 1.27, "1.2").replace("Package_SO:TSOP", "Package_BGA:BGA");
+        let path = scratch_file("bga-keeps", &text);
+        let underpad = std::collections::BTreeSet::from(["U1".to_string()]);
+        let moved = move_vias_off_component_pads(&path, &underpad).expect("the repair runs");
+        assert_eq!(moved, 0, "the declared escape keeps its vias");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The budget applies to a declared component only: the same dense row
+    /// without the declaration has its vias moved as before, whatever the
+    /// window says.
+    #[test]
+    fn a_dense_part_without_the_declaration_is_moved_as_before() {
+        let text = dense_row(8, 0.8, "1.2");
+        let path = scratch_file("undeclared-moves", &text);
+        let moved = move_vias_off_component_pads(&path, &std::collections::BTreeSet::new())
+            .expect("the repair runs");
+        assert_eq!(moved, 8, "an undeclared escape is not exempt");
+        let _ = std::fs::remove_file(&path);
     }
 }

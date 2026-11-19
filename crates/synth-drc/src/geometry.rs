@@ -3,20 +3,17 @@
 //! Copper-to-component clearance — checks routed segments
 //! against component courtyards and pads using continuous
 //! geometry recomputed directly from `Board` + `Placement`,
-//! independent of `synth_route::grid::build_grid`.
+//! independent of any router's search grid.
 //!
-//! `synth_route::drc::check` already re-verifies the router's
-//! output, but it does so by rebuilding the *same* pitch/cell
-//! grid the router searched over — a bug in that grid's
-//! obstacle-expansion math would be invisible to both the
-//! router and that check, since they share it. This module
+//! A router that re-verifies its own output against the grid
+//! it searched over cannot see a bug in that grid's
+//! obstacle-expansion math. This module
 //! recomputes courtyard/pad rectangles straight from
 //! `pcb_courtyard_for_part` / `kicad_footprint_loader::pads`
 //! (the same public geometry primitives, never the grid) and
 //! measures exact rectangle-to-rectangle clearance against the
-//! manufacturer profile. Deliberate duplication of the
-//! extraction logic in `synth_route::grid::build_grid`, per
-//! this crate's stated principle in `lib.rs`: "a DRC engine
+//! manufacturer profile. Deliberately independent of
+//! any router's extraction logic, per this crate's stated principle in `lib.rs`: "a DRC engine
 //! that shares state with the producer can't catch the
 //! producer's bugs."
 //!
@@ -36,14 +33,14 @@
 
 use std::collections::HashMap;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, ComponentId, NetId};
 use synth_layout::kicad_footprint_loader;
 use synth_pcb::{Routing, Segment};
 use synth_place::Placement;
 
-use crate::profile::ManufacturerProfile;
 use crate::Violation;
+use crate::profile::ManufacturerProfile;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObstacleLayer {
@@ -341,11 +338,7 @@ fn segment_capsule(s: &Segment) -> Rect {
 }
 
 fn sort_pair(a: i64, b: i64) -> (i64, i64) {
-    if a < b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a < b { (a, b) } else { (b, a) }
 }
 
 /// Minimum gap between two axis-aligned rectangles. Manhattan
@@ -367,7 +360,7 @@ fn rect_gap_nm(a: &Rect, b: &Rect) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use synth_geometry::{mm_to_nm, Layer};
+    use synth_geometry::{Layer, mm_to_nm};
     use synth_ir::Board;
 
     fn load_board(path: &str) -> Board {

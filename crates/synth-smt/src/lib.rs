@@ -80,7 +80,7 @@ pub fn solve_constraint(constraint: &str) -> Result<SmtSolution, SmtError> {
         _ => {
             return Err(SmtError::Unsupported(format!(
                 "unsupported operator '{op}'"
-            )))
+            )));
         }
     };
 

@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use synth_ir::Board;
-use synth_place::{fitness, PlacementFitness};
+use synth_place::{PlacementFitness, fitness};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -182,19 +182,25 @@ fn missing_metrics_are_named_in_assumptions() {
     let board = load_board("fixtures/designs/component_cap_only.synth");
     let placement = synth_place::place(&board).expect("places");
     let report = fitness(&board, &placement);
-    assert!(!report
-        .metrics
-        .iter()
-        .any(|row| row.key == "support_distance"));
+    assert!(
+        !report
+            .metrics
+            .iter()
+            .any(|row| row.key == "support_distance")
+    );
     assert!(!report.metrics.iter().any(|row| row.key == "mating_inset"));
-    assert!(report
-        .assumptions
-        .iter()
-        .any(|note| note.contains("support_distance")));
-    assert!(report
-        .assumptions
-        .iter()
-        .any(|note| note.contains("mating_inset")));
+    assert!(
+        report
+            .assumptions
+            .iter()
+            .any(|note| note.contains("support_distance"))
+    );
+    assert!(
+        report
+            .assumptions
+            .iter()
+            .any(|note| note.contains("mating_inset"))
+    );
 }
 
 /// Print the four metrics for every example and fixture that places. Run with
@@ -206,16 +212,16 @@ fn corpus_report() {
     if let Ok(examples) = std::fs::read_dir(workspace_root().join("examples")) {
         for entry in examples.flatten() {
             let dir = entry.path();
-            if dir.is_dir() {
-                if let Ok(files) = std::fs::read_dir(&dir) {
-                    for file in files.flatten() {
-                        let path = file.path();
-                        if path
-                            .extension()
-                            .is_some_and(|extension| extension == "synth")
-                        {
-                            designs.push(path);
-                        }
+            if dir.is_dir()
+                && let Ok(files) = std::fs::read_dir(&dir)
+            {
+                for file in files.flatten() {
+                    let path = file.path();
+                    if path
+                        .extension()
+                        .is_some_and(|extension| extension == "synth")
+                    {
+                        designs.push(path);
                     }
                 }
             }

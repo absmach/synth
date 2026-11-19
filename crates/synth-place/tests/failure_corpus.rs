@@ -9,8 +9,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use synth_ir::Board;
 
@@ -92,13 +92,15 @@ fn failure_corpus_emits_structured_placement_errors() {
 
     std::thread::scope(|scope| {
         for _ in 0..workers {
-            scope.spawn(|| loop {
-                let index = next.fetch_add(1, Ordering::Relaxed);
-                let Some(path) = paths.get(index) else {
-                    break;
-                };
-                if let Err(message) = check_placement_failure(path) {
-                    failures.lock().expect("failure list").push(message);
+            scope.spawn(|| {
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(path) = paths.get(index) else {
+                        break;
+                    };
+                    if let Err(message) = check_placement_failure(path) {
+                        failures.lock().expect("failure list").push(message);
+                    }
                 }
             });
         }

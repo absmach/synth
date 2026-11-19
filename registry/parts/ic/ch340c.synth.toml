@@ -132,6 +132,14 @@ net = "vcc"
 value = "100nf"
 count = 1
 
+# At 5 V the V3 pin is the internal regulator's tap and must be decoupled. At
+# 3.3 V it is tied to the supply, so the VCC capacitor already covers it.
+[[required_decoupling]]
+net = "v3"
+value = "100nf"
+count = 1
+when_supply_over_v = 3.6
+
 [footprint_dimensions]
 width_mm = 7.4
 height_mm = 10.4

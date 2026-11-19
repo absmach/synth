@@ -29,7 +29,7 @@ use std::path::Path;
 
 use synth_geometry::Rotation;
 
-use crate::pcb_read::{mm_to_nm, PcbBoard, Point, NM_PER_MM};
+use crate::pcb_read::{NM_PER_MM, PcbBoard, Point, mm_to_nm};
 
 /// The font size of a label that does not write one: KiCad's default.
 const DEFAULT_FONT_MM: f64 = 1.0;
@@ -150,10 +150,28 @@ impl Label {
 /// # Errors
 /// Returns a description when the board cannot be read or written back.
 pub fn keep_labels_off_copper(candidate: &Path) -> Result<LabelMoves, String> {
+    keep_labels(candidate, false)
+}
+
+/// The production pass: move labels, but leave the silkscreen owned by a
+/// library footprint byte-identical. Trimming or widening it makes
+/// `kicad-cli pcb drc` report `lib_footprint_mismatch` against the library
+/// copy, which is a gate failure for a board that is otherwise correct.
+///
+/// # Errors
+/// Returns a description when the board cannot be read or written back.
+pub fn keep_labels_off_copper_preserving_footprints(
+    candidate: &Path,
+) -> Result<LabelMoves, String> {
+    keep_labels(candidate, true)
+}
+
+fn keep_labels(candidate: &Path, preserve_footprint_silk: bool) -> Result<LabelMoves, String> {
     let text = std::fs::read_to_string(candidate)
         .map_err(|e| format!("could not read {}: {e}", candidate.display()))?;
     let board = PcbBoard::parse(&text).map_err(|e| e.to_string())?;
-    let (out, moves) = keep_labels_off_copper_in(&text, &board);
+    let (out, moves) =
+        keep_labels_off_copper_with(text.as_str(), &board, MAX_SHIFT_MM, preserve_footprint_silk);
     if out != text {
         std::fs::write(candidate, out)
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
@@ -161,14 +179,16 @@ pub fn keep_labels_off_copper(candidate: &Path) -> Result<LabelMoves, String> {
     Ok(moves)
 }
 
+#[cfg(test)]
 fn keep_labels_off_copper_in(text: &str, board: &PcbBoard) -> (String, LabelMoves) {
-    keep_labels_off_copper_with(text, board, MAX_SHIFT_MM)
+    keep_labels_off_copper_with(text, board, MAX_SHIFT_MM, false)
 }
 
 fn keep_labels_off_copper_with(
     text: &str,
     board: &PcbBoard,
     reach_mm: f64,
+    preserve_footprint_silk: bool,
 ) -> (String, LabelMoves) {
     let mut out = text.to_string();
     let mut moves = LabelMoves::default();
@@ -227,6 +247,12 @@ fn keep_labels_off_copper_with(
             continue;
         }
         let Some((dx, dy, angle)) = scene.find_spot(label, &others, reach_mm) else {
+            // The export pass leaves an unmovable label where it is: hiding it
+            // would lose the designator, and the DFM check can still see the
+            // overlap. The repair pass (tests, non-export callers) hides it.
+            if preserve_footprint_silk {
+                continue;
+            }
             // A label on a hole, or over silkscreen with nowhere clear to go, is worse than none.
             if hide_label(&mut out, &label.reference) {
                 moves.hidden += 1;
@@ -240,6 +266,11 @@ fn keep_labels_off_copper_with(
             placed[index] = label.bounds_at((centre.0 + dx, centre.1 + dy), angle);
             moves.moved += 1;
         }
+    }
+    if preserve_footprint_silk {
+        // Library parity: only the labels move; the footprint's own silk is
+        // the library's bytes.
+        return (out, moves);
     }
     let (out, widened) = widen_silkscreen(&out);
     moves.widened = widened;
@@ -879,26 +910,26 @@ fn kept_pieces(cuts: &[(f64, f64)], length_mm: f64) -> Vec<(f64, f64)> {
 fn piece_text(line: &str, start: (f64, f64), end: (f64, f64), n: usize) -> String {
     let mut text = line.to_string();
     for (key, to) in [("(start", start), ("(end", end)] {
-        if let Some(k) = text.find(key) {
-            if let Some(close) = text[k..].find(')') {
-                text.replace_range(
-                    k..k + close,
-                    &format!("{key} {} {}", number(to.0), number(to.1)),
-                );
-            }
+        if let Some(k) = text.find(key)
+            && let Some(close) = text[k..].find(')')
+        {
+            text.replace_range(
+                k..k + close,
+                &format!("{key} {} {}", number(to.0), number(to.1)),
+            );
         }
     }
-    if n > 0 {
-        if let Some(u) = text.rfind("(uuid \"") {
-            let body = u + "(uuid \"".len();
-            if let Some(close) = text[body..].find('"') {
-                let mut id: Vec<char> = text[body..body + close].chars().collect();
-                if let Some(last) = id.last_mut() {
-                    let digit = last.to_digit(16).unwrap_or(0);
-                    *last = char::from_digit((digit + n as u32) % 16, 16).unwrap_or('0');
-                }
-                text.replace_range(body..body + close, &id.into_iter().collect::<String>());
+    if n > 0
+        && let Some(u) = text.rfind("(uuid \"")
+    {
+        let body = u + "(uuid \"".len();
+        if let Some(close) = text[body..].find('"') {
+            let mut id: Vec<char> = text[body..body + close].chars().collect();
+            if let Some(last) = id.last_mut() {
+                let digit = last.to_digit(16).unwrap_or(0);
+                *last = char::from_digit((digit + n as u32) % 16, 16).unwrap_or('0');
             }
+            text.replace_range(body..body + close, &id.into_iter().collect::<String>());
         }
     }
     text
@@ -1124,12 +1155,11 @@ fn silk_segments(text: &str) -> Vec<Seg> {
                         .collect();
                     out.extend(ring.windows(2).map(|w| (to_board(w[0]), to_board(w[1]))));
                 }
-            } else if graphic.starts_with("(fp_arc") {
-                if let (Some(a), Some(m), Some(b)) = (point("(start"), point("(mid"), point("(end"))
-                {
-                    out.push((to_board(a), to_board(m)));
-                    out.push((to_board(m), to_board(b)));
-                }
+            } else if graphic.starts_with("(fp_arc")
+                && let (Some(a), Some(m), Some(b)) = (point("(start"), point("(mid"), point("(end"))
+            {
+                out.push((to_board(a), to_board(m)));
+                out.push((to_board(m), to_board(b)));
             }
         }
     }
@@ -1566,6 +1596,23 @@ mod tests {
                 .count(),
             1,
             "the second piece has its own uuid"
+        );
+    }
+
+    /// Export parity: the production pass moves labels but leaves the
+    /// library footprint's own silkscreen bytes alone.
+    #[test]
+    fn the_export_pass_does_not_rewrite_library_footprint_silk() {
+        let text =
+            outlined(r#"  (via (at 20 22) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 1))"#);
+        let board = PcbBoard::parse(&text).unwrap();
+        let (out, moves) = keep_labels_off_copper_with(&text, &board, MAX_SHIFT_MM, true);
+        assert_eq!(moves.trimmed, 0);
+        assert_eq!(moves.widened, 0);
+        assert_eq!(
+            outline_lines(&out),
+            outline_lines(&text),
+            "the library outline is untouched"
         );
     }
 

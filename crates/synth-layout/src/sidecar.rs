@@ -342,13 +342,12 @@ impl SidecarLayout {
     }
 
     pub fn merge_override(&mut self, refdes: String, placement: SidecarPlacement) {
-        if let Some(existing) = self.components.get(&refdes) {
-            if existing.source == OverrideSource::HumanDrag
-                && placement.source == OverrideSource::Agent
-                && existing.priority >= placement.priority
-            {
-                return;
-            }
+        if let Some(existing) = self.components.get(&refdes)
+            && existing.source == OverrideSource::HumanDrag
+            && placement.source == OverrideSource::Agent
+            && existing.priority >= placement.priority
+        {
+            return;
         }
         self.components.insert(refdes, placement);
     }
@@ -372,21 +371,21 @@ impl SidecarLayout {
             // Stale-sheet guard (§P26): coordinates are sheet-local,
             // so an override recorded on another sheet must not move
             // this component.
-            if let Some(want) = override_pos.sheet.as_deref() {
-                if sheet_of(refdes) != Some(want) {
-                    continue;
-                }
+            if let Some(want) = override_pos.sheet.as_deref()
+                && sheet_of(refdes) != Some(want)
+            {
+                continue;
             }
-            if let Some(&comp_id) = refdes_to_id.get(refdes) {
-                if let Some(placement) = layout.components.iter_mut().find(|p| p.id == comp_id) {
-                    placement.center_mm = (override_pos.x, override_pos.y);
-                    placement.rotation = match override_pos.rotation {
-                        90 => Rotation::Ninety,
-                        180 => Rotation::OneEighty,
-                        270 => Rotation::TwoSeventy,
-                        _ => Rotation::Zero,
-                    };
-                }
+            if let Some(&comp_id) = refdes_to_id.get(refdes)
+                && let Some(placement) = layout.components.iter_mut().find(|p| p.id == comp_id)
+            {
+                placement.center_mm = (override_pos.x, override_pos.y);
+                placement.rotation = match override_pos.rotation {
+                    90 => Rotation::Ninety,
+                    180 => Rotation::OneEighty,
+                    270 => Rotation::TwoSeventy,
+                    _ => Rotation::Zero,
+                };
             }
         }
 
@@ -399,10 +398,10 @@ impl SidecarLayout {
                 .iter()
                 .filter(|(_, p)| p.relative_to.is_some())
             {
-                if let Some(want) = override_pos.sheet.as_deref() {
-                    if sheet_of(refdes) != Some(want) {
-                        continue;
-                    }
+                if let Some(want) = override_pos.sheet.as_deref()
+                    && sheet_of(refdes) != Some(want)
+                {
+                    continue;
                 }
                 let Some(anchor) = override_pos.relative_to.as_ref() else {
                     continue;
@@ -634,10 +633,12 @@ hide = true
         use synth_diagnostics::Span;
         use synth_ir::{Board, Component, ComponentId};
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,
@@ -665,6 +666,7 @@ hide = true
             diff_pairs: Vec::new(),
             notes: Vec::new(),
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -774,10 +776,12 @@ mod forced_label_tests {
             source_span: Span::new(0, 0),
         };
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "t".to_string(),
             layers: 2,
             manufacturer: None,
@@ -806,6 +810,7 @@ mod forced_label_tests {
             diff_pairs: Vec::new(),
             notes: Vec::new(),
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],

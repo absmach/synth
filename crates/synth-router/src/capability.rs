@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::contract::{RouteRequest, RouterEngine};
 use crate::failure::{RouterFailure, RouterFailureReason, RouterStage};
+use crate::tools::ToolPaths;
 
 /// FreeRouting JAR filename the project pins by default.
 pub const PINNED_FREEROUTING_JAR: &str = "freerouting-2.4.1.jar";
@@ -106,6 +107,15 @@ pub fn discover(request: &RouteRequest) -> RouterCapability {
     match request.engine {
         RouterEngine::Freerouting => freerouting_capability(request),
         RouterEngine::KiCadRoutingTools => krt_capability(request),
+        RouterEngine::Fastroute => fastroute_capability(request),
+        // The internal router is compiled in, so there is nothing to
+        // discover: it is always runnable, and the version it routes with is
+        // this crate's own.
+        RouterEngine::Internal => RouterCapability::available(
+            RouterEngine::Internal,
+            Some(env!("CARGO_PKG_VERSION").to_string()),
+            None,
+        ),
     }
 }
 
@@ -139,18 +149,19 @@ pub fn discover_all_in_out_dir(out_dir: &Path) -> Vec<RouterCapability> {
 // ── FreeRouting ──────────────────────────────────────────────────────────────
 
 fn freerouting_capability(request: &RouteRequest) -> RouterCapability {
-    let Some(jar) = resolve_jar(request) else {
+    let tools = &request.tools;
+    let Some(jar) = crate::freerouting::resolve_jar(tools) else {
         return RouterCapability::unavailable(
             RouterEngine::Freerouting,
             RouterFailureReason::JarMissing,
             format!(
                 "no FreeRouting JAR found; looked at {} and set SYNTH_FREEROUTING_JAR",
-                searched_jar_paths().join(", ")
+                searched_jar_paths(tools).join(", ")
             ),
         );
     };
 
-    let Some(java) = resolve_java() else {
+    let Some(java) = crate::freerouting::resolve_java(tools) else {
         return RouterCapability::unavailable(
             RouterEngine::Freerouting,
             RouterFailureReason::JavaMissing,
@@ -169,12 +180,12 @@ fn freerouting_capability(request: &RouteRequest) -> RouterCapability {
 /// before a loose glob so a stray newer JAR in the directory cannot
 /// silently change which engine version runs.
 #[must_use]
-pub fn searched_jar_paths() -> Vec<String> {
+pub fn searched_jar_paths(tools: &ToolPaths) -> Vec<String> {
     let mut paths = Vec::new();
-    if let Some(configured) = configured_jar() {
+    if let Some(configured) = &tools.freerouting_jar {
         paths.push(configured.display().to_string());
     }
-    for base in tool_roots() {
+    for base in crate::freerouting::tool_roots(tools) {
         paths.push(
             base.join("freerouting")
                 .join(PINNED_FREEROUTING_JAR)
@@ -183,53 +194,6 @@ pub fn searched_jar_paths() -> Vec<String> {
         );
     }
     paths
-}
-
-fn configured_jar() -> Option<PathBuf> {
-    std::env::var_os("SYNTH_FREEROUTING_JAR")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-}
-
-fn resolve_jar(_request: &RouteRequest) -> Option<PathBuf> {
-    if let Some(configured) = configured_jar() {
-        return configured.is_file().then_some(configured);
-    }
-    tool_roots()
-        .into_iter()
-        .map(|base| base.join("freerouting").join(PINNED_FREEROUTING_JAR))
-        .find(|p| p.is_file())
-}
-
-/// Directories that may hold `tools/freerouting/` and the bundled JRE.
-fn tool_roots() -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Ok(configured) = std::env::var("SYNTH_TOOLS_DIR") {
-        let path = PathBuf::from(configured);
-        if !path.as_os_str().is_empty() {
-            roots.push(path);
-        }
-    }
-    if let Some(root) = crate::repo_root() {
-        roots.push(root.join("tools"));
-        if let Some(parent) = root.parent() {
-            roots.push(parent.join("tools"));
-        }
-    }
-    roots
-}
-
-fn resolve_java() -> Option<PathBuf> {
-    for root in tool_roots() {
-        let bundled = root.join("jre25").join("bin").join("java");
-        if bundled.is_file() {
-            return Some(bundled);
-        }
-    }
-    // Fall back to PATH: a JVM that is not in the tools tree but is on
-    // PATH is still usable, and requiring a bundled copy would make the
-    // default path fail on any machine that installed Java normally.
-    which("java")
 }
 
 /// Locate an executable on `PATH`.
@@ -286,7 +250,7 @@ pub fn probe_runtime_version(binary: &Path) -> Option<String> {
     probe_version(binary, &["-version"])
 }
 
-fn probe_version(binary: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn probe_version(binary: &Path, args: &[&str]) -> Option<String> {
     let owned: Vec<String> = args.iter().map(|a| (*a).to_string()).collect();
     let invocation = crate::process::run(binary, &owned, PROBE_BUDGET, 4096).ok()?;
     if !invocation.succeeded() {
@@ -300,13 +264,149 @@ fn probe_version(binary: &Path, args: &[&str]) -> Option<String> {
         .map(ToString::to_string)
 }
 
+// ── FastRoute ────────────────────────────────────────────────────────────────
+
+/// Resolve a FastRoute binary: explicit flag/env, the conventional install
+/// location, a bundled tool, then `PATH`.
+#[must_use]
+pub(crate) fn resolve_fastroute(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.fastroute_bin {
+        return configured.is_file().then(|| configured.clone());
+    }
+    let conventional = tools
+        .data_dir
+        .as_ref()?
+        .join("synth")
+        .join("fastroute")
+        .join("fastroute");
+    if conventional.is_file() {
+        return Some(conventional);
+    }
+    if let Some(bundled) = crate::repo_root()
+        && let candidate = bundled.join("tools").join("fastroute").join("fastroute")
+        && candidate.is_file()
+    {
+        return Some(candidate);
+    }
+    which("fastroute")
+}
+
+fn fastroute_capability(request: &RouteRequest) -> RouterCapability {
+    let Some(binary) = resolve_fastroute(&request.tools) else {
+        return RouterCapability::unavailable(
+            RouterEngine::Fastroute,
+            RouterFailureReason::NotInstalled,
+            "no FastRoute binary found; set SYNTH_FASTROUTE_BIN or pass --fastroute-binary",
+        );
+    };
+    // A binary that cannot answer `--version` is not a usable FastRoute:
+    // its provenance would be unknown and its DSN/SES contract unverified.
+    let Some(version) = probe_version(&binary, &["--version"]) else {
+        return RouterCapability::unavailable(
+            RouterEngine::Fastroute,
+            RouterFailureReason::NotInstalled,
+            format!(
+                "{} did not answer `--version`; not a usable FastRoute",
+                binary.display()
+            ),
+        );
+    };
+    RouterCapability::available(RouterEngine::Fastroute, Some(version), None)
+}
+
 // ── KiCadRoutingTools ────────────────────────────────────────────────────────
 
 /// The file that must exist for a checkout to be usable.
 pub const KRT_ENTRYPOINT: &str = "py_router/route.py";
 
-fn krt_capability(_request: &RouteRequest) -> RouterCapability {
-    let Some(repo) = resolve_krt_repo() else {
+/// KRT's own capability manifest.
+///
+/// Checking that `route.py` exists passes for a clone on the wrong branch or
+/// one missing the module the chain needs — the run then completes, prints
+/// green, and describes an engine the repo does not pin. KRT publishes this
+/// manifest precisely so a consumer can assert what a checkout actually
+/// provides before it routes. Synth asserts against it at discovery time, so
+/// an unusable checkout is reported as unavailable with the missing tokens
+/// named rather than as a validation failure after a wasted route.
+pub const KRT_CAPABILITIES_SCRIPT: &str = "krt_capabilities.py";
+
+/// The modules and flags the KRT helper drives.
+///
+/// Keep this list in step with `tools/kicad_routing_tools_route.py`. A token
+/// here the helper never uses would reject a checkout that could route the
+/// board; a token the helper does use but that is absent here is exactly the
+/// hole this check exists to close. KRT's `--require` exits non-zero and
+/// names every gap, so the failure message is actionable without Synth
+/// interpreting KRT's manifest.
+pub const KRT_REQUIRED_CAPABILITIES: &[&str] = &[
+    "route.py:--stats",
+    "route.py:--json-out",
+    "route.py:--write-fill",
+    "route.py:--strict-sizes",
+    "route.py:--same-net-pad-clearance",
+    "route.py:--escalation",
+    "route.py:--fab-tier",
+    "route.py:--fab-overrides",
+    "route.py:--ordering",
+    "route.py:--via-cost",
+    "route.py:--layers",
+    "route.py:--nets",
+    "bga_fanout.py:--escape-method",
+    "bga_fanout.py:--clearance",
+    "bga_fanout.py:--component",
+    "bga_fanout.py:--output",
+    "bga_fanout.py:--via-size",
+    "bga_fanout.py:--via-drill",
+    "route_planes.py:--nets",
+    "route_planes.py:--plane-layers",
+    "qfn_fanout.py:--component",
+    "qfn_fanout.py:--output",
+    "qfn_fanout.py:--clearance",
+    "qfn_fanout.py:--no-fix-drc-settings",
+    "check_connected.py",
+];
+
+/// Assert that a checkout provides every module and flag Synth drives.
+///
+/// The check is run with the same interpreter the route will use, so a
+/// checkout whose flags change between Python environments cannot pass here
+/// and fail there. A missing manifest is reported by name rather than
+/// silently skipped: "no way to verify" is not a verification.
+fn verify_krt_capabilities(repo: &Path, python: &Path) -> Result<(), String> {
+    let manifest = repo.join(KRT_CAPABILITIES_SCRIPT);
+    if !manifest.is_file() {
+        return Err(format!(
+            "{KRT_CAPABILITIES_SCRIPT} is missing from {}; Synth needs it to verify that the \
+             checkout provides the flags the router drives",
+            repo.display()
+        ));
+    }
+    let mut argv = vec![manifest.display().to_string(), "--require".to_string()];
+    argv.extend(
+        KRT_REQUIRED_CAPABILITIES
+            .iter()
+            .map(|token| (*token).to_string()),
+    );
+    argv.push("--quiet".to_string());
+    let invocation = crate::process::run(python, &argv, PROBE_BUDGET, 8192)
+        .map_err(|error| format!("could not run {}: {}", manifest.display(), error.detail))?;
+    if invocation.succeeded() {
+        return Ok(());
+    }
+    let detail = invocation.combined_output().trim().to_string();
+    Err(if detail.is_empty() {
+        format!(
+            "{KRT_CAPABILITIES_SCRIPT} rejected the checkout with exit {:?}",
+            invocation.exit_code
+        )
+    } else {
+        detail
+    })
+}
+
+fn krt_capability(request: &RouteRequest) -> RouterCapability {
+    let tools = &request.tools;
+    let Some(repo) = resolve_krt_repo(tools) else {
         return RouterCapability::unavailable(
             RouterEngine::KiCadRoutingTools,
             RouterFailureReason::CheckoutMissing,
@@ -339,13 +439,25 @@ fn krt_capability(_request: &RouteRequest) -> RouterCapability {
         );
     }
 
-    let Some(python) = resolve_python() else {
+    let Some(python) = resolve_python(tools) else {
         return RouterCapability::unavailable(
             RouterEngine::KiCadRoutingTools,
             RouterFailureReason::PythonMissing,
             "no Python interpreter found; pass --kicad-routing-tools-python",
         );
     };
+
+    // A route.py file is not a pin. Verify the checkout actually speaks the
+    // flags the helper will pass before reporting it available; otherwise
+    // `synth routers` and the run record would both claim an engine that
+    // only partly exists.
+    if let Err(detail) = verify_krt_capabilities(&repo, &python) {
+        return RouterCapability::unavailable(
+            RouterEngine::KiCadRoutingTools,
+            RouterFailureReason::CheckoutMissing,
+            detail,
+        );
+    }
 
     RouterCapability::available(
         RouterEngine::KiCadRoutingTools,
@@ -356,25 +468,20 @@ fn krt_capability(_request: &RouteRequest) -> RouterCapability {
 
 /// Resolve the KRT checkout.
 ///
-/// An explicit `KICAD_ROUTING_TOOLS_REPO` always wins. Otherwise fall back to
-/// the location `scripts/setup-routing-engines.sh` installs to, so a machine
-/// that ran the setup script uses KiCadRoutingTools without exporting any
-/// environment. The CLI flag is threaded through the request by the caller
-/// that owns it, so the flag takes precedence by arriving as an already
-/// resolved path.
-pub(crate) fn resolve_krt_repo() -> Option<PathBuf> {
-    if let Some(configured) = std::env::var_os("KICAD_ROUTING_TOOLS_REPO")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return configured.is_dir().then_some(configured);
+/// A configured checkout ([`ToolPaths::krt_repo`], from the CLI flag or
+/// `KICAD_ROUTING_TOOLS_REPO`) always wins. Otherwise fall back to the
+/// location `scripts/setup-routing-engines.sh` installs to, so a machine that
+/// ran the setup script uses KiCadRoutingTools without exporting any
+/// environment.
+pub(crate) fn resolve_krt_repo(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.krt_repo {
+        return configured.is_dir().then(|| configured.clone());
     }
-    let data = std::env::var_os("XDG_DATA_HOME")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local").join("share"))
-        })?;
-    let conventional = data.join("synth").join("kicad-routing-tools");
+    let conventional = tools
+        .data_dir
+        .as_ref()?
+        .join("synth")
+        .join("kicad-routing-tools");
     conventional.is_dir().then_some(conventional)
 }
 
@@ -391,15 +498,12 @@ pub(crate) fn resolve_krt_repo() -> Option<PathBuf> {
 /// returns a `PATH` interpreter without executing it, so a machine with no
 /// pcbnew-capable Python still reports "available" here and fails later with
 /// KRT's own, clearer message.
-pub(crate) fn resolve_python() -> Option<PathBuf> {
-    if let Some(configured) = std::env::var_os("SYNTH_KRT_PYTHON")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return configured.is_file().then_some(configured);
+pub(crate) fn resolve_python(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.krt_python {
+        return configured.is_file().then(|| configured.clone());
     }
     let mut absolute: Vec<PathBuf> = Vec::new();
-    if let Some(repo) = resolve_krt_repo() {
+    if let Some(repo) = resolve_krt_repo(tools) {
         absolute.push(repo.join(".venv").join("bin").join("python"));
     }
     absolute.push(PathBuf::from("/usr/bin/python3"));
@@ -529,44 +633,174 @@ mod tests {
         }
     }
 
+    /// A request whose tool locations are exactly `tools`, ignoring the
+    /// environment of the machine running the tests.
+    fn isolated_request(engine: RouterEngine, tools: ToolPaths) -> RouteRequest {
+        let mut request =
+            RouteRequest::new(Path::new("/tmp/board.kicad_pcb"), Path::new("/tmp"), engine);
+        request.tools = tools;
+        request
+    }
+
     #[test]
     fn an_unconfigured_krt_checkout_reports_checkout_missing() {
-        // Discovery falls back to the conventional install dir when the env
-        // var is unset, so point both XDG_DATA_HOME and HOME at an empty
-        // scratch tree to make "no checkout anywhere" true regardless of what
-        // is installed on the machine running the tests.
-        let data = std::env::temp_dir().join(format!("synth-krt-empty-{}", std::process::id()));
-        std::fs::create_dir_all(&data).expect("scratch");
-        let previous_repo = std::env::var_os("KICAD_ROUTING_TOOLS_REPO");
-        let previous_xdg = std::env::var_os("XDG_DATA_HOME");
-        let previous_home = std::env::var_os("HOME");
-        std::env::remove_var("KICAD_ROUTING_TOOLS_REPO");
-        std::env::set_var("XDG_DATA_HOME", &data);
-        std::env::set_var("HOME", &data);
-
-        let request = RouteRequest::new(
-            Path::new("/tmp/board.kicad_pcb"),
-            Path::new("/tmp"),
-            RouterEngine::KiCadRoutingTools,
-        );
+        // No configured checkout and no data dir: the conventional install
+        // location is not searched, whatever the test machine has installed.
+        let request = isolated_request(RouterEngine::KiCadRoutingTools, ToolPaths::default());
         let capability = discover(&request);
         assert!(!capability.available);
         assert_eq!(
             capability.failure().expect("failure").reason,
             RouterFailureReason::CheckoutMissing
         );
+    }
 
-        for (name, value) in [
-            ("KICAD_ROUTING_TOOLS_REPO", previous_repo),
-            ("XDG_DATA_HOME", previous_xdg),
-            ("HOME", previous_home),
-        ] {
-            match value {
-                Some(v) => std::env::set_var(name, v),
-                None => std::env::remove_var(name),
-            }
-        }
+    #[test]
+    fn an_empty_data_dir_holds_no_conventional_checkout() {
+        let data = std::env::temp_dir().join(format!("synth-krt-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&data).expect("scratch");
+        let request = isolated_request(
+            RouterEngine::KiCadRoutingTools,
+            ToolPaths {
+                data_dir: Some(data.clone()),
+                ..ToolPaths::default()
+            },
+        );
+        let capability = discover(&request);
+        assert_eq!(
+            capability.failure().expect("failure").reason,
+            RouterFailureReason::CheckoutMissing
+        );
         let _ = std::fs::remove_dir_all(&data);
+    }
+
+    /// A scratch interpreter that returns a canned answer, so the capability
+    /// check can be tested without whichever Python happens to be installed.
+    fn fake_python(dir: &Path, body: &str) -> PathBuf {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let script = dir.join("fake-python");
+            std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).expect("write script");
+            let mut permissions = std::fs::metadata(&script).expect("metadata").permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&script, permissions).expect("chmod");
+            script
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = (dir, body);
+            PathBuf::from("python3")
+        }
+    }
+
+    #[test]
+    fn a_configured_fastroute_binary_wins_over_path_discovery() {
+        let dir = std::env::temp_dir().join(format!("synth-fastroute-bin-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let binary = dir.join("fastroute");
+        std::fs::write(&binary, b"binary").expect("write binary");
+        let tools = ToolPaths {
+            fastroute_bin: Some(binary.clone()),
+            data_dir: Some(dir.clone()),
+            ..ToolPaths::default()
+        };
+        assert_eq!(resolve_fastroute(&tools), Some(binary));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_missing_fastroute_binary_is_reported_as_unavailable() {
+        let tools = ToolPaths {
+            fastroute_bin: Some(PathBuf::from("/nonexistent/fastroute")),
+            data_dir: Some(PathBuf::from("/nonexistent/data")),
+            ..ToolPaths::default()
+        };
+        let request = isolated_request(RouterEngine::Fastroute, tools);
+        let capability = discover(&request);
+        assert!(!capability.available);
+        assert_eq!(
+            capability.failure().expect("failure").reason,
+            RouterFailureReason::NotInstalled
+        );
+    }
+
+    #[test]
+    fn krt_required_capabilities_cover_the_helper_contract() {
+        assert!(!KRT_REQUIRED_CAPABILITIES.is_empty());
+        let mut unique = std::collections::BTreeSet::new();
+        for token in KRT_REQUIRED_CAPABILITIES {
+            assert!(
+                unique.insert(*token),
+                "duplicate KRT capability token {token}"
+            );
+            assert!(
+                token.contains(':')
+                    || Path::new(token)
+                        .extension()
+                        .is_some_and(|extension| extension.eq_ignore_ascii_case("py")),
+                "a token must name a module or a module and flag: {token}"
+            );
+        }
+        // The helper's two ends of the chain: routing and escape.
+        assert!(KRT_REQUIRED_CAPABILITIES.contains(&"route.py:--json-out"));
+        assert!(KRT_REQUIRED_CAPABILITIES.contains(&"check_connected.py"));
+    }
+
+    #[test]
+    fn a_checkout_without_the_capability_manifest_cannot_be_verified() {
+        let dir = std::env::temp_dir().join(format!(
+            "krt-no-manifest-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let error = verify_krt_capabilities(&dir, Path::new("/usr/bin/python3"))
+            .expect_err("a checkout without a manifest must fail verification");
+        assert!(error.contains(KRT_CAPABILITIES_SCRIPT), "{error}");
+        assert!(error.contains("missing"), "{error}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// KRT's manifest prints the exact gaps and exits 3. Synth forwards that
+    /// answer rather than replacing it with a generic "checkout unusable".
+    #[test]
+    fn a_checkout_missing_flags_names_the_gaps() {
+        let dir = std::env::temp_dir().join(format!(
+            "krt-gaps-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        std::fs::write(dir.join(KRT_CAPABILITIES_SCRIPT), "manifest").expect("manifest");
+        let python = fake_python(
+            &dir,
+            "echo '  - route.py --bogus (flag not supported)'\nexit 3",
+        );
+        let error = verify_krt_capabilities(&dir, &python)
+            .expect_err("a checkout that fails --require must fail verification");
+        assert!(error.contains("route.py --bogus"), "{error}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_checkout_that_satisfies_every_requirement_is_verified() {
+        let dir = std::env::temp_dir().join(format!(
+            "krt-verified-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        std::fs::write(dir.join(KRT_CAPABILITIES_SCRIPT), "manifest").expect("manifest");
+        let python = fake_python(&dir, "exit 0");
+        assert!(verify_krt_capabilities(&dir, &python).is_ok());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
@@ -574,13 +808,12 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("synth_krt_probe_{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch");
         // Point discovery at a real directory that is not a KRT checkout.
-        let previous = std::env::var_os("KICAD_ROUTING_TOOLS_REPO");
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", &dir);
-
-        let request = RouteRequest::new(
-            Path::new("/tmp/board.kicad_pcb"),
-            Path::new("/tmp"),
+        let request = isolated_request(
             RouterEngine::KiCadRoutingTools,
+            ToolPaths {
+                krt_repo: Some(dir.clone()),
+                ..ToolPaths::default()
+            },
         );
         let capability = discover(&request);
         assert!(!capability.available);
@@ -591,11 +824,46 @@ mod tests {
             "{}",
             failure.detail
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
-        match previous {
-            Some(value) => std::env::set_var("KICAD_ROUTING_TOOLS_REPO", value),
-            None => std::env::remove_var("KICAD_ROUTING_TOOLS_REPO"),
-        }
+    #[test]
+    fn discovery_and_the_run_resolve_the_same_configured_java() {
+        // Discovery used to ignore the configured Java and report the bundled
+        // or PATH one, so `synth routers` could disagree with the run.
+        let dir = std::env::temp_dir().join(format!("synth_fr_probe_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let jar = dir.join("freerouting.jar");
+        let java = dir.join("java");
+        std::fs::write(&jar, b"jar").expect("jar");
+        std::fs::write(&java, b"java").expect("java");
+        let missing_java = dir.join("no-java-here");
+
+        let configured = ToolPaths {
+            freerouting_jar: Some(jar.clone()),
+            freerouting_java: Some(java.clone()),
+            ..ToolPaths::default()
+        };
+        assert_eq!(crate::freerouting::resolve_java(&configured), Some(java));
+        let request = isolated_request(RouterEngine::Freerouting, configured);
+        assert!(
+            discover(&request).available,
+            "configured jar and java are used"
+        );
+
+        let request = isolated_request(
+            RouterEngine::Freerouting,
+            ToolPaths {
+                freerouting_jar: Some(jar),
+                freerouting_java: Some(missing_java),
+                ..ToolPaths::default()
+            },
+        );
+        assert_eq!(
+            discover(&request).failure().expect("failure").reason,
+            RouterFailureReason::JavaMissing,
+            "a configured Java that does not exist is not silently replaced"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

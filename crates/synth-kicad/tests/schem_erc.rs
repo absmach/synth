@@ -17,10 +17,12 @@ use synth_registry::{Lifecycle, Part, PartId, Pin, PinNumber, RequiredDecoupling
 
 fn empty_board() -> Board {
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "test".to_string(),
         layers: 2,
         manufacturer: None,
@@ -31,6 +33,7 @@ fn empty_board() -> Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],
@@ -122,6 +125,9 @@ fn part(kind: &str) -> Part {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
             },
             Pin {
                 name: "2".to_string(),
@@ -134,6 +140,9 @@ fn part(kind: &str) -> Part {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
             },
         ],
         required_decoupling: Vec::new(),
@@ -142,6 +151,7 @@ fn part(kind: &str) -> Part {
         footprint_dimensions: None,
         operating_conditions: None,
         provenance: None,
+        spice: None,
     }
 }
 
@@ -215,15 +225,18 @@ fn decoupling_board() -> Board {
         max_distance_mm: None,
         to: None,
         through: None,
+        when_supply_over_v: None,
     }];
     let mut cap_part = part("capacitor");
     cap_part.required_decoupling = Vec::new();
 
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "dec".to_string(),
         layers: 2,
         manufacturer: None,
@@ -281,6 +294,7 @@ fn decoupling_board() -> Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],
@@ -306,10 +320,12 @@ fn schem_003_fires_on_cap_far_from_ic() {
     let violations = rule(check(&layout, &board), "E-SYNTH-SCHEM-003");
     assert_eq!(violations.len(), 1);
     assert_eq!(violations[0].code, "E-SYNTH-SCHEM-003");
-    assert!(violations[0]
-        .entities
-        .iter()
-        .any(|e| matches!(e, EntityRef::Component { id } if id == "U1")));
+    assert!(
+        violations[0]
+            .entities
+            .iter()
+            .any(|e| matches!(e, EntityRef::Component { id } if id == "U1"))
+    );
 }
 
 #[test]

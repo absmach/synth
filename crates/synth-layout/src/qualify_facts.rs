@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use synth_registry::qualify::{FootprintFacts, ModelFacts, PadFacts, PadSide, SymbolFacts};
 
-use crate::kicad_footprint_loader::{self, PadCopperLayers, MODEL_DIR};
+use crate::kicad_footprint_loader::{self, MODEL_DIR, PadCopperLayers};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct InstalledKicad;
@@ -78,6 +78,10 @@ impl FootprintFacts for InstalledKicad {
 impl SymbolFacts for InstalledKicad {
     fn pin_numbers(&self, lib_id: &str) -> Option<BTreeSet<String>> {
         synth_registry::kicad_pin_numbers(lib_id)
+    }
+
+    fn pin_names(&self, lib_id: &str) -> Option<BTreeMap<String, BTreeSet<String>>> {
+        synth_registry::kicad_pin_names(lib_id)
     }
 }
 

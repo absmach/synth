@@ -1,0 +1,17 @@
+# Testbench for examples/led/led.synth.
+ground = "GND"
+
+[[source]]
+net = "VCC"
+kind = "dc"
+dc = 5.0
+
+[analysis]
+op = true
+
+[[measure]]
+name = "iled"
+kind = "current"
+element = "LED1"
+min = 0.019
+max = 0.021

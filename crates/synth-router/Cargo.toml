@@ -14,7 +14,6 @@ workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 synth-diagnostics = { workspace = true }
@@ -22,6 +21,9 @@ synth-drc = { workspace = true }
 synth-geometry = { workspace = true }
 synth-ir = { workspace = true }
 synth-place = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", features = ["signal"] }
 
 [dev-dependencies]
 sha2 = { workspace = true }

@@ -148,10 +148,10 @@ impl Node {
     /// board's net and version data, so both are accepted.
     #[must_use]
     pub fn child_atom(&self, key: &str) -> Option<&str> {
-        if let Some(child) = self.find(key) {
-            if let Some(value) = child.body().first().and_then(Node::as_str) {
-                return Some(value);
-            }
+        if let Some(child) = self.find(key)
+            && let Some(value) = child.body().first().and_then(Node::as_str)
+        {
+            return Some(value);
         }
         let idx = self.body().iter().position(|n| n.as_str() == Some(key))?;
         self.body().get(idx + 1).and_then(Node::as_str)
@@ -1149,10 +1149,10 @@ impl PcbBoard {
             }
         }
         for zone in &mut self.zones {
-            if zone.net.is_none() {
-                if let Some(name) = &zone.net_name {
-                    zone.net = codes.get(name).copied();
-                }
+            if zone.net.is_none()
+                && let Some(name) = &zone.net_name
+            {
+                zone.net = codes.get(name).copied();
             }
         }
     }
@@ -1466,7 +1466,7 @@ fn pad_drill_offset_nm(pad: &Node) -> (i64, i64) {
 
 /// Midpoint of `lo..=hi` that cannot overflow.
 fn mid_nm(lo: i64, hi: i64) -> i64 {
-    ((i128::from(lo) + i128::from(hi)) / 2) as i64
+    i128::midpoint(i128::from(lo), i128::from(hi)) as i64
 }
 
 /// Bounding box `(centre offset, size)` of a custom pad's anchor and
@@ -1803,7 +1803,7 @@ mod tests {
         assert_eq!(super::mid_nm(1, 3), 2);
         assert_eq!(super::mid_nm(i64::MIN, i64::MAX), 0);
         for (lo, hi) in [(-3, -1), (-3, 2), (-5, 4), (0, 7)] {
-            assert_eq!(super::mid_nm(lo, hi), (lo + hi) / 2);
+            assert_eq!(super::mid_nm(lo, hi), i64::midpoint(lo, hi));
         }
     }
 

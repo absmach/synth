@@ -163,14 +163,14 @@ fn attr(tag: &str, name: &str) -> Option<String> {
         let at = from + rel;
         let after = at + name.len();
         let rest = &tag[after..];
-        if let Some(eq) = rest.find('=') {
-            if rest[..eq].trim().is_empty() {
-                let quoted = rest[eq + 1..].trim_start();
-                if let Some(quoted) = quoted.strip_prefix('"') {
-                    if let Some(end) = quoted.find('"') {
-                        return Some(quoted[..end].to_string());
-                    }
-                }
+        if let Some(eq) = rest.find('=')
+            && rest[..eq].trim().is_empty()
+        {
+            let quoted = rest[eq + 1..].trim_start();
+            if let Some(quoted) = quoted.strip_prefix('"')
+                && let Some(end) = quoted.find('"')
+            {
+                return Some(quoted[..end].to_string());
             }
         }
         from = after;

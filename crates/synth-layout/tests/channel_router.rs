@@ -8,7 +8,7 @@
 //! those tracks — guaranteed minimum pitch and zero line overlap.
 
 use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
-use synth_layout::{route, ComponentPlacement, Layout, Rotation, SheetSize};
+use synth_layout::{ComponentPlacement, Layout, Rotation, SheetSize, route};
 use synth_registry::{ElectricalType, Lifecycle, Part, PartId, Pin, PinNumber};
 
 fn two_pin_part() -> Part {
@@ -35,6 +35,9 @@ fn two_pin_part() -> Part {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
             },
             Pin {
                 name: "p2".to_string(),
@@ -47,6 +50,9 @@ fn two_pin_part() -> Part {
                 voltage_max_v: None,
                 voltage_min_v: None,
                 voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
             },
         ],
         required_decoupling: Vec::new(),
@@ -54,6 +60,7 @@ fn two_pin_part() -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -111,10 +118,12 @@ fn horizontal_y_segments(pts: &[(f64, f64)]) -> Vec<f64> {
 /// packing MUST put them on separate track levels.
 fn two_row_board_and_layout() -> (Board, Layout) {
     let board = Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "channel".to_string(),
         layers: 2,
         manufacturer: None,
@@ -147,6 +156,7 @@ fn two_row_board_and_layout() -> (Board, Layout) {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

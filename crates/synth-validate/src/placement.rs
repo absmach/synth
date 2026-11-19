@@ -7,7 +7,7 @@
 //! and `W-SYNTH-PLACE-*` diagnostics.
 
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, Location, Severity};
-use synth_geometry::{mm_to_nm, nm_to_mm, Rect};
+use synth_geometry::{Rect, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, ComponentId, PinId};
 use synth_place::{ComponentPlacement, Placement};
 
@@ -161,14 +161,14 @@ pub fn validate_placement(board: &Board, placement: &Placement, file: &str) -> V
         );
 
         for (comp_id, refdes, r) in &component_rects {
-            if let Some(anchor) = anchor_component {
-                if *comp_id == anchor.id {
-                    continue; // Anchor component itself is allowed in its keepout
-                }
+            if let Some(anchor) = anchor_component
+                && *comp_id == anchor.id
+            {
+                continue; // Anchor component itself is allowed in its keepout
             }
 
-            let center_x = (r.min.x_nm + r.max.x_nm) / 2;
-            let center_y = (r.min.y_nm + r.max.y_nm) / 2;
+            let center_x = i64::midpoint(r.min.x_nm, r.max.x_nm);
+            let center_y = i64::midpoint(r.min.y_nm, r.max.y_nm);
 
             // The courtyard's nearest point to the circle centre, not its own
             // centre: a part just outside the circle can still hang its pads

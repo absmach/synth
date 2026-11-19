@@ -105,7 +105,7 @@ impl<'de> Deserialize<'de> for Condition {
                         "ic_without_decoupling",
                         "polarized_cap_ground_on_plus",
                     ],
-                ))
+                ));
             }
         })
     }
@@ -712,10 +712,10 @@ fn resistor_hop(board: &Board, net: &Net) -> Option<Net> {
             if pid == e.pin {
                 continue;
             }
-            if let Some((_, far)) = board.nets_containing(comp.id, pid).next() {
-                if far.id != net.id {
-                    return Some(far.clone());
-                }
+            if let Some((_, far)) = board.nets_containing(comp.id, pid).next()
+                && far.id != net.id
+            {
+                return Some(far.clone());
             }
         }
     }
@@ -997,6 +997,9 @@ mod tests {
             voltage_max_v: None,
             voltage_min_v: None,
             voltage_nominal_v: None,
+            drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -1018,6 +1021,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 
@@ -1058,10 +1062,12 @@ mod tests {
 
     fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "kg_test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1072,6 +1078,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -1337,6 +1344,7 @@ mod tests {
             max_distance_mm: None,
             to: None,
             through: None,
+            when_supply_over_v: None,
         }];
         let b = board(
             vec![comp(0, "U1", "mcu", p)],
@@ -1444,9 +1452,10 @@ mod tests {
     #[test]
     fn capacitor_kind_now_maps_to_polarity_template() {
         let kg = kg();
-        assert!(kg
-            .templates_for_kind("capacitor")
-            .iter()
-            .any(|t| t.id == "polarized_cap_miswired"));
+        assert!(
+            kg.templates_for_kind("capacitor")
+                .iter()
+                .any(|t| t.id == "polarized_cap_miswired")
+        );
     }
 }

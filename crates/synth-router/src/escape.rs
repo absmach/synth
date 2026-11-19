@@ -80,7 +80,8 @@ pub struct PackageEscape {
     /// The largest via drill whose escape vias clear each other at this pitch,
     /// in millimetres. Negative when even a zero-drill via cannot.
     pub max_drill_mm: f64,
-    /// Copper layers the board actually has.
+    /// Copper layers the board declares; when no declaration is known, the
+    /// ones its exported file lists.
     pub layers: usize,
     /// The layer count that would give this package somewhere to escape, when
     /// the board is too thin for one. `None` when it already has enough.
@@ -109,13 +110,17 @@ impl PackageEscape {
 /// A missing or unreadable baseline yields no findings rather than an error:
 /// the escape analysis is advisory, and the run proper already reports a
 /// baseline it cannot read.
+///
+/// The advice names the board's own layer count ([`crate::contract::RouteRequest::use_board_layers`])
+/// when the caller recorded one, because the exported file it would
+/// otherwise read can under-report the board it was written from.
 #[must_use]
 pub fn analyse_baseline(request: &crate::contract::RouteRequest) -> Vec<PackageEscape> {
     let Ok(text) = std::fs::read_to_string(request.baseline_path()) else {
         return Vec::new();
     };
     match PcbBoard::parse(&text) {
-        Ok(board) => analyse(&board, &request.policy),
+        Ok(board) => analyse_with_declared_layers(&board, &request.policy, request.declared_layers),
         Err(_) => Vec::new(),
     }
 }
@@ -126,7 +131,27 @@ pub fn analyse_baseline(request: &crate::contract::RouteRequest) -> Vec<PackageE
 /// first. An empty result means every package can be fanned out.
 #[must_use]
 pub fn analyse(board: &PcbBoard, policy: &FabricationPolicy) -> Vec<PackageEscape> {
-    let layers = board.copper_layers().len();
+    analyse_with_declared_layers(board, policy, None)
+}
+
+/// [`analyse`], with the board's declared copper layer count preferred over
+/// the one the exported file carries.
+///
+/// The file is normally right — the exporter writes what the board declares.
+/// It is the file, though, not the board: a baseline that was written by
+/// something other than the compile that produced the request would name a
+/// different layer count, and the advice must not describe a stack the board
+/// does not have. `None` falls back to the file.
+#[must_use]
+pub fn analyse_with_declared_layers(
+    board: &PcbBoard,
+    policy: &FabricationPolicy,
+    declared_layers: Option<u32>,
+) -> Vec<PackageEscape> {
+    let layers = declared_layers.map_or_else(
+        || board.copper_layers().len(),
+        |count| usize::try_from(count).unwrap_or(0),
+    );
     // Two parallel tracks need their centres `width + clearance` apart; the
     // same holds for two vias, where the width is the via's copper diameter.
     let track_span_nm = policy.min_track_width_nm + policy.min_clearance_nm;
@@ -198,9 +223,7 @@ pub fn analyse(board: &PcbBoard, policy: &FabricationPolicy) -> Vec<PackageEscap
 /// [`read_baseline`].
 #[must_use]
 pub fn grid_arrays_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
-    read_baseline(request)
-        .map(|board| grid_arrays(&board))
-        .unwrap_or_default()
+    read_baseline(request).map_or_default(|board| grid_arrays(&board))
 }
 
 /// The request's exported baseline board, or why it cannot be read.
@@ -304,9 +327,7 @@ pub fn fine_pitch_perimeter(board: &PcbBoard) -> Vec<String> {
 /// [`fine_pitch_perimeter`] for the request's exported baseline board.
 #[must_use]
 pub fn fine_pitch_perimeter_in_baseline(request: &crate::contract::RouteRequest) -> Vec<String> {
-    read_baseline(request)
-        .map(|board| fine_pitch_perimeter(&board))
-        .unwrap_or_default()
+    read_baseline(request).map_or_default(|board| fine_pitch_perimeter(&board))
 }
 
 fn describe(
@@ -627,6 +648,46 @@ mod tests {
         assert_eq!(findings[0].suggested_layers, None, "{findings:?}");
         assert!(
             !findings[0].remediation.contains("4 layers"),
+            "{findings:?}"
+        );
+    }
+
+    #[test]
+    fn the_advice_names_the_declared_layer_count_not_the_file_s() {
+        // #98: a four-layer board whose exported baseline carries only the
+        // two outer layers (as one written by something other than the
+        // compile that produced the request can) must not be advised about a
+        // two-layer stack it does not have. The declared count is the source
+        // of truth, so the finding reports four layers and the remediation
+        // stays silent about adding any.
+        let text = row(12, 0.5, 0.23, 1.5, "Package_QFP:LQFP-48_7x7mm_P0.5mm");
+        let findings =
+            analyse_with_declared_layers(&board(&text), &FabricationPolicy::default(), Some(4));
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].layers, 4, "{findings:?}");
+        assert_eq!(findings[0].suggested_layers, None, "{findings:?}");
+        assert!(
+            !findings[0].remediation.contains("copper layers"),
+            "a four-layer board is not told it has two: {findings:?}"
+        );
+    }
+
+    #[test]
+    fn the_advice_reports_a_declared_count_even_when_the_file_disagrees() {
+        // The inverse direction: a declared count of two is what the advice
+        // reads even on a file that lists four, so the sentence always
+        // describes the board the source declared.
+        let text = row(12, 0.5, 0.23, 1.5, "Package_QFP:LQFP-48_7x7mm_P0.5mm").replace(
+            r#"(layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))"#,
+            r#"(layers (0 "F.Cu" signal) (4 "In1.Cu" power) (6 "In2.Cu" power) (31 "B.Cu" signal) (44 "Edge.Cuts" user))"#,
+        );
+        let findings =
+            analyse_with_declared_layers(&board(&text), &FabricationPolicy::default(), Some(2));
+        assert_eq!(findings[0].layers, 2, "{findings:?}");
+        assert!(
+            findings[0]
+                .remediation
+                .contains("this board has 2 copper layers"),
             "{findings:?}"
         );
     }

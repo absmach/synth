@@ -122,6 +122,9 @@ synth routers
 
 **If an engine is missing**, Synth reports `router_unavailable` along with the paths it searched. FreeRouting needs a Java runtime and the JAR; both are found automatically.
 
+`SYNTH_QUALIFY_ROUTER` pins the engine a qualification run records; the run
+then reports that engine honestly missing rather than routing with another.
+
 > [!TIP]
 > There is one failure that catches almost everyone. The helper that drives FreeRouting imports KiCad's `pcbnew` module, which ships with **KiCad's own Python** — and that is usually _not_ the `python3` first on your `PATH`. When that happens, point the pipeline at the right interpreter:
 >
@@ -240,9 +243,25 @@ synth export-kicad board.synth --out output/board --router free-routing
 
 Synth runs KRT in conservative production-review mode by default: it uses `--escalation board --strict-sizes`, keeps vias 0.1 mm away from same-net SMD pads and paste openings, and runs KRT's independent connectivity checker. Synth still writes the routed board when routing is incomplete, but returns exit status 1 and labels the result review-only. KRT's own report is written next to the board as `<name>.krt-stats.json`.
 
+Before a route starts, Synth asks KRT's own `krt_capabilities.py --require` for the modules and flags its helper drives. A checkout that exists but is on the wrong branch, is missing a stage, or does not support a flag is reported as `router_unavailable` with the exact gaps named, rather than routing green against an engine that cannot do what the run record claims. This also means the checkout must be a complete KRT install (KRT 0.23.0 or newer), not just a directory containing `py_router/route.py`.
+
+The independent verdict is also written as a compact quality report at `<name>.quality.json`, beside the run record. Its `passed` field is true only when all pads of every net share one copper island, `kicad-cli pcb drc` ran with zero errors and zero unconnected items, topology matches the exported baseline, and no required check was unavailable. The counts alongside it come from the delivered board and KRT's checker, never from the engine's own summary.
+
 Use `--krt-escalation fab` only when the selected fabrication process has been explicitly approved to relax the board's declared rules. Use `--krt-allow-via-in-pad` only when filled-and-capped via-in-pad is part of the fabrication specification. The production gate rejects open connection groups, delivered dimensions below the board floor, and unapproved via-in-pad sites. `--krt-fab-tier standard|advanced|auto` and `--krt-fab-overrides FILE` expose KRT's fabrication capability floor when a manufacturer-specific override is needed.
 
 On a routed board, each approved via-in-pad site is listed under `routing.fabrication_notes` in `release.json` and printed as a `fabrication note:` line, so the order can carry the filled-and-capped requirement. A board that is not routed gets no such note.
+
+#### FastRoute (Java-free FreeRouting)
+
+[FastRoute](https://github.com/parisxmas/fastroute) is a Rust port of FreeRouting speaking the same Specctra DSN→SES contract, so Synth reuses the same export, clean-netlist, import, and independent validation path. It is a separate optional GPLv3 binary — Synth invokes it, never links or vendors it, and the Apache-2.0 core stays unaffected.
+
+```text
+synth route board.synth --router fastroute \
+  --fastroute-binary /path/to/fastroute \
+  --freerouting-python /usr/bin/python3   # the interpreter that can import pcbnew
+```
+
+`SYNTH_FASTROUTE_BIN` replaces the flag. The pass/thread limits are shared with FreeRouting; FastRoute-specific switches come from `SYNTH_FASTROUTE_PARITY`, `SYNTH_FASTROUTE_ENHANCEMENTS=0`, and `SYNTH_FASTROUTE_MULTI_START=N`. Capability discovery checks `fastroute --version`, and both the quality report and the run record name the exact binary revision. `--best-of` considers KiCadRoutingTools, FreeRouting, and FastRoute and keeps the attempt that passes independent validation with the best cost — never the engine's own claim.
 
 KRT may adapt to fabrication floors and may write project DRC settings; review those changes explicitly rather than treating a zero-unconnected result as automatic production approval.
 
@@ -316,10 +335,27 @@ Synth already prefers KiCad stock symbols/footprints via the registry's `kicad_s
 
 ## 4. PCB review
 
-- **DRC is a gate, not a suggestion:** `kicad-cli pcb drc --format report --severity-error --severity-warning --refill-zones --schematic-parity --exit-code-violations board.kicad_pcb` must be clean before handoff. `--schematic-parity` catches drift between the schematic and the board — with Synth both come from one IR, so any parity error is a bug worth escalating.
-- **Placement doctrine** (already partially encoded in Synth's thematic clusters — `IcBlock`, `LdoBlock`, `Crystal`): decoupling capacitors belong at the IC pins, oriented to minimize ground loop area and trace inductance; horizontal connectors live near board edges; keep packages aligned. Optimize placement for _engineer modifiability_, not a one-shot perfect floorplan.
-- **Review by rendering, not by imagination:** export board-layer SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually look; render specific regions to check 3D-model interference.
-- **Board outline:** rounded or chamfered corners by default; confirm with the engineer. Double-sided assembly is an explicit engineer decision, never a default.
+- **DRC is a gate, not a suggestion:** `kicad-cli pcb drc --format
+report --severity-error --severity-warning --refill-zones
+--schematic-parity --exit-code-violations board.kicad_pcb` must be
+  clean before handoff. `--schematic-parity` catches drift between
+  the schematic and the board — with Synth both come from one IR, so
+  any parity error is a bug worth escalating.
+- **Placement doctrine** (already partially encoded in Synth's
+  thematic clusters — `IcBlock`, `LdoBlock`, `Crystal`): decoupling
+  capacitors belong at the IC pins, oriented to minimize ground loop
+  area and trace inductance; horizontal connectors live near board
+  edges; keep packages aligned. Optimize placement for _engineer
+  modifiability_, not a one-shot perfect floorplan.
+- **Review by rendering, not by imagination:** export board-layer
+  SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually
+  look; render specific regions to check 3D-model interference.
+- **Board outline:** declare `outline <width> x <height>` when the
+  enclosure fixes the board size; Edge.Cuts is then exactly that
+  rectangle and the placer does not fit or tighten it. Without the
+  statement the exporter fits the edge round the parts; rounded or
+  chamfered corners are a manual edit. Double-sided assembly is an
+  explicit engineer decision, never a default.
 
 ### Placement JSON coordinate contract
 
@@ -335,7 +371,18 @@ Serialize internal placements only through `synth_place::to_external`; the KiCad
 
 The persisted `<design>.placement.layout.toml` sidecar is written in the same space: board millimetres at each footprint's origin, the `(at x y)` the exported board and `component_placements` report. A position copied from a run's output pins the part exactly there, so a sidecar pinned from the last run reproduces it. (It used to be read as the courtyard centre, which moved every part whose origin is off-centre — a connector whose origin sits on a pin — by its courtyard offset on each re-pin, so a fully pinned board never reached a fixed point.) A `relative_to` entry's `dx`/`dy` likewise run between footprint origins.
 
-Run the automatic placer first and read the outline it produces; use a placement sidecar only to fix specific parts. A sidecar entry gives that part its starting slot: the placer keeps the entry's rotation and the order of the pinned parts, then slides them toward the board edge to close bands no courtyard uses, so the finished board is no larger than the floorplan the pins describe. `priority = "hard"` entries win over soft ones; a fully pinned floorplan skips the automatic search but still gets the band pass. A floorplan that uses a `relative_to` entry keeps its pinned coordinates exactly, because the band pass moves one part at a time.
+Run the automatic placer first and read the outline it produces; use a
+placement sidecar only to fix specific parts. A sidecar entry gives that part
+its starting slot: the placer keeps the entry's rotation and the order of the
+pinned parts, then slides them toward the board edge to close bands no
+courtyard uses, so the finished board is no larger than the floorplan the pins
+describe. `priority = "hard"` entries win over soft ones; a fully pinned
+floorplan skips the automatic search but still gets the band pass. A floorplan
+that uses a `relative_to` entry keeps its pinned coordinates exactly, because
+the band pass moves one part at a time. A board that declares `outline` is the
+exception: the rectangle is fixed, so the band pass, the pinned-outline
+widening and the final fit all stand down and the sidecar coordinates stay as
+written.
 
 ### Silkscreen reference labels
 

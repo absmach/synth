@@ -39,7 +39,7 @@ use synth_ir::{Board, ComponentId, NetId};
 
 use crate::kicad_lib_loader::PhysicalPin;
 use crate::route::{natural_rotation_offset, pin_terminal_xy, snap_grid_127};
-use crate::{ComponentPlacement, Rotation, POWER_STUB_LEN};
+use crate::{ComponentPlacement, POWER_STUB_LEN, Rotation};
 
 /// Which rail family a physical power pin belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -268,16 +268,13 @@ pub fn undriven_power_nets<S: ::std::hash::BuildHasher>(
             }
             // Symbol-level driver check (only supplements; registry is
             // authoritative for whether power inputs exist).
-            if let Some(lib_id) = part.kicad_symbol.as_deref() {
-                if let Some(physical) = crate::kicad_lib_loader::physical_pins(lib_id)
+            if let Some(lib_id) = part.kicad_symbol.as_deref()
+                && let Some(physical) = crate::kicad_lib_loader::physical_pins(lib_id)
                     .and_then(|pins| pins.into_iter().find(|p| p.number == pin.number.0))
-                {
-                    if physical.electrical_type == "power_out"
-                        || physical.electrical_type == "power_output"
-                    {
-                        has_symbol_power_output = true;
-                    }
-                }
+                && (physical.electrical_type == "power_out"
+                    || physical.electrical_type == "power_output")
+            {
+                has_symbol_power_output = true;
             }
         }
         if has_power_input && !has_registry_power_output && !has_symbol_power_output {
@@ -364,17 +361,17 @@ fn pick_rail_net(board: &Board, candidates: &[NetId], pin_name: &str) -> Option<
     }
     let want = normalize_rail_name(pin_name);
     for id in candidates {
-        if let Some(net) = board.net(*id) {
-            if normalize_rail_name(&net.name) == want {
-                return Some(*id);
-            }
+        if let Some(net) = board.net(*id)
+            && normalize_rail_name(&net.name) == want
+        {
+            return Some(*id);
         }
     }
     for id in candidates {
-        if let Some(net) = board.net(*id) {
-            if net.voltage.is_some() {
-                return Some(*id);
-            }
+        if let Some(net) = board.net(*id)
+            && net.voltage.is_some()
+        {
+            return Some(*id);
         }
     }
     candidates.first().copied()
@@ -494,22 +491,20 @@ fn reconcile_component(board: &Board, component: &synth_ir::Component) -> Reconc
             pin.electrical_type.as_str(),
             "power_in" | "power_input" | "passive"
         );
-        if is_connectable_power {
-            if let Some(family) = RailFamily::for_pin(&pin.electrical_type, &pin.name) {
-                if let Some(candidates) = rail_nets.get(&family) {
-                    if let Some(net) = pick_rail_net(board, candidates, &pin.name) {
-                        out.power_legs.push(PowerLeg {
-                            component: component.id,
-                            pin_number: pin.number.clone(),
-                            pin_name: pin.name.clone(),
-                            electrical_type: pin.electrical_type.clone(),
-                            net,
-                            family,
-                        });
-                        continue;
-                    }
-                }
-            }
+        if is_connectable_power
+            && let Some(family) = RailFamily::for_pin(&pin.electrical_type, &pin.name)
+            && let Some(candidates) = rail_nets.get(&family)
+            && let Some(net) = pick_rail_net(board, candidates, &pin.name)
+        {
+            out.power_legs.push(PowerLeg {
+                component: component.id,
+                pin_number: pin.number.clone(),
+                pin_name: pin.name.clone(),
+                electrical_type: pin.electrical_type.clone(),
+                net,
+                family,
+            });
+            continue;
         }
         out.no_connects.push(NoConnectPin {
             component: component.id,

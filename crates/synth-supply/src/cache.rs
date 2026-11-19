@@ -3,11 +3,11 @@
 //! SQLite cache storage for supply chain query results.
 
 use crate::types::{
-    normalize_part_number, AssemblyEligibility, LifecycleStatus, PurchaseConstraints, StockStatus,
-    SupplyError, SupplyStatus,
+    AssemblyEligibility, LifecycleStatus, PurchaseConstraints, StockStatus, SupplyError,
+    SupplyStatus, normalize_part_number,
 };
 use chrono::{DateTime, Duration, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -272,37 +272,60 @@ impl SupplyCache {
     }
 }
 
-/// Helper function to load `.env` from workspace root or current directory into environment.
-pub fn load_env_file() {
-    // If NEXAR_TOKEN is already set, nothing to do
-    if std::env::var("NEXAR_TOKEN").is_ok() {
-        return;
+/// The value of `key` from the environment, else from the nearest `.env`
+/// file in the current directory or one of its parents.
+///
+/// The `.env` file is read, never exported: loading it into the process
+/// environment would race with any thread reading the environment.
+#[must_use]
+pub fn env_or_dotenv(key: &str) -> Option<String> {
+    if let Ok(value) = std::env::var(key) {
+        return Some(value);
+    }
+    let cwd = std::env::current_dir().ok()?;
+    let env_file = cwd
+        .ancestors()
+        .map(|dir| dir.join(".env"))
+        .find(|path| path.is_file())?;
+    dotenv_value(&std::fs::read_to_string(env_file).ok()?, key)
+}
+
+/// The value `content`, in `.env` syntax, assigns to `key`.
+///
+/// `KEY=value` lines, optionally quoted; blank lines and `#` comments are
+/// skipped. The first assignment wins.
+fn dotenv_value(content: &str, key: &str) -> Option<String> {
+    content.lines().find_map(|line| {
+        let line = line.trim();
+        if line.starts_with('#') || line.is_empty() {
+            return None;
+        }
+        let (k, v) = line.split_once('=')?;
+        (k.trim() == key).then(|| v.trim().trim_matches('"').trim_matches('\'').to_string())
+    })
+}
+
+#[cfg(test)]
+mod dotenv_tests {
+    use super::dotenv_value;
+
+    #[test]
+    fn a_dotenv_value_is_read_unquoted() {
+        let content = "# comment\n\nOTHER=1\nNEXAR_TOKEN = \"abc123\"\nNEXAR_TOKEN=later\n";
+        assert_eq!(
+            dotenv_value(content, "NEXAR_TOKEN"),
+            Some("abc123".to_string())
+        );
+        assert_eq!(dotenv_value(content, "OTHER"), Some("1".to_string()));
+        assert_eq!(
+            dotenv_value("KEY='single'", "KEY"),
+            Some("single".to_string())
+        );
     }
 
-    // Try current directory and parents for .env file
-    if let Ok(cwd) = std::env::current_dir() {
-        let mut curr = Some(cwd.as_path());
-        while let Some(dir) = curr {
-            let env_path = dir.join(".env");
-            if env_path.is_file() {
-                if let Ok(content) = std::fs::read_to_string(&env_path) {
-                    for line in content.lines() {
-                        let line = line.trim();
-                        if line.starts_with('#') || line.is_empty() {
-                            continue;
-                        }
-                        if let Some((k, v)) = line.split_once('=') {
-                            let k = k.trim();
-                            let v = v.trim().trim_matches('"').trim_matches('\'');
-                            if !k.is_empty() && std::env::var(k).is_err() {
-                                std::env::set_var(k, v);
-                            }
-                        }
-                    }
-                }
-                break;
-            }
-            curr = dir.parent();
-        }
+    #[test]
+    fn a_missing_or_commented_key_has_no_value() {
+        assert_eq!(dotenv_value("#NEXAR_TOKEN=abc\n", "NEXAR_TOKEN"), None);
+        assert_eq!(dotenv_value("NEXAR_TOKEN_2=abc\n", "NEXAR_TOKEN"), None);
     }
 }

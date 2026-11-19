@@ -19,6 +19,7 @@ expression: board
       }
     }
   ],
+  "labels": true,
   "keepouts": [
     {
       "name": "antenna",

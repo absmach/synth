@@ -1,0 +1,13 @@
+
+Note: No compatibility mode selected!
+
+
+Circuit: * synth simulation: ldo
+
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+
+No. of Data Rows : 1
+SYNTH_MEAS vout 3.29967
+SYNTH_DONE
+Note: Simulation executed from .control section 

@@ -7,7 +7,7 @@ signed_by = []
 substitutes = []
 mpn = "AO3400A"
 required_decoupling = []
-kicad_symbol = "Transistor_FET:AO3400A"
+kicad_symbol = "Transistor_FET:Q_NMOS_GSD"
 kicad_footprint = "Package_TO_SOT_SMD:SOT-23"
 
 [[pins]]
