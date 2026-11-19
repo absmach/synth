@@ -407,15 +407,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.R4]
-x = 41.5
-y = 48.5
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.TP4]
 x = 44.5
 y = 48.5

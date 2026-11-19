@@ -74,10 +74,9 @@ board "multirail_compute_node" {
     component U2: regulator "lp5907_3v3"
     component C8: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2" priority: hard } }
     component C9: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U2" priority: hard } }
-    component U3: regulator "ams1117_1v8"
+    component U3: regulator "ap2112k_1v8"
     component C10: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3" priority: hard } }
     component C11: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U3" priority: hard } }
-    component R4: resistor "r_generic_0603" value "330" { placement_hint { near: "U3" priority: hard } }
     component U5: regulator "tps22918_sot23_6"
     component C12: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U5" priority: hard } }
     component C13: capacitor "c_generic_0603" value "1nF" { placement_hint { near: "U5" priority: hard } }
@@ -88,7 +87,7 @@ board "multirail_compute_node" {
     component C15: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U4" priority: hard } }
     component C16: capacitor "c_generic_0603" value "1uF" { placement_hint { near: "U4" priority: hard } }
     notes "" {
-      "3V3 LP5907 from 3V6; 1V8 AMS1117 (R4 is its minimum load); 1V2 TLV70012."
+      "3V3 LP5907 from 3V6; 1V8 AP2112K-1.8, which needs no minimum load; 1V2 TLV70012."
       "Sequence: 3V3 up, R16/C17 delay ~10 ms, TPS22918 passes 3V6 to the 1V8 LDO, 1V8 enables the 1V2 LDO."
     }
   }
@@ -155,13 +154,13 @@ board "multirail_compute_node" {
   net "VIN_RAW"  class "PWR" { F1.p2 D1.cathode D2.anode }
   net "VBUS"     class "PWR" { J1.vbus J1.vbus_b4 J1.vbus_a9 J1.vbus_b9 F2.p1 TP6.p1 C30.p1 }
   net "VBUS_F"   class "PWR" { F2.p2 D3.cathode D4.anode }
-  net "VIN"      class "PWR" { D2.cathode D4.cathode U1.vin U1.en C1.p1 C2.p1 C3.p1 TP1.p1 }
+  power "VIN" 12v class "PWR" { D2.cathode D4.cathode U1.vin U1.en C1.p1 C2.p1 C3.p1 TP1.p1 }
   net "GND"      class "GNDC" {
     J2.p2 D1.anode D3.anode
     J1.gnd J1.gnd_b12 J1.gnd_a12 J1.gnd_b1 J1.shld
     R11.p2 R12.p2 D5.gnd D6.gnd D11.anode D12.anode C30.p2 C17.p2
     U1.gnd U1.pad C1.p2 C2.p2 C3.p2 C4.p2 C5.p2 C7.p2 R3.p2
-    U2.gnd C8.p2 C9.p2 U3.gnd C10.p2 C11.p2 R4.p2
+    U2.gnd C8.p2 C9.p2 U3.gnd C10.p2 C11.p2
     U5.gnd C12.p2 C13.p2 C14.p2 U4.gnd C15.p2 C16.p2
     U6.vss U6.vss_2 U6.vss_3 U6.vssa
     C20.p2 C21.p2 C22.p2 C23.p2 C24.p2 C25.p2 C28.p2 C29.p2
@@ -176,25 +175,25 @@ board "multirail_compute_node" {
   net "VCC_BUCK" class "PWR_LOW" { U1.vcc C7.p1 }
   net "FB"       class "SIG_SLOW" { U1.fb R2.p2 R3.p1 }
   net "PG_3V6"   class "SIG_SLOW" { U1.pg R1.p1 U6.pa0 }
-  net "V3V6"     class "PWR" {
+  power "V3V6" 3.6v class "PWR" {
     L1.p2 C4.p1 C5.p1 R2.p1
     U2.vin U2.en C8.p1 U5.vin C12.p1
     R5.p1 TP2.p1
   }
-  net "V3V6_SW"  class "PWR" { U5.vout C14.p1 U3.vin C10.p1 U4.vin C16.p1 TP9.p1 J4.p1 }
+  power "V3V6_SW" 3.6v class "PWR" { U5.vout C14.p1 U3.vin U3.en C10.p1 U4.vin C16.p1 TP9.p1 J4.p1 }
 
   // ---- Nets: LDO rails ---------------------------------------------------
-  net "V3V3"     class "PWR_LOW" {
+  power "V3V3" 3.3v class "PWR_LOW" {
     U2.vout C9.p1 R16.p1 R1.p2
     U6.vdd U6.vdd_2 U6.vdd_3 U6.vdda U6.vbat
     C20.p1 C21.p1 C22.p1 C23.p1 C24.p1 C25.p1
     R9.p1 R13.p1 R14.p2 R15.p2 U7.vcc C29.p1
     J3.p1 R6.p1 TP3.p1 J4.p2
   }
-  net "V1V8"     class "PWR_LOW" { U3.vout C11.p1 R4.p1 U4.en TP4.p1 J4.p3 }
+  power "V1V8" 1.8v class "PWR_LOW" { U3.vout C11.p1 U4.en TP4.p1 J4.p3 }
   net "SEQ_ON"   class "SIG_SLOW" { U5.on R16.p2 C17.p1 }
   net "CT"       class "SIG_SLOW" { U5.ct C13.p1 }
-  net "V1V2"     class "PWR_LOW" { U4.vout C15.p1 TP5.p1 J4.p4 }
+  power "V1V2" 1.2v class "PWR_LOW" { U4.vout C15.p1 TP5.p1 J4.p4 }
 
   // ---- Nets: MCU ---------------------------------------------------------
   net "NRST"     class "SIG_SLOW" { U6.nrst R9.p2 SW1.p1 C28.p1 J3.p4 }
