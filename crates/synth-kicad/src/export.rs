@@ -257,7 +257,7 @@ pub fn placement_candidates(
     board: &Board,
     sidecars: &Sidecars,
 ) -> Result<Vec<synth_place::Placement>, ExportError> {
-    place_candidates_with_margins(board, sidecars.placement_path(), &[0.5, 2.5], &[1, 2])
+    place_candidates_with_margins(board, sidecars.placement_path(), &[0.5, 2.5], &[1, 2], true)
         .map_err(|source| ExportError::Placement { source })
 }
 
@@ -718,10 +718,31 @@ fn place_for_export(
     board: &Board,
     sidecar: Option<&Path>,
 ) -> Result<synth_place::Placement, synth_place::PlaceError> {
-    Ok(place_candidates(board, sidecar)?
+    let has_sidecar = sidecar.is_some_and(Path::exists);
+    // An auto-sized board without an author's floorplan is the margin/seed
+    // sweep. The rules do the same work for every candidate, so generate the
+    // candidates without them, choose with the same key, and finish the winner
+    // once. Finishing a second candidate (the hinted one) was tested: it won
+    // FPV on area but left its USB 0.73 mm off the edge midpoint, past the
+    // judge's 0.5 mm limit, because placement_key does not score the rules'
+    // centring. One finish keeps the arrangement the key already chose.
+    let finish_after = board.outline.is_none() && !has_sidecar;
+    let candidates = place_candidates(board, sidecar, !finish_after)?;
+    let mut best = candidates
         .into_iter()
         .min_by_key(|placement| placement_key(board, placement))
-        .expect("the hinted placement is always a candidate"))
+        .expect("the hinted placement is always a candidate");
+    if finish_after {
+        synth_place::finish_default_placement(board, &mut best, has_sidecar);
+        synth_place::fit_outline_with_passive_margin_mm(
+            board,
+            &mut best,
+            synth_place::tight_edge_margin_mm(board),
+            synth_place::passive_edge_margin_mm(board),
+        );
+        synth_place::trim_outline_to_grid(board, &mut best);
+    }
+    Ok(best)
 }
 
 /// Every placement the export chooses among, in a deterministic order.
@@ -734,11 +755,18 @@ fn place_for_export(
 fn place_candidates(
     board: &Board,
     sidecar: Option<&Path>,
+    finish_rules: bool,
 ) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
     // Seeds 1 to 8: widening to 1..16 reproduced env_logger's failing
     // arrangement. 1.25 and 1.0 mm are the two density steps below the 1.5 mm
     // base that improved the tuning corpus without breaking a board.
-    place_candidates_with_margins(board, sidecar, &[1.25, 1.0], &[1, 2, 3, 4, 5, 6, 7, 8])
+    place_candidates_with_margins(
+        board,
+        sidecar,
+        &[1.25, 1.0],
+        &[1, 2, 3, 4, 5, 6, 7, 8],
+        finish_rules,
+    )
 }
 
 /// One step below the tightest caller margin, tried only on dense boards.
@@ -777,6 +805,7 @@ fn place_candidates_with_margins(
     sidecar: Option<&Path>,
     extra_margins: &[f64],
     extra_seeds: &[u64],
+    finish_rules: bool,
 ) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
     // Match synth-place::place() and the MCP gates. Starting the export
     // with a different courtyard margin can select a different legal
@@ -787,6 +816,25 @@ fn place_candidates_with_margins(
     // override has to be applied here too or export reruns placement with
     // a different orientation than the placer just used.
     let rotation_overrides = flash_rotation_overrides(board);
+    let place = |board: &Board, margin: f64, seed: u64| {
+        if finish_rules {
+            synth_place::place_with_tuning_and_sidecar_seeded(
+                board,
+                margin,
+                &rotation_overrides,
+                sidecar,
+                seed,
+            )
+        } else {
+            synth_place::place_with_tuning_and_sidecar_seeded_unruled(
+                board,
+                margin,
+                &rotation_overrides,
+                sidecar,
+                seed,
+            )
+        }
+    };
     // The hinted pass is a candidate, not a precondition. Taking it with `?`
     // refused the whole export the moment it failed, before the unhinted
     // pass, the other margins or the other seeds had been tried — so a board
@@ -795,7 +843,7 @@ fn place_candidates_with_margins(
     // Keep the error instead, and report it only if nothing places at all.
     let mut candidates = Vec::new();
     let mut first_error = None;
-    match synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar) {
+    match place(board, margin, 0) {
         Ok(hinted) => candidates.push(hinted),
         Err(error) => first_error = Some(error),
     }
@@ -814,23 +862,13 @@ fn place_candidates_with_margins(
             for component in &mut unhinted.components {
                 component.placement_hint = None;
             }
-            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
-                &unhinted,
-                margin,
-                &rotation_overrides,
-                sidecar,
-            ) {
+            if let Ok(candidate) = place(&unhinted, margin, 0) {
                 candidates.push(candidate);
             }
         }
 
         for &extra in extra_margins {
-            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
-                board,
-                extra,
-                &rotation_overrides,
-                sidecar,
-            ) {
+            if let Ok(candidate) = place(board, extra, 0) {
                 candidates.push(candidate);
             }
         }
@@ -839,13 +877,7 @@ fn place_candidates_with_margins(
             if seed == 0 {
                 continue;
             }
-            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
-                board,
-                margin,
-                &rotation_overrides,
-                sidecar,
-                seed,
-            ) {
+            if let Ok(candidate) = place(board, margin, seed) {
                 candidates.push(candidate);
             }
         }
@@ -864,13 +896,7 @@ fn place_candidates_with_margins(
                 if seed == 0 {
                     continue;
                 }
-                if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
-                    board,
-                    TIGHTEST_SEEDED_MARGIN_MM,
-                    &rotation_overrides,
-                    sidecar,
-                    seed,
-                ) {
+                if let Ok(candidate) = place(board, TIGHTEST_SEEDED_MARGIN_MM, seed) {
                     candidates.push(candidate);
                 }
             }
