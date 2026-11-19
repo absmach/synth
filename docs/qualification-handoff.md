@@ -24,7 +24,7 @@ and edit `matrix.toml` second.
 
 The corpus has 19 rows: 18 measured boards plus the skipped `usb-uart` row.
 **Three clear the source/DRC gate** — `buck`,
-`protected_power_entry` and `multirail_compute` — on the pinned environment (KiCad 10.0 with
+`protected_power_entry` and `multirail_fixture` — on the pinned environment (KiCad 10.0 with
 KiCadRoutingTools v0.23.0). Clearing the gate is a measurement, not an
 approval: both are still `experimental`, and the table further down is what a
 human still has to judge before either becomes `qualified`.
@@ -39,10 +39,10 @@ What still fails, and why it is not one cause:
 - `hello` has nothing to route and the engine exits 1 on an empty board, so its
   DRC is `unknown`.
 - `env_logger`, `sensor_logger`, `i2c_sensor_node` and
-  `irrigation_controller` clear the source stage and fail `kicad-cli pcb drc`
+  `irrigation_fixture` clear the source stage and fail `kicad-cli pcb drc`
   on the copper that came back.
 - `hello`, `placement_and_diff_pair`, `rp2350_debug_target`,
-  `dual_usb_compute`, `ice40_hdmi_video` and `sdram_memory` clear source and
+  `dual_usb_compute`, `hdmi_routing_fixture` and `sdram_routing_fixture` clear source and
   report `unknown` for DRC: the stage could not produce a verdict, which is not
   a pass.
 - The `ref_*` boards and `negative_broken_mcu_board` are negative tests and

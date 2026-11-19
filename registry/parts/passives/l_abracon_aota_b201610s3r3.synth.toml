@@ -1,0 +1,43 @@
+id = "l_abracon_aota_b201610s3r3"
+kind = "inductor"
+version = 0
+lifecycle = "active"
+description = "Abracon AOTA-B201610S3R3-101-T 3.3 uH shielded molded power inductor, 2.0 x 1.6 x 1.0 mm, polarity dot. Datasheet (Rev A, 9/13/2024): 3.3 uH +-20 %, DCR 140 mOhm max, Isat 2.4 A min (L drops 30 %), Irms 2.1 A min (max_current_ma is Irms)"
+mpn = "AOTA-B201610S3R3-101-T"
+kicad_symbol = "Device:L"
+# The datasheet land pattern is two 1.0 x 1.6 mm pads 1.0 mm apart (2.0 mm
+# centre to centre), which no stock KiCad footprint has. The nearest stock
+# footprint is Wuerth PMFI-201610 (two 1.0 x 1.8 mm pads at +-0.75 mm), whose
+# pads cover the part's 0.6 mm terminals (0.4 to 1.0 mm from the centre).
+kicad_footprint = "Inductor_SMD:L_Wuerth_PMFI-201610"
+# Polarity. The part carries a white polarity dot. In the datasheet marking
+# figure the dot is the "+" terminal and the current flows from "+" to "-".
+# Pin p1 is the dotted terminal, p2 the other. For the RP2350's on-chip
+# regulator (RP2350 datasheet 6.3.8.2, Figure 28) the dotted terminal goes to
+# VREG_LX, so that the current from LX through the inductor to the output
+# capacitor flows from "+" to "-".
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 1.6
+courtyard_margin_mm = 0.25
+
+# No max_current_ma: the power-budget check sums it as a load on the rail the
+# inductor sits on, and the 2.1 A Irms rating is a limit, not a draw. The
+# ratings are in the description.
+[operating_conditions]
+max_voltage_v = 20.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://abracon.com/datasheets/AOTA-B201610S3R3-101-T.pdf"

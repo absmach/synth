@@ -148,7 +148,7 @@
 // plane instead and W-SYNTH-IMPEDANCE-001 will say the figure is unverified
 // there. That is accurate and stays stated.
 
-board "sdram_memory" {
+board "sdram_routing_fixture" {
     layers 4
     manufacturer "jlcpcb"
     revision "C"

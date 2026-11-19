@@ -46,7 +46,7 @@ board "rp2350_debug_target" {
       component C5: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
       component C6: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
       component C7: capacitor "c_generic_0603" value "1uF"   { placement_hint { near: "U2" priority: hard } }
-      component L1: inductor  "l_generic_0603" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
+      component L1: inductor  "l_abracon_aota_b201610s3r3" value "3.3uH" { placement_hint { near: "U2" priority: hard } }
       component C8: capacitor "c_generic_0805" value "4.7uF" { placement_hint { near: "U2" priority: hard } }
       notes "" {
         "Core rail comes from the RP2350's own switching regulator: VREG_VIN"
@@ -88,7 +88,8 @@ board "rp2350_debug_target" {
     connect U2.dvdd    -> U2.dvdd3
 
     group "CLOCK AND RESET" color "#7c3aed" {
-      component Y1: crystal   "xtal_8mhz" value "12MHz"
+      component Y1: crystal   "ecs_120_20_33_tr" value "12MHz" lcsc_pn "C2449814" mpn "ECS-120-20-33-TR"
+      component R5: resistor   "r_generic_0603" value "1k" { placement_hint { near: "Y1" priority: hard } }
       component C9: capacitor "c_generic_0603" value "15pF" { placement_hint { near: "Y1" priority: hard } }
       component C10: capacitor "c_generic_0603" value "15pF" { placement_hint { near: "Y1" priority: hard } }
       component SW1: switch    "spst_tactile"
@@ -96,15 +97,19 @@ board "rp2350_debug_target" {
       component C11: capacitor "c_generic_0603" value "100nF"
       notes "" {
         "RUN is pulled up 10k and pulled low by SW1. C11 debounces the edge."
+        "Y1 is a 12 MHz crystal; R5 is the 1k series resistor on XOUT that limits the crystal drive."
       }
     }
 
-    connect U2.xin  -> Y1.p1
-    connect U2.xout -> Y1.p2
-    connect Y1.p1   -> C9.p1
+    connect U2.xin  -> Y1.xtal_a
+    connect U2.xout -> R5.p1
+    connect R5.p2   -> Y1.xtal_b
+    connect Y1.xtal_a -> C9.p1
     connect U1.gnd  -> C9.p2
-    connect Y1.p2   -> C10.p1
+    connect Y1.xtal_b -> C10.p1
     connect U1.gnd  -> C10.p2
+    connect Y1.gnd_2 -> U1.gnd
+    connect Y1.gnd_4 -> U1.gnd
 
     connect U1.vout -> R3.p1
     connect R3.p2   -> U2.run

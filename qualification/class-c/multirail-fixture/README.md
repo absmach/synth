@@ -24,7 +24,7 @@ committed in this PR; those are owed before the board is promoted from
 | Process | JLCPCB standard (0.127 mm track/clearance, 0.3 mm drill, 0.13 mm ring) |
 | Components | 48 |
 | Nets | 25 |
-| Source | `multirail_compute.synth` |
+| Source | `multirail_fixture.synth` |
 
 ## Stackup
 

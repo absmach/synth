@@ -31,7 +31,7 @@
 // it. That is good for 640x480 and not for 1080p. A real 1080p board uses a
 // transmitter such as the TFP410; the registry has no such part yet.
 //
-board "ice40_hdmi_video" {
+board "hdmi_routing_fixture" {
     layers 4
     // The filled-via tier, because the board requires via-in-pad above and
     // the standard one does not offer it: E-SYNTH-PROCESS-002 refuses that

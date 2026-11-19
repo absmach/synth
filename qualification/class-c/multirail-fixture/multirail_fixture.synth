@@ -46,7 +46,7 @@
 // and I2C pins and leaves the rest undeclared. That is a registry depth
 // limit, not a language one.
 
-board "multirail_compute" {
+board "multirail_fixture" {
     layers 4
     manufacturer "jlcpcb"
     revision "A"

@@ -37,7 +37,7 @@
 // topology: the valve runs from the protected 12 V rail and only its return
 // is switched, so the MCU never sees 12 V.
 
-board "irrigation_controller" {
+board "irrigation_fixture" {
     layers 2
     manufacturer "jlcpcb"
     revision "A"

@@ -23,8 +23,8 @@ committed in this PR; those are owed before the board is promoted from
 | Layers | 4 |
 | Process | JLCPCB filled-via (0.127 mm track/clearance, 0.3 mm drill, 0.13 mm ring) |
 | Components | 49 |
-| Source | `ice40_hdmi_video.synth` |
-| Sidecars | `ice40_hdmi_video.placement.layout.toml` (all 49 pinned) |
+| Source | `hdmi_routing_fixture.synth` |
+| Sidecars | `hdmi_routing_fixture.placement.layout.toml` (all 49 pinned) |
 
 ## Stackup
 

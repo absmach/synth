@@ -1,6 +1,7 @@
 # Dual-USB compute board
 
-Two RP2350s on their own USB 2.0 pairs, a shared QSPI boot flash, and a
+Two RP2350s on their own USB 2.0 pairs, a QSPI boot flash on the first RP2350
+(the second has no boot flash on this board), and a
 USB 3.0 Type-A receptacle whose two SuperSpeed lanes are carried at 90 Ω to a
 20-pin expansion header, on a six-layer stackup.
 

@@ -1,6 +1,7 @@
 // A six-layer dual-USB compute board: two RP2350s, each on its own native
-// USB 2.0 pair at 90 ohm, a shared QSPI boot flash, a USB 3.0 Type-A
-// receptacle, and a 20-pin expansion header.
+// USB 2.0 pair at 90 ohm, a QSPI boot flash on the first RP2350 (the second
+// has no boot flash on this board), a USB 3.0 Type-A receptacle, and a 20-pin
+// expansion header.
 //
 // WHAT THIS BOARD QUALIFIES, AND WHAT IT DOES NOT. Two independent pairs on
 // one board is the constraint case: each must stay its own pair, on signal

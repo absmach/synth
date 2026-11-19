@@ -100,7 +100,7 @@ jobs:
       # which reports `unknown` and blocks for no real reason.
       - name: Run the qualification matrix
         env:
-          # irrigation_controller and multirail_compute crossed the old 600 s
+          # irrigation_fixture and multirail_fixture crossed the old 600 s
           # cap under runner load and reported `unknown` even though the DRC
           # completes (fail and pass respectively) when given the time. Keep
           # 900 s in both jobs so the two budgets cannot disagree.

@@ -29,8 +29,8 @@ committed in this PR; those are owed before the board is promoted from
 | Nets | 89 |
 | Courtyard area | 1554 mm2 of 4284 mm2, 36.3% |
 | Data width | 32 bits, two x16 dice |
-| Placement | pinned, `sdram_memory.placement.layout.toml` |
-| Source | `sdram_memory.synth` |
+| Placement | pinned, `sdram_routing_fixture.placement.layout.toml` |
+| Source | `sdram_routing_fixture.synth` |
 
 ## Stackup
 
@@ -279,7 +279,7 @@ budget over one net is no budget at all.
 
 ## Placement
 
-The floorplan is pinned in `sdram_memory.placement.layout.toml` and the
+The floorplan is pinned in `sdram_routing_fixture.placement.layout.toml` and the
 automatic placement is not what this card ships. The command connector takes
 one edge with its twenty-four damping resistors in two columns beside the pins
 they damp; the data connector takes the other; the dice are stacked between

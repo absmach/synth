@@ -22,8 +22,8 @@ committed in this PR; those are owed before the board is promoted from
 | Layers | 2 |
 | Process | JLCPCB standard (0.127 mm track/clearance, 0.3 mm drill) |
 | Components | 64 |
-| Source | `irrigation_controller.synth` |
-| Sidecars | `irrigation_controller.placement.layout.toml`, `irrigation_controller.schematic.layout.toml` |
+| Source | `irrigation_fixture.synth` |
+| Sidecars | `irrigation_fixture.placement.layout.toml`, `irrigation_fixture.schematic.layout.toml` |
 
 ## Supply
 
