@@ -227,5 +227,5 @@ board "multirail_compute_node" {
   net "GPIO_A"   class "SIG_SLOW" { U6.pb10 J4.p6 }
   net "GPIO_B"   class "SIG_SLOW" { U6.pb11 J4.p7 }
 
-  keepout hot_buck { radius 5mm }
+  keepout hot_buck { radius 5mm anchor "U1" allow "VIN", "SW", "BOOT", "VCC_BUCK", "FB", "PG_3V6", "V3V6", "GND" }
 }
