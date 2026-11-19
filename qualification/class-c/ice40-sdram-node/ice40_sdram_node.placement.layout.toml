@@ -101,24 +101,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.Q1]
-x = 20.0
-y = 56.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
-[components.R1]
-x = 20.0
-y = 61.0
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.C1]
 x = 16.5
 y = 61.5

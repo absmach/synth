@@ -55,14 +55,29 @@ board "ice40_sdram_node" {
     component R3: resistor "r_generic_0603" value "5.1k"
     component F1: fuse "polyfuse_1r1a"
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1.p2" priority: hard } }
-    component Q1: transistor "p_mosfet_si2301"
     component RPD1: resistor "r_generic_0603" value "10k"
-    component R1: resistor "r_generic_0603" value "10k"
+    component RCB1: resistor "r_generic_0402" value "10k"
+    component RCB2: resistor "r_generic_0402" value "10k"
+    component RPD2: resistor "r_generic_0402" value "10k"
+    component RPD3: resistor "r_generic_0402" value "10k"
+    component RPD4: resistor "r_generic_0402" value "10k"
+    component RPD5: resistor "r_generic_0402" value "10k"
+    component RPD6: resistor "r_generic_0402" value "10k"
+    component RPD7: resistor "r_generic_0402" value "10k"
+    component RPD8: resistor "r_generic_0402" value "10k"
     component C1: capacitor "c_generic_0805" value "10uF"
     notes "" {
       "5 V in, max 5.25 V. F1 hold 1.1 A, 16 V."
-      "D1 standoff 6.0 V, above 5.25 V, before Q1."
-      "Q1 P-MOSFET reverse stage, gate to GND."
+      "D1 standoff 6.0 V, above 5.25 V, then straight to +5V: no reverse-polarity stage, since a Type-C receptacle cannot be mated reversed and one would only add drop ahead of the LDO."
+    }
+  }
+
+  // ---- FPGA clock -------------------------------------------------------------
+  group "FPGA CLOCK" color "#6d28d9" {
+    component X1: crystal "osc_smd_25mhz" value "25MHz" { placement_hint { near: "U3.iot_197_gbin1" priority: hard } }
+    component C41: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "X1.vcc" priority: hard } }
+    notes "" {
+      "The iCE40HX has no internal oscillator. 25 MHz 3.3 V oscillator on global buffer input GBIN1 (iot_197_gbin1); OE tied high."
     }
   }
 
@@ -162,7 +177,7 @@ board "ice40_sdram_node" {
   }
 
   group "TEST POINTS" color "#475569" {
-    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "Q1.s" priority: hard } }
+    component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "C1.p1" priority: hard } }
     component TP2: testpoint "testpoint_pad_1_5" { placement_hint { near: "U4.vddq_3" priority: hard } }
     component TP3: testpoint "testpoint_pad_1_5" { placement_hint { near: "U2.vout" priority: hard } }
     component TP4: testpoint "testpoint_pad_1_5" { placement_hint { near: "U5.gnd" priority: hard } }
@@ -179,15 +194,15 @@ board "ice40_sdram_node" {
   // ---- Rails ------------------------------------------------------------------
   power "GND" 0v class "GNDC" {
     J1.gnd J1.gnd_b12 J1.gnd_a12 J1.gnd_b1 J1.shld R2.p2 R3.p2
-    D1.anode R1.p2 C1.p2 RPD1.p2
+    D1.anode C1.p2 RPD1.p2 RPD2.p2 RPD3.p2 RPD4.p2 RPD5.p2 RPD6.p2 RPD7.p2 RPD8.p2
     U1.gnd C2.p2 C3.p2 C4.p2 C5.p2
     U2.gnd C6.p2 C7.p2
     U3.gnd U3.gnd_2 U3.gnd_3 U3.gnd_4 U3.gnd_5 U3.gnd_6 U3.gnd_7 U3.gnd_8 U3.gnd_9 U3.gndpll0 U3.gndpll1
-    U3.iob_103_cbsel0 U3.iob_104_cbsel1
+    RCB1.p2 RCB2.p2
     C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C21.p2 C22.p2 C23.p2 C24.p2
     U4.gndq_0 U4.gndq_1 U4.gndq_2 U4.gndq_3 U4.gnd_0 U4.gnd_1 U4.gnd_2
     C30.p2 C31.p2 C32.p2 C33.p2 C34.p2 C35.p2 C36.p2 C37.p2
-    U5.gnd C40.p2
+    U5.gnd C40.p2 X1.gnd C41.p2
     D2.cathode D4.cathode Q2.s
     TP4.p1 TP7.p1 J2.p6
   }
@@ -196,9 +211,7 @@ board "ice40_sdram_node" {
   // USB-C is a 5 V power sink only: 5.1 k pull-downs on CC1/CC2, D+/D-/SBU left open.
   net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 }
   net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 }
-  net "VIN_FUSED" class "PWR5" { F1.p2 D1.cathode Q1.d }
-  net "Q1_GATE" class "LOWSPD" { Q1.g R1.p1 }
-  power "+5V" 5v class "PWR5" { Q1.s C1.p1 U1.vin C2.p1 C3.p1 TP1.p1 }
+  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode C1.p1 U1.vin C2.p1 C3.p1 TP1.p1 }
 
   power "+3V3" 3.3v class "PWR33" {
     U1.vout C4.p1 C5.p1 U2.vin C6.p1 U2.en
@@ -208,7 +221,7 @@ board "ice40_sdram_node" {
     C30.p1 C31.p1 C32.p1 C33.p1 C34.p1 C35.p1 C36.p1 C37.p1
     U5.vcc C40.p1
     R10.p1 R11.p1 R12.p1 R13.p1 R14.p1 R20.p1 R21.p1
-    TP2.p1
+    TP2.p1 X1.vcc X1.oe C41.p1
   }
 
   power "+1V2" 1.2v class "PWR12" {
@@ -273,7 +286,17 @@ board "ice40_sdram_node" {
   // The board uses the upper data byte, the one on the SDRAM pin row that faces the FPGA: the FPGA holds SD_LDQM
   // high, which masks the lower byte, and the eight lower data pins are tied to ground through one 10 k resistor
   // (the IS42S16400J ignores a masked byte on a write and drives it high-impedance on a read), so they carry no signal.
-  net "SD_DQ_LO" class "LOWSPD" { U4.dq0 U4.dq1 U4.dq2 U4.dq3 U4.dq4 U4.dq5 U4.dq6 U4.dq7 RPD1.p1 }
+  net "CBSEL0" class "LOWSPD" { U3.iob_103_cbsel0 RCB1.p1 }
+  net "CBSEL1" class "LOWSPD" { U3.iob_104_cbsel1 RCB2.p1 }
+  net "CLK25" class "SDADDR" { X1.out U3.iot_197_gbin1 }
+  net "SD_DQ0" class "LOWSPD" { U4.dq0 RPD1.p1 }
+  net "SD_DQ1" class "LOWSPD" { U4.dq1 RPD2.p1 }
+  net "SD_DQ2" class "LOWSPD" { U4.dq2 RPD3.p1 }
+  net "SD_DQ3" class "LOWSPD" { U4.dq3 RPD4.p1 }
+  net "SD_DQ4" class "LOWSPD" { U4.dq4 RPD5.p1 }
+  net "SD_DQ5" class "LOWSPD" { U4.dq5 RPD6.p1 }
+  net "SD_DQ6" class "LOWSPD" { U4.dq6 RPD7.p1 }
+  net "SD_DQ7" class "LOWSPD" { U4.dq7 RPD8.p1 }
 
   // ---- SDRAM command group and clock (22 ohm at the FPGA end) -------------------------
   // Command group on left pads 23 to 26 and 32; the clock on the global-buffer pad iol_14a_gbin6.
