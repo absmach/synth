@@ -50,6 +50,10 @@ const INSTANCE_MARGIN: f64 = 20.0;
 const INSTANCE_GAP: f64 = 25.0;
 const INSTANCE_H: f64 = 60.0;
 const INSTANCE_MIN_W: f64 = 80.0;
+/// Widest a row of sheet instances may grow before it wraps to the next
+/// row. Three 80 mm boxes and their gaps fit an A4 page; a nine-sheet
+/// hierarchy then needs a 3x3 block, not a 928 mm strip that forces A0.
+const INSTANCE_ROW_MAX_MM: f64 = 320.0;
 /// Pin spacing granularity along the box bottom edge, and channel
 /// pitch for root inter-pin wires.
 const PIN_PITCH: f64 = 12.0;
@@ -280,15 +284,14 @@ pub fn plan_multisheet(
     // `endpoint_off_grid` plus lost connections.
     let (_min_x, _max_x, _min_y, root_max_y) = root_bounds;
     let mut cursor_x = snap_grid_127(INSTANCE_MARGIN);
-    let box_y = snap_grid_127(if root_max_y.is_finite() {
+    let mut box_y = snap_grid_127(if root_max_y.is_finite() {
         root_max_y + INSTANCE_GAP
     } else {
         INSTANCE_MARGIN
     });
     // Pin row is snapped independently; the box height is then
     // derived from it so the bottom edge lands exactly on the pins.
-    let pin_y = snap_grid_127(box_y + INSTANCE_H);
-    let box_h = pin_y - box_y;
+    let box_h = snap_grid_127(box_y + INSTANCE_H) - box_y;
     let mut instances = Vec::new();
     let mut files = Vec::new();
     let mut used_files: HashSet<String> = HashSet::new();
@@ -303,6 +306,13 @@ pub fn plan_multisheet(
             .collect();
         let width =
             snap_grid_127(INSTANCE_MIN_W.max(pins_here.len() as f64 * PIN_PITCH + 2.0 * PIN_PITCH));
+        // Wrap before placing a box that would make the row wider than a
+        // readable page. The first box in a row always stays.
+        if cursor_x > INSTANCE_MARGIN && cursor_x + width > INSTANCE_ROW_MAX_MM {
+            cursor_x = snap_grid_127(INSTANCE_MARGIN);
+            box_y = snap_grid_127(box_y + box_h + INSTANCE_GAP);
+        }
+        let pin_y = snap_grid_127(box_y + INSTANCE_H);
         let uuid = sheet_uuid(project, name);
         // Two sheet names can sanitise to one file name ("A / B" and
         // "A + B"): the second gets a numeric suffix rather than
@@ -936,6 +946,53 @@ mod tests {
             .map(|i| i.file.as_str())
             .collect();
         assert_eq!(instances, files, "instances point at their own files");
+    }
+
+    /// Nine sub-sheets must wrap into a readable block. Laid out as one row
+    /// they span 928 mm and force the root page to A0; the index is then
+    /// 94% blank and unreadable at a zoom that fits it.
+    #[test]
+    fn a_large_hierarchy_wraps_its_sheet_instances_into_rows() {
+        let names: Vec<String> = (0..9).map(|index| format!("G{index}")).collect();
+        let components: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| component(u32::try_from(index).unwrap(), Some(name)))
+            .collect();
+        let b = board(components, vec![]);
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let positions: Vec<_> = (0..9)
+            .map(|index| {
+                (
+                    u32::try_from(index).unwrap(),
+                    ceiling_w * 2.0 + f64::from(index) * 60.0,
+                    30.0,
+                )
+            })
+            .collect();
+        let global = layout_at(&positions);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 10, "root + nine named sheets");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        let first_row = plan.furniture.instances[0].at_mm.1;
+        assert!(
+            plan.furniture
+                .instances
+                .iter()
+                .any(|instance| (instance.at_mm.1 - first_row).abs() > 1.0),
+            "nine boxes must wrap, not sit in one row"
+        );
+        let max_x = plan
+            .furniture
+            .instances
+            .iter()
+            .map(|instance| instance.at_mm.0 + instance.size_mm.0)
+            .fold(0.0_f64, f64::max);
+        assert!(max_x <= INSTANCE_ROW_MAX_MM, "wrapped rows stay readable");
+        let page = root_page(&b, sheets[0].layout.sheet_size, (20.0, max_x, 20.0, 300.0));
+        assert_ne!(page, SheetSize::A0, "wrapping must not need an A0 index");
     }
 
     /// A sheet literally named with the suffix a disambiguated sheet took
