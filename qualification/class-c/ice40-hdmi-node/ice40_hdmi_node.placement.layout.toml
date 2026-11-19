@@ -730,3 +730,12 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+
+[components.D_GZ]
+x = 68.0
+y = 13.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0

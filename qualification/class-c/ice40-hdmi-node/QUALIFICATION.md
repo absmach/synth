@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 80.3 x 72.0 mm, 5,781 mm2, 81 parts (72 excluding mounting holes and test points) |
+| Outline | 80.3 x 72.0 mm, 5,781 mm2, 82 parts (73 excluding mounting holes and test points) |
 | Courtyard fill | **22.7 %** of the board area, measured on the exported board (`layout_metrics.py`, the author's script; its output is not committed); the Class C target is 30 %, which at this outline needs about 1,730 mm2 of courtyard (the board holds about 1,312 mm2) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"`, JLCPCB's `JLC06161H-3313` stackup as declared in the source (prepreg 3313 0.0994 mm er 4.1, core 0.55 mm er 4.6, prepreg 2116 0.1088 mm er 4.16; outer copper 35 um, inner 15.2 um; [JLCPCB impedance tool](https://jlcpcb.com/impedance)), 1.47 mm in the STEP model |
 | Routing | 46 of 46 nets, 644 segments, 155 vias (0.46/0.2 mm: 89, 0.6/0.3 mm: 66), 1650.2 mm of track; the router's report (from the author's run, not committed in this package) and the delivered board agree (the delivered-board count) |
@@ -39,7 +39,7 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 
 ## 3.3 V regulator thermal budget
 
-`U1` (AP2112K-3.3, SOT-25) drops at most 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, limited to 150 &deg;C (Diodes AP2112 datasheet, absolute maximum ratings: operating junction temperature +150 &deg;C; SOT25 `RθJA = 184 °C/W`, no heatsink). `W-SYNTH-THERMAL-001` reports `U1` at about 119 &deg;C (510 mW over 184 °C/W), the validator's own load estimate, not this board's load.
+`U1` (AP7361C-33E, SOT-223) drops at most 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, held to 125 &deg;C here (Diodes AP7361C datasheet DS37274 Rev. 5-2: SOT223 `RθJA = 110 °C/W`, 360 mV typical dropout at 1 A for the 3.3 V version, 1 A output, input 2.2 to 6.0 V recommended and 6.5 V absolute maximum). `W-SYNTH-THERMAL-001` is not reported for `U1`.
 
 | Load on `+3V3` | Current used | Source |
 |---|---|---|
@@ -48,7 +48,11 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 | Four LEDs, 470 ohm | 28 mA (3.3 V / 470 ohm each, which ignores the LED forward drop) | the design's own arithmetic |
 | Total | 253 mA | |
 
-At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 79 &deg;C rise: Tj is 104 &deg;C at 25 &deg;C ambient and 149 &deg;C at 70 &deg;C ambient, which is within 1 &deg;C of the 150 &deg;C limit. Tj reaches 150 &deg;C at `(150 - 25) / 184 / 1.7 = 0.40 A` in total at 25 &deg;C ambient and at `(150 - 70) / 184 / 1.7 = 0.26 A` at 70 &deg;C ambient, so at 70 &deg;C the 0.253 A above already uses the whole budget and the FPGA's 3.3 V I/O current, which depends on the design and is not counted, has no room. The load currents are datasheet maxima added together, which no operating state reaches at once. Dropout: the datasheet gives 250 mV typical and 400 mV maximum at 600 mA, so at 253 mA and the 4.6 V worst-case rail below the output stays in regulation with more than 1 V to spare. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1`.
+At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 47 &deg;C rise: Tj is 72 &deg;C at 25 &deg;C ambient and 117 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.7 = 0.53 A` in total at 25 &deg;C ambient and at `(125 - 70) / 110 / 1.7 = 0.29 A` at 70 &deg;C ambient, which leaves about 0.04 A at 70 &deg;C for the FPGA's 3.3 V I/O current, which depends on the design and is not counted above. The load currents are datasheet maxima added together, which no operating state reaches at once. Dropout: 360 mV typical at 1 A, so at 253 mA and the 4.6 V worst-case rail below the output stays in regulation with more than 1 V to spare. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1`.
+
+## Input surge
+
+`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.5 V maximum input, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.0 V recommended and 6.5 V absolute maximum at its input, so a surge that drives `D1` into breakdown (6.67 V at the least) exceeds the regulator's absolute rating by 0.17 V at the least and by about 3.8 V at the full clamp. No TVS with a standoff above 5.5 V clamps below 6.5 V, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at their input, so this board does not meet that margin: the input surge is limited upstream by `F1` and the source, not by the regulator rating. `Q3` is protected by `D_GZ`, a 5.1 V zener from its gate to its source, which holds the gate-source voltage under the SI2301CDS's 8 V rating while the source follows a surge to 10.3 V behind the 10 k gate resistor `R40`.
 
 ## +5 V at the HDMI connector (pin 18)
 
@@ -73,7 +77,7 @@ The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 81 lines: 72 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
+[`fab/bom.csv`](fab/bom.csv) has 82 lines: 73 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 

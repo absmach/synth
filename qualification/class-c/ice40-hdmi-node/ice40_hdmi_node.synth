@@ -1,6 +1,6 @@
 // iCE40HX4K HDMI node: DVI-style TMDS output (resistor-source), six layers.
 //   5 V terminal -> PTC fuse -> TVS -> P-MOSFET reverse-polarity -> +5V
-//   +5V -> AP2112K-3.3 -> +3V3 -> TLV70012 -> +1V2 core; PLL supply via ferrite bead
+//   +5V -> AP7361C-33E -> +3V3 -> TLV70012 -> +1V2 core; PLL supply via ferrite bead
 //   iCE40HX4K-TQ144 + W25Q128JVSIQ SPI boot flash, 25 MHz oscillator
 //   HDMI Type-A: 3 data pairs + clock pair, DDC (level-shifted), HPD, +5V through PTC fuse
 board "ice40_hdmi_node" {
@@ -79,6 +79,7 @@ board "ice40_hdmi_node" {
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1" priority: hard } }
     component Q3: transistor "p_mosfet_si2301" { placement_hint { near: "D1" priority: hard } }
     component R40: resistor "r_generic_0603" value "10k" { placement_hint { near: "Q3" priority: hard } }
+    component D_GZ: diode "d_zener_5v1" value "5V1" { placement_hint { near: "Q3" priority: hard } }
     component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "Q3" priority: hard } }
     component TP1: testpoint "testpoint_pad_1_5" value "+5V" { placement_hint { near: "C1" priority: hard } }
     notes "" {
@@ -88,7 +89,7 @@ board "ice40_hdmi_node" {
 
   // ---- 3.3 V and 1.2 V rails ----------------------------------------------
   group "RAILS" color "#a16207" {
-    component U1: regulator "ap2112k_3v3" value "AP2112K-3.3" { placement_hint { near: "Q3" priority: hard } }
+    component U1: regulator "ap7361c_33e" value "AP7361C-33E" { placement_hint { near: "Q3" priority: hard } }
     component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
     component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
     component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
@@ -190,8 +191,8 @@ board "ice40_hdmi_node" {
   // ---- Nets ---------------------------------------------------------------
   net "+5V_IN" class "PWR" { J1.p1 F1.p1 }
   net "VIN_FUSED" class "PWR" { F1.p2 D1.cathode Q3.d }
-  net "Q3_GATE" class "SIG" { Q3.g R40.p1 }
-  power "+5V" 5.0v class "PWR" { Q3.s C1.p1 TP1.p1 U1.vin U1.en C2.p1 C3.p1 F2.p1 }
+  net "Q3_GATE" class "SIG" { Q3.g R40.p1 D_GZ.anode }
+  power "+5V" 5.0v class "PWR" { Q3.s D_GZ.cathode C1.p1 TP1.p1 U1.vin C2.p1 C3.p1 F2.p1 }
   power "+3V3" 3.3v class "PWR" {
     U1.vout C4.p1 C5.p1 TP2.p1 U2.vin U2.en C6.p1
     U3.vccio_0 U3.vccio_1 U3.vccio_2 U3.vccio_3 U3.vccio_3_2 U3.vccio_0_2 U3.vccio_1_2 U3.vccio_2_2 U3.vcc_spi U3.vpp_2v5

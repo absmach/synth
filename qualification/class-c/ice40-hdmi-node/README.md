@@ -6,8 +6,8 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) driving an HDMI Type-A recept
 
 | Group | Parts |
 |---|---|
-| Power entry | `J1` JST B2B-XH-A 2-pin header (5 V in); `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 2.2 A trip, 16 V); `D1` Nexperia PTVS6V0S1UR (6.0 V standoff above the 5.5 V maximum input, 6.67 V minimum breakdown); `Q3` Vishay SI2301CDS P-MOSFET (20 V) as the reverse-polarity stage, gate to GND through `R40` (10 k); `C1`, `TP1` |
-| 3.3 V | `U1` Diodes AP2112K-3.3 low-dropout regulator (600 mA, 250 mV typical dropout at 600 mA, stable with ceramic capacitors) with 10 uF capacitors `C2` to `C5` |
+| Power entry | `J1` JST B2B-XH-A 2-pin header (5.0 to 5.25 V in: HDMI pin 18 needs at least 4.94 V at `J1`, see QUALIFICATION.md); `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 2.2 A trip, 16 V); `D1` Nexperia PTVS6V0S1UR (6.0 V standoff above the 5.5 V maximum input, 6.67 V minimum breakdown); `Q3` Vishay SI2301CDS P-MOSFET (20 V) as the reverse-polarity stage, gate to GND through `R40` (10 k) with a 5.1 V zener `D_GZ` from gate to source; `C1`, `TP1` |
+| 3.3 V | `U1` Diodes AP7361C-33E-13 low-dropout regulator (1 A, 360 mV typical dropout at 1 A, SOT-223, stable with ceramic capacitors) with 10 uF capacitors `C2` to `C5` |
 | 1.2 V core | `U2` Texas Instruments TLV70012DDCR, TSOT-23-5, with `C6` and `C7`; the PLL supplies `VCCPLL0` and `VCCPLL1` through the ferrite beads `L1` and `L2` and `C21`, `C22` |
 | FPGA | `U3` Lattice iCE40HX4K-TQ144, supply decoupling 100 nF `C10` to `C20` and `C25` to `C27`; `X1` SiTime SiT8008 25 MHz oscillator with `C23` |
 | Configuration | `U4` Winbond W25Q128JVSIQ, SOIC-8 208 mil, master SPI; `R30` and `R31` pull `CDONE` and `CRESET_B` up, `R32` and `R33` the write-protect and hold pins |
