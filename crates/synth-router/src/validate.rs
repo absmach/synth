@@ -1077,6 +1077,76 @@ fn find_via_in_pad(board: &PcbBoard) -> Vec<String> {
     hits
 }
 
+/// Re-derive each declared pair's intra-pair skew from the delivered copper.
+///
+/// The check reads only the candidate board file, never the router's report:
+/// the total routed copper of each half is measured from its track segments
+/// the way KiCad's own length accounting reads it, and a pair whose halves
+/// differ by more than its declared `max_skew` is a blocking finding naming
+/// the pair (`E-SYNTH-DRC-014`, the same code the design's own DRC reports).
+/// A pair with no declared budget is skipped, and a half with no copper is
+/// skipped with it — a pair that did not route is the connectivity pass's
+/// finding, not this one.
+#[must_use]
+#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+pub fn check_diff_pair_skew(
+    board: &PcbBoard,
+    pairs: &[crate::contract::DiffPairRequest],
+) -> Vec<String> {
+    let length_of = |net: &str| -> i64 {
+        board
+            .segments
+            .iter()
+            .filter(|segment| {
+                let name = segment
+                    .net
+                    .and_then(|code| board.nets.get(&code))
+                    .map(String::as_str)
+                    .or(segment.net_name.as_deref());
+                name == Some(net)
+            })
+            .map(|segment| {
+                let dx = (segment.end.x_nm - segment.start.x_nm) as f64;
+                let dy = (segment.end.y_nm - segment.start.y_nm) as f64;
+                dx.hypot(dy).round() as i64
+            })
+            .sum()
+    };
+    let mut findings = Vec::new();
+    for pair in pairs {
+        let Some(max_skew_nm) = pair.max_skew_nm else {
+            continue;
+        };
+        if max_skew_nm <= 0 {
+            continue;
+        }
+        let positive_len = length_of(&pair.positive);
+        let negative_len = length_of(&pair.negative);
+        if positive_len == 0 || negative_len == 0 {
+            continue;
+        }
+        let skew = (positive_len - negative_len).abs();
+        if skew <= max_skew_nm {
+            continue;
+        }
+        findings.push(format!(
+            "pair `{}`/`{}` is length-matched to {:.3} mm, longer than the {:.3} mm maximum \
+             skew (E-SYNTH-DRC-014)",
+            pair.positive,
+            pair.negative,
+            nm_to_mm_f64(skew),
+            nm_to_mm_f64(max_skew_nm),
+        ));
+    }
+    findings
+}
+
+/// A length in nanometres, as millimetres.
+#[allow(clippy::cast_precision_loss)]
+fn nm_to_mm_f64(nm: i64) -> f64 {
+    nm as f64 / 1_000_000.0
+}
+
 /// Disjoint-set forest with union by rank.
 #[derive(Debug, Clone)]
 struct UnionFind {
@@ -2040,5 +2110,116 @@ mod tests {
             "{reason}"
         );
         assert!(!reason.contains("and "), "{reason}");
+    }
+}
+
+#[cfg(test)]
+mod diff_pair_skew_tests {
+    use super::*;
+    use crate::contract::DiffPairRequest;
+    use crate::pcb_read::PcbBoard;
+
+    fn pair(positive: &str, negative: &str, max_skew_nm: i64) -> DiffPairRequest {
+        DiffPairRequest {
+            positive: positive.to_string(),
+            negative: negative.to_string(),
+            max_skew_nm: Some(max_skew_nm),
+        }
+    }
+
+    /// A board whose halves carry the copper given: `positive_mm` and
+    /// `negative_mm` of straight track on net `USB_DP` / `USB_DN`.
+    fn routed_board(positive_mm: f64, negative_mm: f64) -> PcbBoard {
+        let text = format!(
+            r#"(kicad_pcb
+              (version 20260206)
+              (generator "synth-eda")
+              (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+              (net 0 "") (net 1 "USB_DP") (net 2 "USB_DN")
+              (segment (start 10 10) (end {p} 10) (width 0.25) (layer "F.Cu") (net 1))
+              (segment (start 10 12) (end {n} 12) (width 0.25) (layer "F.Cu") (net 2))
+              (gr_line (start 0 0) (end 40 40) (layer "Edge.Cuts") (width 0.1))
+            )"#,
+            p = 10.0 + positive_mm,
+            n = 10.0 + negative_mm,
+        );
+        PcbBoard::parse(&text).expect("fixture parses")
+    }
+
+    #[test]
+    fn a_pair_inside_its_budget_is_not_a_finding() {
+        let board = routed_board(10.0, 10.0);
+        let pairs = [pair("USB_DP", "USB_DN", 300_000)];
+        assert!(check_diff_pair_skew(&board, &pairs).is_empty());
+    }
+
+    #[test]
+    fn a_pair_outside_its_budget_blocks_and_names_the_pair() {
+        let board = routed_board(10.0, 10.4);
+        let pairs = [pair("USB_DP", "USB_DN", 150_000)];
+        let findings = check_diff_pair_skew(&board, &pairs);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        let finding = &findings[0];
+        assert!(finding.contains("pair `USB_DP`/`USB_DN`"), "{finding}");
+        assert!(finding.contains("0.400 mm"), "{finding}");
+        assert!(finding.contains("0.150 mm"), "{finding}");
+        assert!(finding.contains("E-SYNTH-DRC-014"), "{finding}");
+    }
+
+    #[test]
+    fn a_half_without_copper_is_skipped_not_blocked() {
+        // Only the positive half routed: the connectivity pass reports the
+        // open net; a skew against nothing is not this check's finding.
+        let board = routed_board(10.0, 0.0);
+        let pairs = [pair("USB_DP", "USB_DN", 150_000)];
+        assert!(check_diff_pair_skew(&board, &pairs).is_empty());
+    }
+
+    #[test]
+    fn a_pair_with_no_declared_budget_is_not_enforced() {
+        let board = routed_board(10.0, 10.4);
+        let pairs = [DiffPairRequest {
+            positive: "USB_DP".to_string(),
+            negative: "USB_DN".to_string(),
+            max_skew_nm: None,
+        }];
+        assert!(check_diff_pair_skew(&board, &pairs).is_empty());
+    }
+
+    #[test]
+    fn a_board_without_the_pair_copper_has_no_finding() {
+        let board = routed_board(10.0, 10.4);
+        let pairs = [pair("DP", "DN", 150_000)];
+        assert!(check_diff_pair_skew(&board, &pairs).is_empty());
+    }
+
+    #[test]
+    fn skew_uses_the_segments_euclidean_length_not_manhattan() {
+        // A 10 x 10 mm diagonal carries 14.142 mm of copper, not the 20 mm
+        // Manhattan measuring would call it. The negative half is 15 mm
+        // straight, so the halves are 0.858 mm apart and inside a 1 mm
+        // budget; a Manhattan count would report 5 mm of skew.
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (generator "synth-eda")
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal))
+          (net 0 "") (net 1 "USB_DP") (net 2 "USB_DN")
+          (segment (start 10 10) (end 20 20) (width 0.25) (layer "F.Cu") (net 1))
+          (segment (start 10 12) (end 25 12) (width 0.25) (layer "F.Cu") (net 2))
+          (gr_line (start 0 0) (end 40 40) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let board = PcbBoard::parse(text).expect("fixture parses");
+        let pairs = [pair("USB_DP", "USB_DN", 1_000_000)];
+        let findings = check_diff_pair_skew(&board, &pairs);
+        assert!(findings.is_empty(), "{findings:?}");
+    }
+
+    #[test]
+    fn the_budget_is_measured_from_copper_not_from_the_router_s_claim() {
+        // 0.15 mm of declared skew on a pair delivering exactly 0.15 mm:
+        // measured, inside, released.
+        let board = routed_board(10.0, 10.15);
+        let pairs = [pair("USB_DP", "USB_DN", 150_000)];
+        assert!(check_diff_pair_skew(&board, &pairs).is_empty());
     }
 }

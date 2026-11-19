@@ -1127,6 +1127,8 @@ fn multi_unit_rails_split_is_an_error() {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -1160,6 +1162,7 @@ fn multi_unit_rails_split_is_an_error() {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "t".into(),
         layers: 2,
         manufacturer: None,
@@ -1208,6 +1211,7 @@ fn multi_unit_rails_split_is_an_error() {
         diff_pairs: Vec::new(),
         notes: Vec::new(),
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

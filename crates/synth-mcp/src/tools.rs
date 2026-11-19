@@ -1113,6 +1113,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "legends on"
                 },
                 {
+                    "form": "labels <on|off>",
+                    "description": "Board-level silkscreen labels, default on. When off, the exported PCB carries none of the reference-designator or value text the exporter itself adds; text the library footprint owns (silk lines, courtyards) is untouched. Use off for boards whose silkscreen is drawn by hand or whose assembly wants a clean top.",
+                    "example": "labels off"
+                },
+                {
                     "form": "company \"<name>\"",
                     "description": "Design-authority name for the schematic title block's Company field. Distinct from `manufacturer`, which names who builds the board.",
                     "example": "company \"Acme Robotics\""
@@ -1629,8 +1634,10 @@ fn route_design_externally_with(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
+    request.use_board_diff_pairs(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -3109,11 +3116,13 @@ fn evaluate_candidate_mcp(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     // Each candidate is scored by routing it, so it has to be routed the way
     // the board asked: without the escape intent a declared `escape { off }`
     // or a chosen method would change the winner.
     request.use_board_escapes(board);
     request.use_board_layer_pins(board);
+    request.use_board_diff_pairs(board);
     // Granting only. Reporting belongs to the run the caller keeps: this is
     // reached from `select_placement_by_route` inside `execute_export`, which
     // grants again for the chosen placement and puts any unmet requirement in
@@ -3349,8 +3358,10 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
+    request.use_board_diff_pairs(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;

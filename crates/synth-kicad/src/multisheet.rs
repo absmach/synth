@@ -415,6 +415,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -464,6 +466,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -474,6 +477,7 @@ mod tests {
             diff_pairs: Vec::new(),
             notes: Vec::new(),
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -525,6 +529,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         };
         let mut components = Vec::new();
         for id in 0..40 {

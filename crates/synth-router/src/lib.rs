@@ -467,6 +467,20 @@ fn with_repair_findings(
     verdict
 }
 
+/// The verdict with a declared pair outside its skew budget marked blocking.
+/// The finding names the pair and its budget; the candidate is not
+/// fabrication-ready, the same way a return-via blocker holds it.
+fn with_diff_pair_findings(
+    mut verdict: validate::FabricationVerdict,
+    findings: Vec<String>,
+) -> validate::FabricationVerdict {
+    if !findings.is_empty() {
+        verdict.fabrication_ready = false;
+        verdict.blocking_reasons.extend(findings);
+    }
+    verdict
+}
+
 /// Say what the post-routing silkscreen pass did, and return the findings that
 /// must reach the verdict. A hidden designator is a blocking finding: a board
 /// with an unreadable reference is not fabrication-ready. A pass that could not
@@ -628,6 +642,15 @@ pub fn finalize_candidate(
         repair_unavailable,
         repair_advisory,
     );
+    // A declared pair the copper does not length-match to its budget blocks
+    // the release here, in the same verdict the return-via blockers do: a
+    // board that releases with 9.9 mm of skew on a `max_skew 0.15mm` pair is
+    // the failure #447 shipped, and it stops being silent.
+    let skew_findings = match &delivered_board {
+        Some(board) => validate::check_diff_pair_skew(board, &request.diff_pairs),
+        None => Vec::new(),
+    };
+    let verdict = with_diff_pair_findings(verdict, skew_findings);
 
     let state = RouteReport::state_for_verdict(&verdict);
 
@@ -979,6 +1002,33 @@ mod repair_tests {
         assert!(verdict.fabrication_ready);
         assert!(!verdict.has_blocking_findings());
         assert_eq!(verdict.advisories, vec![advisory.to_string()]);
+        assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
+    }
+
+    /// A declared pair outside its skew budget blocks the candidate in the
+    /// same verdict the return-via blockers do: the finding names the pair,
+    /// the board lands in validation-failed, and the release gate keeps it
+    /// (absmach/synth#447).
+    #[test]
+    fn a_declared_pair_outside_its_skew_budget_blocks_the_verdict() {
+        let finding = "pair `USB_DP`/`USB_DN` is length-matched to 9.900 mm, longer than \
+             the 0.150 mm maximum skew (E-SYNTH-DRC-014)";
+        let verdict =
+            with_diff_pair_findings(FabricationVerdict::ready(), vec![finding.to_string()]);
+        assert!(!verdict.fabrication_ready);
+        assert_eq!(verdict.blocking_reasons, vec![finding.to_string()]);
+        assert_eq!(
+            RouteReport::state_for_verdict(&verdict),
+            RouteState::ValidationFailed
+        );
+    }
+
+    /// A board with no declared pair — or with every pair inside its budget —
+    /// leaves the verdict as validation found it.
+    #[test]
+    fn a_clean_or_undeclared_pair_verdict_is_unchanged() {
+        let verdict = with_diff_pair_findings(FabricationVerdict::ready(), Vec::new());
+        assert!(verdict.fabrication_ready);
         assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
     }
 }

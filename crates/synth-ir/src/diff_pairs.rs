@@ -59,6 +59,23 @@ pub fn resolve_pairs(board: &Board) -> Vec<ResolvedPair> {
     out
 }
 
+/// [`resolve_pairs`] with each pair's declared skew budget alongside it, in the
+/// same declaration order.
+///
+/// The budget is the length the two halves may differ by, in nanometres; `None`
+/// for a pair that declares none. Carried with the resolution rather than read
+/// separately because the router needs both facts about the same pair, and a
+/// resolver that dropped an unresolved pair would misalign a separately read
+/// budget list with the pairs that survived.
+#[must_use]
+pub fn resolve_pairs_with_budgets(board: &Board) -> Vec<(ResolvedPair, Option<i64>)> {
+    board
+        .diff_pairs
+        .iter()
+        .filter_map(|pair| resolve_one(board, pair).map(|r| (r, pair.max_skew.map(|l| l.0))))
+        .collect()
+}
+
 fn resolve_one(board: &Board, pair: &crate::DiffPair) -> Option<ResolvedPair> {
     // Strategy 1: the halves name nets directly. Canonical when a design
     // names its nets (`connect … as "USB_DP"`).
@@ -412,6 +429,25 @@ mod tests {
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0].positive_net, crate::board::NetId(0));
         assert_eq!(pairs[0].negative_net, crate::board::NetId(1));
+    }
+
+    /// The declared `max_skew` travels with the resolved pair, aligned with it,
+    /// because the router needs both facts about the same pair (absmach/synth#447).
+    #[test]
+    fn a_resolved_pair_carries_its_declared_skew_budget() {
+        let mut b = usb_board();
+        b.diff_pairs[0].max_skew = Some(crate::units::Length(150_000));
+        let pairs = resolve_pairs_with_budgets(&b);
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].1, Some(150_000));
+
+        // A pair without a budget resolves with none, and a declaration that
+        // resolves to nothing is dropped without misaligning the budgets.
+        b.diff_pairs[0].max_skew = None;
+        b.diff_pairs.push(pair("J1_missing", "J1_dn"));
+        let pairs = resolve_pairs_with_budgets(&b);
+        assert_eq!(pairs.len(), 1, "{pairs:?}");
+        assert_eq!(pairs[0].1, None);
     }
 
     /// A pair is not a USB concept. Anything declared

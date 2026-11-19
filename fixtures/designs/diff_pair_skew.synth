@@ -1,0 +1,16 @@
+// A declared differential pair on a two-part board, for the router's
+// coupled-routing and skew-budget tests (absmach/synth#447).
+board "diff_pair_skew" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component J1: resistor "r_generic_0603"
+  component U1: resistor "r_generic_0603"
+
+  connect J1.p1 -> U1.p1 as "USB_DP"
+  connect J1.p2 -> U1.p2 as "USB_DN"
+
+  diff_pair USB_DP USB_DN {
+    max_skew 0.15mm
+  }
+}

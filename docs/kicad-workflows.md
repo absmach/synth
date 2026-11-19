@@ -122,6 +122,9 @@ synth routers
 
 **If an engine is missing**, Synth reports `router_unavailable` along with the paths it searched. FreeRouting needs a Java runtime and the JAR; both are found automatically.
 
+`SYNTH_QUALIFY_ROUTER` pins the engine a qualification run records; the run
+then reports that engine honestly missing rather than routing with another.
+
 > [!TIP]
 > There is one failure that catches almost everyone. The helper that drives FreeRouting imports KiCad's `pcbnew` module, which ships with **KiCad's own Python** — and that is usually _not_ the `python3` first on your `PATH`. When that happens, point the pipeline at the right interpreter:
 >

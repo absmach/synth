@@ -998,6 +998,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -1065,6 +1067,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "kg_test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -1075,6 +1078,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],

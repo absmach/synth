@@ -21,9 +21,11 @@ budget to make the timeout easy to observe:
 timeout = 1.0
 ```
 
-A dense AC sweep on a large circuit, or a slow subcircuit model, is the usual
-cause. A switching converter in transient would need a much larger budget,
-but transient analysis itself is not implemented yet.
+A dense AC sweep on a large circuit, a slow subcircuit model, or a transient
+whose `stop/step` exceeds the 100 000-point output cap (rejected before the
+run) are the usual causes. Transient runs are the ones most likely to need
+more than the default budget: shorten `stop`, raise `step`, or set an
+explicit `[options] timeout`.
 
 ## Suggested fix
 

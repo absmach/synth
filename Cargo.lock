@@ -2418,6 +2418,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "chrono",
+ "futures-core",
  "insta",
  "schemars",
  "serde",

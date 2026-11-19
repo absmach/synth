@@ -425,6 +425,7 @@ expression: board
       }
     }
   ],
+  "labels": true,
   "keepouts": [],
   "netclasses": [],
   "groups": [

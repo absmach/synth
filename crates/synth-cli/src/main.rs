@@ -565,6 +565,10 @@ enum Command {
         /// JSON file to write. Defaults to stdout.
         #[arg(long, value_name = "FILE")]
         out: Option<PathBuf>,
+        /// Disposition for one reference designator, e.g. `J1=hand-assembly`
+        /// or `H1=mechanical`. Repeat for each part.
+        #[arg(long, value_name = "REF=KIND")]
+        disposition: Vec<String>,
     },
 
     /// Calculate a reproducible report from a frozen `synth-cost` input JSON.
@@ -860,10 +864,10 @@ enum Format {
 
 /// The external router an operator selected.
 ///
-/// KiCadRoutingTools is the default; FreeRouting is the managed alternative
-/// and therefore always an explicit choice. There is no third variant, and no
-/// built-in router: a missing engine is a capability error, never a silent
-/// fallback to something else.
+/// KiCadRoutingTools is the default; FreeRouting and FastRoute are the
+/// alternatives and therefore always an explicit choice. There is no
+/// Synth-native route: a missing engine is an unavailable run, not copper
+/// from another engine.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
 enum ExternalRouter {
     FreeRouting,
@@ -877,6 +881,50 @@ impl From<ExternalRouter> for synth_router::RouterEngine {
             ExternalRouter::FreeRouting => Self::Freerouting,
             ExternalRouter::KicadRoutingTools => Self::KiCadRoutingTools,
             ExternalRouter::Fastroute => Self::Fastroute,
+        }
+    }
+}
+
+/// Whether a validate child's stdout is a complete, clean JSON verdict.
+///
+/// The child is asked for JSON, so a truncated line (the stage was killed
+/// mid-write) or an unparseable one is a failed stage. Treating it as a pass
+/// with no diagnostics would let the rest of `check` grade a board it never
+/// validated. A `parse_error` the child reports inside otherwise valid JSON is
+/// the same failure.
+fn validate_stdout_passed(stdout: &[u8]) -> bool {
+    serde_json::from_slice::<serde_json::Value>(stdout).is_ok_and(|json| {
+        !json
+            .get("parse_error")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    })
+}
+
+/// The engine `SYNTH_QUALIFY_ROUTER` pins, or `selected` when unset.
+///
+/// A qualification run records the engine its corpus was routed with, so the
+/// pin outranks `--router` and the run record always names the engine that
+/// produced the copper. A value naming no engine is ignored with a warning
+/// rather than quietly routing with something else.
+fn pinned_engine(selected: ExternalRouter) -> ExternalRouter {
+    let value = std::env::var("SYNTH_QUALIFY_ROUTER")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    let Some(value) = value else {
+        return selected;
+    };
+    match synth_router::RouterEngine::parse(&value) {
+        Some(synth_router::RouterEngine::Freerouting) => ExternalRouter::FreeRouting,
+        Some(synth_router::RouterEngine::KiCadRoutingTools) => ExternalRouter::KicadRoutingTools,
+        Some(synth_router::RouterEngine::Fastroute) => ExternalRouter::Fastroute,
+        Some(synth_router::RouterEngine::Internal) | None => {
+            warn!(
+                "SYNTH_QUALIFY_ROUTER={value} names no external router (kicad-routing-tools, \
+                 freerouting or fastroute); the pin is ignored"
+            );
+            selected
         }
     }
 }
@@ -1239,11 +1287,13 @@ fn main() -> ExitCode {
             registry,
             variant,
             out,
+            disposition,
         } => procurement_lock(
             &input,
             registry.as_deref(),
             variant.as_deref(),
             out.as_deref(),
+            &disposition,
         ),
         Command::Cost { input, out } => cost_report(&input, out.as_deref()),
         Command::Render {
@@ -1319,9 +1369,9 @@ const UNSUPPORTED: &[CapabilityLimit] = &[
     (
         "spice_simulation",
         None,
-        "`synth sim` runs an operating point or an AC decade sweep only; transient and DC-sweep \
-         analyses, pulse/pwl/sin sources, expression measures and vendor model import are not \
-         implemented yet.",
+        "`synth sim` runs an operating point, an AC decade sweep or a pulse-driven transient \
+         only; DC-sweep analyses, pwl/sin sources, expression measures and vendor model \
+         import are not implemented yet.",
     ),
     (
         "coupled_diff_pair_routing",
@@ -1645,10 +1695,15 @@ fn check(
     if let Some(dir) = registry {
         validate_args.extend(["--registry".into(), dir.display().to_string()]);
     }
-    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, 120)?;
+    let budget = check_stage_budget_secs();
+    let (validate_output, validate_timed_out) = run_check_child(&exe, &validate_args, budget)?;
+    // Truncated or unparseable stdout is not a pass, and a reported parse
+    // error inside otherwise valid JSON is not one either.
+    let validate_parse_ok = validate_stdout_passed(&validate_output.stdout);
     let validate_json = serde_json::from_slice::<serde_json::Value>(&validate_output.stdout)
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
-    let validate_pass = !validate_timed_out && validate_output.status.success();
+    let validate_pass =
+        !validate_timed_out && validate_output.status.success() && validate_parse_ok;
 
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
@@ -1656,7 +1711,10 @@ fn check(
         if let Some(dir) = registry {
             drc_args.extend(["--registry".into(), dir.display().to_string()]);
         }
-        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, 30)?;
+        // The stage routes the board with the selected external engine and
+        // then runs `kicad-cli pcb drc`, so its budget is the stage budget,
+        // not a parse-and-print one.
+        let (drc_output, timed_out) = run_check_child(&exe, &drc_args, budget)?;
         (
             serde_json::from_slice::<serde_json::Value>(&drc_output.stdout)
                 .unwrap_or_else(|_| serde_json::json!({"status": "unknown", "parse_error": true})),
@@ -1729,7 +1787,7 @@ fn check(
         if allow_unverified_parts {
             export_args.push("--allow-unverified-parts".into());
         }
-        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, 120)?;
+        let (export_output, export_timed_out) = run_check_child(&exe, &export_args, budget)?;
         fab_pass = !export_timed_out && export_output.status.success();
         let native = std::fs::read_to_string(&verification_path)
             .ok()
@@ -2096,13 +2154,56 @@ fn structural_refusal(board: &synth_ir::Board) -> Option<String> {
     Some(out)
 }
 
+/// Keep a bounded amount of a child's output without blocking it. `synth
+/// check` parses stdout as JSON, so the cap is generous; stderr is diagnostic
+/// and only the tail is needed. A truncated stdout makes the parse fail, which
+/// fails the stage closed rather than accepting half a document.
+const CHECK_STDOUT_CAP: usize = 16 * 1024 * 1024;
+const CHECK_STDERR_CAP: usize = 1024 * 1024;
+
+fn read_capped(pipe: &mut impl std::io::Read, cap: usize) -> (Vec<u8>, bool) {
+    let mut kept = Vec::with_capacity(cap.min(64 * 1024));
+    let mut chunk = vec![0_u8; 64 * 1024];
+    let mut truncated = false;
+    loop {
+        match pipe.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(read) => {
+                let room = cap.saturating_sub(kept.len());
+                if room > 0 {
+                    kept.extend_from_slice(&chunk[..read.min(room)]);
+                }
+                if read > room {
+                    truncated = true;
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    (kept, truncated)
+}
+
+/// The per-stage child budget of `synth check`.
+///
+/// The gate routes real boards through its DRC stage now, and a reference
+/// board's external route takes minutes, so the release matrix can raise the
+/// budget with `SYNTH_CHECK_STAGE_BUDGET_SECS` without editing the command.
+/// An unparsable or non-positive value keeps the default, exactly like the
+/// other `SYNTH_*` budgets.
+fn check_stage_budget_secs() -> u64 {
+    std::env::var("SYNTH_CHECK_STAGE_BUDGET_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(120)
+}
+
 fn run_check_child(
     exe: &Path,
     args: &[String],
     timeout_seconds: u64,
 ) -> anyhow::Result<(std::process::Output, bool)> {
-    use std::io::Read;
-
     let mut child = ProcessCommand::new(exe)
         .args(args)
         .stdout(std::process::Stdio::piped())
@@ -2117,25 +2218,26 @@ fn run_check_child(
     // passes the 64 KiB a pipe holds on an ordinary board, so this is
     // reached by real designs rather than pathological ones.
     //
-    // Nothing is capped here. The caller parses stdout as JSON, so a
-    // truncated stream is worse than a large one: it is indistinguishable
-    // from a board that does not parse.
+    // Drain into a bounded buffer and keep reading after the cap, so a
+    // verbose child never blocks on a full pipe and never grows the parent
+    // without limit. A stdout that hit the cap is marked in stderr; the JSON
+    // parse then fails the stage rather than accepting a partial document.
     let mut stdout_pipe = child.stdout.take();
     let mut stderr_pipe = child.stderr.take();
     let (stdout_tx, stdout_rx) = std::sync::mpsc::channel();
     let (stderr_tx, stderr_rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(pipe) = stdout_pipe.as_mut() {
-            let _ = pipe.read_to_end(&mut buf);
-        }
-        let _ = stdout_tx.send(buf);
+        let (buf, truncated) = match stdout_pipe.as_mut() {
+            Some(pipe) => read_capped(pipe, CHECK_STDOUT_CAP),
+            None => (Vec::new(), false),
+        };
+        let _ = stdout_tx.send((buf, truncated));
     });
     std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(pipe) = stderr_pipe.as_mut() {
-            let _ = pipe.read_to_end(&mut buf);
-        }
+        let (buf, _) = match stderr_pipe.as_mut() {
+            Some(pipe) => read_capped(pipe, CHECK_STDERR_CAP),
+            None => (Vec::new(), false),
+        };
         let _ = stderr_tx.send(buf);
     });
 
@@ -2165,8 +2267,17 @@ fn run_check_child(
         rx.recv_timeout(grace.saturating_duration_since(std::time::Instant::now()))
             .unwrap_or_default()
     };
-    let stdout = collect(&stdout_rx);
-    let stderr = collect(&stderr_rx);
+    let (stdout, stdout_truncated) = stdout_rx
+        .recv_timeout(grace.saturating_duration_since(std::time::Instant::now()))
+        .unwrap_or_default();
+    let mut stderr = collect(&stderr_rx);
+    if stdout_truncated {
+        use std::io::Write as _;
+        let _ = writeln!(
+            stderr,
+            "child stdout exceeded {CHECK_STDOUT_CAP} bytes and was truncated"
+        );
+    }
 
     Ok((
         std::process::Output {
@@ -3936,6 +4047,10 @@ fn route_design(
     let sidecars = synth_kicad::Sidecars::resolve_for(input);
     let result = synth_kicad::export_with_sidecars(board, &out_dir, &sidecars)
         .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+
+    // The qualification pin outranks the flag, so a recorded run names the
+    // engine the corpus used.
+    let engine = pinned_engine(engine);
     let report = route_externally(board, &result, input, engine, options, best_of, &[])?;
 
     // Signal/power-integrity on the delivered copper, so `synth route` and
@@ -5372,6 +5487,7 @@ fn build_route_request(
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
     request.use_board_escapes(board);
     request.use_board_layer_pins(board);
+    request.use_board_diff_pairs(board);
     request.use_profile_floor(
         &board
             .manufacturer
@@ -6272,11 +6388,32 @@ fn supply_chain(input: &Path, registry_dir: Option<&Path>, format: Format) -> an
     Ok(EXIT_SUCCESS)
 }
 
+fn parse_disposition(raw: &str) -> anyhow::Result<(String, synth_ir::AssemblyDisposition)> {
+    let (refdes, kind) = raw.split_once('=').ok_or_else(|| {
+        anyhow::anyhow!("disposition `{raw}` must be REF=KIND, e.g. J1=hand-assembly")
+    })?;
+    let refdes = refdes.trim();
+    if refdes.is_empty() {
+        anyhow::bail!("disposition `{raw}` names no reference designator");
+    }
+    let disposition = match kind.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+        "supplier-assembly" | "supplier" => synth_ir::AssemblyDisposition::SupplierAssembly,
+        "hand-assembly" | "hand" => synth_ir::AssemblyDisposition::HandAssembly,
+        "dnp" => synth_ir::AssemblyDisposition::Dnp,
+        "mechanical" => synth_ir::AssemblyDisposition::Mechanical,
+        other => anyhow::bail!(
+            "unknown disposition `{other}`; use supplier-assembly, hand-assembly, dnp or mechanical"
+        ),
+    };
+    Ok((refdes.to_string(), disposition))
+}
+
 fn procurement_lock(
     input: &Path,
     registry_dir: Option<&Path>,
     variant_name: Option<&str>,
     out: Option<&Path>,
+    disposition_args: &[String],
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
@@ -6324,7 +6461,23 @@ fn procurement_lock(
         ),
         None => None,
     };
-    let lock = synth_ir::lock_board(board, variant)
+    let mut dispositions = std::collections::BTreeMap::new();
+    for raw in disposition_args {
+        let (refdes, disposition) = parse_disposition(raw)?;
+        if !board
+            .components
+            .iter()
+            .any(|component| component.refdes == refdes)
+        {
+            anyhow::bail!("disposition names `{refdes}`, which this board does not have");
+        }
+        if let Some(previous) = dispositions.insert(refdes.clone(), disposition)
+            && previous != disposition
+        {
+            anyhow::bail!("disposition for `{refdes}` is given twice with different values");
+        }
+    }
+    let lock = synth_ir::lock_board_with_dispositions(board, variant, &dispositions)
         .map_err(|error| anyhow::anyhow!("procurement lock rejected: {error}"))?;
     let json = serde_json::to_string_pretty(&lock)? + "\n";
     if let Some(path) = out {
@@ -6684,6 +6837,24 @@ mod tests {
         assert!(output.status.success());
     }
 
+    /// More output than the cap is drained and discarded, not accumulated.
+    #[cfg(unix)]
+    #[test]
+    fn a_child_that_floods_stdout_is_capped_and_marked() {
+        let args = [
+            "-c".to_string(),
+            format!("yes x | head -c {}", CHECK_STDOUT_CAP + 4 * 1024 * 1024),
+        ];
+        let (output, timed_out) =
+            run_check_child(Path::new("/bin/sh"), &args, 30).expect("run the child");
+        assert!(!timed_out);
+        assert_eq!(output.stdout.len(), CHECK_STDOUT_CAP);
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("was truncated"),
+            "the truncation must be visible"
+        );
+    }
+
     /// The budget still has to end a child that genuinely hangs, and a
     /// killed child is reported as timed out rather than as a clean run.
     #[cfg(unix)]
@@ -6904,5 +7075,15 @@ mod tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
         assert!(findings[0].is_blocking());
+    }
+
+    #[test]
+    fn a_truncated_or_unparseable_validate_stdout_is_not_a_pass() {
+        assert!(validate_stdout_passed(br#"{"diagnostics": []}"#));
+        assert!(!validate_stdout_passed(br#"{"diagnostics": [{"code":"E-"#));
+        assert!(!validate_stdout_passed(b""));
+        assert!(!validate_stdout_passed(
+            br#"{"diagnostics": [], "parse_error": true}"#
+        ));
     }
 }
