@@ -67,6 +67,8 @@ fn reg_pin(name: &str) -> RegPin {
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -151,7 +153,9 @@ fn build(
         nets,
         diff_pairs: Vec::new(),
         notes: Vec::new(),
+        labels: false,
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],
@@ -164,14 +168,37 @@ fn build(
 
 /// `groups` groups, each 1-3 two-pin parts, chained by one cross-sheet net
 /// to the next group. A groups-only split puts the first group on the root.
+///
+/// For six groups or fewer, the groups after the first carry sixteen two-pin
+/// parts, so the design really spills the A4 page `hierarchy` asks for; larger
+/// counts spill on their own. With only 1-3 small parts per group even six
+/// groups tile one page and there is no hierarchy to number.
 fn grouped(name: &str, groups: usize) -> Board {
+    grouped_with(name, groups, true)
+}
+
+/// [`grouped`] without the extra parts: a small board that fits one page.
+fn plain_grouped(name: &str, groups: usize) -> Board {
+    grouped_with(name, groups, false)
+}
+
+fn grouped_with(name: &str, groups: usize, dense: bool) -> Board {
     let mut specs = Vec::new();
     let mut links = Vec::new();
     let mut next = 0u32;
     let mut first = Vec::new();
     let mut last = Vec::new();
     for g in 0..groups {
-        let count = 1 + g % 3;
+        // With 1-3 parts per group, three to six groups still fit one A4
+        // page, so the first few fixtures need groups big enough to spill it
+        // (16 per group is the smallest count measured to overflow at N=3).
+        // The first group merges onto the root; keep it small so the root
+        // still fits A4.
+        let count = if dense && groups <= 6 {
+            if g == 0 { 1 } else { 16 }
+        } else {
+            1 + g % 3
+        };
         let start = next;
         for _ in 0..count {
             specs.push(Spec::group(&format!("G{g:02}"), 2));
@@ -426,7 +453,7 @@ fn the_root_declares_its_own_page() {
 
 #[test]
 fn a_single_sheet_root_has_no_sheet_instances_block() {
-    let board = grouped("single", 2);
+    let board = plain_grouped("single", 2);
     let out = export(&board);
     // Two groups still fit one page, so there is no hierarchy root.
     assert!(pages(&out.root).is_empty());
@@ -525,9 +552,43 @@ fn the_first_group_on_the_root_keeps_page_two_for_the_first_sub_sheet() {
 }
 
 #[test]
+fn a_large_first_group_merges_onto_the_root() {
+    // Sixteen parts in the first group make its tiled box large; it still
+    // moves onto the root, and the first sub-sheet keeps page 2.
+    let mut specs = Vec::new();
+    let mut links = Vec::new();
+    for g in 0..3 {
+        let start = specs.len() as u32;
+        for _ in 0..16 {
+            specs.push(Spec::group(&format!("G{g:02}"), 2));
+        }
+        for part in start..start + 11 {
+            links.push((part, 1, part + 1, 0, format!("G{g:02}_LOCAL")));
+        }
+        if start > 0 {
+            links.push((start - 1, 1, start, 0, format!("LINK_{g:02}")));
+        }
+    }
+    let board = build("largefirst", &specs, &links, None);
+    let out = export(&board);
+    assert_eq!(pages(&out.root), vec![2, 3]);
+    assert!(out.root.contains("\"R0\""), "the first group left the root");
+    assert!(
+        out.root.contains("\"R15\""),
+        "the whole first group is on the root"
+    );
+    assert!(!out.dir.join("largefirst_G00.kicad_sch").exists());
+    let boxes = sheet_blocks(&out.root);
+    let (_, width, height) = paper(&out.root);
+    assert_boxes_fit(&boxes, width, height);
+    assert_boxes_do_not_overlap(&boxes);
+    assert_pages_follow_reading_order(&boxes, &pages(&out.root));
+}
+
+#[test]
 fn a_sheet_with_no_cross_nets_keeps_its_page() {
     let specs = (0..4)
-        .map(|g| Spec::group(&format!("G{g:02}"), 2))
+        .flat_map(|g| (0..12).map(move |_| Spec::group(&format!("G{g:02}"), 2)))
         .collect::<Vec<_>>();
     let board = build("zeropins", &specs, &[], None);
     let out = export(&board);
@@ -542,15 +603,20 @@ fn a_sheet_with_no_cross_nets_keeps_its_page() {
 
 #[test]
 fn many_cross_nets_stay_on_the_box_bottom_edge() {
-    let specs = (0..4)
-        .map(|g| Spec::group(&format!("G{g:02}"), 20))
-        .collect::<Vec<_>>();
+    let mut specs = Vec::new();
+    let mut linked = Vec::new();
+    for g in 0..4 {
+        linked.push(specs.len() as u32);
+        for _ in 0..8 {
+            specs.push(Spec::group(&format!("G{g:02}"), 20));
+        }
+    }
     let mut links = Vec::new();
     for pin in 0..20 {
-        links.push((0, pin, 1, pin, format!("CROSS_{pin:02}")));
+        links.push((linked[0], pin, linked[1], pin, format!("CROSS_{pin:02}")));
     }
-    links.push((1, 19, 2, 0, "L01".to_string()));
-    links.push((2, 19, 3, 0, "L12".to_string()));
+    links.push((linked[1], 19, linked[2], 0, "L01".to_string()));
+    links.push((linked[2], 19, linked[3], 0, "L12".to_string()));
     let board = build("manypins", &specs, &links, None);
     let out = export(&board);
     assert_eq!(pages(&out.root), vec![2, 3, 4]);
@@ -740,7 +806,10 @@ fn kicad_reads_twelve_pages_in_page_order_and_erc_is_clean() {
         return;
     }
 
-    let board = grouped("pages12", 12);
+    // No tall ballast: its 40-pin parts leave pins unconnected, and this
+    // test is the one that checks the rendered hierarchy's ERC. Twelve
+    // groups already spill the page, so the hierarchy exists anyway.
+    let board = plain_grouped("pdforder12", 12);
     let out = export(&board);
     let pdf = out.dir.join("order.pdf");
     let status = std::process::Command::new("kicad-cli")
