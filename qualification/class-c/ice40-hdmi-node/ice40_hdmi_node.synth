@@ -1,6 +1,6 @@
 // iCE40HX4K HDMI node: DVI-style TMDS output (resistor-source), six layers.
-//   5 V terminal -> PTC fuse -> TVS -> Schottky reverse-polarity -> +5V
-//   +5V -> AMS1117-3.3 -> +3V3 -> TLV70012 -> +1V2 core; PLL supply via ferrite bead
+//   5 V terminal -> PTC fuse -> TVS -> P-MOSFET reverse-polarity -> +5V
+//   +5V -> AP2112K-3.3 -> +3V3 -> TLV70012 -> +1V2 core; PLL supply via ferrite bead
 //   iCE40HX4K-TQ144 + W25Q128JVSIQ SPI boot flash, 25 MHz oscillator
 //   HDMI Type-A: 3 data pairs + clock pair, DDC (level-shifted), HPD, +5V through PTC fuse
 board "ice40_hdmi_node" {
@@ -77,17 +77,18 @@ board "ice40_hdmi_node" {
     component J1: connector "jst_b2b_xh_a_2pin" { placement_hint { edge: right priority: hard } }
     component F1: fuse "polyfuse_1r1a" { placement_hint { near: "J1" priority: hard } }
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1" priority: hard } }
-    component D2: diode "ss36" { placement_hint { near: "D1" priority: hard } }
-    component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "D2" priority: hard } }
+    component Q3: transistor "p_mosfet_si2301" { placement_hint { near: "D1" priority: hard } }
+    component R40: resistor "r_generic_0603" value "10k" { placement_hint { near: "Q3" priority: hard } }
+    component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "Q3" priority: hard } }
     component TP1: testpoint "testpoint_pad_1_5" value "+5V" { placement_hint { near: "C1" priority: hard } }
     notes "" {
-      "5 V in; PTC 1.1 A hold; TVS 6.0 V standoff above the 5.5 V maximum input."
+      "5 V in; PTC 1.1 A hold; TVS 6.0 V standoff above the 5.5 V maximum input; Q3 P-MOSFET reverse-polarity stage, gate to GND through R40."
     }
   }
 
   // ---- 3.3 V and 1.2 V rails ----------------------------------------------
   group "RAILS" color "#a16207" {
-    component U1: regulator "ams1117_3v3" value "AMS1117-3.3" { placement_hint { near: "D2" priority: hard } }
+    component U1: regulator "ap2112k_3v3" value "AP2112K-3.3" { placement_hint { near: "Q3" priority: hard } }
     component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
     component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
     component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1" priority: hard } }
@@ -154,6 +155,8 @@ board "ice40_hdmi_node" {
     component F2: fuse "polyfuse_500ma" { placement_hint { near: "J2.vcc_5v" priority: hard } }
     component C8: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "F2" priority: hard } }
     component D3: diode "tvs_array_5v" { placement_hint { near: "J2.sda" priority: hard } }
+    component D8: diode "tpd4e05u06" { placement_hint { near: "J2" priority: hard } }
+    component D9: diode "tpd4e05u06" { placement_hint { near: "J2" priority: hard } }
     component Q1: transistor "n_mosfet_irlml6244" { placement_hint { near: "D3" priority: hard } }
     component Q2: transistor "n_mosfet_irlml6244" { placement_hint { near: "D3" priority: hard } }
     component R9: resistor "r_generic_0603" value "2k" { placement_hint { near: "Q1" priority: hard } }
@@ -165,6 +168,7 @@ board "ice40_hdmi_node" {
     component TP7: testpoint "testpoint_pad_1_5" value "+5V_HDMI" { placement_hint { near: "F2" priority: hard } }
     notes "" {
       "TMDS drive: FPGA LVCMOS33 output + 270 ohm into 50 ohm sink pull-up to 3.3 V."
+      "D8 and D9 are TPD4E05U06 ESD arrays (0.5 pF per channel) on the eight TMDS lines at the connector."
     }
   }
 
@@ -172,6 +176,7 @@ board "ice40_hdmi_node" {
   group "STATUS" color "#be185d" {
     component R20: resistor "r_generic_0603" value "470" { placement_hint { near: "D4" priority: hard } }
     component R21: resistor "r_generic_0603" value "470" { placement_hint { near: "D5" priority: hard } }
+    component Q4: transistor "ao3400a_nmos" { placement_hint { near: "D5" priority: hard } }
     component R22: resistor "r_generic_0603" value "470" { placement_hint { near: "D6" priority: hard } }
     component R23: resistor "r_generic_0603" value "470" { placement_hint { near: "D7" priority: hard } }
     component D4: led "led_green_0603" { placement_hint { edge: bottom priority: hard } }
@@ -184,15 +189,16 @@ board "ice40_hdmi_node" {
 
   // ---- Nets ---------------------------------------------------------------
   net "+5V_IN" class "PWR" { J1.p1 F1.p1 }
-  net "VIN_FUSED" class "PWR" { F1.p2 D1.cathode D2.anode }
-  power "+5V" 5.0v class "PWR" { D2.cathode C1.p1 TP1.p1 U1.vin C2.p1 C3.p1 F2.p1 }
+  net "VIN_FUSED" class "PWR" { F1.p2 D1.cathode Q3.d }
+  net "Q3_GATE" class "SIG" { Q3.g R40.p1 }
+  power "+5V" 5.0v class "PWR" { Q3.s C1.p1 TP1.p1 U1.vin U1.en C2.p1 C3.p1 F2.p1 }
   power "+3V3" 3.3v class "PWR" {
     U1.vout C4.p1 C5.p1 TP2.p1 U2.vin U2.en C6.p1
     U3.vccio_0 U3.vccio_1 U3.vccio_2 U3.vccio_3 U3.vccio_3_2 U3.vccio_0_2 U3.vccio_1_2 U3.vccio_2_2 U3.vcc_spi U3.vpp_2v5
     C14.p1 C15.p1 C16.p1 C17.p1 C18.p1 C19.p1 C20.p1
     U4.vcc C24.p1 C25.p1 C26.p1 C27.p1 R32.p1 R33.p1 R30.p1 R31.p1
     X1.vcc X1.oe C23.p1
-    Q1.g Q2.g R11.p1 R12.p1 R20.p1
+    Q1.g Q2.g R11.p1 R12.p1 R20.p1 R21.p1
   }
   power "+1V2" 1.2v class "PWR" {
     U2.vout C7.p1 TP3.p1
@@ -211,14 +217,14 @@ board "ice40_hdmi_node" {
   net "D2_N_SRC" class "TMDS_SRC" { U3.iol_5a R6.p1 }
   net "CK_P_SRC" class "TMDS_SRC" { U3.iol_2b R7.p1 }
   net "CK_N_SRC" class "TMDS_SRC" { U3.iol_2a R8.p1 }
-  net "HDMI_D0_P" class "TMDS" { R1.p2 J2.d0_p }
-  net "HDMI_D0_N" class "TMDS" { R2.p2 J2.d0_n }
-  net "HDMI_D1_P" class "TMDS" { R3.p2 J2.d1_p }
-  net "HDMI_D1_N" class "TMDS" { R4.p2 J2.d1_n }
-  net "HDMI_D2_P" class "TMDS" { R5.p2 J2.d2_p }
-  net "HDMI_D2_N" class "TMDS" { R6.p2 J2.d2_n }
-  net "HDMI_CK_P" class "TMDS" { R7.p2 J2.ck_p }
-  net "HDMI_CK_N" class "TMDS" { R8.p2 J2.ck_n }
+  net "HDMI_D0_P" class "TMDS" { R1.p2 J2.d0_p D8.ch1 }
+  net "HDMI_D0_N" class "TMDS" { R2.p2 J2.d0_n D8.ch2 }
+  net "HDMI_D1_P" class "TMDS" { R3.p2 J2.d1_p D8.ch3 }
+  net "HDMI_D1_N" class "TMDS" { R4.p2 J2.d1_n D8.ch4 }
+  net "HDMI_D2_P" class "TMDS" { R5.p2 J2.d2_p D9.ch1 }
+  net "HDMI_D2_N" class "TMDS" { R6.p2 J2.d2_n D9.ch2 }
+  net "HDMI_CK_P" class "TMDS" { R7.p2 J2.ck_p D9.ch3 }
+  net "HDMI_CK_N" class "TMDS" { R8.p2 J2.ck_n D9.ch4 }
 
   // Intra-pair skew budget. The TMDS rule for the transmitter is 0.15 Tbit between the two halves of a pair
   // (secondary sources: Chrontel and Texas Instruments TMDS layout notes and the SN65DP159/TMDS181 datasheet
@@ -245,7 +251,8 @@ board "ice40_hdmi_node" {
   net "SPI_MISO" class "SIG" { U3.iob_106_sdi U4.io1 }
   net "FLASH_WP" class "SIG" { U4.io2 R32.p2 }
   net "FLASH_HOLD" class "SIG" { U4.io3 R33.p2 }
-  net "CDONE" class "SIG" { U3.cdone R30.p2 TP5.p1 R21.p1 }
+  net "CDONE" class "SIG" { U3.cdone R30.p2 TP5.p1 Q4.g }
+  net "LED_DONE_K" class "SIG" { D5.cathode Q4.d }
   net "CRESET_B" class "SIG" { U3.creset R31.p2 TP6.p1 }
   net "CLK25" class "CLK" { X1.out U3.iot_197_gbin1 }
 
@@ -266,7 +273,7 @@ board "ice40_hdmi_node" {
     C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C25.p2 C26.p2 C27.p2 C21.p2 C22.p2 C23.p2 C24.p2 C8.p2
     X1.gnd U4.gnd
     J2.d2_shield J2.d1_shield J2.d0_shield J2.ck_shield J2.gnd J2.shield
-    D3.gnd R14.p2
-    D4.cathode D5.cathode D6.cathode D7.cathode
+    D3.gnd R14.p2 D8.gnd D8.gnd_2 D9.gnd D9.gnd_2
+    D4.cathode Q4.s D6.cathode D7.cathode
   }
 }

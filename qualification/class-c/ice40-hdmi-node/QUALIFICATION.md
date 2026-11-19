@@ -39,7 +39,7 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 
 ## 3.3 V regulator thermal budget
 
-`U1` (AMS1117-3.3, SOT-223) drops at most 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, limited to 125 &deg;C ([Advanced Monolithic Systems AMS1117 datasheet](https://files.waveshare.com/upload/b/b8/AMS1117-datasheet.pdf), a third-party print of the manufacturer's document: "Maximum junction temperature must not exceed 125 °C"; SOT-223 `RθJA = 90 °C/W`, which "can vary from 46 °C/W to >90 °C/W depending on the size of the copper area"). The board uses 90 °C/W. `W-SYNTH-THERMAL-001` comes from the registry part's declared 1200 mW rating at 90 °C/W (25 + 1.2 x 90 = 133 °C), the package limit, not this board's load.
+`U1` (AP2112K-3.3, SOT-25) drops at most 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, limited to 150 &deg;C (Diodes AP2112 datasheet, absolute maximum ratings: operating junction temperature +150 &deg;C; SOT25 `RθJA = 184 °C/W`, no heatsink). `W-SYNTH-THERMAL-001` reports `U1` at about 119 &deg;C (510 mW over 184 °C/W), the validator's own load estimate, not this board's load.
 
 | Load on `+3V3` | Current used | Source |
 |---|---|---|
@@ -48,7 +48,24 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 | Four LEDs, 470 ohm | 28 mA (3.3 V / 470 ohm each, which ignores the LED forward drop) | the design's own arithmetic |
 | Total | 253 mA | |
 
-At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 39 &deg;C rise: Tj is 64 &deg;C at 25 &deg;C ambient and 109 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 90 / 1.7 = 0.65 A` in total at 25 &deg;C ambient and at `(125 - 70) / 90 / 1.7 = 0.36 A` at 70 &deg;C ambient, which leaves about 0.40 A and 0.11 A for the FPGA's 3.3 V I/O banks, whose current depends on the design and is not counted above. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1`. The load currents are datasheet maxima added together, which no operating state reaches at once.
+At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 79 &deg;C rise: Tj is 104 &deg;C at 25 &deg;C ambient and 149 &deg;C at 70 &deg;C ambient, which is within 1 &deg;C of the 150 &deg;C limit. Tj reaches 150 &deg;C at `(150 - 25) / 184 / 1.7 = 0.40 A` in total at 25 &deg;C ambient and at `(150 - 70) / 184 / 1.7 = 0.26 A` at 70 &deg;C ambient, so at 70 &deg;C the 0.253 A above already uses the whole budget and the FPGA's 3.3 V I/O current, which depends on the design and is not counted, has no room. The load currents are datasheet maxima added together, which no operating state reaches at once. Dropout: the datasheet gives 250 mV typical and 400 mV maximum at 600 mA, so at 253 mA and the 4.6 V worst-case rail below the output stays in regulation with more than 1 V to spare. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1`.
+
+## +5 V at the HDMI connector (pin 18)
+
+An HDMI source must present 4.8 to 5.3 V on pin 18. The path is `J1` to `F1` to `Q3` to the +5 V rail to `F2` to pin 18. Worst-case drops at the resistances the datasheets give, with 55 mA on pin 18 (the HDMI source minimum) and 0.253 A drawn by `U1` ahead of `F2`, so 0.308 A through `F1` and `Q3`:
+
+| Part | Resistance | Current | Drop |
+|---|---|---|---|
+| `F1` Bourns MF-MSMF110/16 | 0.21 ohm (R1Max) | 0.308 A | 0.065 V |
+| `Q3` Vishay SI2301CDS | 0.112 ohm (maximum at VGS -4.5 V, from a mirror of the Vishay datasheet) | 0.308 A | 0.034 V |
+| `F2` Bourns MF-NSMF050 | 0.70 ohm (R1Max) | 0.055 A | 0.039 V |
+| Total | | | 0.138 V |
+
+With a 5.00 V input pin 18 sits at 4.86 V, inside the 4.8 V minimum. With a 4.75 V input (5 V less 5 %) it sits at 4.61 V, below it: the board needs at least 4.94 V at `J1` to meet 4.8 V on pin 18. The previous Schottky stage dropped about 0.45 V; the P-MOSFET stage drops 0.034 V.
+
+## Back-drive
+
+With the board unpowered and a powered sink attached, the sink's 50 ohm pull-ups to 3.3 V reach the FPGA's I/O banks through the 270 ohm source resistors and can back-power them. The board has no isolation switch for this; do not connect a powered sink to an unpowered board.
 
 ## Layout and fill
 

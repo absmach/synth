@@ -245,15 +245,6 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.D2]
-x = 68.15
-y = 10.1
-rotation = 0
-source = "agent"
-priority = "hard"
-dx = 0.0
-dy = 0.0
-
 [components.D3]
 x = 8.3
 y = 54.45
@@ -689,6 +680,51 @@ dy = 0.0
 [components.X1]
 x = 38.75
 y = 8.41
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.Q3]
+x = 68.15
+y = 10.1
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R40]
+x = 71.5
+y = 10.1
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.Q4]
+x = 50.0
+y = 68.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D8]
+x = 12.0
+y = 34.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D9]
+x = 12.0
+y = 45.0
 rotation = 0
 source = "agent"
 priority = "hard"
