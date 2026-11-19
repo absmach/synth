@@ -7803,13 +7803,12 @@ fn separate_overlaps_with(
 }
 
 /// Compact the finished placement and fit the outline round the result, with
-/// the origin back at the corner. A placement compaction cannot improve comes
-/// back untouched, outline included.
+/// the origin back at the corner. Even when compaction cannot improve the
+/// arrangement, the outline is still fitted: the canvas a candidate was solved
+/// on is not the board's size, and a design with edge-hinted connectors would
+/// otherwise keep that canvas as its outline (#233).
 fn compact_and_fit(board: &Board, placement: Placement) -> Placement {
-    let packed = compact_placement(board, placement.clone());
-    if packed.components == placement.components {
-        return placement;
-    }
+    let packed = compact_placement(board, placement);
     let mut fitted = packed;
     tighten_outline_to_hints(board, &mut fitted);
     let origin = fitted.board_outline.min;
