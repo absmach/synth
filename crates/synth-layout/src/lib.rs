@@ -6018,6 +6018,16 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
             continue;
         }
         let label = pick_net_label(board, net).unwrap_or_else(|| format!("NET_{}", net.id.0));
+        // A label whose text only repeats the pin name beside it is visual
+        // noise. When another endpoint spells the net out, label that one and
+        // leave the self-named pin unlabelled; a net whose every pin carries
+        // the net's own name keeps one, or the copper would lose its name.
+        let spells_net = |endpoint: &synth_ir::NetEndpoint| {
+            board
+                .pin(endpoint.component, endpoint.pin)
+                .is_some_and(|pin| pin.name == label)
+        };
+        let has_other_name = net.endpoints.iter().any(|endpoint| !spells_net(endpoint));
         // A net that leaves its region is wired inside each region it touches
         // (see [`wired_subnets`]) and flagged once there, where it leaves.
         let mut flagged_regions: Vec<Option<&str>> = Vec::new();
@@ -6028,6 +6038,8 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
                     continue;
                 }
                 flagged_regions.push(region);
+            } else if has_other_name && spells_net(ep) {
+                continue;
             }
             labels.push(NetLabel {
                 net: net.id,
@@ -9652,6 +9664,32 @@ mod documentation_tests {
         assert!(
             layout.wires.iter().any(|w| w.net == NetId(0)),
             "the two pins in Sensor are wired together"
+        );
+    }
+
+    #[test]
+    fn a_label_that_only_repeats_its_pin_name_is_left_to_the_other_endpoint() {
+        let part = |name: &str| part("resistor", vec![pin(name), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", part("USB_DP"), None),
+                component(1, "R2", part("D+"), None),
+                component(2, "R3", part("USB_DP"), None),
+            ],
+            vec![net(0, "USB_DP", &[(0, 0), (1, 0), (2, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        let labels: Vec<ComponentId> = layout
+            .net_labels
+            .iter()
+            .filter(|label| label.net == NetId(0))
+            .map(|label| label.component)
+            .collect();
+        assert_eq!(
+            labels,
+            vec![ComponentId(1)],
+            "label the pin that spells the net out"
         );
     }
 
