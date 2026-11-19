@@ -716,6 +716,7 @@ expression: board
   ],
   "nets": [],
   "diff_pairs": [],
+  "labels": true,
   "keepouts": [],
   "netclasses": [],
   "source_span": {

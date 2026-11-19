@@ -332,8 +332,8 @@ fn run_board(spec: &BoardSpec, fab: bool) -> BoardResult {
     // board takes about 50s on a release build, well past the 30s default, and
     // a stage that overruns reports `unknown` rather than what it found.
     // Honour an inherited value so CI can raise it further.
-    if std::env::var_os("SYNTH_CHECK_DRC_TIMEOUT_SECS").is_none() {
-        command.env("SYNTH_CHECK_DRC_TIMEOUT_SECS", "600");
+    if std::env::var_os("SYNTH_CHECK_STAGE_BUDGET_SECS").is_none() {
+        command.env("SYNTH_CHECK_STAGE_BUDGET_SECS", "600");
     }
     let output = command
         .current_dir(&root)

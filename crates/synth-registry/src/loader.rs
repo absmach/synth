@@ -108,6 +108,20 @@ pub enum LoadError {
         pin: String,
         message: String,
     },
+
+    #[error("part {path}: invalid [pins.pwm] on pin `{pin}` ({message})")]
+    InvalidPinPwm {
+        path: PathBuf,
+        pin: String,
+        message: String,
+    },
+
+    #[error("part {path}: invalid [pins.gate] on pin `{pin}` ({message})")]
+    InvalidPinGate {
+        path: PathBuf,
+        pin: String,
+        message: String,
+    },
 }
 
 /// Recursively load every `*.synth.toml` file under `root` into a
@@ -523,6 +537,12 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         if let Some(drive) = &pin.drive {
             validate_pin_drive(path, &pin.name, pin.electrical_type, drive)?;
         }
+        if let Some(pwm) = &pin.pwm {
+            validate_pin_pwm(path, &pin.name, pin.electrical_type, pwm)?;
+        }
+        if let Some(gate) = &pin.gate {
+            validate_pin_gate(path, &pin.name, gate)?;
+        }
     }
 
     // Pin-number invariant: if the part references a KiCad stock
@@ -706,6 +726,58 @@ fn validate_pin_drive(
     {
         return Err(invalid(
             "`output_resistance_ohm` must be a positive finite number".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// PWM data is datasheet data too: it belongs on an output-capable pin and
+/// every value must be usable.
+fn validate_pin_pwm(
+    path: &Path,
+    pin: &str,
+    electrical_type: crate::ElectricalType,
+    pwm: &crate::part::PinPwm,
+) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidPinPwm {
+        path: path.to_path_buf(),
+        pin: pin.to_string(),
+        message,
+    };
+    if !electrical_type.can_output() {
+        return Err(invalid(format!(
+            "`[pins.pwm]` requires an output-capable electrical type, not `{electrical_type:?}`"
+        )));
+    }
+    if !pwm.pwm_max_hz.is_finite() || pwm.pwm_max_hz <= 0.0 {
+        return Err(invalid(
+            "`pwm_max_hz` must be a positive finite number".to_string(),
+        ));
+    }
+    if pwm.datasheet_ref.trim().is_empty() {
+        return Err(invalid(
+            "`datasheet_ref` is required; record the datasheet page or table".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Gate data is datasheet data: the capacitance must be usable and its
+/// source recorded.
+fn validate_pin_gate(path: &Path, pin: &str, gate: &crate::part::PinGate) -> Result<(), LoadError> {
+    let invalid = |message: String| LoadError::InvalidPinGate {
+        path: path.to_path_buf(),
+        pin: pin.to_string(),
+        message,
+    };
+    if !gate.input_capacitance_pf.is_finite() || gate.input_capacitance_pf <= 0.0 {
+        return Err(invalid(
+            "`input_capacitance_pf` must be a positive finite number".to_string(),
+        ));
+    }
+    if gate.datasheet_ref.trim().is_empty() {
+        return Err(invalid(
+            "`datasheet_ref` is required; record the datasheet page or table".to_string(),
         ));
     }
     Ok(())
@@ -1532,6 +1604,70 @@ label_side = "inside"
             "electrical_type = \"bidirectional\"",
             &format!("electrical_type = \"{electrical_type}\""),
         )
+    }
+
+    fn pwm_part(pwm: &str) -> String {
+        format!(
+            "id = \"pwm_ic\"\nkind = \"ic\"\n\
+             [[pins]]\nname = \"gpio5\"\nnumber = \"1\"\nelectrical_type = \"bidirectional\"\n\
+             {pwm}"
+        )
+    }
+
+    const COMPLETE_PWM: &str = "[pins.pwm]\npwm_max_hz = 100000.0\ndatasheet_ref = \"Table 5-2\"\n";
+
+    #[test]
+    fn a_complete_pin_pwm_loads_and_preserves_its_values() {
+        let registry = load_from_strs(&[("pwm_ic.synth.toml", &pwm_part(COMPLETE_PWM))])
+            .expect("valid pwm block");
+        let pwm = registry
+            .lookup("pwm_ic")
+            .expect("pwm_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .pwm
+            .as_ref()
+            .expect("pwm block");
+        assert_eq!(pwm.pwm_max_hz, 100_000.0);
+        assert_eq!(pwm.datasheet_ref, "Table 5-2");
+    }
+
+    #[test]
+    fn a_pin_pwm_with_unusable_values_is_a_load_error() {
+        for (label, pwm) in [
+            (
+                "zero frequency",
+                COMPLETE_PWM.replace("pwm_max_hz = 100000.0", "pwm_max_hz = 0.0"),
+            ),
+            (
+                "negative frequency",
+                COMPLETE_PWM.replace("pwm_max_hz = 100000.0", "pwm_max_hz = -1.0"),
+            ),
+            (
+                "empty datasheet_ref",
+                COMPLETE_PWM.replace("datasheet_ref = \"Table 5-2\"", "datasheet_ref = \" \""),
+            ),
+        ] {
+            let error = load_from_strs(&[("pwm_ic.synth.toml", &pwm_part(&pwm))])
+                .expect_err(&format!("{label} must fail"));
+            assert!(
+                matches!(&error, LoadError::InvalidPinPwm { pin, .. } if pin == "gpio5"),
+                "{label}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pin_pwm_requires_an_output_capable_electrical_type() {
+        let input = pwm_part(COMPLETE_PWM)
+            .replace("id = \"pwm_ic\"", "id = \"pwm_in\"")
+            .replace(
+                "electrical_type = \"bidirectional\"",
+                "electrical_type = \"input\"",
+            );
+        let error =
+            load_from_strs(&[("pwm_in.synth.toml", &input)]).expect_err("input pin cannot pwm");
+        assert!(error.to_string().contains("output-capable"), "{error}");
     }
 
     /// Only pins that can drive a net may carry datasheet drive data: the

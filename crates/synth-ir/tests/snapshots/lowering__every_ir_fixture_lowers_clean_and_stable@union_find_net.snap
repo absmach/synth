@@ -941,6 +941,7 @@ expression: board
     }
   ],
   "diff_pairs": [],
+  "labels": true,
   "keepouts": [],
   "netclasses": [],
   "source_span": {

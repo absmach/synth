@@ -137,13 +137,18 @@ exits 0; callers must check that the file exists.
 
 A supply used for an `op` shape is that net's DC value. An `ac` draft drives
 the source at 1 V regardless of the declared supply, so an absolute `vdb`
-measure reads gain in dB. Anything the draft does not cover is printed
-to stderr as `not covered: <reason>` (a part with no datasheet, a part that is
-not one of the shapes, an RC corner that cannot share the file, …). A drafted
-overdriven LED is a warning printed as `overdrive:`, not a not-covered line. A
-design with none of the shapes writes no file and says so. One analysis is
-selected per testbench: op shapes (LED, divider) win, and an RC shape is then
-listed as not covered because an `op` and an `ac` measure cannot share one file.
+measure reads gain in dB. A `tran` draft drives the PWM pin with a pulse
+between its `[pins.drive]` levels, timed from the pin's `[pins.pwm]`
+`pwm_max_hz`; see [the transient page](spice-transient.md) for the three
+transient shapes and their windows. Anything the draft does not cover is
+printed to stderr as `not covered: <reason>` (a part with no datasheet, a
+part that is not one of the shapes, an RC corner that cannot share the file,
+a second tran shape with a different timing, …). A drafted overdriven LED is
+a warning printed as `overdrive:`, not a not-covered line. A design with
+none of the shapes writes no file and says so. One analysis is selected per
+testbench: op shapes (LED, divider) win first, an RC shape is then listed as
+not covered because an `op` and an `ac` measure cannot share one file, and a
+second transient shape with a different timing is listed the same way.
 
 The generated values are a starting point. Review every limit against the
 datasheet before relying on a passing simulation.
@@ -206,7 +211,7 @@ plot = "wave.dat"
 | --------- | ---------------------------------------------------------------- |
 | `ground`  | Synth net that maps to SPICE node `0`. Required.                  |
 | `source`  | Independent voltage sources (`[[source]]`). At least one.         |
-| `analysis`| Exactly one of `op` or `ac`. Required.                            |
+| `analysis`| Exactly one of `op`, `ac` or `tran`. Required.                    |
 | `measure` | Named measurements (`[[measure]]`). At least one.                 |
 | `options` | Run-wide settings; the table is optional.                         |
 | `ignore`  | Placed references to leave out of the deck and topology check.    |
@@ -217,20 +222,34 @@ A source drives exactly one target: a net with `dc`/`ac`, or an IC pin's
 output with `level`. Mixing the two forms, giving a pin `dc`/`ac`, or giving a
 net a `level` is `E-SYNTH-SIM-007`.
 
-| Field   | Meaning                                                          |
-| ------- | ---------------------------------------------------------------- |
-| `net`   | Synth net to drive. Must exist and must not be the ground net.    |
-| `pin`   | `REF.PIN` of an output pin carrying `[pins.drive]`.              |
-| `level` | `high` or `low` for a pin source. Required with `pin`.            |
-| `kind`  | Source kind. Only `dc` is accepted today; defaults to `dc`.      |
-| `dc`    | DC value in volts. Required for a net source unless `ac` is set.  |
-| `ac`    | AC magnitude in volts for an `ac` analysis.                       |
+| Field    | Meaning                                                          |
+| -------- | ---------------------------------------------------------------- |
+| `net`    | Synth net to drive. Must exist and must not be the ground net.    |
+| `pin`    | `REF.PIN` of an output pin carrying `[pins.drive]`.              |
+| `level`  | `high` or `low` for a DC pin source. Required with `pin` for kind `dc`; rejected on `pulse`. |
+| `kind`   | `dc` (default) or `pulse`.                                       |
+| `dc`     | DC value in volts. Required for a net source unless `ac` is set.  |
+| `ac`     | AC magnitude in volts for an `ac` analysis.                       |
+| `low`    | PULSE low level in volts. Required for a net pulse source.        |
+| `high`   | PULSE high level in volts. Required for a net pulse source.       |
+| `period` | PULSE period; a duration. Required for any pulse source.          |
+| `duty`   | High fraction of the period, from 0 (exclusive) to 1.             |
+| `rise`   | PULSE rise time; a duration.                                      |
+| `fall`   | PULSE fall time; a duration.                                      |
 
-A net source must have at least one of `dc` or `ac`; each present value must
-be finite. `ac` must be non-negative, but a `relative_db` measure needs a
-source with `ac` **greater than 0** (`ac = 0` gives the sweep nothing to
-excite). A source with `ac` but no `dc` emits `V<N> <node> 0 AC <value>`; the
-DC operating point then has no source drive.
+A net source must have at least one of `dc` or `ac` (kind `dc`), each present
+value must be finite, and `ac` must be non-negative — but a `relative_db`
+measure needs a source with `ac` **greater than 0** (`ac = 0` gives the sweep
+nothing to excite). A source with `ac` but no `dc` emits
+`V<N> <node> 0 AC <value>`; the DC operating point then has no source drive.
+
+A `kind = "pulse"` source emits
+`V<N> <node> 0 PULSE(<low> <high> 0 <rise> <fall> <pw> <period>)` with a zero
+delay and `pw = duty * period`; a duration on the sidecar becomes an explicit
+exponent in the deck, so `period = "100us"` is `1e-4` and SPICE's milli-`M`
+trap never reaches the deck. A pulse source needs the `tran` analysis and
+rejects `dc`/`ac`. See [the transient page](spice-transient.md) for the
+windowed measures it feeds.
 
 A net may be declared by only one source. Two sources that resolve to the same
 design net (net plus pin, or two pins) are `E-SYNTH-SIM-007` naming both source
@@ -263,8 +282,30 @@ pin = "U1.gpio5"
 level = "high"
 ```
 
+With a `[pins.pwm]` block on the same pin,
+
+```toml
+[pins.pwm]
+pwm_max_hz = 100000.0
+datasheet_ref = "Table 5-2"
+```
+
+the testbench may instead drive a repeating pulse between the pin's own
+levels (`low_v`, `high_v`), with the timing from the sidecar:
+
+```toml
+[[source]]
+pin = "U1.gpio5"
+kind = "pulse"
+period = "10us"
+duty = 0.5
+rise = "10ns"
+fall = "10ns"
+```
+
 Synth finds the placed part by reference and the pin by name, finds the one net
-the pin is on, and emits a voltage source at `high_v` (or `low_v`). When
+the pin is on, and emits a voltage source at `high_v` (or `low_v`; a pulse
+between both). When
 `output_resistance_ohm` is present it emits an internal node plus a series
 resistor (`V<N> vpin_<N> 0 DC …` and `Rpin<N> n_<net> vpin_<N> <rout>`); the
 generated resistor joins the element-name collision check, so a design
@@ -280,10 +321,11 @@ value is never defaulted. The IC that owns the pin must still be listed under
 `ignore` (or carry a `[spice]` model): drive data says what the pin does, not
 how the rest of the IC behaves.
 
-PWM, transient output changes and firmware behaviour are **not** simulated:
-this is one DC operating point at the chosen level. A GPIO that toggles, a
-pin whose level is set by software, and any switching waveform need a future
-transient source; do not read a passing DC check as a timing guarantee.
+A DC pin source is one level for the whole run. For a switching waveform, use
+`kind = "pulse"` with the `tran` analysis: the pulse steps between the pin's
+own `low_v` and `high_v`, so a GPIO that toggles is simulated against its
+datasheet drive data — but `pin_current` (below) still requires `op`, and a
+steady DC level is the only thing a pulse-free testbench asserts.
 
 The matching measure reads the current out of that source in milliamps:
 
@@ -306,7 +348,7 @@ measured milliamps, the datasheet field, the limit and the `datasheet_ref`.
 The measure requires the `op` analysis and a `[[source]]` with the same pin;
 a missing source is `E-SYNTH-SIM-007`.
 
-### `[analysis]` and `[analysis.ac]`
+### `[analysis]`, `[analysis.ac]` and `[analysis.tran]`
 
 Exactly one analysis must be selected.
 
@@ -324,30 +366,52 @@ stop = 1000000.0
 points_per_decade = 100
 ```
 
+or
+
+```toml
+[analysis.tran]
+stop = "5ms"
+step = "1us"
+```
+
 | Field               | Default | Rule                                  |
 | ------------------- | ------- | ------------------------------------- |
 | `start`             | `1.0`   | finite and greater than 0             |
 | `stop`              | `1e6`   | finite and greater than `start`       |
 | `points_per_decade` | `100`   | integer from 1 to 1000                |
+| `tran.stop`         | —       | a duration, finite and greater than 0 |
+| `tran.step`         | —       | a duration, finite, greater than 0 and less than `stop` |
 
-The emitted command is `ac dec <points> <start> <stop>`, with values as plain
-exponents. The sweep must contain at least two points:
+Durations are a number of seconds or a number with an `ns`, `us`, `ms`, `ps`
+or `s` suffix; a bare `m` is rejected because SPICE `M` is milli.
+
+The emitted AC command is `ac dec <points> <start> <stop>`, with values as
+plain exponents. The sweep must contain at least two points:
 `points_per_decade * log10(stop/start) >= 1`. A smaller sweep (for example
 `.ac dec 1 10 55`) makes real ngspice 42 hang until the timeout, so it is
 `E-SYNTH-SIM-007` naming the range and telling you to widen the sweep or raise
 `points_per_decade` before any process starts.
 
+The emitted transient command is `tran <step> <stop>`, with `stop/step` —
+the number of output points ngspice writes — capped at 100 000 to keep a
+sidecar typo from turning into hours of wall clock and gigabytes of output.
+See [the transient page](spice-transient.md) for the measures it feeds.
+
 ### `[[measure]]`
 
-| Field     | Meaning                                                          |
-| --------- | ---------------------------------------------------------------- |
+| Field          | Meaning                                                          |
+| -------------- | ---------------------------------------------------------------- |
 | `name`    | Sentinel name: letters, digits, `_`, `-` or `.`. Unique.         |
-| `kind`    | `node_voltage`, `current`, `relative_db` or `pin_current`.       |
-| `node`    | Synth net name. Required by `node_voltage` and `relative_db`.    |
-| `element` | Synth reference. Required by `current`.                          |
+| `kind`    | `node_voltage`, `current`, `relative_db`, `pin_current`, `average`, `rms`, `peak_to_peak`, `settling_time`, `rise_time` or `overshoot`. |
+| `node`    | Synth net name. Required by `node_voltage`, `relative_db` and the transient kinds. |
+| `element` | Synth reference. Required by `current`; allowed on `average`, `rms` and `peak_to_peak` instead of `node`. |
 | `pin`     | `REF.PIN`. Required by `pin_current`.                            |
 | `drop_db` | Relative drop in dB for `relative_db`. Defaults to `3.0`.        |
 | `at_frequency` | Frequency in Hz for an absolute gain on `node_voltage`.     |
+| `window_start` | Transient window start; a duration. Defaults to 0.          |
+| `window_end`   | Transient window end; a duration. Defaults to the `tran` stop. |
+| `tolerance`    | Absolute band for `settling_time`, in the waveform's unit.  |
+| `low_threshold` / `high_threshold` | The 0%/100%-crossing thresholds for `rise_time`, in volts. |
 | `min`     | Inclusive lower limit. Optional.                                 |
 | `max`     | Inclusive upper limit. Optional.                                 |
 
@@ -403,12 +467,22 @@ Rules per kind:
   `element` and `at_frequency`. If the crossing cannot be found, ngspice
   reports `Error: measure ...` and the measure fails as `E-SYNTH-SIM-003` with
   a message naming the Synth measure, node and drop band.
+- the transient kinds (`average`, `rms`, `peak_to_peak`, `settling_time`,
+  `rise_time`, `overshoot`) read the node voltage or — for `average`, `rms`
+  and `peak_to_peak` — the element current out of a `wrdata` file ngspice
+  writes into the run directory, and compute the value in Synth over the
+  window. They require the `tran` analysis; a waveform that never settles,
+  never crosses its thresholds, or ends at 0 V (for `overshoot`) is
+  `E-SYNTH-SIM-003` naming the measure. See
+  [the transient page](spice-transient.md) for the value definitions.
 
 `min` must not exceed `max`. Limits are inclusive and compared at ngspice's
 print precision (see below). Every result carries a unit: `V` for a node
 voltage, `dB` for a node voltage with `at_frequency`, `A` for a device
-current, `Hz` for `relative_db` and `mA` for `pin_current`. The CLI prints it
-after the value and the MCP JSON carries it as `unit`.
+current, `Hz` for `relative_db`, `mA` for `pin_current`, `V`/`A` for a
+transient waveform, `s` for `settling_time` and `rise_time`, and `%` for
+`overshoot`. The CLI prints it after the value and the MCP JSON carries it as
+`unit`.
 
 ### `[options]`
 
@@ -425,6 +499,8 @@ missing directory cannot silently lose the plot. The deck emits
 `wrdata '<absolute path>' allv` after the measures and before `SYNTH_DONE`.
 ngspice 42 does not accept a double-quoted `wrdata` path; single quotes do.
 `allv` writes every vector in the current plot, one row per frequency point.
+(The transient measures write their own `wrdata` files inside the run
+directory; they need no `[options] plot` entry.)
 
 ### `ignore`
 
@@ -500,8 +576,9 @@ Each simulation failure is a stable code with a page under
 
 ## Not covered
 
-- PWM, GPIO firmware and transient behaviour of an IC pin source: the pin
-  drive is one DC operating point at the chosen level.
+- GPIO firmware: a `[pins.pwm]` block bounds what the pin may generate, but
+  the firmware's actual duty cycle is software; a drafted pulse is a test
+  excitation at 0.5 duty.
 - Verilog-A and encrypted vendor models (ngspice cannot run them; Synth
   reports an error instead of guessing).
 - RF, S-parameter and EMC simulation.
@@ -510,8 +587,7 @@ Each simulation failure is a stable code with a page under
   10-second default budget.
 - Per-part SPICE dialect mixing: all parts in one run must use the same
   `[spice] dialect`, because ngspice has one `ngbehavior` setting per run.
-- Transient and DC-sweep analyses, pulse/pwl/sin sources, and expression
-  measures.
+- DC-sweep analyses, `pwl`/`sin` sources and expression measures.
 
 ## Known limits
 

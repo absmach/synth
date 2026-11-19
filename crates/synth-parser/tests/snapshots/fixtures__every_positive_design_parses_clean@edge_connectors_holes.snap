@@ -1,0 +1,600 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "edge_connectors_holes",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 262,
+          "byte_end": 270
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 273,
+          "byte_end": 294
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "mcu",
+        "part": "stm32g030",
+        "span": {
+          "byte_start": 298,
+          "byte_end": 327
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "value": "100nF",
+        "span": {
+          "byte_start": 330,
+          "byte_end": 384
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C2",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "value": "100nF",
+        "span": {
+          "byte_start": 387,
+          "byte_end": 441
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J1",
+        "kind": "connector",
+        "part": "jst_ph_2pin",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "left_edge",
+                {
+                  "byte_start": 509,
+                  "byte_end": 518
+                }
+              ]
+            },
+            {
+              "Edge": [
+                "left",
+                {
+                  "byte_start": 525,
+                  "byte_end": 529
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 540,
+                  "byte_end": 544
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 484,
+            "byte_end": 546
+          }
+        },
+        "span": {
+          "byte_start": 444,
+          "byte_end": 548
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J2",
+        "kind": "connector",
+        "part": "jst_xh_2pin",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "right_edge",
+                {
+                  "byte_start": 616,
+                  "byte_end": 626
+                }
+              ]
+            },
+            {
+              "Edge": [
+                "right",
+                {
+                  "byte_start": 633,
+                  "byte_end": 638
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 649,
+                  "byte_end": 653
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 591,
+            "byte_end": 655
+          }
+        },
+        "span": {
+          "byte_start": 551,
+          "byte_end": 657
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J3",
+        "kind": "connector",
+        "part": "jst_ph_3pin",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "bottom_edge",
+                {
+                  "byte_start": 725,
+                  "byte_end": 736
+                }
+              ]
+            },
+            {
+              "Edge": [
+                "bottom",
+                {
+                  "byte_start": 743,
+                  "byte_end": 749
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 760,
+                  "byte_end": 764
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 700,
+            "byte_end": 766
+          }
+        },
+        "span": {
+          "byte_start": 660,
+          "byte_end": 768
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H1",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "top_left",
+                {
+                  "byte_start": 848,
+                  "byte_end": 856
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 867,
+                  "byte_end": 871
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 823,
+            "byte_end": 873
+          }
+        },
+        "span": {
+          "byte_start": 772,
+          "byte_end": 875
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H2",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "top_right",
+                {
+                  "byte_start": 954,
+                  "byte_end": 963
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 974,
+                  "byte_end": 978
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 929,
+            "byte_end": 980
+          }
+        },
+        "span": {
+          "byte_start": 878,
+          "byte_end": 982
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H3",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "bottom_left",
+                {
+                  "byte_start": 1061,
+                  "byte_end": 1072
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 1083,
+                  "byte_end": 1087
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 1036,
+            "byte_end": 1089
+          }
+        },
+        "span": {
+          "byte_start": 985,
+          "byte_end": 1091
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H4",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "placement_hint": {
+          "attrs": [
+            {
+              "Region": [
+                "bottom_right",
+                {
+                  "byte_start": 1170,
+                  "byte_end": 1182
+                }
+              ]
+            },
+            {
+              "Priority": [
+                "hard",
+                {
+                  "byte_start": 1193,
+                  "byte_end": 1197
+                }
+              ]
+            }
+          ],
+          "span": {
+            "byte_start": 1145,
+            "byte_end": 1199
+          }
+        },
+        "span": {
+          "byte_start": 1094,
+          "byte_end": 1201
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1213,
+            "byte_end": 1218
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "vdd",
+          "span": {
+            "byte_start": 1222,
+            "byte_end": 1228
+          }
+        },
+        "span": {
+          "byte_start": 1205,
+          "byte_end": 1228
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1239,
+            "byte_end": 1244
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "vss",
+          "span": {
+            "byte_start": 1248,
+            "byte_end": 1254
+          }
+        },
+        "span": {
+          "byte_start": 1231,
+          "byte_end": 1254
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd",
+          "span": {
+            "byte_start": 1265,
+            "byte_end": 1271
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1275,
+            "byte_end": 1280
+          }
+        },
+        "span": {
+          "byte_start": 1257,
+          "byte_end": 1280
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vss",
+          "span": {
+            "byte_start": 1291,
+            "byte_end": 1297
+          }
+        },
+        "to": {
+          "component": "C1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1301,
+            "byte_end": 1306
+          }
+        },
+        "span": {
+          "byte_start": 1283,
+          "byte_end": 1306
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vdd",
+          "span": {
+            "byte_start": 1317,
+            "byte_end": 1323
+          }
+        },
+        "to": {
+          "component": "C2",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1327,
+            "byte_end": 1332
+          }
+        },
+        "span": {
+          "byte_start": 1309,
+          "byte_end": 1332
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "U1",
+          "pin": "vss",
+          "span": {
+            "byte_start": 1343,
+            "byte_end": 1349
+          }
+        },
+        "to": {
+          "component": "C2",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1353,
+            "byte_end": 1358
+          }
+        },
+        "span": {
+          "byte_start": 1335,
+          "byte_end": 1358
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J2",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1369,
+            "byte_end": 1374
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "pa0",
+          "span": {
+            "byte_start": 1378,
+            "byte_end": 1384
+          }
+        },
+        "span": {
+          "byte_start": 1361,
+          "byte_end": 1384
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J2",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1395,
+            "byte_end": 1400
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "vss",
+          "span": {
+            "byte_start": 1404,
+            "byte_end": 1410
+          }
+        },
+        "span": {
+          "byte_start": 1387,
+          "byte_end": 1410
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J3",
+          "pin": "p1",
+          "span": {
+            "byte_start": 1421,
+            "byte_end": 1426
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "pa1",
+          "span": {
+            "byte_start": 1430,
+            "byte_end": 1436
+          }
+        },
+        "span": {
+          "byte_start": 1413,
+          "byte_end": 1436
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J3",
+          "pin": "p2",
+          "span": {
+            "byte_start": 1447,
+            "byte_end": 1452
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "pa2",
+          "span": {
+            "byte_start": 1456,
+            "byte_end": 1462
+          }
+        },
+        "span": {
+          "byte_start": 1439,
+          "byte_end": 1462
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J3",
+          "pin": "p3",
+          "span": {
+            "byte_start": 1473,
+            "byte_end": 1478
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "vss",
+          "span": {
+            "byte_start": 1482,
+            "byte_end": 1488
+          }
+        },
+        "span": {
+          "byte_start": 1465,
+          "byte_end": 1488
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 228,
+      "byte_end": 1490
+    }
+  },
+  "span": {
+    "byte_start": 228,
+    "byte_end": 1490
+  }
+}

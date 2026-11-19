@@ -220,7 +220,17 @@ rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schott
 [[board]]
 id = "usb-uart"
 path = "qualification/class-b/usb-uart/usb_uart.synth"
+fixture_sha256 = "17636ac956014fd7022e12c5f9885b2e00558244877edf011c9137a2d6badeae"
 class = "B"
 status = "experimental"
-skip_reason = "the source gate rejects the board with E-SYNTH-POWER-010 (the LP5907 LDO feeding VIO is counted against a load envelope the committed evidence predates). The row stays here, unrun, until the board or the rule decides the mismatch."
-rationale = "USB-C dual CH342F UART plus a THVD1450 RS-485 transceiver, with the protection parts the registry has. The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision."
+skip_reason = "cannot run on this branch: the source gate rejects the board with E-SYNTH-POWER-010 (rail load exceeds the regulator's current limit — the LP5907 LDO feeding VIO). The committed evidence predates that rule; the row stays here, unrun, until the board or the rule decides the mismatch."
+rationale = "USB-C dual CH342F UART plus a THVD1450 RS-485 transceiver, with the protection parts the registry has. The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision; the parts carry no registry review records."
+
+[[board]]
+id = "rtd-afe"
+path = "qualification/class-b/rtd-afe/rtd_afe.synth"
+fixture_sha256 = "e22b0030df0f1b594bbde2febfe8cd99ebf65a1fdfb3b30f6cb48c111204b612"
+class = "B"
+status = "experimental"
+skip_reason = "the route does not validate on this branch: the FreeRouting copper leaves +3V3 and VREG_LX open, an untied GND island and signal vias without ground return vias — 13 blocking findings (verified 2026-11-13 with FreeRouting 2.4.1). The board's own QUALIFICATION.md already records that the current tree does not route. The row stays here, unrun, until the route validates again."
+rationale = "PT100 four-wire RTD front end (ADS124S08, REF5025, RP2350 as the host side). The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision, with the parts reviewed in the registry; its own QUALIFICATION.md records what is still open (SI/PI review, historical committed package)."

@@ -152,3 +152,127 @@ jobs:
       - name: Run doctests
         if: matrix.shard == 1
         run: cargo test --workspace --locked --doc
+  # Which release paths a pull request touched (#45). The qualification matrix
+  # is expensive — it routes and exports real reference boards — so it runs on
+  # the changes that could move a release verdict: the compiler, the part
+  # registry, placement and layout, the routers, the KiCad export, and the
+  # release/gate surface itself. A job-level check, not a workflow-level
+  # `paths:` filter, so the lint, test and routability jobs keep running on
+  # every pull request.
+  changed-release-paths:
+    name: Release paths changed?
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    outputs:
+      release: ${{ steps.paths.outputs.release }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+        with:
+          # The pull request's merge base, so the diff is the PR's own change.
+          fetch-depth: 0
+
+      - name: Detect changed release paths
+        id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          files="$(git diff --name-only "${BASE}...${GITHUB_SHA}")"
+          if printf '%s\n' "$files" | grep -Eq \
+            '^(crates/synth-(ast|ir|parser|validate|registry|layout|place|geometry|route|router|pcb|kicad|drc|cli)/|registry/|qualification/|scripts/run_qualification_matrix\.py|Cargo\.lock$|rust-toolchain\.toml$|\.github/)'; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "release paths changed:"
+            printf '%s\n' "$files" | grep -E \
+              '^(crates/synth-(ast|ir|parser|validate|registry|layout|place|geometry|route|router|pcb|kicad|drc|cli)/|registry/|qualification/|scripts/run_qualification_matrix\.py|Cargo\.lock$|rust-toolchain\.toml$|\.github/)' || true
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # The release-blocking reference-board matrix (#45): every versioned row of
+  # `qualification/matrix.toml` runs the same `synth check` gate a release
+  # runs, against the expectations the corpus declares, with KiCadRoutingTools
+  # pinned so each verdict names the engine that produced it. Negative rows
+  # must fail at the source gate, so a compiler change cannot silently widen
+  # what a board may declare. Results and the per-row records are uploaded on
+  # failure for human review; what the matrix cannot prove — visual, assembly,
+  # SI/PI, thermal and fabrication checks — stays with the reviewers and is
+  # documented in docs/qualification-matrix.md.
+  qualification-matrix:
+    name: Qualification Matrix (release)
+    needs: changed-release-paths
+    # `always()` so the matrix still runs on push and dispatch, where the
+    # paths job above is skipped: a skipped `needs` job would otherwise skip
+    # this one too.
+    if: >-
+      ${{
+        always() &&
+        (github.event_name != 'pull_request' ||
+          needs.changed-release-paths.outputs.release == 'true')
+      }}
+    # Pinned, not ubuntu-latest: see the other jobs' note about KiCad 10.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.100.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ runner.os }}-matrix-${{ hashFiles('rust-toolchain.toml') }}
+
+      - name: Cache KiCad apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/synth-apt
+          key: ${{ runner.os }}-kicad-apt-${{ hashFiles('.github/scripts/install-kicad.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-kicad-apt-
+
+      - name: Install kicad-cli and the stock symbol/footprint libraries
+        run: .github/scripts/install-kicad.sh
+
+      - name: Cache routing engines
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/synth/kicad-routing-tools
+            tools/freerouting
+          key: ${{ runner.os }}-routing-engines-${{ hashFiles('scripts/setup-routing-engines.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-routing-engines-
+
+      - name: Install the routing engines the corpus records
+        run: scripts/setup-routing-engines.sh
+
+      - name: Pin KiCadRoutingTools to the revision the corpus was routed with
+        run: |
+          set -euo pipefail
+          repo="${XDG_DATA_HOME:-$HOME/.local/share}/synth/kicad-routing-tools"
+          git -C "$repo" fetch --depth 1 origin 9399bfb29e072bfe60b10d9cdae20c274fc2a17a
+          git -C "$repo" checkout 9399bfb29e072bfe60b10d9cdae20c274fc2a17a
+          git -C "$repo" rev-parse HEAD
+
+      - name: Build the release gate binary
+        run: cargo build --release -p synth-cli --locked
+
+      - name: Run the qualification matrix
+        id: matrix
+        run: |
+          python3 scripts/run_qualification_matrix.py \
+            --synth target/release/synth \
+            --out qualification-matrix-results
+
+      - name: Upload the matrix results for review
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: qualification-matrix-results
+          path: qualification-matrix-results/
+          if-no-files-found: error
+          retention-days: 14

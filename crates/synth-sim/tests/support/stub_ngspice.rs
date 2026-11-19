@@ -68,6 +68,7 @@ fn main() {
         "singular" => replay(&fixtures, "divider-singular", 0),
         "singular-no-done" => replay(&fixtures, "divider-singular-no-done", 0),
         "singular-missing-value" => replay(&fixtures, "divider-singular-missing-value", 0),
+        "tran-fail" => replay(&fixtures, "tran-fail", 0),
         other => {
             eprintln!("stub_ngspice: unknown label `{other}`");
             std::process::exit(2);
