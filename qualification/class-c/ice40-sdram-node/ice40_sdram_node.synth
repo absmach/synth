@@ -44,7 +44,7 @@ board "ice40_sdram_node" {
   // SDADDR skew budget from the IS42S16400J-7 datasheet (ISSI, AC characteristics, CAS latency 3): clock cycle
   // 7 ns minimum, address setup 1.5 ns and hold 0.8 ns, command setup 1.5 ns and hold 0.8 ns. At the 143 MHz grade
   // limit the setup and hold windows leave 7 - 1.5 - 0.8 = 4.7 ns. A group skew of 60 mm is 0.42 ns at 7.0 ps/mm
-  // (stripline, er 4.4), 9 % of that window; the router's own length limit of 60 mm is the same figure.
+  // (stripline, er 4.4), 9 % of that window; the router's own length limit of 60 mm is the same figure. This bounds the routing budget only: no controller runs on this board, so the window is not exercised.
   netclass "SDADDR" { trace_width 0.15mm clearance 0.127mm max_skew 60mm max_length 80mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium color "#56b4e9" }
   netclass "SDCLK"  { trace_width 0.15mm clearance 0.127mm impedance 50ohm max_length 40mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#d62728" }
 
@@ -83,7 +83,7 @@ board "ice40_sdram_node" {
 
   // ---- 3.3 V and 1.2 V rails ------------------------------------------------
   group "3V3 RAIL" color "#b45309" {
-    component U1: regulator "ams1117_3v3" value "AMS1117-3.3"
+    component U1: regulator "lp5907_3v3" value "LP5907-3.3"
     component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
     component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
     component C4: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vout" priority: hard } }
@@ -211,7 +211,7 @@ board "ice40_sdram_node" {
   // USB-C is a 5 V power sink only: 5.1 k pull-downs on CC1/CC2, D+/D-/SBU left open.
   net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 }
   net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 }
-  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode C1.p1 U1.vin C2.p1 C3.p1 TP1.p1 }
+  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode C1.p1 U1.vin U1.en C2.p1 C3.p1 TP1.p1 }
 
   power "+3V3" 3.3v class "PWR33" {
     U1.vout C4.p1 C5.p1 U2.vin C6.p1 U2.en
