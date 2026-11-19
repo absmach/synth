@@ -74,6 +74,7 @@ pub use export::{
     export_with_sidecar_and_routing_order, export_with_sidecars,
     export_with_sidecars_and_routing_order, placement_candidates, placement_for_export,
 };
+pub use pcb::silk_label_overlaps;
 pub use sch_svg::{SvgExportError, run_kicad_svg_export};
 
 /// Configure exporter worker-count compatibility for the CLI's shared jobs

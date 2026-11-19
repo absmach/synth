@@ -670,6 +670,7 @@ fn place_sheet_notes(
         labels: board.labels,
         schematic_paper: board.schematic_paper,
         schematic_overflow: board.schematic_overflow,
+        placement_spacing_nm: board.placement_spacing_nm,
         name: board.name.clone(),
         layers: board.layers,
         manufacturer: board.manufacturer.clone(),
@@ -809,6 +810,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

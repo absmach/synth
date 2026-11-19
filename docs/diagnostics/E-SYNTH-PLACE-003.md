@@ -27,3 +27,25 @@ with `x = 65` for `R1` in `x.placement.layout.toml`.
 ## Suggested fix
 
 Move the part inside the rectangle, or declare a larger `outline`.
+
+## Placement spacing outside the supported range
+
+The same code reports a `placement { spacing = … }` value, in the board file or
+`export-kicad --spacing`, outside 1.0 mm to 5.0 mm. The placer is tuned for that
+range: below it the parts cannot be routed, above it the board grows without a
+routing benefit. The value is never clamped.
+
+## Minimal reproduction
+
+```synth
+board "x" {
+  layers 2
+  placement { spacing = 0.5mm }
+}
+```
+
+## Suggested fix
+
+Use a spacing from 1.0 mm to 5.0 mm. To proceed anyway, re-run the export with
+`--force`: it uses the typed value and prints a warning. Routing is still
+judged by the router, so a spacing too tight shows up as open nets.

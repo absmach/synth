@@ -821,7 +821,7 @@ fn close_pinned_bands(
         .zip(&sized)
         .map(|(placed, size)| {
             let ring = if is_dense_part(board, placed.id) {
-                DENSE_PART_RING_MM
+                dense_ring_mm(board)
             } else {
                 0.0
             };
@@ -2399,6 +2399,9 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
     pinned: &PinnedPlacements,
 ) -> Result<Placement, PlaceError> {
     use synth_layout::pcb_courtyard_geometry_for_part;
+
+    // A spacing set on the board replaces the caller's courtyard margin.
+    let extra_margin_mm = spacing_gap_mm(board).unwrap_or(extra_margin_mm);
 
     // Per-component courtyard geometry: (id, (cx, cy), (w, h)).
     let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
@@ -7996,8 +7999,29 @@ const DENSE_PART_PINS: usize = 12;
 const DENSE_PART_RING_MM: f64 = 7.0;
 
 /// Room a silk reference label needs between two parts, in mm: one label
-/// height (the export draws labels 1.3 mm tall).
+/// height (the export draws labels 1.3 mm tall). Reserved on top of the
+/// spacing from 2 mm up; at the tight 1 mm setting a label may sit over a
+/// courtyard on purpose.
 pub(crate) const LABEL_ROOM_MM: f64 = 1.3;
+
+/// The `placement { spacing }` the author asked for, in mm.
+#[must_use]
+pub fn placement_spacing_mm(board: &Board) -> Option<f64> {
+    board.placement_spacing_nm.map(synth_geometry::nm_to_mm)
+}
+
+/// The gap every pair of parts keeps when a spacing is set: the spacing, plus
+/// `LABEL_ROOM_MM` from 2 mm up. `None` leaves the placer's own clearances.
+#[must_use]
+pub fn spacing_gap_mm(board: &Board) -> Option<f64> {
+    placement_spacing_mm(board).map(|s| if s >= 2.0 { s + LABEL_ROOM_MM } else { s })
+}
+
+/// The ring added round a dense part: twice the gap each side keeps, or the
+/// fixed [`DENSE_PART_RING_MM`] when no spacing is set.
+pub(crate) fn dense_ring_mm(board: &Board) -> f64 {
+    spacing_gap_mm(board).map_or(DENSE_PART_RING_MM, |gap| 2.0 * gap)
+}
 
 /// Whether a component has enough pins to need a keep-out ring.
 fn is_dense_part(board: &Board, id: ComponentId) -> bool {
@@ -8733,7 +8757,7 @@ fn compact_placement(board: &Board, placement: Placement) -> Placement {
         .zip(&sizes)
         .map(|(placed, (w, h))| {
             let ring = if is_dense_part(board, placed.id) {
-                DENSE_PART_RING_MM
+                dense_ring_mm(board)
             } else {
                 0.0
             };
@@ -8920,7 +8944,7 @@ fn shorten_wires(board: &Board, mut placement: Placement) -> Placement {
     // The router needs room to leave a many-pin part's pins, so a passive may
     // not move into the ring compaction keeps around such a part. Only
     // passives move here, so these rings stay where they are.
-    let half_ring_nm = mm_to_nm(DENSE_PART_RING_MM) / 2;
+    let half_ring_nm = mm_to_nm(dense_ring_mm(board)) / 2;
     let rings: Vec<Rect> = placement
         .components
         .iter()

@@ -1,0 +1,169 @@
+// SPDX-License-Identifier: Apache-2.0
+
+//! The `placement { spacing }` setting: parsed, lowered, and honoured by both
+//! placement paths as the least courtyard gap between any two parts.
+
+use std::path::{Path, PathBuf};
+
+use synth_geometry::{Rect, nm_to_mm};
+use synth_ir::Board;
+use synth_place::Placement;
+
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .canonicalize()
+        .expect("workspace root")
+}
+
+fn lower(source: &str) -> Board {
+    let file = "spacing.synth".to_string();
+    let parse = synth_parser::parse(source, file.clone());
+    assert!(parse.diagnostics.is_empty(), "{:?}", parse.diagnostics);
+    let registry = synth_registry::load_dir(&workspace_root().join("registry").join("parts"))
+        .expect("registry");
+    synth_ir::lower(&parse.ast.expect("ast"), &registry, &file)
+        .board
+        .expect("board")
+}
+
+fn rtd_source() -> String {
+    std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rtd_afe.synth"),
+    )
+    .expect("fixture")
+}
+
+fn rtd_afe(spacing: Option<&str>) -> Board {
+    let mut source = rtd_source();
+    if let Some(value) = spacing {
+        source = source.replacen(
+            "  layers 4\n",
+            &format!("  layers 4\n  placement {{ spacing = {value} }}\n"),
+            1,
+        );
+    }
+    lower(&source)
+}
+
+/// The spacings checked; `SYNTH_TEST_SPACINGS=2.5` narrows a debugging run.
+fn spacings() -> Vec<f64> {
+    std::env::var("SYNTH_TEST_SPACINGS").map_or_else(
+        |_| vec![1.0, 2.5, 4.0, 5.0],
+        |v| v.split(',').filter_map(|s| s.parse().ok()).collect(),
+    )
+}
+
+fn with_spacing_mm(mm: f64) -> Board {
+    let mut board = rtd_afe(None);
+    board.placement_spacing_nm = Some(synth_geometry::mm_to_nm(mm));
+    board
+}
+
+fn courtyards(board: &Board, placement: &Placement) -> Vec<(String, Option<String>, Rect)> {
+    placement
+        .components
+        .iter()
+        .map(|placed| {
+            let component = board.component(placed.id).expect("component");
+            let (w, h) = component
+                .part
+                .as_ref()
+                .map_or(synth_place::fallback_courtyard(&component.kind), |part| {
+                    synth_layout::pcb_courtyard_geometry_for_part(part).1
+                });
+            let (w, h) = if placed.rotation.swaps_extents() {
+                (h, w)
+            } else {
+                (w, h)
+            };
+            let half = |mm: f64| synth_geometry::mm_to_nm(mm) / 2;
+            (
+                component.refdes.clone(),
+                component.group.clone(),
+                Rect::from_center_half_extents(placed.center, half(w), half(h)),
+            )
+        })
+        .collect()
+}
+
+fn gap_mm(a: &Rect, b: &Rect) -> f64 {
+    let gx = (b.min.x_nm - a.max.x_nm).max(a.min.x_nm - b.max.x_nm);
+    let gy = (b.min.y_nm - a.max.y_nm).max(a.min.y_nm - b.max.y_nm);
+    nm_to_mm(gx.max(gy))
+}
+
+#[test]
+fn the_setting_is_parsed_and_lowered() {
+    assert_eq!(rtd_afe(Some("2.0mm")).placement_spacing_nm, Some(2_000_000));
+    assert_eq!(rtd_afe(Some("2.5mm")).placement_spacing_nm, Some(2_500_000));
+    assert_eq!(rtd_afe(None).placement_spacing_nm, None);
+}
+
+/// Both paths must give the same placement with the setting absent as the raw
+/// solver gives; the rule pass is covered by `default_rules.rs`.
+#[test]
+fn unset_places_exactly_as_before() {
+    let board = rtd_afe(None);
+    let mut explicit_none = board.clone();
+    explicit_none.placement_spacing_nm = None;
+    assert_eq!(
+        synth_place::place(&board).expect("place"),
+        synth_place::place(&explicit_none).expect("place")
+    );
+}
+
+/// `groups` also checks the group-to-group gap.
+fn check_spacing(label: &str, board: &Board, placement: &Placement, spacing_mm: f64, groups: bool) {
+    let parts = courtyards(board, placement);
+    let mut least = f64::MAX;
+    for (i, (a, _, ra)) in parts.iter().enumerate() {
+        for (b, _, rb) in &parts[i + 1..] {
+            let gap = gap_mm(ra, rb);
+            least = least.min(gap);
+            assert!(
+                gap >= spacing_mm - 0.05,
+                "{label} at {spacing_mm} mm: {a} and {b} are {gap:.2} mm apart"
+            );
+        }
+    }
+    eprintln!("SPACING {label} {spacing_mm}: least part gap {least:.2} mm");
+    if !groups {
+        return;
+    }
+    let want = (spacing_mm + 1.0).max(2.0);
+    let mut groups = std::collections::BTreeMap::<String, Rect>::new();
+    for (_, group, r) in &parts {
+        if let Some(group) = group {
+            groups
+                .entry(group.clone())
+                .and_modify(|b| {
+                    b.min.x_nm = b.min.x_nm.min(r.min.x_nm);
+                    b.min.y_nm = b.min.y_nm.min(r.min.y_nm);
+                    b.max.x_nm = b.max.x_nm.max(r.max.x_nm);
+                    b.max.y_nm = b.max.y_nm.max(r.max.y_nm);
+                })
+                .or_insert(*r);
+        }
+    }
+    let names: Vec<_> = groups.keys().cloned().collect();
+    for (i, a) in names.iter().enumerate() {
+        for b in &names[i + 1..] {
+            let gap = gap_mm(&groups[a], &groups[b]);
+            assert!(
+                gap >= want - 0.05,
+                "{label} at {spacing_mm} mm: groups {a} and {b} are {gap:.2} mm apart, want {want:.2}"
+            );
+        }
+    }
+}
+
+#[test]
+fn default_path_keeps_every_pair_at_the_spacing() {
+    for mm in spacings() {
+        let board = with_spacing_mm(mm);
+        let placement = synth_place::place(&board).expect("place");
+        check_spacing("default", &board, &placement, mm, true);
+    }
+}

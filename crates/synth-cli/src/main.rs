@@ -183,6 +183,10 @@ enum Command {
         /// Force export even if Synth ERC validation produces error diagnostics.
         #[arg(long)]
         force: bool,
+        /// Least courtyard-to-courtyard gap between any two parts, in mm
+        /// (1.0 to 5.0). Overrides `placement { spacing }` in the board file.
+        #[arg(long, value_name = "MM")]
+        spacing: Option<f64>,
         /// Release mode: refuse to accept any override flag. Suitable for CI
         /// and release gates, where a package that needed an override is not
         /// a package anyone should be able to produce by accident.
@@ -1078,6 +1082,7 @@ fn main() -> ExitCode {
             validate_erc,
             verification_report,
             force,
+            spacing,
             safe,
             allow_unverified_parts,
             user_registry,
@@ -1116,6 +1121,7 @@ fn main() -> ExitCode {
             validate_erc,
             verification_report.as_deref(),
             force,
+            spacing,
             safe,
             allow_unverified_parts,
             autoroute,
@@ -4404,6 +4410,7 @@ fn export_kicad(
     validate_erc: bool,
     verification_report: Option<&Path>,
     force: bool,
+    spacing_mm: Option<f64>,
     safe: bool,
     allow_unverified_parts: bool,
     autoroute: bool,
@@ -4508,6 +4515,19 @@ fn export_kicad(
         .board
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("lowering produced no IR; not exporting"))?;
+    // `--spacing` wins over the board file. The range is checked by the ERC
+    // rule below, so a typed value outside it is a blocking diagnostic that
+    // `--force` lets through, never a silent clamp.
+    let spaced_board;
+    let board = match spacing_mm {
+        Some(mm) => {
+            let mut copy = board.clone();
+            copy.placement_spacing_nm = Some((mm * 1e6).round() as i64);
+            spaced_board = copy;
+            &spaced_board
+        }
+        None => board,
+    };
 
     let mut overrides: Vec<release::OverrideRecord> = Vec::new();
 
@@ -4538,6 +4558,12 @@ fn export_kicad(
             Vec::new(),
             format!("{blocking} blocking ERC diagnostic(s) suppressed by --force"),
         ));
+        if erc_diags.iter().any(|d| d.code == "E-SYNTH-PLACE-003") {
+            eprintln!(
+                "warning: [E-SYNTH-PLACE-003] the typed placement spacing is outside the \
+                 supported 1.0 mm to 5.0 mm range; using it because of --force"
+            );
+        }
     }
 
     // R15.9 footprint guarantee: every part on the board must resolve to a

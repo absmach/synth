@@ -185,6 +185,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     // wherever it appears rather than being scoped to its block.
     let mut schematic_paper: Option<SchematicPaper> = None;
     let mut schematic_overflow: Option<SchematicOverflow> = None;
+    let mut placement_spacing_nm: Option<i64> = None;
     // Declared fabrication processes. A set, because declaring the same
     // requirement in two places is a duplicate rather than a conflict.
     let mut required_processes: std::collections::BTreeSet<ProcessRequirement> =
@@ -211,6 +212,14 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Company(c) => company = Some(c.name.clone()),
             StatementAst::Legends(l) => legends = l.enabled,
             StatementAst::Labels(l) => labels = l.enabled,
+            StatementAst::Placement(pl) => {
+                if let Some(v) = &pl.spacing {
+                    match Length::try_from(v) {
+                        Ok(l) => placement_spacing_nm = Some(l.0),
+                        Err(e) => ctx.emit_unit_error(&e, "placement spacing"),
+                    }
+                }
+            }
             StatementAst::Schematic(sc) => {
                 if let Some(paper) = sc.paper {
                     schematic_paper = Some(match paper {
@@ -481,6 +490,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         labels,
         schematic_paper,
         schematic_overflow,
+        placement_spacing_nm,
         name: ast.board.name.clone(),
         layers,
         manufacturer,
