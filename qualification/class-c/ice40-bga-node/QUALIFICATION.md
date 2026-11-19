@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 56.0 x 45.0 mm, 2,519 mm2, 77 parts (70 excluding mounting holes and test points) |
+| Outline | 56.0 x 45.0 mm, 2,519 mm2, 81 parts (74 excluding mounting holes and test points) |
 | Courtyard fill | **35.8 %** of the board area, measured on the exported board (`layout_metrics.py`) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"` (the JLCPCB tier that offers the 0.2 mm drill and via-in-pad on six layers), `requires via_in_pad`, 1.37 mm in the STEP model |
 | Routing | 42 of 42 nets, 424 segments, 208 vias (0.35/0.2 mm: 18, 0.46/0.2 mm: 18, 0.6/0.3 mm: 172), 1025.6 mm of track; the router's report and the delivered board agree (the delivered-board count) |
@@ -45,7 +45,7 @@ The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_no
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 77 lines: 70 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 7 board features (2 mounting holes, 5 test points) that are not parts and carry no identity. Several LCSC pages show different stock figures between snapshots and are noted in the table; the part pages were read in 2026-11 and the stock is not firm. `J3` and `J4` are hand-fit through-hole parts. The BOM-matching findings are `U1` and `Y1` below the 5-board quantity and `J4` without a match.
+[`fab/bom.csv`](fab/bom.csv) has 81 lines: 74 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 7 board features (2 mounting holes, 5 test points) that are not parts and carry no identity. Several LCSC pages show different stock figures between snapshots and are noted in the table; the part pages were read in 2026-11 and the stock is not firm. `J3` and `J4` are hand-fit through-hole parts. The BOM-matching findings are `U1` and `Y1` below the 5-board quantity and `J4` without a match.
 
 ## Fabrication package
 
