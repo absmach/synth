@@ -2,6 +2,7 @@ id = "tpd4e05u06"
 kind = "diode"
 description = "TI TPD4E05U06 4-channel low-capacitance ESD array, 5.5 V standoff, 0.5 pF per channel, USON-10"
 mpn = "TPD4E05U06DQAR"
+lcsc_pn = "C138714"
 kicad_symbol = "Power_Protection:TPD4E05U06DQA"
 kicad_footprint = "Package_SON:USON-10_2.5x1.0mm_P0.5mm"
 # Pins are Table 4-2 of TI SLVSBO7O (revised August 2024), DQA package: D1+ 1,
@@ -11,8 +12,8 @@ kicad_footprint = "Package_SON:USON-10_2.5x1.0mm_P0.5mm"
 # channels the same way. Line capacitance 0.5 pF typical (VIO = 2.5 V, 1 MHz,
 # I/O to GND), reverse stand-off voltage 5.5 V at IIO < 10 uA.
 #
-# The procurement identifier (LCSC) is left out until it is checked against
-# the distributor listing for this exact MPN.
+# LCSC C138714 is the Texas Instruments TPD4E05U06DQAR (USON-10) on its
+# product-search listing; other LCSC numbers for this MPN are other makers.
 
 [footprint_dimensions]
 width_mm = 2.5

@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 80.3 x 72.0 mm, 5,781 mm2, 77 parts (68 excluding mounting holes and test points) |
+| Outline | 80.3 x 72.0 mm, 5,781 mm2, 81 parts (72 excluding mounting holes and test points) |
 | Courtyard fill | **22.7 %** of the board area, measured on the exported board (`layout_metrics.py`, the author's script; its output is not committed); the Class C target is 30 %, which at this outline needs about 1,730 mm2 of courtyard (the board holds about 1,312 mm2) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"`, JLCPCB's `JLC06161H-3313` stackup as declared in the source (prepreg 3313 0.0994 mm er 4.1, core 0.55 mm er 4.6, prepreg 2116 0.1088 mm er 4.16; outer copper 35 um, inner 15.2 um; [JLCPCB impedance tool](https://jlcpcb.com/impedance)), 1.47 mm in the STEP model |
 | Routing | 46 of 46 nets, 644 segments, 155 vias (0.46/0.2 mm: 89, 0.6/0.3 mm: 66), 1650.2 mm of track; the router's report (from the author's run, not committed in this package) and the delivered board agree (the delivered-board count) |
@@ -73,7 +73,7 @@ The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 77 lines: 68 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
+[`fab/bom.csv`](fab/bom.csv) has 81 lines: 72 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 
