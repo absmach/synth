@@ -191,9 +191,9 @@ path = "qualification/class-c/multirail-fixture/multirail_fixture.synth"
 fixture_sha256 = "9a52457c6b8b891a530007e6ebef8a75c8d5574fa809b447cb502cdf1a2f65dd"
 class = "C"
 status = "experimental"
-expect = "pass"
+expect = "fail"
 expect_fab = "unestablished"
-rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers: Class-C case 4. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner. This is a fixture of the matrix, not the Class-C case 4 board."
+rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers: Class-C case 4. Source passes; on the pinned KiCad 10.0.8 run against current main the DRC stage fails (measured in CI on 2026-11-19), so the gate is `fail`; manufacturing is unestablished until it is measured on the pinned runner. This is a fixture of the matrix, not the Class-C case 4 board."
 
 [[board]]
 id = "sdram_routing_fixture"

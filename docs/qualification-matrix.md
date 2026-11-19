@@ -47,33 +47,38 @@ is an **unavailable** check, not a clean one.
 
 ## What CI does
 
-The `Qualification Matrix (release)` job in `.github/workflows/ci.yml` runs
-`scripts/run_qualification_matrix.py` — one deterministic `synth check`
-per row of `qualification/matrix.toml`, with each row's recorded engine set
-in `SYNTH_QUALIFY_ROUTER` and the check gate's per-stage budget raised via
-`SYNTH_CHECK_STAGE_BUDGET_SECS` (a corpus route takes minutes, so a
-parse-and-print budget would report `unknown` for a board that is fine):
+The `Reference Board Qualification` workflow (`.github/workflows/qualification.yml`)
+runs the Rust harness `crates/synth-cli/tests/qualification_matrix.rs` over
+`qualification/matrix.toml`, in a KiCad 10 container, on pushes to `main` and on
+pull requests that touch the compiler, registry, qualification corpus, examples,
+fixtures or the toolchain (a workflow-level path filter). It has two jobs:
 
-- `kicad-cli` and the routing engines are installed first, KiCadRoutingTools
-  pinned to the revision the corpus was routed with, so each verdict names
-  the engine that produced it; a row can record a different engine for its
-  fab command (`fab_router`) when the corpus evidence does;
-- rows that declare `expect_fab` also run the fab command, and their
-  manufacturing stage must come out exactly as declared; rows that declare
-  `user_registry` run with it loaded, the way the board's own reproduce
-  script does;
-- every row records the KiCad version, the design's SHA-256, the artifact
-  hashes the package reports and which native reports were present;
-- a row whose directory holds a `SHA256SUMS` covering the design source has
-  that source verified, so an accidental fixture edit fails the matrix
-  instead of quietly changing what a pass means;
+- `Qualification matrix` runs `synth check <board> --json` for every row and
+  compares the source/DRC gate with the row's `expect`. A negative row fails at
+  the source gate, so a compiler change cannot silently widen what a board may
+  declare;
+- `Qualification matrix (manufacturing)` also runs the fab command
+  (`SYNTH_QUALIFY_FAB`) and compares the manufacturing stage with `expect_fab`;
+  a row declaring `expect_fab = "unestablished"` is observed and recorded, never
+  compared.
+
+Both jobs set `SYNTH_QUALIFY_ROUTER=kicad-routing-tools`, so each verdict names
+the engine that produced it, with KiCadRoutingTools pinned to the revision the
+corpus was routed with. A corpus route takes minutes, so both raise the check
+gate's per-stage budget with `SYNTH_CHECK_STAGE_BUDGET_SECS`; a parse-and-print
+budget would report `unknown` for a board that is fine.
+
+Each row is held to the inputs it was measured on:
+
+- `fixture_sha256` pins the board source and its layout sidecars, so a changed
+  board must be re-measured before its verdict means anything;
 - a row the corpus cannot run on this code declares `skip_reason`: it is
   recorded in the results and named in the job log, never silently dropped;
-- results land in `qualification-matrix-results/` as one JSON document per
-  row plus `results.json`, uploaded as reviewable artifacts on failure;
-- the job runs on pull requests that touch the compiler, registry, layout,
-  routing, KiCad-export or release paths (a job-level path check, so the
-  other CI jobs keep running on every pull request).
+- `expect_source_codes` lists the diagnostics a negative row must produce.
+
+Results are uploaded as `qualification-results` and `qualification-results-fab`
+(`results.json`, one record per row, with the registry qualification report), so
+a reviewer can see what was checked.
 
 ## What only a human can check (review handoff)
 
