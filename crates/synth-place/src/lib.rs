@@ -1793,7 +1793,7 @@ pub fn place_with_sidecar(
     // author's coordinates were read, however complete the floorplan was.
     place_with_tuning_and_sidecar_seeded(
         board,
-        DEFAULT_MARGIN_MM,
+        default_part_margin_mm(),
         &default_rotation_overrides(board),
         sidecar_path,
         0,
@@ -2027,7 +2027,7 @@ fn place_with_default_tuning(
     let solve_start = std::time::Instant::now();
     let mut placement = place_with_tuning_impl(
         board,
-        DEFAULT_MARGIN_MM,
+        default_part_margin_mm(),
         rotation_overrides,
         0,
         compact,
@@ -2162,7 +2162,30 @@ pub fn place_with_export_sweep(board: &Board) -> Result<Placement, PlaceError> {
 }
 
 /// The courtyard margin every default placement path uses.
+///
+/// 1.5 mm is the measured passive-clearance floor: 1.0 mm and below added
+/// unconnected copper-pour fragments on the reference fixtures.
 const DEFAULT_MARGIN_MM: f64 = 1.5;
+
+/// The least courtyard margin the environment override may name, in mm.
+const MIN_MARGIN_MM: f64 = 0.25;
+
+/// Courtyard margin every default placement path uses.
+///
+/// `SYNTH_PLACE_PART_MARGIN_MM` overrides the default; an unparseable value is
+/// ignored and the override is never applied below `MIN_MARGIN_MM`.
+pub fn default_part_margin_mm() -> f64 {
+    std::env::var("SYNTH_PLACE_PART_MARGIN_MM")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .map_or(DEFAULT_MARGIN_MM, |value: f64| value.max(MIN_MARGIN_MM))
+}
+
+/// The greedy packer's perimeter inset, scaled with the part margin from the
+/// 6 mm that the 1.5 mm default was tuned with.
+fn board_margin_mm() -> f64 {
+    BOARD_MARGIN_MM * default_part_margin_mm() / 1.5
+}
 
 /// Orientation overrides the production defaults apply.
 ///
@@ -2236,7 +2259,11 @@ fn place_with_dimensions_rotated(
                 || fallback_courtyard(&c.kind),
                 |part| pcb_courtyard_geometry_for_part(part).1,
             );
-            (c.id, PLACEMENT_COURTYARD_OFFSET_MM, (w + 1.5, h + 1.5))
+            (
+                c.id,
+                PLACEMENT_COURTYARD_OFFSET_MM,
+                (w + default_part_margin_mm(), h + default_part_margin_mm()),
+            )
         })
         .collect();
 
@@ -4783,7 +4810,7 @@ fn placements_valid(
         })
         .collect();
 
-    let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
+    let margin_nm = mm_to_nm(board_margin_mm());
     let board_outline = Rect::new(
         Point::new(0, 0),
         Point::new(usable.max.x_nm + margin_nm, usable.max.y_nm + margin_nm),
@@ -5650,7 +5677,7 @@ fn board_with_external_hints(board: &Board, external_hints: &[ExternalHint]) -> 
 #[allow(clippy::cast_precision_loss)]
 fn hint_satisfaction(board: &Board, placement: &Placement) -> HintSatisfactionReport {
     let mut outcomes = Vec::new();
-    let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
+    let margin_nm = mm_to_nm(board_margin_mm());
     let usable = Rect::new(
         Point::new(
             placement.board_outline.min.x_nm + margin_nm,
@@ -6631,7 +6658,7 @@ pub fn describe_placement_external(board: &Board, placement: &Placement) -> Plac
 pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDescription {
     let board_w_mm = synth_geometry::nm_to_mm(placement.board_outline.width_nm());
     let board_h_mm = synth_geometry::nm_to_mm(placement.board_outline.height_nm());
-    let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
+    let margin_nm = mm_to_nm(board_margin_mm());
     let usable = Rect::new(
         Point::new(
             placement.board_outline.min.x_nm + margin_nm,
@@ -8896,6 +8923,454 @@ fn total_hpwl_nm(board: &Board, placement: &Placement) -> i64 {
         .sum()
 }
 
+/// Move passives into under-occupied interior bins, then squeeze the passive
+/// band vertically. Opt-in experiment; [`place`] and the export path do not
+/// call it.
+///
+/// The pass never moves connectors, hinted parts, sidecar pins, keepout
+/// anchors, board features or non-passives. It keeps the dense-part ring and
+/// guards every move with total HPWL and a per-net centroid distance, so a
+/// decoupling cap cannot leave its IC just because the total HPWL is unchanged.
+#[allow(clippy::implicit_hasher)]
+pub fn repack_interior(
+    board: &Board,
+    mut placement: Placement,
+    frozen: &std::collections::HashSet<ComponentId>,
+) -> Placement {
+    let original = placement.clone();
+    let sizes = courtyard_sizes(board, &placement);
+    let spaced: Vec<(f64, f64)> = placement
+        .components
+        .iter()
+        .zip(&sizes)
+        .map(|(placed, &(width, height))| {
+            if is_dense_part(board, placed.id) {
+                (width + dense_ring_mm(board), height + dense_ring_mm(board))
+            } else {
+                (width, height)
+            }
+        })
+        .collect();
+    let anchors = repack_anchors(board);
+    let movable: Vec<bool> = placement
+        .components
+        .iter()
+        .map(|placed| {
+            board.component(placed.id).is_some_and(|component| {
+                is_passive(component)
+                    && !frozen.contains(&placed.id)
+                    && !repack_hinted(component)
+                    && !is_edge_flush_connector(component)
+                    && !synth_layout::is_board_feature_kind(&component.kind)
+                    && !anchors.contains(&placed.id)
+            })
+        })
+        .collect();
+    if !movable.iter().any(|&free| free) {
+        return original;
+    }
+    let Some(envelope) = non_connector_envelope(board, &placement, &sizes) else {
+        return original;
+    };
+    let bins = repack_bins(&placement, &spaced, envelope);
+    let baseline_hpwl = total_hpwl_nm(board, &placement);
+    let baseline_hits = keepout_overlap_count(board, &placement);
+    let baseline_labels = labels_without_room(board, &placement, &sizes);
+
+    let mut order: Vec<usize> = (0..placement.components.len())
+        .filter(|&index| movable[index])
+        .collect();
+    order.sort_by(|&left, &right| {
+        let area = |index: usize| sizes[index].0 * sizes[index].1;
+        area(right)
+            .partial_cmp(&area(left))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                placement.components[left]
+                    .id
+                    .cmp(&placement.components[right].id)
+            })
+    });
+
+    let pitch_nm = mm_to_nm(0.5);
+    let radius_nm = mm_to_nm(REPACK_RADIUS_MM);
+    for index in order {
+        let placed = &placement.components[index];
+        let centroid = net_centroid(board, &placement, placed.id).unwrap_or(placed.center);
+        let mut candidates: Vec<(i128, i128, usize, Point)> = bins
+            .iter()
+            .enumerate()
+            .filter(|(_, bin)| bin.under_occupied)
+            .filter_map(|(bin_index, bin)| {
+                let center = Point::new(
+                    i64::midpoint(bin.rect.min.x_nm, bin.rect.max.x_nm),
+                    i64::midpoint(bin.rect.min.y_nm, bin.rect.max.y_nm),
+                );
+                let dx = center.x_nm - placed.center.x_nm;
+                let dy = center.y_nm - placed.center.y_nm;
+                if dx.abs() > radius_nm || dy.abs() > radius_nm {
+                    return None;
+                }
+                let to_centroid = squared_distance(center, centroid);
+                let to_current = squared_distance(center, placed.center);
+                Some((to_centroid, to_current, bin_index, center))
+            })
+            .collect();
+        candidates.sort_unstable_by_key(|&(to_centroid, to_current, bin_index, _)| {
+            (to_centroid, to_current, bin_index)
+        });
+        for (_, _, _, mut center) in candidates.into_iter().take(REPACK_CANDIDATES) {
+            center.x_nm = snap_nm(center.x_nm, pitch_nm);
+            center.y_nm = snap_nm(center.y_nm, pitch_nm);
+            if !repack_candidate_legal(board, &placement, index, center, &spaced, envelope) {
+                continue;
+            }
+            let mut trial = placement.clone();
+            trial.components[index].center = center;
+            if total_hpwl_nm(board, &trial) > baseline_hpwl
+                || !net_centroids_do_not_grow(board, &placement, &trial, placed.id)
+            {
+                continue;
+            }
+            placement = trial;
+            break;
+        }
+    }
+
+    if placement == original
+        || total_hpwl_nm(board, &placement) > baseline_hpwl
+        || keepout_overlap_count(board, &placement) > baseline_hits
+        || labels_without_room(board, &placement, &sizes) > baseline_labels
+    {
+        return original;
+    }
+    let mut candidate = keep_unless_worse(board, original.clone(), placement);
+    candidate = squeeze_passive_band(board, candidate, &sizes, &spaced, &movable);
+    keep_unless_worse(board, original, candidate)
+}
+
+/// A hinted part is the author's decision; a soft hint is still a hint.
+fn repack_hinted(component: &synth_ir::Component) -> bool {
+    component.placement_hint.is_some()
+}
+
+/// Anchors a passive move must not disturb: the target of a relative hint and
+/// the part a keepout circle is attached to.
+fn repack_anchors(board: &Board) -> std::collections::HashSet<ComponentId> {
+    let mut anchors = std::collections::HashSet::new();
+    for component in &board.components {
+        if let Some(anchor) = component
+            .placement_hint
+            .as_ref()
+            .and_then(|hint| hint.near.as_deref())
+            .and_then(|near| {
+                board
+                    .components
+                    .iter()
+                    .find(|candidate| candidate.refdes.eq_ignore_ascii_case(near))
+            })
+        {
+            anchors.insert(anchor.id);
+        }
+    }
+    for keepout in &board.keepouts {
+        let name = keepout.name.to_lowercase();
+        if let Some(anchor) = board.components.iter().find(|component| {
+            component.refdes.to_lowercase() == name
+                || component.kind.to_lowercase() == name
+                || component.refdes.to_lowercase().starts_with(&name)
+        }) {
+            anchors.insert(anchor.id);
+        }
+    }
+    anchors
+}
+
+fn snap_nm(value: i64, pitch: i64) -> i64 {
+    (value + pitch / 2).div_euclid(pitch) * pitch
+}
+
+/// Bins of [`REPACK_BIN_MM`] over the non-connector envelope, with the
+/// courtyard coverage that decides whether a bin has room.
+struct RepackBin {
+    rect: Rect,
+    under_occupied: bool,
+}
+
+const REPACK_BIN_MM: f64 = 2.0;
+const REPACK_RADIUS_MM: f64 = 15.0;
+const REPACK_CANDIDATES: usize = 8;
+const REPACK_UNDER_OCCUPIED_PERMILLE: i64 = 250;
+
+fn repack_bins(placement: &Placement, spaced: &[(f64, f64)], envelope: Rect) -> Vec<RepackBin> {
+    let bin_nm = mm_to_nm(REPACK_BIN_MM);
+    let cols = (envelope.width_nm().max(1) / bin_nm).clamp(1, 128);
+    let rows = (envelope.height_nm().max(1) / bin_nm).clamp(1, 128);
+    let mut bins = Vec::with_capacity(usize::try_from(cols * rows).unwrap_or(0));
+    for row in 0..rows {
+        for col in 0..cols {
+            let rect = Rect::new(
+                Point::new(
+                    envelope.min.x_nm + col * bin_nm,
+                    envelope.min.y_nm + row * bin_nm,
+                ),
+                Point::new(
+                    (envelope.min.x_nm + (col + 1) * bin_nm).min(envelope.max.x_nm),
+                    (envelope.min.y_nm + (row + 1) * bin_nm).min(envelope.max.y_nm),
+                ),
+            );
+            let covered: i64 = placement
+                .components
+                .iter()
+                .zip(spaced)
+                .map(|(placed, size)| {
+                    intersection_area(rect, rotated_courtyard_rect(placed, *size))
+                })
+                .sum();
+            let capacity = rect.width_nm().saturating_mul(rect.height_nm());
+            let under_occupied = covered.saturating_mul(1000)
+                < capacity.saturating_mul(REPACK_UNDER_OCCUPIED_PERMILLE);
+            bins.push(RepackBin {
+                rect,
+                under_occupied,
+            });
+        }
+    }
+    bins
+}
+
+fn intersection_area(left: Rect, right: Rect) -> i64 {
+    let width = (left.max.x_nm.min(right.max.x_nm) - left.min.x_nm.max(right.min.x_nm)).max(0);
+    let height = (left.max.y_nm.min(right.max.y_nm) - left.min.y_nm.max(right.min.y_nm)).max(0);
+    width.saturating_mul(height)
+}
+
+fn non_connector_envelope(
+    board: &Board,
+    placement: &Placement,
+    sizes: &[(f64, f64)],
+) -> Option<Rect> {
+    placement
+        .components
+        .iter()
+        .zip(sizes)
+        .filter(|(placed, _)| {
+            board.component(placed.id).is_some_and(|component| {
+                !matches!(component.kind.as_str(), "connector" | "jack")
+                    && !synth_layout::is_board_feature_kind(&component.kind)
+            })
+        })
+        .map(|(placed, size)| rotated_courtyard_rect(placed, *size))
+        .reduce(union_rects)
+}
+
+fn union_rects(left: Rect, right: Rect) -> Rect {
+    Rect::new(
+        Point::new(
+            left.min.x_nm.min(right.min.x_nm),
+            left.min.y_nm.min(right.min.y_nm),
+        ),
+        Point::new(
+            left.max.x_nm.max(right.max.x_nm),
+            left.max.y_nm.max(right.max.y_nm),
+        ),
+    )
+}
+
+fn squared_distance(left: Point, right: Point) -> i128 {
+    let dx = i128::from(left.x_nm - right.x_nm);
+    let dy = i128::from(left.y_nm - right.y_nm);
+    dx * dx + dy * dy
+}
+
+/// The centroid of the other endpoints on one net, or `None` for a netless
+/// part.
+fn net_centroid(board: &Board, placement: &Placement, id: ComponentId) -> Option<Point> {
+    let mut sum_x = 0_i128;
+    let mut sum_y = 0_i128;
+    let mut count = 0_i128;
+    for net in &board.nets {
+        if !net
+            .endpoints
+            .iter()
+            .any(|endpoint| endpoint.component == id)
+        {
+            continue;
+        }
+        for endpoint in &net.endpoints {
+            if endpoint.component == id {
+                continue;
+            }
+            if let Some(placed) = placement
+                .components
+                .iter()
+                .find(|placed| placed.id == endpoint.component)
+            {
+                sum_x += i128::from(placed.center.x_nm);
+                sum_y += i128::from(placed.center.y_nm);
+                count += 1;
+            }
+        }
+    }
+    (count > 0).then(|| Point::new((sum_x / count) as i64, (sum_y / count) as i64))
+}
+
+/// Every net the part belongs to must not pull the part farther from that
+/// net's other endpoints. This is the power-net guard the coarse HPWL misses.
+fn net_centroids_do_not_grow(
+    board: &Board,
+    before: &Placement,
+    after: &Placement,
+    id: ComponentId,
+) -> bool {
+    let old = before.components.iter().find(|placed| placed.id == id);
+    let new = after.components.iter().find(|placed| placed.id == id);
+    let (Some(old), Some(new)) = (old, new) else {
+        return true;
+    };
+    for net in &board.nets {
+        if !net
+            .endpoints
+            .iter()
+            .any(|endpoint| endpoint.component == id)
+        {
+            continue;
+        }
+        let others: Vec<Point> = net
+            .endpoints
+            .iter()
+            .filter(|endpoint| endpoint.component != id)
+            .filter_map(|endpoint| {
+                before
+                    .components
+                    .iter()
+                    .find(|placed| placed.id == endpoint.component)
+                    .map(|placed| placed.center)
+            })
+            .collect();
+        if others.is_empty() {
+            continue;
+        }
+        let sum_x: i128 = others.iter().map(|point| i128::from(point.x_nm)).sum();
+        let sum_y: i128 = others.iter().map(|point| i128::from(point.y_nm)).sum();
+        let centroid = Point::new(
+            (sum_x / others.len() as i128) as i64,
+            (sum_y / others.len() as i128) as i64,
+        );
+        if squared_distance(new.center, centroid) > squared_distance(old.center, centroid) {
+            return false;
+        }
+    }
+    true
+}
+
+fn repack_candidate_legal(
+    board: &Board,
+    placement: &Placement,
+    index: usize,
+    center: Point,
+    spaced: &[(f64, f64)],
+    usable: Rect,
+) -> bool {
+    let placed = &placement.components[index];
+    let Some(component) = board.component(placed.id) else {
+        return false;
+    };
+    let candidate = ComponentPlacement { center, ..*placed };
+    let rect = rotated_courtyard_rect(&candidate, spaced[index]);
+    let inset = if board.outline.is_none() {
+        auto_fit_courtyard_edge_inset_nm(component)
+    } else {
+        courtyard_edge_inset_nm(component)
+    };
+    if rect.min.x_nm < usable.min.x_nm + inset
+        || rect.min.y_nm < usable.min.y_nm + inset
+        || rect.max.x_nm > usable.max.x_nm - inset
+        || rect.max.y_nm > usable.max.y_nm - inset
+    {
+        return false;
+    }
+    for (other_index, other) in placement.components.iter().enumerate() {
+        if other_index == index {
+            continue;
+        }
+        if rect.intersects(&rotated_courtyard_rect(other, spaced[other_index])) {
+            return false;
+        }
+    }
+    let lookup = |id: ComponentId| {
+        placement
+            .components
+            .iter()
+            .zip(spaced)
+            .find(|(placed, _)| placed.id == id)
+            .map(|(placed, size)| rotated_courtyard_rect(placed, *size))
+    };
+    let corners = [
+        center,
+        Point::new(rect.min.x_nm, rect.min.y_nm),
+        Point::new(rect.min.x_nm, rect.max.y_nm),
+        Point::new(rect.max.x_nm, rect.min.y_nm),
+        Point::new(rect.max.x_nm, rect.max.y_nm),
+    ];
+    !corners.iter().any(|point| {
+        #[allow(clippy::needless_borrows_for_generic_args)]
+        intersects_keepout(Rect::new(*point, *point), placed.id, board, usable, &lookup)
+    })
+}
+
+/// Scale the passive band toward its vertical middle, then separate overlaps.
+/// Only passives move; the caller keeps the result only if the envelope and
+/// the guards improve.
+fn squeeze_passive_band(
+    board: &Board,
+    placement: Placement,
+    sizes: &[(f64, f64)],
+    spaced: &[(f64, f64)],
+    movable: &[bool],
+) -> Placement {
+    let Some(envelope) = non_connector_envelope(board, &placement, sizes) else {
+        return placement;
+    };
+    let middle_y = i64::midpoint(envelope.min.y_nm, envelope.max.y_nm);
+    let baseline_hpwl = total_hpwl_nm(board, &placement);
+    let baseline_hits = keepout_overlap_count(board, &placement);
+    let baseline_labels = labels_without_room(board, &placement, sizes);
+    let frozen: Vec<bool> = movable.iter().map(|&free| !free).collect();
+    let pitch_nm = mm_to_nm(0.5);
+    let mut best = placement;
+    let mut best_height = envelope.height_nm();
+    for permille in [950_i64, 900, 850, 800] {
+        let mut trial = best.clone();
+        for (index, placed) in trial.components.iter_mut().enumerate() {
+            if !movable[index] {
+                continue;
+            }
+            let scaled = middle_y + (placed.center.y_nm - middle_y) * permille / 1000;
+            placed.center.y_nm = snap_nm(scaled, pitch_nm);
+        }
+        if !separate_overlaps(&mut trial, spaced, &frozen) {
+            continue;
+        }
+        let Some(candidate_envelope) = non_connector_envelope(board, &trial, sizes) else {
+            continue;
+        };
+        if candidate_envelope.height_nm() >= best_height
+            || total_hpwl_nm(board, &trial) > baseline_hpwl
+            || keepout_overlap_count(board, &trial) > baseline_hits
+            || labels_without_room(board, &trial, sizes) > baseline_labels
+        {
+            continue;
+        }
+        let accepted = keep_unless_worse(board, best.clone(), trial);
+        if accepted != best {
+            best_height = candidate_envelope.height_nm();
+            best = accepted;
+        }
+    }
+    best
+}
+
 /// The nearest centre to `centre` whose rectangle (`half` wide and tall on each
 /// side) is clear of every ring: whichever ring it overlaps, it moves out along
 /// the axis with the smaller distance to travel.
@@ -9483,7 +9958,7 @@ mod tests {
                 (c.id, (w + 1.0, h + 1.0))
             })
             .collect();
-        let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
+        let margin_nm = mm_to_nm(board_margin_mm());
         let usable = Rect::new(
             Point::new(margin_nm, margin_nm),
             Point::new(
@@ -9785,7 +10260,7 @@ board "features_only" {
         let u1 = placement
             .component_by_refdes(&board, "U1")
             .expect("U1 component placement");
-        let margin_nm = mm_to_nm(BOARD_MARGIN_MM);
+        let margin_nm = mm_to_nm(board_margin_mm());
         let usable = Rect::new(
             Point::new(margin_nm, margin_nm),
             Point::new(
@@ -11240,6 +11715,109 @@ board "near" {
         };
         assert!(first < second, "rows out of order: {text}");
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Court-to-court edge gap, negative when they overlap.
+    fn edge_gap(a: Rect, b: Rect) -> f64 {
+        let dx = (b.min.x_nm - a.max.x_nm).max(a.min.x_nm - b.max.x_nm);
+        let dy = (b.min.y_nm - a.max.y_nm).max(a.min.y_nm - b.max.y_nm);
+        nm_to_mm(dx.max(dy))
+    }
+
+    /// Edition 2024 makes `set_var` unsafe and the workspace forbids unsafe,
+    /// so each margin runs in a child that sets the variable for this test.
+    fn reexec_with_part_margin(test: &str, value: &str) {
+        let out = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args(["--exact", test, "--nocapture"])
+            .env("SYNTH_PART_MARGIN_CHILD", value)
+            .env("SYNTH_PLACE_PART_MARGIN_MM", value)
+            .output()
+            .expect("child test");
+        assert!(
+            out.status.success(),
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
+    /// The default margin is 1.5 mm; the environment override wins and never
+    /// goes below the 0.25 mm clamp. An unparseable value is ignored.
+    #[test]
+    fn part_margin_override_parses_and_clamps_at_a_quarter_millimetre() {
+        if let Some(value) = std::env::var_os("SYNTH_PART_MARGIN_CHILD") {
+            let value = value.to_string_lossy().to_string();
+            let expected = match value.as_str() {
+                "0.5" => 0.5,
+                "0.1" | "0.25" => 0.25,
+                "nonsense" => 1.5,
+                other => panic!("unexpected child value {other}"),
+            };
+            assert_eq!(default_part_margin_mm(), expected, "override {value}");
+            return;
+        }
+        for value in ["0.5", "0.1", "0.25", "nonsense"] {
+            reexec_with_part_margin(
+                "tests::part_margin_override_parses_and_clamps_at_a_quarter_millimetre",
+                value,
+            );
+        }
+    }
+
+    /// The 0.5 mm margin leaves at least that gap between two courtyards.
+    #[test]
+    fn a_half_millimetre_margin_leaves_half_a_millimetre_between_courtyards() {
+        let (board, _) = row_board(TWO_RESISTORS, &[10.0, 50.0]);
+        let courtyards: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
+            .components
+            .iter()
+            .map(|component| {
+                let (w, h) = component.part.as_ref().map_or_else(
+                    || fallback_courtyard(&component.kind),
+                    |part| synth_layout::pcb_courtyard_geometry_for_part(part).1,
+                );
+                (
+                    component.id,
+                    PLACEMENT_COURTYARD_OFFSET_MM,
+                    (w + 0.5, h + 0.5),
+                )
+            })
+            .collect();
+        let placed = place_with_outline(
+            &board,
+            Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0))),
+            &courtyards,
+            &std::collections::HashMap::new(),
+            false,
+            BOARD_MARGIN_MM,
+            0,
+            &PinnedPlacements::new(),
+        )
+        .expect("place");
+        let rects = authoritative_courtyards(&board, &placed);
+        let gap = edge_gap(rects[0], rects[1]);
+        assert!(
+            gap >= 0.5 - 1e-9,
+            "courtyard gap {gap} is below the 0.5 mm margin"
+        );
+    }
+
+    /// Any margin at or above the clamp places two courtyards apart.
+    #[test]
+    fn tightening_the_margin_never_overlaps_courtyards() {
+        if let Some(value) = std::env::var_os("SYNTH_PART_MARGIN_CHILD") {
+            let value = value.to_string_lossy().to_string();
+            let board = board_with_part_count(20);
+            let placement = place(&board).expect("place");
+            assert_eq!(overlaps(&board, &placement), 0, "margin {value}");
+            return;
+        }
+        for value in ["1.5", "0.5", "0.25"] {
+            reexec_with_part_margin(
+                "tests::tightening_the_margin_never_overlaps_courtyards",
+                value,
+            );
+        }
     }
 
     /// The export rim is a schedule over board size, and a dense board keeps
