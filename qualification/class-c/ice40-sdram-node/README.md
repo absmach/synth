@@ -1,6 +1,6 @@
 # iCE40HX4K SDR SDRAM node with a USB-C power input (Class C, case 2)
 
-An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISSI IS42S16400J, TSOP-II-54), an SPI boot flash, a 1x6 programming header and three status LEDs, powered from a USB-C receptacle (5 V only), on six copper layers. It answers #329 under #40: a board whose memory interface is length- and impedance-sensitive, made by an agent driving `synth mcp`. The interface is a single-data-rate SDRAM driven by a soft controller in the FPGA fabric: there is no DQS strobe, no differential pair and no DDR claim. Jeff Mboya is the independent PCB reviewer as well as the author of this pull request.
+An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISSI IS42S16400J, TSOP-II-54), an SPI boot flash, a 1x6 programming header and three status LEDs, powered from a USB-C receptacle (5 V only), on six copper layers. It answers #329 under #40: a board whose memory interface is length- and impedance-sensitive, made by an agent driving `synth mcp`. The interface is a single-data-rate SDRAM driven by a soft controller in the FPGA fabric: there is no DQS strobe, no differential pair and no DDR claim. Jeff Mboya is the author of this pull request and has self-reviewed it; the independent PCB expert sign-off required by #40 is open (see [`QUALIFICATION.md`](QUALIFICATION.md), Human review).
 
 ## The board
 
