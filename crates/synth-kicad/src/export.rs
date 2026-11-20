@@ -834,14 +834,19 @@ fn place_for_export(
 ) -> Result<synth_place::Placement, synth_place::PlaceError> {
     // Local experiment seam for the RePlAce params loop; production never sets
     // it. The route-free export still validates and fits the outline below.
-    if allow_replace
-        && std::env::var_os("SYNTH_PLACE_REPLACE").is_some()
-        && let Ok(mut placement) = synth_place::place_with_replace(board)
+    if allow_replace && synth_place::replace_enabled() && sidecar.is_none_or(|path| !path.exists())
     {
-        // Match the export candidate set: fit the tight rim before the
-        // PCB is serialized, or the score compares different outlines.
-        synth_place::finish_outline(board, &mut placement);
-        return Ok(placement);
+        match synth_place::place_with_replace(board) {
+            Ok(mut placement) => {
+                // Match the export candidate set: fit the tight rim before the
+                // PCB is serialized, or the score compares different outlines.
+                synth_place::finish_outline(board, &mut placement);
+                return Ok(placement);
+            }
+            Err(error) => {
+                eprintln!("REPLACE fallback: {error}; using the default export placement");
+            }
+        }
     }
     place_for_export_default(board, sidecar)
 }

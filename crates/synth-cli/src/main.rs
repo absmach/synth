@@ -4737,7 +4737,11 @@ fn export_kicad(
     // must not ship. Judge the placement by its own routed export: if that
     // route is not clean, re-export the default placement and route it as the
     // production path would. This is the same board `upstream/main` produces.
-    if !place_route_iterate && std::env::var_os("SYNTH_PLACE_REPLACE").is_some() {
+    let sidecar_layout = sidecars
+        .placement
+        .as_ref()
+        .is_some_and(|path| path.exists());
+    if chosen_placement.is_none() && synth_place::replace_enabled() && !sidecar_layout {
         let unavailable = routing.state == synth_router::RouteState::RouterUnavailable;
         match replace_gate_action(unavailable, replace_route_is_clean(&routing)) {
             GateAction::Keep => {}
@@ -5865,14 +5869,16 @@ fn replace_gate_action(router_unavailable: bool, clean: bool) -> GateAction {
 /// the same finding on these boards, and the experiment's META gate is the
 /// KiCad DRC counts, not the release gate. A missing DRC result fails closed.
 fn replace_route_is_clean(report: &synth_router::RouteReport) -> bool {
-    report.state != synth_router::RouteState::RouterUnavailable
-        && route_counts_are_clean(
-            report.statistics.open_nets,
-            report
-                .validation
-                .as_ref()
-                .and_then(|validation| validation.kicad_drc.as_ref()),
-        )
+    matches!(
+        report.state,
+        synth_router::RouteState::Routed | synth_router::RouteState::ReviewRequired
+    ) && route_counts_are_clean(
+        report.statistics.open_nets,
+        report
+            .validation
+            .as_ref()
+            .and_then(|validation| validation.kicad_drc.as_ref()),
+    )
 }
 
 fn route_counts_are_clean(open_nets: usize, drc: Option<&synth_router::result::DrcCounts>) -> bool {

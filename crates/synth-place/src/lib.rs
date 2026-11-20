@@ -2091,15 +2091,21 @@ pub fn place_with_analytic_seed_and_sidecar(
     )
 }
 
+/// Whether the opt-in RePlAce seam is on. Empty and `0` are off, so a shell
+/// that exports `SYNTH_PLACE_REPLACE=` cannot enable the experiment.
+#[must_use]
+pub fn replace_enabled() -> bool {
+    std::env::var_os("SYNTH_PLACE_REPLACE").is_some_and(|value| {
+        let value = value.to_string_lossy();
+        !value.is_empty() && value != "0"
+    })
+}
+
 /// Write one `REPLACE ...` outcome line, but only while the experiment seam is
 /// on. The experiment scorer reads these lines from stderr; a production run
 /// never sets `SYNTH_PLACE_REPLACE`, so it stays silent.
 fn replace_note(line: std::fmt::Arguments<'_>) {
-    replace_note_to(
-        &mut std::io::stderr(),
-        std::env::var_os("SYNTH_PLACE_REPLACE").is_some(),
-        line,
-    );
+    replace_note_to(&mut std::io::stderr(), replace_enabled(), line);
 }
 
 fn replace_note_to(out: &mut impl std::io::Write, enabled: bool, line: std::fmt::Arguments<'_>) {
@@ -2217,6 +2223,10 @@ fn compact_replace_envelope(board: &Board, placement: &mut Placement, frozen: &[
 
 /// Full RePlAce-style analytical placement.
 ///
+/// Above this many components the dense RePlAce solve is not worth its
+/// memory and legalizer cost; the default export sweep is used instead.
+const MAX_REPLACE_COMPONENTS: usize = 200;
+
 /// The default [`place`] supplies the outline, usable rectangle and layers;
 /// the RePlAce solve (weighted-average wirelength plus bin density, optimised
 /// with Nesterov) owns the continuous geometry; the displacement-minimising
@@ -2240,9 +2250,26 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
     // The solve starts from the default arrangement without the group rule, so
     // RePlAce sees the same envelope it would on an ungrouped board; the full
     // `place()` result is what a rejected solve falls back to.
-    let fallback = place(board)?;
+    let fallback = place_with_export_sweep(board)?;
     let baseline =
         place_with_default_tuning(board, true, false, &default_rotation_overrides(board))?;
+    if board.components.len() > MAX_REPLACE_COMPONENTS {
+        replace_note(format_args!(
+            "REPLACE fallback: {} components is above the {MAX_REPLACE_COMPONENTS}-component guard",
+            board.components.len()
+        ));
+        return Ok(fallback);
+    }
+    if board.components.iter().any(|component| {
+        component.placement_hint.as_ref().is_some_and(|hint| {
+            hint.priority == synth_ir::PlacementPriority::Hard && hint.near.is_some()
+        })
+    }) {
+        replace_note(format_args!(
+            "REPLACE fallback: hard near hint is anchored by the default path"
+        ));
+        return Ok(fallback);
+    }
     if !board.nets.iter().any(|net| net.endpoints.len() >= 2) {
         return Ok(fallback);
     }
@@ -2455,6 +2482,14 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
     let stage_start = std::time::Instant::now();
     default_rules::close_edges(board, &mut placement);
     stage_trace::record("close_edges", board, &placement, stage_start.elapsed());
+    if keepout_overlaps(board, &placement) > keepout_overlaps(board, &baseline) {
+        replace_note(format_args!(
+            "REPLACE fallback: keepout overlaps rose from {} to {}",
+            keepout_overlaps(board, &baseline),
+            keepout_overlaps(board, &placement)
+        ));
+        return Ok(fallback);
+    }
     replace_note(format_args!("REPLACE used"));
     Ok(placement)
 }
@@ -12350,6 +12385,34 @@ board "near" {
         }
         board.components.truncate(parts);
         board
+    }
+
+    /// `SYNTH_PLACE_REPLACE` is off for empty and `0`, not just absent.
+    #[test]
+    fn replace_enabled_treats_empty_and_zero_as_off() {
+        if let Some(value) = std::env::var_os("SYNTH_REPLACE_CHILD") {
+            let value = value.to_string_lossy().to_string();
+            assert_eq!(replace_enabled(), value == "1", "child value {value:?}");
+            return;
+        }
+        for value in ["", "0", "1"] {
+            let out = std::process::Command::new(std::env::current_exe().expect("test binary"))
+                .args([
+                    "--exact",
+                    "tests::replace_enabled_treats_empty_and_zero_as_off",
+                    "--nocapture",
+                ])
+                .env("SYNTH_REPLACE_CHILD", value)
+                .env("SYNTH_PLACE_REPLACE", value)
+                .output()
+                .expect("child test");
+            assert!(
+                out.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&out.stdout),
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
     }
 
     /// The stage writer appends one row per recorded stage, with a header.
