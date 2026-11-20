@@ -51,6 +51,19 @@ The SDRAM's active current, the FPGA's 3.3 V I/O bank current and the oscillator
 
 `D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.25 V maximum VBUS, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input, so a surge that drives `D1` into breakdown (6.67 V at the least) exceeds the regulator's rating by 0.17 V at the least and by about 3.8 V at the full clamp. No TVS with a standoff above 5.25 V clamps below 6.5 V, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at their input, so the board does not meet that margin; the surge is limited upstream by `F1` and the source, not by the regulator rating.
 
+### Requirement check: regulator and input protection
+
+| Requirement | Our choice | Arithmetic | Result |
+|---|---|---|---|
+| The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | VBUS is at most 5.25 V, 0.75 V under 6.0 V; at the 4.75 V minimum less `F1` (0.21 ohm x 0.235 A = 0.05 V) the input is 4.70 V | Met |
+| Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | 4.70 V - 3.3 V = 1.40 V against 0.36 V at 1 A, less at 0.235 A | Met |
+| The regulator carries every load | 1 A output | known loads 0.235 A, 24 % of the rating; the uncounted SDRAM, I/O and oscillator currents fit electrically up to 0.76 A | Met electrically |
+| The regulator sheds its dissipation | SOT-223, `RθJA` 110 C/W | 1.95 V x 0.235 A = 0.46 W gives 120 C at 70 C ambient and 75 C at 25 C ambient; the total at which Tj reaches 125 C is 0.47 A at 25 C and 0.26 A at 70 C | Met for the known loads; not shown at 70 C for the uncounted loads (0.02 A left) |
+| The TVS does not conduct in operation | `D1` PTVS6V0S1UR, 6.0 V standoff, 6.67 V minimum breakdown | 5.25 V maximum VBUS is 0.75 V under the standoff | Met |
+| The regulator survives the TVS clamp | `U1` absolute maximum input 6.5 V | `D1` begins to conduct at 6.67 V minimum breakdown (7.02 V typical, 7.37 V maximum) and clamps at 10.3 V at 38.8 A (Nexperia PTVS6V0S1UR: 400 W, VRWM 6 V) | Not met: the regulator rating is 0.17 V under the least breakdown |
+
+The last row is the one gap. It cannot be closed by choice of a low-dropout regulator, because the ones considered (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at the input, and it cannot be closed by choice of a TVS with a standoff above 5.25 V, because the least breakdown of such a part is above 6.5 V. What limits the stress on the regulator is upstream of it: `F1` (0.21 ohm maximum, 1.1 A hold, 2.2 A trip) is in series with `D1`, so a sustained over-voltage holds the input at about 7 V and opens `F1`, and the 10 uF capacitors `C2` and `C3` sit on the same node as `D1`, so they do not lower the clamp. Two changes would close it: a regulator rated above 10.3 V, or a series resistor of about 1 ohm between `D1` and `U1` with `C2` and `C3` behind it, which costs 0.24 V at 0.235 A and holds a 60 ns clamp event at 10 V to about 0.03 V on 20 uF (the charge through the resistor is (10 V / 1 ohm) x 60 ns = 0.6 uC). Neither is made here; the maintainer's choice is asked on the pull request.
+
 ## Layout and fill
 
 The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdram_node.placement.layout.toml): the SDRAM and the FPGA face each other, the series resistors between them, the USB-C receptacle and the power chain along the bottom, the flash and the programming header on the right. The header `J2` has its courtyard 0.98 mm from the screw-head keepout of mounting hole `H2` (a 5.5 mm square around the hole) and 1.57 mm inside the board's right edge. The courtyard fill of 28.4 % and the outline are measured on the exported board; the parts occupy a 70.4 x 51.5 mm box (75 % of the board) and 9 of the 42 10 x 10 mm cells are empty.
