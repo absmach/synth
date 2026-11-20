@@ -13553,65 +13553,135 @@ board "near" {
         }
     }
 
-    #[ignore = "hard-edge sweep exceeds the CI timeout; tracked"]
-    #[test]
-    fn hard_edge_hinted_connectors_are_flush_and_soft_ones_are_not_in_the_solver() {
-        let header_1x20 = [(
-            "component J4: connector \"header_1x4\"",
-            "component J4: connector \"header_1x20\"",
-        )];
-        let mut cases: Vec<(&str, &[(&str, &str)], &str, &str, bool)> = Vec::new();
-        for edge in EDGES {
-            cases.push((FEATHER, &[], "J2", edge, false));
-            cases.push((FEATHER, &[], "J2", edge, true));
-            cases.push((
-                "../../examples/env_logger/env_logger.synth",
-                &[],
-                "J2",
-                edge,
-                true,
-            ));
-        }
-        cases.push((
-            "../../fixtures/designs/iot_sensor_board.synth",
-            &[],
-            "J1",
-            "top",
-            false,
-        ));
-        cases.push((FEATHER, &[], "J1", "bottom", false));
-        cases.push((FEATHER, &header_1x20, "J4", "bottom", false));
-        for (path, replacements, refdes, edge, wide_pads) in cases {
-            for priority in ["hard", "soft"] {
-                let board = load_board_replacing(path, replacements);
-                let board = if wide_pads {
-                    with_wide_pad_footprint(board, refdes)
-                } else {
-                    board
-                };
-                let board = with_hint(&board, refdes, edge, priority);
-                let placement = place(&board).expect("place");
-                let rects = authoritative_courtyards(&board, &placement);
-                for (i, a) in rects.iter().enumerate() {
-                    for b in &rects[i + 1..] {
-                        assert!(
-                            !a.intersects(b),
-                            "{refdes} {edge} {priority} wide={wide_pads}: {a:?} and {b:?} overlap"
-                        );
-                    }
-                }
-                if priority == "hard" {
-                    assert_flush_with_copper_clear(&board, &placement, refdes, edge);
-                } else {
-                    let gaps = courtyard_gaps(&board, &placement, refdes);
+    /// One hard/soft edge-hint case. Split from the sweep into its own test so
+    /// nextest runs the cases in parallel and each stays under the timeout.
+    fn check_hard_soft_case(
+        path: &str,
+        replacements: &[(&str, &str)],
+        refdes: &str,
+        edge: &str,
+        wide_pads: bool,
+    ) {
+        for priority in ["hard", "soft"] {
+            let board = load_board_replacing(path, replacements);
+            let board = if wide_pads {
+                with_wide_pad_footprint(board, refdes)
+            } else {
+                board
+            };
+            let board = with_hint(&board, refdes, edge, priority);
+            let placement = place(&board).expect("place");
+            let rects = authoritative_courtyards(&board, &placement);
+            for (i, a) in rects.iter().enumerate() {
+                for b in &rects[i + 1..] {
                     assert!(
-                        gaps.iter().all(|gap| *gap >= fitted_edge_margin_nm(&board)),
-                        "soft hint for {refdes} on {edge} must not reach the edge, gaps {gaps:?}"
+                        !a.intersects(b),
+                        "{refdes} {edge} {priority} wide={wide_pads}: {a:?} and {b:?} overlap"
                     );
                 }
             }
+            if priority == "hard" {
+                assert_flush_with_copper_clear(&board, &placement, refdes, edge);
+            } else {
+                let gaps = courtyard_gaps(&board, &placement, refdes);
+                assert!(
+                    gaps.iter().all(|gap| *gap >= fitted_edge_margin_nm(&board)),
+                    "soft hint for {refdes} on {edge} must not reach the edge, gaps {gaps:?}"
+                );
+            }
         }
     }
+
+    macro_rules! hard_soft_case {
+        ($name:ident, $path:expr, $replacements:expr, $refdes:expr, $edge:expr, $wide:expr) => {
+            #[test]
+            fn $name() {
+                check_hard_soft_case($path, $replacements, $refdes, $edge, $wide);
+            }
+        };
+    }
+
+    hard_soft_case!(hard_edge_left_j2_narrow, FEATHER, &[], "J2", "left", false);
+    hard_soft_case!(hard_edge_left_j2_wide, FEATHER, &[], "J2", "left", true);
+    hard_soft_case!(
+        hard_edge_left_env_j2_wide,
+        "../../examples/env_logger/env_logger.synth",
+        &[],
+        "J2",
+        "left",
+        true
+    );
+    hard_soft_case!(
+        hard_edge_right_j2_narrow,
+        FEATHER,
+        &[],
+        "J2",
+        "right",
+        false
+    );
+    hard_soft_case!(hard_edge_right_j2_wide, FEATHER, &[], "J2", "right", true);
+    hard_soft_case!(
+        hard_edge_right_env_j2_wide,
+        "../../examples/env_logger/env_logger.synth",
+        &[],
+        "J2",
+        "right",
+        true
+    );
+    hard_soft_case!(hard_edge_top_j2_narrow, FEATHER, &[], "J2", "top", false);
+    hard_soft_case!(hard_edge_top_j2_wide, FEATHER, &[], "J2", "top", true);
+    hard_soft_case!(
+        hard_edge_top_env_j2_wide,
+        "../../examples/env_logger/env_logger.synth",
+        &[],
+        "J2",
+        "top",
+        true
+    );
+    hard_soft_case!(
+        hard_edge_bottom_j2_narrow,
+        FEATHER,
+        &[],
+        "J2",
+        "bottom",
+        false
+    );
+    hard_soft_case!(hard_edge_bottom_j2_wide, FEATHER, &[], "J2", "bottom", true);
+    hard_soft_case!(
+        hard_edge_bottom_env_j2_wide,
+        "../../examples/env_logger/env_logger.synth",
+        &[],
+        "J2",
+        "bottom",
+        true
+    );
+    hard_soft_case!(
+        hard_edge_iot_j1_top,
+        "../../fixtures/designs/iot_sensor_board.synth",
+        &[],
+        "J1",
+        "top",
+        false
+    );
+    hard_soft_case!(
+        hard_edge_feather_j1_bottom,
+        FEATHER,
+        &[],
+        "J1",
+        "bottom",
+        false
+    );
+    hard_soft_case!(
+        hard_edge_feather_j4_bottom,
+        FEATHER,
+        &[(
+            "component J4: connector \"header_1x4\"",
+            "component J4: connector \"header_1x20\""
+        )],
+        "J4",
+        "bottom",
+        false
+    );
 
     #[test]
     fn solver_keeps_overhanging_pads_clear_of_the_edge_in_every_orientation() {
@@ -13687,23 +13757,37 @@ board "near" {
         placement
     }
 
-    #[ignore = "sidecar outline scan exceeds the CI timeout; tracked"]
-    #[test]
-    fn sidecar_outline_pass_makes_a_pulled_out_hinted_connector_flush() {
-        for wide_pads in [false, true] {
-            for edge in EDGES {
-                let board = feather_with_j2_hint(edge, "hard");
-                let board = if wide_pads {
-                    with_wide_pad_footprint(board, "J2")
-                } else {
-                    board
-                };
-                let mut placement = j2_protruding(&board, edge, 12.0);
-                tighten_outline_after_sidecar(&board, &mut placement);
-                assert_flush_with_copper_clear(&board, &placement, "J2", edge);
-            }
-        }
+    /// One edge/wide-pad case of the sidecar outline sweep; split so nextest
+    /// runs the eight solves in parallel under the per-test timeout.
+    fn check_sidecar_outline_flush(wide_pads: bool, edge: &str) {
+        let board = feather_with_j2_hint(edge, "hard");
+        let board = if wide_pads {
+            with_wide_pad_footprint(board, "J2")
+        } else {
+            board
+        };
+        let mut placement = j2_protruding(&board, edge, 12.0);
+        tighten_outline_after_sidecar(&board, &mut placement);
+        assert_flush_with_copper_clear(&board, &placement, "J2", edge);
     }
+
+    macro_rules! sidecar_flush_case {
+        ($name:ident, $wide:expr, $edge:expr) => {
+            #[test]
+            fn $name() {
+                check_sidecar_outline_flush($wide, $edge);
+            }
+        };
+    }
+
+    sidecar_flush_case!(sidecar_outline_left_narrow, false, "left");
+    sidecar_flush_case!(sidecar_outline_left_wide, true, "left");
+    sidecar_flush_case!(sidecar_outline_right_narrow, false, "right");
+    sidecar_flush_case!(sidecar_outline_right_wide, true, "right");
+    sidecar_flush_case!(sidecar_outline_top_narrow, false, "top");
+    sidecar_flush_case!(sidecar_outline_top_wide, true, "top");
+    sidecar_flush_case!(sidecar_outline_bottom_narrow, false, "bottom");
+    sidecar_flush_case!(sidecar_outline_bottom_wide, true, "bottom");
 
     /// A connector hinted to one edge but pinned on another must not undo its
     /// neighbour's flush edge: its own side is judged by where it sits.
