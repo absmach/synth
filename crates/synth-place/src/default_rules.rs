@@ -140,9 +140,6 @@ const SNAP_ROOM_MM: f64 = 0.25;
 /// Cap on the push-apart passes that clear overlaps after a rule moved parts.
 const RELAX_PASSES: usize = 200;
 
-/// A non-connector part with at least this many pins is a major IC.
-const MAJOR_IC_PINS: usize = 16;
-
 /// Vertical step (mm) at which the row of chip blocks looks for a clear seat.
 const CHIP_ROW_STEP_MM: f64 = 0.5;
 
@@ -329,6 +326,42 @@ struct State<'a> {
     reserved: Vec<Rect>,
     /// Parts a header row carries: the spread pass leaves them with it.
     spread_keep: Vec<usize>,
+}
+
+/// Group boxes as the placement review draws them: a connector in a group with
+/// a major IC docks on its own edge and is left out of the block, and a
+/// mounting hole on a board corner leaves too. The judge, the rules and the
+/// spacing tests all read this one rule.
+pub(crate) fn review_group_boxes(
+    board: &Board,
+    placed: &[ComponentPlacement],
+    outline: Rect,
+) -> BTreeMap<String, Rect> {
+    let mut boxes: BTreeMap<String, Rect> = BTreeMap::new();
+    let mut groups: BTreeMap<&str, bool> = BTreeMap::new();
+    for item in placed {
+        if let Some(group) = board.component(item.id).and_then(|c| c.group.as_deref()) {
+            let major = groups.entry(group).or_insert(false);
+            *major |= board
+                .component(item.id)
+                .is_some_and(crate::fold::is_major_component);
+        }
+    }
+    for (group, has_chip) in groups {
+        let members = placed.iter().filter_map(|placed| {
+            let component = board.component(placed.id)?;
+            (component.group.as_deref() == Some(group)).then(|| {
+                (
+                    component.kind.as_str(),
+                    sidecar_courtyard_rect(board, component, placed),
+                )
+            })
+        });
+        if let Some(rect) = crate::fold::group_box(members, has_chip, outline) {
+            boxes.insert(group.to_string(), rect);
+        }
+    }
+    boxes
 }
 
 /// `(gap_nm, infl, group_gap_nm)` for a board.
@@ -2507,26 +2540,10 @@ impl State<'_> {
 
     /// Group boxes as the placement review draws them: a connector in a group
     /// with a major IC docks on its own edge and is left out of the block, and
-    /// a mounting hole on a board corner leaves too. [`crate::fold::group_box`]
-    /// is the one rule behind both this and the judge.
+    /// a mounting hole on a board corner leaves too. [`review_group_boxes`] is
+    /// the one rule behind this, the judge and the spacing tests.
     fn review_group_boxes(&self) -> BTreeMap<String, Rect> {
-        let mut boxes: BTreeMap<String, Rect> = BTreeMap::new();
-        let mut groups: BTreeMap<&str, bool> = BTreeMap::new();
-        for i in 0..self.placed.len() {
-            if let Some(group) = self.component(i).group.as_deref() {
-                let major = groups.entry(group).or_insert(false);
-                *major |= self.is_major_ic(i);
-            }
-        }
-        for (group, has_chip) in groups {
-            let members = (0..self.placed.len())
-                .filter(|&i| self.component(i).group.as_deref() == Some(group))
-                .map(|i| (self.component(i).kind.as_str(), self.rect(i)));
-            if let Some(rect) = crate::fold::group_box(members, has_chip, self.outline) {
-                boxes.insert(group.to_string(), rect);
-            }
-        }
-        boxes
+        review_group_boxes(self.board, &self.placed, self.outline)
     }
 
     /// Least gap between the group boxes the review draws.
@@ -3100,12 +3117,7 @@ impl State<'_> {
     }
 
     fn is_major_ic(&self, index: usize) -> bool {
-        let component = self.component(index);
-        component.kind != "connector"
-            && component
-                .part
-                .as_ref()
-                .is_some_and(|part| part.pins.len() >= MAJOR_IC_PINS)
+        crate::fold::is_major_component(self.component(index))
     }
 
     /// Whether the part is a chip the spread pass must leave alone.

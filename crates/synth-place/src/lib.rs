@@ -5181,6 +5181,16 @@ impl Placement {
     }
 }
 
+/// The declared group boxes as the placement review draws them: a connector in
+/// a group with a major IC docks on its own edge and is left out, and a mounting
+/// hole on a board corner leaves too. The judge and the rules share the same
+/// `fold::group_box` and `fold::is_major_component` rule; this exposes the
+/// rules' box so a test asserts the block the judge's `group_gap` row measures.
+#[must_use]
+pub fn group_boxes(board: &Board, placement: &Placement) -> BTreeMap<String, Rect> {
+    default_rules::review_group_boxes(board, &placement.components, placement.board_outline)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ExternalHint {
     #[serde(default)]

@@ -55,7 +55,17 @@ const ALIGN_MM: f64 = 0.5;
 /// A mounting hole this close to a board corner is a corner hole.
 pub(crate) const HOLE_CORNER_LIMIT_MM: f64 = 5.5;
 /// A part with at least this many pins is the group's major IC.
-const MAJOR_IC_PINS: usize = 16;
+pub(crate) const MAJOR_IC_PINS: usize = 16;
+
+/// Whether a part counts as a major IC for a group box: a non-connector with at
+/// least [`MAJOR_IC_PINS`] pins. The judge, the rules and the fold all read it.
+pub(crate) fn is_major_component(component: &synth_ir::Component) -> bool {
+    component.kind != "connector"
+        && component
+            .part
+            .as_ref()
+            .is_some_and(|part| part.pins.len() >= MAJOR_IC_PINS)
+}
 /// Smallest candidate width, before the walls ask for more.
 const MIN_WIDTH_MM: f64 = 20.0;
 /// How far past the minimum the width scan goes.

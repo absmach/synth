@@ -535,14 +535,9 @@ fn group_boxes(parts: &[Part<'_>], outline: Rect) -> Vec<Rect> {
     }
     let mut boxes = Vec::new();
     for members in groups.values() {
-        let has_major = members.iter().any(|part| {
-            part.component.kind != "connector"
-                && part
-                    .component
-                    .part
-                    .as_ref()
-                    .is_some_and(|part| part.pins.len() >= 16)
-        });
+        let has_major = members
+            .iter()
+            .any(|part| crate::fold::is_major_component(part.component));
         if let Some(rect) = crate::fold::group_box(
             members
                 .iter()
