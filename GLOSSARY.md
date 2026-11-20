@@ -30,7 +30,7 @@ The `simulation` entry in a `synth check` report, with status `pass`, `fail`,
 _Avoid_: sim check, spice gate
 
 **Skipped**:
-A simulation-stage status meaning there was no testbench to run, or the source
+A simulation-stage status meaning there was no sidecar entry, or the source
 gate failed. It is not evidence of correctness and does not block the check.
 _Avoid_: passed, not applicable
 
