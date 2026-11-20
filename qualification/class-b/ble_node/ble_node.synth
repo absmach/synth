@@ -1,0 +1,224 @@
+// 4-Layer BLE Environment Node Board
+//   USB-C 5V -> LP5907 3.3V LDO -> nRF52840 MCU + BME680 Sensor
+//   BLE: nRF52840 -> 2.4GHz balun -> matching network -> chip antenna
+//   32 MHz crystal, SWD debug header, I2C bus with pull-ups
+//
+// Class B qualification design
+// 50 ohm antenna feed trace width computed from 4-layer stackup
+
+board "ble_node" {
+  layers 4
+  manufacturer "jlc-filled-via"
+  revision "A"
+  company "Synth QualiBoard"
+
+  // ---- Stackup (4-layer) ------------------------------------------------
+  // Top: 1oz Cu, prepreg 0.1mm er4.3, inner1 1oz Cu, core 1.0mm er4.4,
+  //      inner2 1oz Cu, prepreg 0.1mm er4.3, bottom 1oz Cu
+  // Total thickness ~1.34mm
+  // 50 ohm microstrip on top: width ~0.145mm (computed via SI tool)
+  stackup {
+    copper 0.035mm
+    insulator 0.1mm er 4.3 material "FR4"
+    copper 0.035mm
+    insulator 1.0mm er 4.4 material "FR4"
+    copper 0.035mm
+    insulator 0.1mm er 4.3 material "FR4"
+    copper 0.035mm
+  }
+
+  // ---- Net Classes ------------------------------------------------------
+  netclass "RF50" {
+    trace_width 0.145mm
+    clearance 0.2mm
+    color "#cc0000"
+  }
+
+  // ---- Power Chain (USB-C 5V to 3.3V LDO) ------------------------------
+  group "USB-C INPUT / 3V3 LDO" color "#c2410c" {
+    component J1: connector "usb_c_receptacle"
+    component R_CC1: resistor "r_generic_0603" value "5.1k"
+    component R_CC2: resistor "r_generic_0603" value "5.1k"
+    component U_LDO: regulator "lp5907_3v3" value "LP5907-3.3"
+    component C_VBUS: capacitor "c_generic_0805" value "10uF"
+    component C_LDO_IN: capacitor "c_generic_0603" value "1uF"
+    component C_LDO_OUT: capacitor "c_generic_0603" value "1uF"
+    component D_ESD_DP: diode "esd_usb"
+    component D_ESD_DN: diode "esd_usb"
+    component L_FB1: inductor "ferrite_bead_0603"
+    notes "" {
+      "USB-C 5V input -> LP5907-3.3 low-noise LDO -> 3.3V rail."
+      "CC1/CC2 pulled down 5.1k each: advertises 5V sink."
+      "LP5907 chosen for low noise on RF supply."
+      "Ferrite bead isolates digital/RF 3V3."
+    }
+  }
+
+  connect J1.vbus -> C_VBUS.p1
+  connect J1.gnd -> C_VBUS.p2
+  connect J1.vbus -> U_LDO.vin
+  connect J1.gnd -> U_LDO.gnd
+  connect U_LDO.vin -> C_LDO_IN.p1
+  connect U_LDO.gnd -> C_LDO_IN.p2
+  connect U_LDO.vout -> C_LDO_OUT.p1
+  connect U_LDO.gnd -> C_LDO_OUT.p2
+  connect J1.vbus -> U_LDO.en
+
+  // USB-C CC negotiation
+  connect J1.cc1 -> R_CC1.p1
+  connect R_CC1.p2 -> J1.gnd
+  connect J1.cc2 -> R_CC2.p1
+  connect R_CC2.p2 -> J1.gnd
+
+  // USB ESD protection on data lines (separate channels for DP and DN)
+  connect J1.dp -> D_ESD_DP.io
+  connect J1.gnd -> D_ESD_DP.gnd
+  connect J1.dn -> D_ESD_DN.io
+  connect J1.gnd -> D_ESD_DN.gnd
+
+  // ---- nRF52840 MCU -----------------------------------------------------
+  group "nRF52840 MCU" color "#0072b2" {
+    component U1: mcu "nrf52840" value "nRF52840-QIAA"
+    component C_DEC1: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+    component C_DEC2: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+    component R_RESET: resistor "r_generic_0603" value "10k" { placement_hint { near: "U1" priority: hard } }
+    component SW_RESET: switch "spst_tactile"
+    component C_RESET: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U1" priority: hard } }
+    notes "" {
+      "nRF52840 BLE 5 / Thread / Zigbee SoC, aQFN-73."
+      "VDD decoupling: 2x 100nF close to VDD pins."
+      "Reset: 10k pull-up + 100nF filter + tactile button."
+      "ANT pin connects to 2.4GHz balun."
+    }
+  }
+
+  connect U_LDO.vout -> L_FB1.p1
+  connect L_FB1.p2 -> U1.vdd
+  connect U_LDO.gnd -> U1.vss
+  connect U1.vdd -> C_DEC1.p1
+  connect U1.vss -> C_DEC1.p2
+  connect U1.vdd -> C_DEC2.p1
+  connect U1.vss -> C_DEC2.p2
+  connect U_LDO.vout -> R_RESET.p1
+  connect R_RESET.p2 -> U1.reset
+  connect U1.reset -> SW_RESET.p1
+  connect SW_RESET.p2 -> U1.vss
+  connect U1.reset -> C_RESET.p1
+  connect U1.vss -> C_RESET.p2
+
+  // ---- 32 MHz Crystal ---------------------------------------------------
+  group "32 MHz CRYSTAL" color "#6a3d9a" {
+    component X1: crystal "xtal_generic" value "32 MHz"
+    component C_XTAL1: capacitor "c_generic_0603" value "12pF" { placement_hint { near: "X1" priority: hard } }
+    component C_XTAL2: capacitor "c_generic_0603" value "12pF" { placement_hint { near: "X1" priority: hard } }
+    notes "" {
+      "32 MHz crystal for nRF52840 HFCLK."
+      "12 pF load caps (typical for 32 MHz)."
+      "Place close to MCU, minimize trace length."
+    }
+  }
+
+  // Crystal connections (generic 2-pin crystal)
+  connect X1.p1 -> C_XTAL1.p1
+  connect C_XTAL1.p2 -> U1.vss
+  connect X1.p2 -> C_XTAL2.p1
+  connect C_XTAL2.p2 -> U1.vss
+
+  // ---- BLE RF: Balun + Matching + Antenna --------------------------------
+  group "BLE RF FRONT END" color "#e31a1c" {
+    component B1: filter "balun_2g4" value "2.4GHz Balun"
+    component L_MATCH1: inductor "l_generic_0402" value "3.9nH" { placement_hint { near: "B1" priority: hard } }
+    component C_MATCH1: capacitor "c_generic_0402" value "1.0pF" { placement_hint { near: "B1" priority: hard } }
+    component ANT1: antenna "ant_chip_2g4" value "2.4GHz Chip Ant"
+    component C_ANT: capacitor "c_generic_0402" value "1.0pF" { placement_hint { near: "ANT1" priority: hard } }
+    notes "" {
+      "2.4 GHz BLE RF path: nRF52840 -> balun -> matching -> chip antenna."
+      "50 ohm feed trace between MCU ANT pin and balun UNBAL."
+      "Matching network values per Nordic reference design."
+      "Keepout zone under antenna (no copper pour)."
+    }
+  }
+
+  // Antenna feed: MCU ant -> balun unbal (50 ohm net class)
+  net "ANT_FEED" class "RF50" {
+    U1.ant
+    B1.unbal
+  }
+
+  // Balun to matching network
+  connect B1.bal_a -> L_MATCH1.p1
+  connect L_MATCH1.p2 -> C_MATCH1.p1
+  connect C_MATCH1.p2 -> ANT1.feed
+  connect B1.bal_b -> U1.vss
+  connect B1.gnd -> U1.vss
+
+  // Antenna ground and decoupling
+  connect ANT1.gnd -> U1.vss
+  connect ANT1.feed -> C_ANT.p1
+  connect C_ANT.p2 -> U1.vss
+
+  // Keepout under antenna
+  keepout antenna_zone {
+    radius 8mm
+  }
+
+  // ---- BME280 Environmental Sensor on I2C -------------------------------
+  group "BME280 ENVIRONMENT SENSOR" color "#33a02c" {
+    component U2: sensor "bme280" value "BME280"
+    component C_SENS: capacitor "c_generic_0603" value "100nF" { placement_hint { near: "U2" priority: hard } }
+    component R_I2C_SDA: resistor "r_generic_0603" value "4.7k" { placement_hint { near: "U2" priority: hard } }
+    component R_I2C_SCL: resistor "r_generic_0603" value "4.7k" { placement_hint { near: "U2" priority: hard } }
+    notes "" {
+      "BME280: temp, humidity, pressure (I2C, addr 0x76)."
+      "I2C address 0x76 (SDO tied low, CSB high)."
+      "4.7k pull-ups for 400 kHz I2C at 3.3V."
+    }
+  }
+
+  connect U_LDO.vout -> U2.vdd
+  connect U_LDO.gnd -> U2.gnd
+  connect U2.vdd -> C_SENS.p1
+  connect U2.gnd -> C_SENS.p2
+
+  // I2C mode selection: CSB -> VDD, SDO -> GND (addr 0x76)
+  connect U2.csb -> U_LDO.vout
+  connect U2.sdo -> U_LDO.gnd
+
+  // I2C bus connections (using p0_06 = SDA, p0_08 = SCL on nRF52840)
+  connect U1.p0_06 -> U2.sda
+  connect U1.p0_08 -> U2.scl
+
+  // I2C pull-ups
+  connect U1.p0_06 -> R_I2C_SDA.p1
+  connect R_I2C_SDA.p2 -> U_LDO.vout
+  connect U1.p0_08 -> R_I2C_SCL.p1
+  connect R_I2C_SCL.p2 -> U_LDO.vout
+
+  // ---- SWD Debug Header -------------------------------------------------
+  group "SWD DEBUG" color "#ff7f00" {
+    component J_SWD: connector "header_1x5" value "SWD Header" { placement_hint { near: "U1" side: left priority: hard } }
+    notes "" {
+      "SWD debug header: VCC, SWDIO, SWCLK, GND, RESET."
+      "Pin 1: VCC, Pin 2: SWDIO, Pin 3: SWCLK, Pin 4: GND, Pin 5: RESET."
+    }
+  }
+
+  connect U_LDO.vout -> J_SWD.p1
+  connect U1.p0_26 -> J_SWD.p2
+  connect U1.p0_27 -> J_SWD.p3
+  connect U_LDO.gnd -> J_SWD.p4
+  connect U1.reset -> J_SWD.p5
+
+  // ---- Power Rail Declaration -------------------------------------------
+  power "+3V3" 3.3v {
+    U_LDO.vout
+    U1.vdd
+    U2.vdd
+  }
+
+  power "GND" 0v {
+    U_LDO.gnd
+    U1.vss
+    U2.gnd
+  }
+}
