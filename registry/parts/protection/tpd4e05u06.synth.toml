@@ -1,7 +1,80 @@
+id = "tpd4e05u06"
+kind = "diode"
+description = "TI TPD4E05U06 4-channel low-capacitance ESD array, 5.5 V standoff, 0.5 pF per channel, USON-10"
+mpn = "TPD4E05U06DQAR"
+lcsc_pn = "C138714"
+kicad_symbol = "Power_Protection:TPD4E05U06DQA"
+kicad_footprint = "Package_SON:USON-10_2.5x1.0mm_P0.5mm"
+# Pins are Table 4-2 of TI SLVSBO7O (revised August 2024), DQA package: D1+ 1,
+# D1- 2, D2+ 4, D2- 5 are the four protected channels, GND on 3 and 8, and
+# 6, 7, 9 and 10 are "Not connected; Used for optional straight-through
+# routing. Can be left floating or grounded". The stock symbol numbers the
+# channels the same way. Line capacitance 0.5 pF typical (VIO = 2.5 V, 1 MHz,
+# I/O to GND), reverse stand-off voltage 5.5 V at IIO < 10 uA.
+#
+# LCSC C138714 is the Texas Instruments TPD4E05U06DQAR (USON-10) on its
+# product-search listing; other LCSC numbers for this MPN are other makers.
+[footprint_dimensions]
+width_mm = 2.5
+height_mm = 1.0
+courtyard_margin_mm = 0.25
 
+[operating_conditions]
+max_voltage_v = 5.5
+
+[[pins]]
+name = "ch1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch2"
+number = "2"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd"
+number = "3"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch3"
+number = "4"
+electrical_type = "passive"
+
+[[pins]]
+name = "ch4"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "nc_6"
+number = "6"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_7"
+number = "7"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "gnd_2"
+number = "8"
+electrical_type = "passive"
+
+[[pins]]
+name = "nc_9"
+number = "9"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "nc_10"
+number = "10"
+electrical_type = "do_not_connect"
 
 [provenance]
-source = "authored"
 # Authored from the cited datasheet and reviewed by the pull request author, who confirmed the review on 2026-11-20. An independent review is open.
+source = "authored"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tpd4e05u06.pdf"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-11-20"
