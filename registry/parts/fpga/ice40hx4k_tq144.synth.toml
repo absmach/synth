@@ -19,6 +19,11 @@ width_mm = 23.3
 height_mm = 23.3
 courtyard_margin_mm = 0.25
 
+[provenance]
+source = "imported"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-20"
+
 [[pins]]
 name = "iol_2a"
 number = "1"

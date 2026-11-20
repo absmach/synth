@@ -17,6 +17,11 @@ min_voltage_v = 4.8
 max_voltage_v = 5.4
 max_current_ma = 100.0
 
+[provenance]
+source = "imported"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-20"
+
 [[pins]]
 name = "anode"
 number = "2"
