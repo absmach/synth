@@ -23,8 +23,9 @@ every signal net unless the design declares the net slow: a `netclass` with
 `edge_rate slow`. A generic `output` or `bidirectional` pin carries a fast SPI,
 USB or timer edge as readily as a slow GPIO, so pin type cannot prove a slow
 edge and an unclassified net stays blocking. One that is slow by declaration is
-listed in the route report's `advisories`, with the net and the position, and
-does not block.
+not given a return via, even where there is room for one: the via would take
+room from the nets that need it. Its layer change is still listed as this
+warning, with the net and the position, and does not block.
 
 A net class may instead declare `edge_rate medium`: edges no faster than 0.3 ns.
 The net keeps the return-via requirement, but looks for the ground via within
