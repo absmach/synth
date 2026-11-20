@@ -258,6 +258,12 @@ pub fn placement_candidates(
     sidecars: &Sidecars,
 ) -> Result<Vec<synth_place::Placement>, ExportError> {
     place_candidates_with_margins(board, sidecars.placement_path(), &[0.5, 2.5], &[1, 2], true)
+        .map(|candidates| {
+            candidates
+                .into_iter()
+                .map(|(_source, placement)| placement)
+                .collect()
+        })
         .map_err(|source| ExportError::Placement { source })
 }
 
@@ -728,19 +734,19 @@ fn place_for_export(
     // centring. One finish keeps the arrangement the key already chose.
     let finish_after = board.outline.is_none() && !has_sidecar;
     let candidates = place_candidates(board, sidecar, !finish_after)?;
-    let mut best = candidates
+    let (source, mut best) = candidates
         .into_iter()
-        .min_by_key(|placement| placement_key(board, placement))
+        .min_by_key(|(source, placement)| placement_key(source, placement))
         .expect("the hinted placement is always a candidate");
     if finish_after {
-        synth_place::finish_default_placement(board, &mut best, has_sidecar);
+        synth_place::finish_default_placement(&source, &mut best, has_sidecar);
         synth_place::fit_outline_with_passive_margin_mm(
-            board,
+            &source,
             &mut best,
-            synth_place::tight_edge_margin_mm(board),
-            synth_place::passive_edge_margin_mm(board),
+            synth_place::tight_edge_margin_mm(&source),
+            synth_place::passive_edge_margin_mm(&source),
         );
-        synth_place::trim_outline_to_grid(board, &mut best);
+        synth_place::trim_outline_to_grid(&source, &mut best);
     }
     Ok(best)
 }
@@ -756,7 +762,7 @@ fn place_candidates(
     board: &Board,
     sidecar: Option<&Path>,
     finish_rules: bool,
-) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
+) -> Result<Vec<(Board, synth_place::Placement)>, synth_place::PlaceError> {
     // Seeds 1 to 8: widening to 1..16 reproduced env_logger's failing
     // arrangement. 1.25 and 1.0 mm are the two density steps below the 1.5 mm
     // base that improved the tuning corpus without breaking a board.
@@ -806,7 +812,7 @@ fn place_candidates_with_margins(
     extra_margins: &[f64],
     extra_seeds: &[u64],
     finish_rules: bool,
-) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
+) -> Result<Vec<(Board, synth_place::Placement)>, synth_place::PlaceError> {
     // Match synth-place::place() and the MCP gates. Starting the export
     // with a different courtyard margin can select a different legal
     // placement, making the exported PCB disagree with the placement the
@@ -844,7 +850,7 @@ fn place_candidates_with_margins(
     let mut candidates = Vec::new();
     let mut first_error = None;
     match place(board, margin, 0) {
-        Ok(hinted) => candidates.push(hinted),
+        Ok(hinted) => candidates.push((board.clone(), hinted)),
         Err(error) => first_error = Some(error),
     }
 
@@ -863,13 +869,13 @@ fn place_candidates_with_margins(
                 component.placement_hint = None;
             }
             if let Ok(candidate) = place(&unhinted, margin, 0) {
-                candidates.push(candidate);
+                candidates.push((unhinted.clone(), candidate));
             }
         }
 
         for &extra in extra_margins {
             if let Ok(candidate) = place(board, extra, 0) {
-                candidates.push(candidate);
+                candidates.push((board.clone(), candidate));
             }
         }
 
@@ -878,7 +884,7 @@ fn place_candidates_with_margins(
                 continue;
             }
             if let Ok(candidate) = place(board, margin, seed) {
-                candidates.push(candidate);
+                candidates.push((board.clone(), candidate));
             }
         }
 
@@ -897,7 +903,7 @@ fn place_candidates_with_margins(
                     continue;
                 }
                 if let Ok(candidate) = place(board, TIGHTEST_SEEDED_MARGIN_MM, seed) {
-                    candidates.push(candidate);
+                    candidates.push((board.clone(), candidate));
                 }
             }
         }
@@ -912,30 +918,30 @@ fn place_candidates_with_margins(
     // A declared `outline` is the board the author asked for: fitting a tight
     // rim round the parts would silently replace it.
     if board.outline.is_none() {
-        for candidate in &mut candidates {
+        for (source, candidate) in &mut candidates {
             synth_place::fit_outline_with_passive_margin_mm(
-                board,
+                source,
                 candidate,
-                synth_place::tight_edge_margin_mm(board),
-                synth_place::passive_edge_margin_mm(board),
+                synth_place::tight_edge_margin_mm(source),
+                synth_place::passive_edge_margin_mm(source),
             );
-            synth_place::trim_outline_to_grid(board, candidate);
+            synth_place::trim_outline_to_grid(source, candidate);
         }
     }
     // The outline is final now: put each corner-hinted mounting hole into the
     // corner it asked for when that spot is free.
-    for candidate in &mut candidates {
+    for (source, candidate) in &mut candidates {
         synth_place::snap_features_to_corners(
-            board,
+            source,
             candidate,
-            synth_place::passive_edge_margin_mm(board),
+            synth_place::passive_edge_margin_mm(source),
         );
     }
 
-    let mut distinct: Vec<synth_place::Placement> = Vec::with_capacity(candidates.len());
-    for candidate in candidates {
-        if !distinct.contains(&candidate) {
-            distinct.push(candidate);
+    let mut distinct: Vec<(Board, synth_place::Placement)> = Vec::with_capacity(candidates.len());
+    for (source, candidate) in candidates {
+        if !distinct.iter().any(|(_, known)| *known == candidate) {
+            distinct.push((source, candidate));
         }
     }
     if distinct.is_empty() {

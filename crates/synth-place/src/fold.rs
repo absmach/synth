@@ -355,13 +355,13 @@ fn make_units(
         let mut conns: Vec<&Piece> = members
             .iter()
             .copied()
-            .filter(|piece| piece.kind == "connector")
+            .filter(|piece| is_wall_connector(&piece.kind))
             .collect();
         conns.sort_by_key(|piece| piece.refdes.clone());
         let rest: Vec<&Piece> = members
             .iter()
             .copied()
-            .filter(|piece| piece.kind != "connector")
+            .filter(|piece| !is_wall_connector(&piece.kind))
             .collect();
         let folded = (!rest.is_empty()).then(|| {
             let owned: Vec<Piece> = rest.iter().map(|piece| (*piece).clone()).collect();
@@ -1631,6 +1631,11 @@ fn union(a: Rect, b: Rect) -> Rect {
     )
 }
 
+/// A part that docks on a wall: a connector or a jack.
+fn is_wall_connector(kind: &str) -> bool {
+    matches!(kind, "connector" | "jack")
+}
+
 /// Whether a part joins its group's review box.
 ///
 /// A connector leaves the box when its group also holds a major part, because
@@ -1639,7 +1644,7 @@ fn union(a: Rect, b: Rect) -> Rect {
 /// from the group would otherwise span the board. The rules and the judge
 /// both call this, so the settle and the score always draw the same box.
 pub(crate) fn joins_group_box(kind: &str, has_major: bool, rect: Rect, outline: Rect) -> bool {
-    if has_major && kind == "connector" {
+    if has_major && is_wall_connector(kind) {
         return false;
     }
     !(kind == "mounting_hole" && corner_seated(rect, outline))
@@ -1841,6 +1846,14 @@ mod tests {
             ab: None,
             hinted: false,
         }
+    }
+
+    #[test]
+    fn a_jack_leaves_the_group_box_like_a_connector() {
+        let outline = rect(0.0, 0.0, 50.0, 50.0);
+        let jack = rect(45.0, 0.0, 50.0, 5.0);
+        assert!(!joins_group_box("connector", true, jack, outline));
+        assert!(!joins_group_box("jack", true, jack, outline));
     }
 
     #[test]

@@ -1976,7 +1976,7 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
     }
     if board.outline.is_none() && sidecar_path.is_some_and(std::path::Path::exists) {
         tighten_outline_after_sidecar(board, &mut placement);
-    } else if rules {
+    } else if rules && board.outline.is_none() {
         // A sidecar is the author's own floorplan, so the rules leave it be.
         let rules_start = std::time::Instant::now();
         default_rules::apply(board, &mut placement, true);
@@ -2034,14 +2034,18 @@ fn place_with_default_tuning(
         &PinnedPlacements::new(),
     )?;
     crate::stage_trace::record_time("place_solve", solve_start.elapsed());
-    let rules_start = std::time::Instant::now();
-    default_rules::apply(board, &mut placement, with_groups);
-    crate::stage_trace::record_time("apply_rules", rules_start.elapsed());
-    if with_groups {
-        // The ungrouped run is only the RePlAce baseline; leave it as it was.
-        let edges_start = std::time::Instant::now();
-        default_rules::close_edges(board, &mut placement);
-        crate::stage_trace::record_time("close_edges_total", edges_start.elapsed());
+    // A declared outline is the author's frame; the rules' outline fit would
+    // overwrite it. The solver already placed inside it.
+    if board.outline.is_none() {
+        let rules_start = std::time::Instant::now();
+        default_rules::apply(board, &mut placement, with_groups);
+        crate::stage_trace::record_time("apply_rules", rules_start.elapsed());
+        if with_groups {
+            // The ungrouped run is only the RePlAce baseline; leave it as it was.
+            let edges_start = std::time::Instant::now();
+            default_rules::close_edges(board, &mut placement);
+            crate::stage_trace::record_time("close_edges_total", edges_start.elapsed());
+        }
     }
     Ok(placement)
 }
@@ -7574,8 +7578,8 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
             && let Some(mcu_center) = center_of(mcu.id)
         {
             let connector_center = connector_placement.center;
-            let is_connector_mcu_chain_component = |component_id: ComponentId| {
-                let touches_connector = board.nets.iter().any(|net| {
+            let touches_connector = |component_id: ComponentId| {
+                board.nets.iter().any(|net| {
                     net.endpoints
                         .iter()
                         .any(|endpoint| endpoint.component == connector.id)
@@ -7583,17 +7587,19 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
                             .endpoints
                             .iter()
                             .any(|endpoint| endpoint.component == component_id)
-                });
-                let touches_mcu = board.nets.iter().any(|net| {
-                    net.endpoints
-                        .iter()
-                        .any(|endpoint| endpoint.component == component_id)
-                        && net
-                            .endpoints
+                })
+            };
+            let is_connector_mcu_chain_component = |component_id: ComponentId| {
+                touches_connector(component_id)
+                    && board.nets.iter().any(|net| {
+                        net.endpoints
                             .iter()
-                            .any(|endpoint| endpoint.component == mcu.id)
-                });
-                touches_connector && touches_mcu
+                            .any(|endpoint| endpoint.component == component_id)
+                            && net
+                                .endpoints
+                                .iter()
+                                .any(|endpoint| endpoint.component == mcu.id)
+                    })
             };
             // A rectangular bounding box around a diagonal connector-to-
             // MCU path over-reports nearly every component between the
@@ -7623,10 +7629,14 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
                     if is_connector_mcu_chain_component(blocker.id) {
                         return false;
                     }
-                    // The rest of the connector's own declared group is its
-                    // support circuit (CC resistors, ESD diodes), meant to sit
-                    // beside it.
-                    if connector.group.is_some() && blocker.group == connector.group {
+                    // A net-connected support part in the connector's own
+                    // group (CC resistor, ESD diode) is meant to sit beside
+                    // it. A same-group part with no net to the connector is
+                    // still a blocker; the group alone must not hide it.
+                    if connector.group.is_some()
+                        && blocker.group == connector.group
+                        && touches_connector(blocker.id)
+                    {
                         return false;
                     }
                     let (distance, t) =
@@ -12481,6 +12491,24 @@ board "near" {
             compacted, uncompacted,
             "setup: compaction changes this board"
         );
+    }
+
+    #[test]
+    fn a_declared_outline_is_not_rewritten_by_the_rules() {
+        let board = board_from_source(
+            r#"board "fixed_outline" {
+              layers 2
+              outline 60mm x 30mm
+              component U1: mcu "rp2350"
+              component J1: connector "header_1x4"
+              connect U1.gp0 -> J1.p1
+            }"#,
+            "fixed_outline.synth",
+        );
+        let expected = board.outline.expect("declared outline");
+        let placement = place(&board).expect("place");
+        assert_eq!(placement.board_outline.width_nm(), expected.width.0);
+        assert_eq!(placement.board_outline.height_nm(), expected.height.0);
     }
 
     /// One squeeze step on its own: a free part scales toward the middle and
