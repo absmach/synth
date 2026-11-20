@@ -676,6 +676,22 @@ fn explicit_sheets_and_groups_mix_keep_contiguous_pages() {
 }
 
 #[test]
+fn a_requested_a5_page_is_honoured() {
+    // A5 is not on the auto-fit ladder; it is reachable only by asking.
+    let mut board = grouped("a5forced", 2);
+    board.schematic_paper = Some(SchematicPaper::A5);
+    let out = export(&board);
+    assert!(
+        out.root.contains("(paper \"A5\")"),
+        "A5 was not honoured: {:?}",
+        paper(&out.root)
+    );
+    assert_eq!(pages(&out.root), vec![2]);
+    let (_, width, height) = paper(&out.root);
+    assert_boxes_fit(&sheet_blocks(&out.root), width, height);
+}
+
+#[test]
 fn a_requested_a4_page_is_a_floor() {
     let mut board = grouped("a4forced", 3);
     board.schematic_paper = Some(SchematicPaper::A4);
