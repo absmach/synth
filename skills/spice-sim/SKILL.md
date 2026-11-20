@@ -76,7 +76,8 @@ had no limits; it is not a pass.
 - `pass`: the testbench ran and every blocking diagnostic is clear.
 - `fail`: a blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit
   measure.
-- `unknown`: the sidecar exists but ngspice is missing or timed out.
+- `unknown`: the sidecar exists but ngspice is missing, timed out, or the
+  report was unreadable.
 
 `fail` and `unknown` block the check. `skipped` and `pass` do not.
 

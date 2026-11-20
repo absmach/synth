@@ -9,6 +9,9 @@ ngspice.
 The engine is the external `ngspice` binary. Synth does not link libngspice
 and ships no ngspice code.
 
+Simulation does not prove power sequencing, signal integrity, EMC, thermal
+behaviour, or firmware.
+
 ## Install
 
 ```sh

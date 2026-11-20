@@ -198,6 +198,7 @@ for an interactive review._
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.
 - [Component registry](registry/README.md) — part definitions and registry structure.
 - [MCP server](crates/synth-mcp/README.md) — agent tools and integration.
+- [Glossary](GLOSSARY.md) — shared vocabulary for simulation and check stages.
 
 ## Contributing
 
