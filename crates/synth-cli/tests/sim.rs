@@ -145,6 +145,21 @@ fn divider_example_prints_pass() {
 }
 
 #[test]
+fn a_nonpositive_timeout_is_a_usage_error() {
+    let output = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("sim")
+        .arg("--timeout")
+        .arg("0")
+        .arg(example_design())
+        .output()
+        .expect("run synth sim --timeout 0");
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--timeout"), "{stderr}");
+}
+
+#[test]
 fn json_is_written_when_the_design_cannot_be_read() {
     let dir = scratch("missing-design");
     let design = dir.join("missing.synth");

@@ -122,6 +122,11 @@ enum Command {
         /// Write the report as one JSON object to stdout.
         #[arg(long, conflicts_with = "suggest")]
         json: bool,
+
+        /// Cap the ngspice run in seconds. The sidecar's own timeout still
+        /// applies when it is shorter.
+        #[arg(long, value_name = "SECS", conflicts_with = "suggest")]
+        timeout: Option<f64>,
     },
 
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
@@ -496,14 +501,16 @@ enum Command {
     },
 
     /// Run the deterministic, network-free release/check contract. The
-    /// command composes compiler validation, DRC, and (with --fab) a complete
-    /// KiCad manufacturing export into one stable JSON result.
+    /// command composes compiler validation, the testbench when one exists,
+    /// DRC, and (with --fab) a complete KiCad manufacturing export into one
+    /// stable JSON result.
     Check {
         /// Path to a `.synth` source file.
         input: PathBuf,
         #[arg(long, value_name = "DIR")]
         registry: Option<PathBuf>,
-        /// Run the manufacturing export gate as well as source/DRC checks.
+        /// Run the manufacturing export gate as well as source, simulation and
+        /// DRC checks.
         #[arg(long)]
         fab: bool,
         /// Allow manufacturing output containing unverified registry parts.
@@ -1062,7 +1069,8 @@ fn main() -> ExitCode {
             suggest,
             force,
             json,
-        } => sim(&input, registry.as_deref(), suggest, force, json),
+            timeout,
+        } => sim(&input, registry.as_deref(), suggest, force, json, timeout),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -2007,7 +2015,7 @@ fn simulation_stage(
         }));
     }
     let sidecar = synth_sim::sidecar_path(input);
-    if !sidecar.is_file() {
+    if std::fs::symlink_metadata(&sidecar).is_err() {
         return Ok(serde_json::json!({
             "status": "skipped",
             "reason": "no testbench sidecar",
@@ -2018,39 +2026,71 @@ fn simulation_stage(
     args.extend([
         "sim".to_string(),
         "--json".to_string(),
+        "--timeout".to_string(),
+        budget.saturating_sub(2).max(1).to_string(),
         input.display().to_string(),
     ]);
     if let Some(dir) = registry {
         args.extend(["--registry".to_string(), dir.display().to_string()]);
     }
-    let (output, timed_out) = run_check_child(exe, &args, budget)?;
-    if timed_out {
+    let invocation = synth_router::process::run_cancellable(
+        exe,
+        &args,
+        std::time::Duration::from_secs(budget),
+        CHECK_STDOUT_CAP,
+        None,
+        None,
+        synth_router::process::KillScope::ProcessTree,
+    )
+    .map_err(|error| anyhow::anyhow!("could not run `synth sim`: {}", error.detail))?;
+    if invocation.timed_out {
         return Ok(serde_json::json!({
             "status": "unknown",
             "reason": "timeout",
             "detail": "`synth sim` exceeded its stage budget",
         }));
     }
-
-    let Ok(result) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+    if invocation.output_truncated {
         return Ok(serde_json::json!({
             "status": "unknown",
             "reason": "unreadable simulation report",
-            "stderr": String::from_utf8_lossy(&output.stderr),
+            "detail": "`synth sim` output exceeded the report cap",
+        }));
+    }
+
+    let Ok(result) = serde_json::from_str::<serde_json::Value>(&invocation.stdout) else {
+        return Ok(serde_json::json!({
+            "status": "unknown",
+            "reason": "unreadable simulation report",
+            "stderr": invocation.stderr,
         }));
     };
-    if output.status.success() && result["passed"].as_bool() == Some(true) {
+    if invocation.succeeded() && result["passed"].as_bool() == Some(true) {
         return Ok(serde_json::json!({"status": "pass", "result": result}));
     }
-    let simulator_unavailable = result["diagnostics"].as_array().is_some_and(|diagnostics| {
-        diagnostics.iter().any(|diagnostic| {
-            matches!(
-                diagnostic["code"].as_str(),
-                Some(synth_sim::E_SYNTH_SIM_001 | synth_sim::E_SYNTH_SIM_005)
-            )
+    if let Some(error) = result["error"].as_str() {
+        return Ok(serde_json::json!({
+            "status": "unknown",
+            "reason": "simulation setup failed",
+            "detail": error,
+            "result": result,
+        }));
+    }
+    let has_code = |code: &str| {
+        result["diagnostics"].as_array().is_some_and(|diagnostics| {
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == code)
         })
-    });
-    if simulator_unavailable {
+    };
+    if has_code(synth_sim::E_SYNTH_SIM_005) {
+        return Ok(serde_json::json!({
+            "status": "unknown",
+            "reason": "timeout",
+            "result": result,
+        }));
+    }
+    if has_code(synth_sim::E_SYNTH_SIM_001) {
         return Ok(serde_json::json!({
             "status": "unknown",
             "reason": "simulator unavailable",
@@ -3530,7 +3570,13 @@ fn sim(
     suggest: bool,
     force: bool,
     json: bool,
+    timeout_secs: Option<f64>,
 ) -> anyhow::Result<u8> {
+    if let Some(timeout) = timeout_secs
+        && (!timeout.is_finite() || timeout <= 0.0)
+    {
+        anyhow::bail!("--timeout must be a positive finite number of seconds");
+    }
     let (source, file) = match read_source(input) {
         Ok(pair) => pair,
         Err(error) => {
@@ -3621,6 +3667,7 @@ fn sim(
             design_path: Some(input.to_path_buf()),
             testbench_path: Some(sidecar.clone()),
             registry_dirs,
+            timeout_secs,
             ..synth_sim::SimOptions::default()
         },
     );

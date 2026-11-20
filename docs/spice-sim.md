@@ -32,6 +32,10 @@ synth sim examples/divider/divider.synth
 
 The design must have a testbench sidecar beside it, named
 `<design>.sim.toml` (for `divider.synth`, that is `divider.sim.toml`).
+`--timeout <secs>` caps the ngspice run; the sidecar's own `[options] timeout`
+still applies when it is shorter. `synth check` uses this cap to keep the
+simulation inside its stage budget.
+
 The command prints one line per measure:
 
 ```
@@ -62,7 +66,9 @@ and `coverage`. `coverage` is the list of what the run used and measured:
 | `unmodelled` | Refdes with no usable SPICE model. |
 | `measured` | Net, element and pin targets named by measures. |
 
-The human output prints the same four lists on one coverage line.
+The human output prints the same four lists on one coverage line. A part the
+emitter could not wire is named by its diagnostic; it is not added to
+`unmodelled`, which is specifically about unusable models.
 
 ### Check integration
 

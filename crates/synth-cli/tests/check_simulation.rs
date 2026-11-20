@@ -95,12 +95,16 @@ fn design_with_sidecar(dir: &Path) -> PathBuf {
 }
 
 fn run_check(design: &Path, ngspice: &Path) -> Output {
+    run_check_with_budget(design, ngspice, "10")
+}
+
+fn run_check_with_budget(design: &Path, ngspice: &Path, budget: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_synth"))
         .arg("check")
         .arg(design)
         .arg("--json")
         .env("NGSPICE", ngspice)
-        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", "10")
+        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", budget)
         .output()
         .expect("run synth check")
 }
@@ -127,6 +131,36 @@ fn report(output: &Output) -> serde_json::Value {
 
 fn simulation(report: &serde_json::Value) -> &serde_json::Value {
     &report["stages"]["simulation"]
+}
+
+fn read_pid(path: &Path) -> u32 {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()))
+        .trim()
+        .parse()
+        .expect("pid")
+}
+
+fn pid_exists(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+fn assert_gone(path: &Path) {
+    let pid = read_pid(path);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while pid_exists(pid) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "pid {pid} from {} survived the timeout",
+            path.display()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
 }
 
 #[test]
@@ -188,6 +222,63 @@ fn an_out_of_limit_measure_makes_the_simulation_stage_fail() {
             .any(|diagnostic| diagnostic["code"] == "E-SYNTH-SIM-004"),
         "{report:#}"
     );
+}
+
+#[test]
+fn a_sidecar_directory_is_fail_not_skipped() {
+    let dir = Scratch::new("sidecar-directory");
+    let design = dir.join("divider.synth");
+    std::fs::copy(example_design(), &design).expect("copy design");
+    std::fs::create_dir(dir.join("divider.sim.toml")).expect("sidecar directory");
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = run_check(&design, &stub);
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "fail", "{report:#}");
+    assert_eq!(report["status"], "fail", "{report:#}");
+}
+
+#[test]
+fn a_timed_out_simulation_is_unknown() {
+    let dir = Scratch::new("timeout");
+    let design = design_with_sidecar(&dir);
+    let stub = stub_ngspice(&dir, "hang");
+
+    let output = run_check_with_budget(&design, &stub, "3");
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "unknown", "{report:#}");
+    assert_eq!(simulation(&report)["reason"], "timeout", "{report:#}");
+    assert_gone(&dir.join("hang.pid"));
+    assert_gone(&dir.join("hang-child.pid"));
+}
+
+#[test]
+fn a_simulation_setup_error_is_unknown() {
+    let dir = Scratch::new("setup-error");
+    let design = design_with_sidecar(&dir);
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("check")
+        .arg(&design)
+        .arg("--json")
+        .arg("--registry")
+        .arg(dir.join("no-registry"))
+        .env("NGSPICE", &stub)
+        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", "10")
+        .output()
+        .expect("run synth check");
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "unknown", "{report:#}");
+    assert_eq!(
+        simulation(&report)["reason"],
+        "simulation setup failed",
+        "{report:#}"
+    );
+    assert_eq!(report["status"], "fail", "{report:#}");
 }
 
 #[test]

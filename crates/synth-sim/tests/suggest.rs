@@ -886,6 +886,7 @@ fn simulate_suggested(
             design_path: Some(PathBuf::from("suggested.synth")),
             testbench_path: Some(PathBuf::from("suggested.sim.toml")),
             registry_dirs: vec![registry_parts_dir()],
+            timeout_secs: None,
         },
     )
 }
@@ -2538,6 +2539,7 @@ fn a_gate_drive_testbench_passes_on_real_ngspice() {
             design_path: Some(PathBuf::from("suggested.synth")),
             testbench_path: Some(PathBuf::from("suggested.sim.toml")),
             registry_dirs: vec![scratch.path().to_path_buf()],
+            timeout_secs: None,
         },
     );
 
