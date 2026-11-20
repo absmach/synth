@@ -2265,7 +2265,6 @@ dependencies = [
  "synth-pcb",
  "synth-place",
  "synth-registry",
- "synth-route",
  "synth-router",
  "synth-sim",
  "synth-smt",
