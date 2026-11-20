@@ -1089,7 +1089,8 @@ fn layout_with_overrides_and_power(
     grow_sheet_to_fit(board, &mut layout);
     compact_sheet_to_fit(board, &mut layout);
     settle_sheet_size(board, &mut layout);
-    extend_boxes_to_frame_bottom(&mut layout);
+    let extended = extend_boxes_to_frame_bottom(&mut layout);
+    lower_notes_with_boxes(board, &mut layout, &extended);
     clamp_annotations_to_sheet(&mut layout);
     layout
 }
@@ -1312,12 +1313,7 @@ fn region_boxes(board: &Board, layout: &Layout) -> Vec<(String, Rect)> {
         .map(|(group, min_x, max_x, min_y, max_y)| {
             let (min, max) =
                 group_box_rect(&group_caption(board, &group), (min_x, max_x, min_y, max_y));
-            let notes = board
-                .notes
-                .iter()
-                .filter(|n| n.group.as_deref() == Some(group.as_str()))
-                .map(note_strip_height)
-                .sum::<f64>();
+            let notes = group_note_strip_height(board, &group);
             let note_w = group_note_box_width(board, Some(&group));
             (group, (min, (max.0.max(min.0 + note_w), max.1 + notes)))
         })
@@ -1516,13 +1512,81 @@ fn page_frame(size: SheetSize) -> Rect {
 /// Stretch the regions on the bottom row down to the sheet frame, so the page
 /// has no empty strip under them. A region that reaches over the title block
 /// stays above it.
-fn extend_boxes_to_frame_bottom(layout: &mut Layout) {
+///
+/// Returns the groups whose box moved, so notes already placed inside them can
+/// be re-anchored to the new bottom.
+fn extend_boxes_to_frame_bottom(layout: &mut Layout) -> Vec<String> {
     let sheet = layout.sheet_size.dims_mm();
     let (block_x, block_y) = title_block_origin(sheet);
+    let mut extended = Vec::new();
     for box_ in &mut layout.group_boxes {
         let on_the_bottom_row = (box_.max_mm.1 - block_y).abs() < GROUP_TILE_GAP;
         if on_the_bottom_row && box_.max_mm.0 <= block_x + GROUP_TILE_GAP {
-            box_.max_mm.1 = sheet.1 - SHEET_BORDER_MM;
+            let bottom = sheet.1 - SHEET_BORDER_MM;
+            if bottom > box_.max_mm.1 {
+                box_.max_mm.1 = bottom;
+                extended.push(box_.group.clone());
+            }
+        }
+    }
+    extended
+}
+
+/// Put each extended region's note block back on its final box bottom.
+///
+/// [`place_design_notes`] runs before [`extend_boxes_to_frame_bottom`], and
+/// on the floorplan-less path the tiling can also grow a box afterwards, so a
+/// note placed at the old bottom is left above the added strip. Anchor the
+/// block by where it was actually drawn, not by a fixed delta, so a torn
+/// block is impossible.
+///
+/// Notes are pushed in board order and every note starts with a title, which
+/// the overlap pass never drops (only runs under the title size are
+/// droppable), so the titles split the annotation tail into one run per note.
+fn lower_notes_with_boxes(board: &Board, layout: &mut Layout, extended: &[String]) {
+    if extended.is_empty() {
+        return;
+    }
+    let mut runs: Vec<usize> = layout
+        .annotations
+        .iter()
+        .enumerate()
+        .filter(|(_, text)| text.kind == TextKind::NoteTitle)
+        .map(|(i, _)| i)
+        .collect();
+    if runs.len() != board.notes.len() {
+        // Every note has a title; a mismatch would pair the wrong runs, so
+        // leave the notes where they are.
+        return;
+    }
+    runs.push(layout.annotations.len());
+    let mut by_group: std::collections::HashMap<&str, Vec<(usize, usize)>> =
+        std::collections::HashMap::new();
+    for (note, pair) in board.notes.iter().zip(runs.windows(2)) {
+        if let Some(group) = note.group.as_deref() {
+            by_group.entry(group).or_default().push((pair[0], pair[1]));
+        }
+    }
+    for group in extended {
+        let Some(segments) = by_group.get(group.as_str()) else {
+            continue;
+        };
+        let Some(box_) = layout.group_boxes.iter().find(|b| b.group == *group) else {
+            continue;
+        };
+        let bottom = segments
+            .iter()
+            .flat_map(|&(start, end)| &layout.annotations[start..end])
+            .map(|text| text.at_mm.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let shift = box_.max_mm.1 - GROUP_BOX_PAD - bottom;
+        if shift <= 0.0 {
+            continue;
+        }
+        for &(start, end) in segments {
+            for text in &mut layout.annotations[start..end] {
+                text.at_mm.1 += shift;
+            }
         }
     }
 }
@@ -1565,11 +1629,6 @@ const FLOORPLAN_MAX_REGIONS: usize = 64;
 /// (aspect ratio closest to the frame's on a tie, then the cut that keeps the
 /// earlier regions together); room left over is shared down the tree in
 /// proportion to the content area on each side.
-///
-/// Cut trees are searched, rather than splitting the total area once in
-/// half: one area split strands a tall region beside a short one, and the
-/// space under the short one is lost. A cut tree can pair regions of
-/// matching width or height so that room is used.
 ///
 /// Cut trees are searched, rather than splitting the total area once in
 /// half: one area split strands a tall region beside a short one, and the
@@ -1900,12 +1959,7 @@ fn spread_content_to_cells(board: &Board, layout: &mut Layout, cells: &HashMap<S
         let Some(&(cell_min, cell_max)) = cells.get(&group) else {
             continue;
         };
-        let notes: f64 = board
-            .notes
-            .iter()
-            .filter(|n| n.group.as_deref() == Some(group.as_str()))
-            .map(note_strip_height)
-            .sum();
+        let notes = group_note_strip_height(board, &group);
         // Keep one grid step of clearance inside the cell: routing can put a
         // label slightly past the content bounds measured before the scale,
         // and the box still has to fit its cell.
@@ -2475,12 +2529,7 @@ fn place_design_notes(board: &Board, layout: &mut Layout, bottom_anchor: bool) {
             let Some(box_) = layout.group_boxes.iter().find(|b| b.group == group) else {
                 continue;
             };
-            let total: f64 = board
-                .notes
-                .iter()
-                .filter(|n| n.group.as_deref() == Some(group))
-                .map(note_strip_height)
-                .sum();
+            let total = group_note_strip_height(board, group);
             bottom_cursor.entry(group).or_insert(box_.max_mm.1 - total);
         }
     }
@@ -2529,6 +2578,16 @@ fn note_strip_height(note: &synth_ir::Note) -> f64 {
         + NOTE_TITLE_GAP
         + note.lines.len().saturating_sub(1) as f64 * NOTE_LINE_PITCH
         + GROUP_BOX_PAD
+}
+
+/// Height (mm) the notes of `group` reserve at the bottom of its box.
+fn group_note_strip_height(board: &Board, group: &str) -> f64 {
+    board
+        .notes
+        .iter()
+        .filter(|note| note.group.as_deref() == Some(group))
+        .map(note_strip_height)
+        .sum()
 }
 
 /// Push one titled note block's runs: the title at `(x, y)`, one run
@@ -10361,6 +10420,48 @@ mod documentation_tests {
             "the last note line is {} mm above the cell bottom",
             box_.max_mm.1 - last
         );
+    }
+
+    #[test]
+    fn a_note_follows_its_box_to_the_frame_bottom() {
+        // B lands on the bottom row and ends left of the title block, like the
+        // I2C region on sensor_node, so the frame extension moves it down.
+        let sizes = [("A", 1), ("B", 3), ("C", 2), ("D", 4)];
+        let mut b = resistor_groups(&sizes, 0);
+        b.notes = sizes
+            .iter()
+            .map(|(group, _)| note(group, &["Keep the loop small."]))
+            .collect();
+        // Two notes in one group pin the block order: the first sits at the
+        // box bottom, the second stacks above it.
+        b.notes.push(note("B", &["Second note."]));
+        let layout = layout(&b);
+        let block_y = title_block_origin(layout.sheet_size.dims_mm()).1;
+        let extended: Vec<&GroupBox> = layout
+            .group_boxes
+            .iter()
+            .filter(|box_| box_.max_mm.1 > block_y + 1e-6)
+            .collect();
+        assert!(
+            !extended.is_empty(),
+            "no box runs on beside the title block"
+        );
+        for box_ in extended {
+            let last = layout
+                .annotations
+                .iter()
+                .filter(|a| a.kind == TextKind::NoteLine)
+                .filter(|a| (a.at_mm.0 - (box_.min_mm.0 + GROUP_BOX_PAD)).abs() < 1e-6)
+                .map(|a| a.at_mm.1)
+                .fold(f64::NEG_INFINITY, f64::max);
+            assert!(
+                (box_.max_mm.1 - last - GROUP_BOX_PAD).abs() < 0.5,
+                "{}'s note ends {} mm above the box bottom, not {}",
+                box_.group,
+                box_.max_mm.1 - last,
+                GROUP_BOX_PAD
+            );
+        }
     }
 
     #[test]
