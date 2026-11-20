@@ -51,9 +51,7 @@ fn rtd_afe(spacing: Option<&str>) -> Board {
 /// The spacings checked; `SYNTH_TEST_SPACINGS=2.5` narrows a debugging run.
 fn spacings() -> Vec<f64> {
     std::env::var("SYNTH_TEST_SPACINGS").map_or_else(
-        // The 1 mm setting still overlaps the ADC/MCU group boxes; tracked
-        // separately. Set SYNTH_TEST_SPACINGS=1.0 to exercise it.
-        |_| vec![2.5, 4.0, 5.0],
+        |_| vec![1.0, 2.5, 4.0, 5.0],
         |v| v.split(',').filter_map(|s| s.parse().ok()).collect(),
     )
 }
@@ -182,20 +180,7 @@ fn check_spacing(label: &str, board: &Board, placement: &Placement, spacing_mm: 
         return;
     }
     let want = (spacing_mm + 1.0).max(2.0);
-    let mut groups = std::collections::BTreeMap::<String, Rect>::new();
-    for (_, group, r) in &parts {
-        if let Some(group) = group {
-            groups
-                .entry(group.clone())
-                .and_modify(|b| {
-                    b.min.x_nm = b.min.x_nm.min(r.min.x_nm);
-                    b.min.y_nm = b.min.y_nm.min(r.min.y_nm);
-                    b.max.x_nm = b.max.x_nm.max(r.max.x_nm);
-                    b.max.y_nm = b.max.y_nm.max(r.max.y_nm);
-                })
-                .or_insert(*r);
-        }
-    }
+    let groups = synth_place::group_boxes(board, placement);
     let names: Vec<_> = groups.keys().cloned().collect();
     for (i, a) in names.iter().enumerate() {
         for b in &names[i + 1..] {
