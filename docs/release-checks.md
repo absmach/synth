@@ -1,6 +1,6 @@
 # Release checks
 
-For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic, model-free gate for compiler validation and DRC. When `<design>.sim.toml` exists it also runs the simulation and reports a `simulation` stage. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
+For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic gate for compiler validation and DRC. When `<design>.sim.toml` exists it also runs the simulation and reports a `simulation` stage. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
 
 ## Simulation stage
 

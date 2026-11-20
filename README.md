@@ -122,7 +122,7 @@ synth validate examples/env_logger/env_logger.synth --format json
 
 Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
 
-For CI and release gates, `synth check DESIGN.synth --json` is the deterministic, model-free gate for validation and DRC. A check that could not run is reported as `unknown` and blocks just as a failure does — see [release checks](docs/release-checks.md).
+For CI and release gates, `synth check DESIGN.synth --json` is the deterministic, model-free gate for validation, DRC and the testbench when one exists. A check that could not run is reported as `unknown` and blocks just as a failure does — see [release checks](docs/release-checks.md).
 
 ### Logging
 
