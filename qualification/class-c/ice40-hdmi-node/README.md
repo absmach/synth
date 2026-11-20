@@ -1,0 +1,19 @@
+# iCE40HX4K HDMI (DVI-style TMDS) node (Class C, case 3)
+
+An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) driving an HDMI Type-A receptacle with four TMDS-style differential pairs (three data lanes and the clock) through 270 ohm source resistors, with the DDC lines level-shifted, a hot-plug-detect divider and a fused +5 V pin, an SPI boot flash and four status LEDs, powered from a 5 V terminal, on six copper layers. It is the Class C case 3 attempt for #330 under #40: the board declares impedance, pair spacing and skew for its TMDS pairs and the delivered copper is measured against those declarations, but only the skew budget is met; spacing, coupling and impedance are not (the pairs are not a coupled differential interface, see [#447](https://github.com/absmach/synth/issues/447), open). The interface is DVI-style: the iCE40 cannot source TMDS levels, so each line is an LVCMOS33 output through a series resistor into the sink's 50 ohm termination to 3.3 V. No HDMI compliance is claimed; the board demonstrates only what is measured below.
+
+## The board
+
+| Group | Parts |
+|---|---|
+| Power entry | `J1` JST B2B-XH-A 2-pin header (5.0 to 5.25 V in: HDMI pin 18 needs at least 4.94 V at `J1`, see QUALIFICATION.md); `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 2.2 A trip, 16 V); `D1` Nexperia PTVS6V0S1UR (6.0 V standoff above the 5.5 V maximum input, 6.67 V minimum breakdown); `Q3` Vishay SI2301CDS P-MOSFET (20 V) as the reverse-polarity stage, gate to GND through `R40` (10 k) with a 5.1 V zener `D_GZ` from gate to source; `C1`, `TP1` |
+| 3.3 V | `U1` Diodes AP7361C-33E-13 low-dropout regulator (1 A, 360 mV typical dropout at 1 A, SOT-223, stable with ceramic capacitors) with 10 uF capacitors `C2` to `C5`, behind the 1 ohm series resistor `R_SURGE` that keeps a clamp event of `D1` off the regulator input |
+| 1.2 V core | `U2` Texas Instruments TLV70012DDCR, TSOT-23-5, with `C6` and `C7`; the PLL supplies `VCCPLL0` and `VCCPLL1` through the ferrite beads `L1` and `L2` and `C21`, `C22` |
+| FPGA | `U3` Lattice iCE40HX4K-TQ144, supply decoupling 100 nF `C10` to `C20` and `C25` to `C27`; `X1` SiTime SiT8008 25 MHz oscillator with `C23` |
+| Configuration | `U4` Winbond W25Q128JVSIQ, SOIC-8 208 mil, master SPI; `R30` and `R31` pull `CDONE` and `CRESET_B` up, `R32` and `R33` the write-protect and hold pins |
+| HDMI | `J2` Amphenol 10029449-111RLF HDMI Type-A receptacle; `R1` to `R8` 270 ohm source resistors; `D3` onsemi SRV05-4 4-line ESD array on the DDC and HPD lines; `D8` and `D9` TI TPD4E05U06 4-channel ESD arrays (0.5 pF per channel) on the eight TMDS lines; `F2` Bourns MF-NSMF050-2 (0.5 A hold) on the +5 V pin; DDC level shifters `Q1` and `Q2` (IRLML6244) with `R9` and `R10` (2 k to +5 V) and `R11` and `R12` (10 k to 3.3 V); the HPD divider `R13` (10 k) and `R14` (20 k), which gives 5 V x 20 / (10 + 20) = 3.33 V at the FPGA |
+| Indicators and test points | `D4` and `D5` green, `D6` and `D7` red LEDs with 470 ohm resistors `R20` to `R23`; `D5` is driven through N-FET `Q4` (AO3400A, gate on `CDONE`), so the open-drain `CDONE` net sees only a gate; test points `TP1` to `TP7` (+5 V, +3.3 V, +1.2 V, GND, CDONE, CRESET_B, +5 V_HDMI); two M2.5 mounting holes |
+
+The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040); the part model in `registry/parts/fpga/ice40hx4k_tq144.synth.toml` is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet. The four lanes use the four adjacent pin pairs on the FPGA's left side (pins 1 and 2, 3 and 4, 7 and 8, 9 and 10), in the same top-to-bottom order as the connector's lanes, so no pair crosses another; the eight source resistors sit in one column between the FPGA and the connector.
+
+The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md). Gerber content hash `92d05ff69b`.

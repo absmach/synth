@@ -4,6 +4,8 @@ description = "HDMI Type-A receptacle, 19-pin + shield, horizontal"
 mpn = "10029449-111RLF"
 kicad_symbol = "Connector:HDMI_A_1.4"
 kicad_footprint = "Connector_Video:HDMI_A_Amphenol_10029449-x01xLF_Horizontal"
+lcsc_pn = "C427307"
+datasheet_url = "https://www.lcsc.com/product-detail/C427307.html"
 
 [footprint_dimensions]
 width_mm = 18.5
