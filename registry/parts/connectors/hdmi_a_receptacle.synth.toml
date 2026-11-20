@@ -24,11 +24,6 @@ max_current_ma = 55.0
 # The four TMDS pairs. Declaring the polarity in the electrical type is what
 # lets `diff_pair` resolve them: `diff_pair_positive` requires
 # `differential_positive`, so the two have to agree or the part will not load.
-[provenance]
-source = "imported"
-reviewed_by = "JeffMboya"
-reviewed_at = "2026-11-20"
-
 [[pins]]
 name = "d2_p"
 number = "1"

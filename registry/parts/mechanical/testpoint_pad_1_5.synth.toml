@@ -10,11 +10,6 @@ width_mm = 1.5
 height_mm = 1.5
 courtyard_margin_mm = 0.5
 
-[provenance]
-source = "imported"
-reviewed_by = "JeffMboya"
-reviewed_at = "2026-11-20"
-
 [[pins]]
 name = "p1"
 number = "1"

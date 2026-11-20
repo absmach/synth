@@ -19,11 +19,6 @@ courtyard_margin_mm = 0.25
 max_voltage_v = 16.0
 max_current_ma = 1100
 
-[provenance]
-source = "imported"
-reviewed_by = "JeffMboya"
-reviewed_at = "2026-11-20"
-
 [[pins]]
 name = "p1"
 number = "1"
