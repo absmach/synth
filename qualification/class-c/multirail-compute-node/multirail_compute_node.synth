@@ -24,7 +24,7 @@ board "multirail_compute_node" {
   netclass "SPI"      { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm layers "F.Cu" color "#009e73" }
   // USB full speed (12 Mbit/s) only: transceiver datasheets give the full-speed rise and fall times as 4 to 20 ns
   // (10-90 %; onsemi USB1T20, TI TUSB1210), far above 0.3 ns, so no edge on the pair is faster than `medium`.
-  netclass "USB"      { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium color "#cc79a7" }
+  netclass "USB"      { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate medium layers "F.Cu" color "#cc79a7" }
 
   // ---- Power entry -------------------------------------------------------
   group "POWER ENTRY" color "#c2410c" {

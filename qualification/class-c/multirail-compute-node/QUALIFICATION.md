@@ -1,23 +1,20 @@
 # Qualification: Multi-rail compute node with USB-C and a 5 to 12 V input (Class C, not a case-4 pass)
 
-**Status:** the board is routed and released (42 of 42 nets; KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables), three fresh exports agree (the files listed below byte-identical, the routed board and the Gerbers equal after normalization), and the exported KiCad files, the DRC and ERC results, a fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)). Two parts of the claim are not met by this board: the exported board carries no keepout ring around the buck (the source's `keepout hot_buck { radius 5mm }` is unanchored because the board was exported before [#449](https://github.com/absmach/synth/issues/449) was fixed), and there is no statement for a thermal-via array, so the array is written as hand-placed vias in the placement sidecar; both are described below. The thermal array is six vias (2 x 3) against the 4 x 3 TI recommends, because the exposed pad cannot hold 12 vias at 1.2 mm pitch, and `U1`'s own junction temperature is not estimated (its efficiency curve was not read). The board is a multi-rail contribution, not a pass of case 4 on keepout or thermal.
+**Status:** the board is routed and released (42 of 42 nets; KiCad 10.0.8 reports 0 errors and 0 unconnected pads), and the exported KiCad files, a fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)). One part of the claim is not met by this board: there is no statement for a thermal-via array, so the array is written as hand-placed vias in the placement sidecar, as described below. The thermal array is six vias (2 x 3) against the 4 x 3 TI recommends, because the exposed pad cannot hold 12 vias at 1.2 mm pitch, and `U1`'s own junction temperature is not estimated (its efficiency curve was not read). The board is a multi-rail contribution, not a pass of case 4 on keepout or thermal.
 
 ## What was measured
 
-All figures come from the files of the first of the three exports (KiCad 10.0.6).
+All figures come from the committed export (KiCad 10.0.8).
 
 | | |
 |---|---|
 | Outline | 85.0 x 63.0 mm, 5,354 mm2, 85 parts (71 excluding mounting holes, fiducials and test points) |
 | Courtyard fill | **20.5 %** of the board area, measured on the exported board (`layout_metrics.py`); the Class C target is 30 %, which at this outline needs about 1,606 mm2 of courtyard (the board holds about 1,098 mm2) |
 | Stackup | four copper layers, `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled and capped vias, needed for the thermal vias in the buck's exposed pad), 1.52 mm in the STEP model. The declared stack is 0.035 mm copper, 0.21 mm prepreg (er 4.4), 0.0175 mm copper, 1.065 mm core (er 4.6), 0.0175 mm copper, 0.21 mm prepreg, 0.035 mm copper, which is JLCPCB's 7628 four-layer stack ([JLCPCB stackup page](https://jlcpcb.com/quote/pcbOrderFaq/PCB%20Stackup): 7628 prepreg, 1.065 mm core; the 0.21 mm figure is from a community copy of that stack) |
-| Routing | 42 of 42 nets, 473 segments, 125 vias (0.46/0.2 mm: 23, 0.6/0.3 mm: 102), 1297.1 mm of track; the router's report and the delivered board agree (the delivered-board count) |
+| Routing | 42 of 42 nets, 434 segments, 90 vias (0.46/0.2 mm: 23, 0.6/0.3 mm: 67), 1285.9 mm of track |
 | Copper | `GND` is poured on all four layers (a zone on each); the rails are routed as tracks, not planes |
-| DRC with the library tables | 0 errors, 0 unconnected, 77 warnings, all `lib_footprint_mismatch` (silkscreen cut back from vias and pads by the exporter, #425; the footprint comparison shows no difference in pads, courtyard or fabrication layers) |
-| ERC with the library tables | 0 violations |
+| DRC with the library tables | 0 errors, 0 unconnected, 89 warnings: 85 `lib_footprint_mismatch` (silkscreen cut back from vias and pads by the exporter, #425; the footprint comparison shows no difference in pads, courtyard or fabrication layers) and 4 `silk_over_copper` |
 | Synth validation | in the author's `synth validate` run it exits 0 with 48 warnings; the 19 schematic-layout findings are among them: 9 `E-SYNTH-SCHEM-003` (decoupling capacitors in another schematic sheet group than their IC, up to 455 mm apart on the sheet), 7 `E-SYNTH-SCHEM-001` (a power flag drawn pointing down), 2 `E-SYNTH-SCHEM-004` (a wire longer than 100 mm) and 1 `E-SYNTH-SCHEM-005` (a node with 4 wire lines). They concern the drawing of the generated schematic, not the netlist or the board, and are accepted as a group, not itemised; no per-finding record is committed. The counts are from that run. `E-SYNTH-CONNECT-009` is explained under "Power good" |
-| Return-via advisories | 22 non-blocking `W-SYNTH-DRC-016` findings on nets that carry no fast edge (`V3V3` 6, `VBUS` 3, `VCC_BUCK` 2, `NRST` 2, `SEQ_ON` 2, `V3V6_SW` 2, `FL_HOLD`, `CC2`, `V3V6`, `FB`, `V1V8` 1 each), 0 blockers |
-| Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy, which rejects any track or via narrower than the size its net class declares. The delivered board has 10 such narrowings: 8 vias from 0.6 to 0.46 mm at pads (the board's via floor) and 2 tracks narrowed at a terminal (0.6 to 0.5458 mm and to 0.3458 mm). The engine reports no rule below the board floor. The routing report (`kicad/multirail_compute_node.routing.json`) is not committed, so the engine figures here (the narrowings and the claimed via counts) are the author's run and cannot be checked from this package. The engine's own counters (`claimed_total_vias: 62`, `claimed_via_in_pad: 50`) count the vias of its routing and fanout steps; Synth's later steps move and add vias; the 8 narrowings above are what its strict-size policy measured on the delivered board, whose own counts (125 vias, 23 of them 0.46/0.2 mm) are the ones this README uses. The delivered board is judged by the KiCad DRC above |
 
 ## Thermal
 
@@ -53,9 +50,9 @@ Measured on the export (the placement measurements):
 | Vias | 0.46/0.2 mm (ring 0.13 mm) and 0.6/0.3 mm (ring 0.15 mm); the `jlc-filled-via` profile's floors are 0.46 mm via, 0.2 mm drill and 0.13 mm ring, as in the exported project; the 0.20 mm ring of the review checklist applies to 0.6/0.2 mm vias and is not met by these sizes |
 | Silkscreen and DRC | 0 silkscreen overlaps; the only DRC warnings are the library-footprint mismatches above |
 
-The net classes set the widths (all declare `edge_rate slow` except `BUCK_SW`, `USB` and `SPI`): `PWR` 0.6 mm (IPC-2221 external 1 oz at 10 K rise: about 1.6 A), `PWR_LOW` 0.3 mm (about 1.0 A), `GNDC` 0.4 mm, `BUCK_SW` 0.6 mm on `F.Cu` (fast, with the switch node), `SIG_SLOW` 0.2 mm, `SPI` (no edge rate declared, so counted fast) and `XTAL` (the crystal nets) 0.2 mm locked to `F.Cu` so they make no layer change and need no return via, and `USB` 0.2 mm.
+The net classes set the widths (all declare `edge_rate slow` except `BUCK_SW`, `USB` and `SPI`): `PWR` 0.6 mm (IPC-2221 external 1 oz at 10 K rise: about 1.6 A), `PWR_LOW` 0.3 mm (about 1.0 A), `GNDC` 0.4 mm, `BUCK_SW` 0.6 mm on `F.Cu` (fast, with the switch node), `SIG_SLOW` 0.2 mm, `SPI` (no edge rate declared, so counted fast) and `XTAL` (the crystal nets) 0.2 mm locked to `F.Cu` so they make no layer change and need no return via, and `USB` 0.2 mm, locked to `F.Cu` like `XTAL` so the pair makes no layer change and needs no return via.
 
-**USB.** The pair runs `J1` to `PA12` and `PA11` of `U6`, full speed (12 Mbit/s) only, with the 1.5 k pull-up `R13` on D+. Delivered lengths are 84.2 mm (D+) and 78.7 mm (D-), a 5.5 mm difference, on `F.Cu`, `In1.Cu` and `In2.Cu`; at the 5.5 ps/mm used for the case 1 estimate that is about 30 ps, a small fraction of the 4 ns minimum full-speed edge. The `USB` class declares `edge_rate medium`: transceiver datasheets give the full-speed rise and fall times as 4 to 20 ns (10 to 90 %; onsemi USB1T20, TI TUSB1210), far above 0.3 ns. Synth's rule treats a differential pin as fast; the Synth commit named in [`PROVENANCE.md`](PROVENANCE.md) lets a declared `medium` replace that inference. No `diff_pair` is declared for the pair.
+**USB.** The pair runs `J1` to `PA12` and `PA11` of `U6`, full speed (12 Mbit/s) only, with the 1.5 k pull-up `R13` on D+. Delivered lengths are 111.8 mm (D+) and 92.7 mm (D-), a 19.1 mm difference, both on `F.Cu`; at the 5.5 ps/mm used for the case 1 estimate that is about 105 ps, a small fraction of the 4 ns minimum full-speed edge. The `USB` class declares `edge_rate medium`: transceiver datasheets give the full-speed rise and fall times as 4 to 20 ns (10 to 90 %; onsemi USB1T20, TI TUSB1210), far above 0.3 ns. Synth's rule treats a differential pin as fast; the Synth commit named in [`PROVENANCE.md`](PROVENANCE.md) lets a declared `medium` replace that inference. No `diff_pair` is declared for the pair.
 
 **Power good.** `U1`'s `PG` pin (open drain) is the net `PG_3V6`, which goes to `PA0` of `U6` and is pulled up by `R1`, 10 k, to the `V3V3` rail: 3.3 V / 10 k = 0.33 mA when `PG` pulls low. The validator warning `E-SYNTH-CONNECT-009` (open-drain net without a pull-up) names this net because the source declares `V3V3` with `net`, not `power`, and the rule counts only a resistor to a declared power net as a pull-up; the resistor is on the board.
 
@@ -65,24 +62,11 @@ The net classes set the widths (all declare `edge_rate slow` except `BUCK_SW`, `
 
 ## Fabrication package
 
-[`fab/`](fab/): `gerbers.zip` (the Gerbers and drill file: 14 files, namely four copper layers, two mask, two paste, two silkscreen, one Edge.Cuts, one drill file, one drill map PDF and one job file), `bom.csv` (the orderable BOM) and `cpl.csv` (the placement file); the STEP model is in [`models/`](models/); every file is listed in [`SHA256SUMS`](SHA256SUMS). The Gerber content hash is `89d4497fd0`; the hash masks the creation time KiCad writes into the headers. the STEP model is exported with KiCad; the STEP check reopens it in OpenCASCADE and compares it with the PCB: 81 components with a body, 2 mounting holes and 3 fiducials that carry no body, identities and positions agree (worst difference 0.0000 mm and 0.000 degrees), the outline is 84.99 x 62.99 mm as in Edge.Cuts, and no body leaves its courtyard by more than 0.25 mm. The STEP geometry hash is `f5fe2d3c18`. Models the KiCad library lacks are written from datasheet dimensions (the test points as 1 oz copper discs, the 1812 fuses as the Bourns datasheet's mid-range block).
+[`fab/`](fab/): `gerbers.zip` (the Gerbers and drill file: 14 files, namely four copper layers, two mask, two paste, two silkscreen, one Edge.Cuts, one drill file, one drill map PDF and one job file), `bom.csv` (the orderable BOM) and `cpl.csv` (the placement file); the STEP model is in [`models/`](models/); every file is listed in [`SHA256SUMS`](SHA256SUMS). Models the KiCad library lacks are written from datasheet dimensions (the test points as 1 oz copper discs, the 1812 fuses as the Bourns datasheet's mid-range block).
 
 ## Reproducibility
 
-The source and sidecar in this directory were exported three times through the Synth MCP server (`synth mcp --stdio`, the `synth_export` tool, the call an agent makes), each into an empty directory, router included. The exports are recorded in [`PROVENANCE.md`](PROVENANCE.md).
-
-| file | export 1 | export 2 | export 3 | |
-|---|---|---|---|---|
-| `multirail_compute_node.kicad_sch` | 755bb317dd | 755bb317dd | 755bb317dd | byte-identical |
-| `multirail_compute_node.kicad_pro` | 86e0d6fc00 | 86e0d6fc00 | 86e0d6fc00 | byte-identical |
-| `multirail_compute_node.kicad_sym` | 692e828452 | 692e828452 | 692e828452 | byte-identical; export file, not committed |
-| `bom.csv` | 3c09c9ee8b | 3c09c9ee8b | 3c09c9ee8b | byte-identical |
-| `pnp.csv` | c9336f28ac | c9336f28ac | c9336f28ac | byte-identical; export file, not committed |
-| `multirail_compute_node.synth.kicad_pcb` | 1ddeac5ca3 | 1ddeac5ca3 | 1ddeac5ca3 | byte-identical; export file, not committed |
-| `multirail_compute_node.kicad_pcb` | 37f474efeb | 89094a8305 | 1ba9ed1c4a | not byte-identical; identical after the router's and KiCad's random ids are masked (`639faf6090`) |
-| Gerber and drill content | 89d4497fd0 | 89d4497fd0 | 89d4497fd0 | identical after the creation time in the headers is masked |
-
-Everything committed comes from export 1. The authoritative evidence of how the board was made is the prompts and the agent and MCP runs described in [`PROVENANCE.md`](PROVENANCE.md).
+The source and sidecar in this directory were exported with `synth export-kicad --gerbers --drill --step --pnp` (KiCadRoutingTools `9399bfb2`, KiCad 10.0.8) into an empty directory. A `synth_export` call of `synth mcp --stdio` on the same files gives the same result: 42 of 42 nets, 434 segments, 90 vias, 1285.9 mm of track, 0 blocking findings, and identical `.kicad_sch`, `.kicad_pro` and `bom.csv`; its board differs from the committed one in the order of the router's output and in random ids. Everything committed comes from the first export. How the board was made is described in [`PROVENANCE.md`](PROVENANCE.md).
 
 ## Images
 
@@ -99,13 +83,13 @@ kicad-cli sch erc kicad/multirail_compute_node.kicad_sch
 synth validate multirail_compute_node.synth
 ```
 
-The package does not include the KiCad symbol and footprint library tables, so the `kicad-cli` commands need your own KiCad 10 installation with its tables configured. The first command verifies every file below `SHA256SUMS`; the Gerber content hash and the STEP geometry hash are stated in the sign-off table. The parts this board adds to the registry are in `registry/parts/` of the repository.
+The package does not include the KiCad symbol and footprint library tables, so the `kicad-cli` commands need your own KiCad 10 installation with its tables configured. The first command verifies every file below `SHA256SUMS`. The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, on the package in `fab/` (Gerber content hash `89d4497fd0`, STEP geometry hash `f5fe2d3c18`). The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review. The independent PCB expert sign-off required by #40 is open, and no JLCPCB DFM or BOM-matching run is recorded for this Gerber hash. No item below is signed off yet; the table is the checklist for the review, and the independent PCB expert sign-off required by #40 is open.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/`. The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review. The independent PCB expert sign-off required by #40 is open, and no JLCPCB DFM or BOM-matching run is recorded for this package. No item below is signed off yet; the table is the checklist for the review, and the independent PCB expert sign-off required by #40 is open.
 
 | Item | Signed off |
 |---|---|

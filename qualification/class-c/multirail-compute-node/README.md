@@ -1,6 +1,6 @@
 # Multi-rail compute node with USB-C and a 5 to 12 V input (Class C, not a case-4 pass)
 
-An STM32F103C8 microcontroller with a 128 Mbit SPI flash and a USB-C receptacle, powered from a 5 to 12 V DC header or from USB VBUS, with a 4 A buck converter, three linear rails, a load switch that sequences them and an expansion header, on four copper layers. It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output (its buck keepout is not: the exported board carries no keepout ring, see QUALIFICATION.md), made by an agent driving `synth mcp`. Jeff Mboya is the author of this pull request and has self-reviewed it; the independent PCB expert sign-off required by #40 is open (see QUALIFICATION.md, Human review).
+An STM32F103C8 microcontroller with a 128 Mbit SPI flash and a USB-C receptacle, powered from a 5 to 12 V DC header or from USB VBUS, with a 4 A buck converter, three linear rails, a load switch that sequences them and an expansion header, on four copper layers. It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output, made by an agent driving `synth mcp`. Jeff Mboya is the author of this pull request and has self-reviewed it; the independent PCB expert sign-off required by #40 is open (see QUALIFICATION.md, Human review).
 
 ## The board
 
@@ -16,4 +16,4 @@ An STM32F103C8 microcontroller with a 128 Mbit SPI flash and a USB-C receptacle,
 
 The processor was picked from the registry's MCUs (ATmega328P, ESP32-C3 and WROOM-32, nRF52840, RP2350, STM32F103C8, STM32G030 variants) because the board needs a USB full-speed device, a 72 MHz core and an external SPI flash on a hand-solderable 0.5 mm LQFP, which the registry's `stm32f103c8` provides; this pull request extends that entry with the `usb_dn` and `usb_dp` capability tags (and the differential USB pin types) on PA11 and PA12 and the `spi_cs` tag on PB12. The flash is the registry's 128 Mbit W25Q128 with the 208 mil outline the JVSIQ part has, and the regulator is the DDC package that LCSC lists.
 
-The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md). Gerber content hash `89d4497fd0`.
+The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).

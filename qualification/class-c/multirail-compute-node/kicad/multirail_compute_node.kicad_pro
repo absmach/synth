@@ -197,10 +197,9 @@
     },
     "net_colors": null,
     "netclass_assignments": {
-      "/BOOT0": "SIG_SLOW",
+      "/BOOT": "BUCK_SW",
       "/CC1": "SIG_SLOW",
       "/CC2": "SIG_SLOW",
-      "/CT": "SIG_SLOW",
       "/FB": "SIG_SLOW",
       "/GPIO_A": "SIG_SLOW",
       "/GPIO_B": "SIG_SLOW",
@@ -208,7 +207,9 @@
       "/LED_B": "SIG_SLOW",
       "/NRST": "SIG_SLOW",
       "/PG_3V6": "SIG_SLOW",
+      "/SEQ_ON": "SIG_SLOW",
       "/SPI_CLK": "SPI",
+      "/SPI_CS": "SPI",
       "/SPI_MISO": "SPI",
       "/SPI_MOSI": "SPI",
       "/SW": "BUCK_SW",
@@ -217,7 +218,6 @@
       "/USB_DN": "USB",
       "/USB_DP": "USB",
       "/VBUS_F": "PWR",
-      "/VCC_BUCK": "PWR_LOW",
       "/VIN_RAW": "PWR",
       "/XIN": "XTAL",
       "/XOUT": "XTAL",
@@ -278,8 +278,8 @@
         "pattern": "/*/SW"
       },
       {
-        "netclass": "PWR_LOW",
-        "pattern": "/*/VCC_BUCK"
+        "netclass": "BUCK_SW",
+        "pattern": "/*/BOOT"
       },
       {
         "netclass": "SIG_SLOW",
@@ -291,15 +291,11 @@
       },
       {
         "netclass": "SIG_SLOW",
-        "pattern": "/*/CT"
+        "pattern": "/*/SEQ_ON"
       },
       {
         "netclass": "SIG_SLOW",
         "pattern": "/*/NRST"
-      },
-      {
-        "netclass": "SIG_SLOW",
-        "pattern": "/*/BOOT0"
       },
       {
         "netclass": "SIG_SLOW",
@@ -332,6 +328,10 @@
       {
         "netclass": "SIG_SLOW",
         "pattern": "/*/CC2"
+      },
+      {
+        "netclass": "SPI",
+        "pattern": "/*/SPI_CS"
       },
       {
         "netclass": "SPI",
