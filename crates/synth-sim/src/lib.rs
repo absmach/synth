@@ -1837,7 +1837,8 @@ fn locate(diagnostics: &mut [Diagnostic], path: Option<&Path>) {
 /// Default wall-clock budget, overridable with `[options] timeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Upper bound on `[options] timeout`; `Instant + Duration` must not overflow.
-const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
+/// Upper bound for a simulation deadline, in seconds.
+pub const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
 /// Upper bound on `[analysis.tran]` output points (stop/step). A transient
 /// is the run most likely to hang or fill the disk, so the cap keeps a
 /// sidecar typo from turning into hours of wall clock and gigabytes of

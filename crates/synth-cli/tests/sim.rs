@@ -145,18 +145,20 @@ fn divider_example_prints_pass() {
 }
 
 #[test]
-fn a_nonpositive_timeout_is_a_usage_error() {
-    let output = Command::new(env!("CARGO_BIN_EXE_synth"))
-        .arg("sim")
-        .arg("--timeout")
-        .arg("0")
-        .arg(example_design())
-        .output()
-        .expect("run synth sim --timeout 0");
+fn an_invalid_timeout_is_a_usage_error() {
+    for value in ["0", "3601"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_synth"))
+            .arg("sim")
+            .arg("--timeout")
+            .arg(value)
+            .arg(example_design())
+            .output()
+            .unwrap_or_else(|error| panic!("run synth sim --timeout {value}: {error}"));
 
-    assert_eq!(output.status.code(), Some(2));
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("--timeout"), "{stderr}");
+        assert_eq!(output.status.code(), Some(2), "--timeout {value}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("--timeout"), "{stderr}");
+    }
 }
 
 #[test]

@@ -3577,9 +3577,12 @@ fn sim(
     timeout_secs: Option<f64>,
 ) -> anyhow::Result<u8> {
     if let Some(timeout) = timeout_secs
-        && (!timeout.is_finite() || timeout <= 0.0)
+        && (!timeout.is_finite() || timeout <= 0.0 || timeout > synth_sim::MAX_TIMEOUT_SECONDS)
     {
-        anyhow::bail!("--timeout must be a positive finite number of seconds");
+        anyhow::bail!(
+            "--timeout must be greater than 0 and at most {} seconds",
+            synth_sim::MAX_TIMEOUT_SECONDS
+        );
     }
     let deadline = timeout_secs
         .map(|secs| std::time::Instant::now() + std::time::Duration::from_secs_f64(secs));
