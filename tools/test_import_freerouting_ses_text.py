@@ -68,6 +68,27 @@ def items(node, name):
     return [x for x in node[1:] if isinstance(x, list) and x and x[0] == name]
 
 
+class MissingNet(unittest.TestCase):
+    def test_an_ses_net_absent_from_the_board_names_the_net(self):
+        board = '(kicad_pcb\n\t(net 0 "")\n\t(net 1 "A")\n)\n'
+        with tempfile.TemporaryDirectory() as directory:
+            directory = Path(directory)
+            board_path = directory / "board.kicad_pcb"
+            ses_path = directory / "board.ses"
+            out = directory / "out.kicad_pcb"
+            board_path.write_text(board)
+            ses_path.write_text(SES)
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(board_path), str(ses_path), str(out)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("B", result.stderr)
+        self.assertIn("not in the board net table", result.stderr)
+
+
 class DeterministicUuids(unittest.TestCase):
     def test_two_runs_are_byte_identical(self):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
@@ -101,7 +122,7 @@ class InsertionPoint(unittest.TestCase):
             '(kicad_pcb\n\t(net 0 "")\n\t(net 1 "A")\n\t(net 2 "B")\n'
             '\t(footprint "U1"\n\t\t(layer "F.Cu")\n'
             '\t\t(property "Description" "a ) ( zone")\n'
-            f"\t\t{ZONE}\n\t)\n)\n"
+            f"\t{ZONE}\n\t)\n)\n"
         )
         _text, root = self.merge(board)
         self.assert_at_board_level(root)
@@ -113,11 +134,19 @@ class InsertionPoint(unittest.TestCase):
             '(kicad_pcb\n\t(net 0 "")\n\t(net 1 "A")\n\t(net 2 "B")\n'
             f"\t{ZONE}\n)\n"
         )
-        _text, root = self.merge(board)
+        text, root = self.merge(board)
         self.assert_at_board_level(root)
         order = [x[0] for x in root[1:] if isinstance(x, list)]
         self.assertEqual(order.count("zone"), 1)
         self.assertLess(order.index("segment"), order.index("zone"))
+        # The zone keeps its leading tab and no whitespace-only line appears
+        # before it; inserting at the zone's "(" drops both.
+        lines = text.splitlines()
+        zone_line = next(
+            index for index, line in enumerate(lines) if line.lstrip().startswith("(zone")
+        )
+        self.assertTrue(lines[zone_line].startswith("\t(zone"))
+        self.assertNotEqual(lines[zone_line - 1].strip(), "")
 
     def test_no_zone(self):
         _text, root = self.merge(BOARD)

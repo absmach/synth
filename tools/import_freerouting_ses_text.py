@@ -124,11 +124,6 @@ def board_net_codes(text: str) -> dict[str, str]:
     return codes
 
 
-def ground_net_codes(text: str) -> set[str]:
-    """Return net codes attached to the board's generated ground zones."""
-    return set(re.findall(r"\(zone\s+\(net\s+(\d+)\)", text))
-
-
 def content_uuid(seen: dict[str, int], *parts: object) -> uuid.UUID:
     key = "|".join(str(part) for part in parts)
     seen[key] = seen.get(key, 0) + 1
@@ -144,7 +139,12 @@ def route_records(ses_text: str, net_codes: dict[str, str]):
     )
     records = []
     for net in children(network, "net"):
-        net_code = net_codes[net[1]]
+        net_name = net[1]
+        net_code = net_codes.get(net_name)
+        if net_code is None:
+            raise SystemExit(
+                f"error: SES net {net_name!r} is not in the board net table"
+            )
         for wire in children(net, "wire"):
             for path in children(wire, "path"):
                 layer, width = path[1], fmt(max(coord(path[2]), 0.127))
@@ -190,24 +190,8 @@ def main() -> int:
 
     board = Path(args.input_board).read_text()
     net_codes = board_net_codes(board)
-    ground_codes = ground_net_codes(board)
     records = route_records(Path(args.input_ses).read_text(), net_codes)
     spans = list(top_level_blocks(board))
-    kept = []
-    insert_at = None
-    for start, end, block in spans:
-        first = block_name(block)
-        if first == "segment":
-            continue
-        if first == "via":
-            net = re.search(r"\(net\s+(\d+)\)", block)
-            if not net or net.group(1) not in ground_codes:
-                continue
-        if insert_at is None and first == "zone":
-            insert_at = start
-        kept.append((start, end, block))
-    if insert_at is None:
-        insert_at = board.rfind(")")
     # Remove old route blocks while preserving every other top-level object.
     rebuilt = []
     cursor = 0
@@ -218,18 +202,25 @@ def main() -> int:
     rebuilt.append(board[cursor:])
     without_routes = "".join(rebuilt)
     # The first zone-looking text can sit inside a footprint; only a child of
-    # the board root is a real zone.
-    insert_at = next(
+    # the board root is a real zone. Insert at the newline before it so the
+    # zone keeps its leading tab and no whitespace-only line is left behind.
+    zone_start = next(
         (
             start
             for start, _end, block in top_level_blocks(without_routes)
             if block_name(block) == "zone"
         ),
-        without_routes.rfind(")"),
+        None,
     )
+    if zone_start is None:
+        insert_at = without_routes.rfind(")")
+    else:
+        insert_at = without_routes.rfind("\n", 0, zone_start)
+        insert_at = insert_at + 1 if insert_at >= 0 else zone_start
+    prefix = without_routes[:insert_at]
     result = (
-        without_routes[:insert_at]
-        + "\n"
+        prefix
+        + ("" if prefix.endswith("\n") else "\n")
         + "".join(records)
         + without_routes[insert_at:]
     )
