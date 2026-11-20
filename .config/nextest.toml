@@ -1,0 +1,5 @@
+# Placement tests that exercise the export-style candidate sweep take several
+# minutes in release; the default 4x60s terminate-after would kill them.
+[[profile.default.overrides]]
+filter = 'test(/default_path_|usb_frame_holds_on_the_fpv_board/)'
+slow-timeout = { period = "120s", terminate-after = 8 }
