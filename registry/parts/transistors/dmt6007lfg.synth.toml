@@ -1,0 +1,64 @@
+id = "dmt6007lfg"
+kind = "transistor"
+description = "Diodes Incorporated DMT6007LFG 60 V N-channel MOSFET, PowerDI3333-8: VDSS 60 V, VGSS +/-20 V, RDS(on) 6 mOhm max at 10 V and 8.5 mOhm max at 4.5 V, VGS(th) 0.8 to 2 V, Ciss 2090 pF typical. The MOSFET TI's LM74700-Q1 datasheet selects for a 12 V reverse-battery design. Pads: 1, 2, 3 source, 4 gate, 5 drain."
+version = 0
+lifecycle = "active"
+signed_by = []
+substitutes = []
+mpn = "DMT6007LFG-7"
+lcsc_pn = "C2802568"
+kicad_footprint = "Package_SON:Diodes_PowerDI3333-8"
+kicad_symbol = "Transistor_FET:DMT6008LFG"
+
+[[pins]]
+name = "s1"
+number = "1"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "s2"
+number = "2"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "s3"
+number = "3"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[[pins]]
+name = "g"
+number = "4"
+electrical_type = "input"
+capabilities = []
+required = false
+voltage_max_v = 20.0
+
+[[pins]]
+name = "d"
+number = "5"
+electrical_type = "passive"
+capabilities = []
+required = false
+
+[operating_conditions]
+max_voltage_v = 60.0
+max_current_ma = 15000.0
+max_power_mw = 2200
+thermal_resistance_c_per_w = 55
+
+[footprint_dimensions]
+width_mm = 3.8
+height_mm = 3.8
+courtyard_margin_mm = 0.25
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.diodes.com/assets/Datasheets/DMT6007LFG.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-11"

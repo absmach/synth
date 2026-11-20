@@ -1,0 +1,30 @@
+id = "xtal_32k768_fc135_7pf"
+kind = "crystal"
+version = 0
+lifecycle = "active"
+description = "Epson FC-135 32.7680KF-AG0 32.768 kHz crystal, 7 pF load, 3.2 x 1.5 mm 2-pad SMD. Epson FC-135 datasheet (Ver 2.0): R1 70 kOhm typ, C0 1.0 pF typ, C1 3.4 fF typ; the LCSC listing gives +-10 ppm"
+mpn = "FC-135 32.7680KF-AG0"
+lcsc_pn = "C7275974"
+kicad_symbol = "Device:Crystal"
+kicad_footprint = "Crystal:Crystal_SMD_3215-2Pin_3.2x1.5mm"
+[footprint_dimensions]
+width_mm = 3.2
+height_mm = 1.5
+courtyard_margin_mm = 0.25
+
+[[pins]]
+name = "xtal_a"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "xtal_b"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+# Authored from the cited datasheet and reviewed by the pull request author, who confirmed the review on 2026-11-20. An independent review is open.
+source = "authored"
+datasheet_url = "https://download.epsondevice.com/td/pdf/app/FC-135_en.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-20"

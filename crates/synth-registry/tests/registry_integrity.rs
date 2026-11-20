@@ -72,6 +72,12 @@ fn diodes_number_pins_like_kicad() {
 
     let mut checked = 0;
     for (_, part) in registry.iter() {
+        // KiCad's numbering is for diode symbols. The LM74700-Q1 names two of
+        // its pins after the diode it drives (ANODE and CATHODE sense pins) and
+        // is numbered by its own datasheet.
+        if part.id.as_str() == "lm74700_q1" {
+            continue;
+        }
         let number_of = |name: &str| {
             part.pins
                 .iter()
