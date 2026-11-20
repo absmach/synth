@@ -1,6 +1,19 @@
 # Release checks
 
-For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic, model-free gate for compiler validation and DRC. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
+For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic, model-free gate for compiler validation and DRC. When `<design>.sim.toml` exists it also runs the simulation and reports a `simulation` stage. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
+
+## Simulation stage
+
+A design with a testbench sidecar gets a `simulation` stage alongside `source`, `drc` and `manufacturing`:
+
+| Status    | Meaning                                                                                             |
+| --------- | --------------------------------------------------------------------------------------------------- |
+| `skipped` | No sidecar, or the source gate failed. It is not evidence of correctness, and it does not block.     |
+| `pass`    | The sidecar ran and every blocking simulation diagnostic is clear.                                  |
+| `fail`    | The sidecar ran and produced a blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit value. |
+| `unknown` | The sidecar exists but ngspice is missing, timed out, or the report was unreadable. It blocks.       |
+
+`synth check --fab` uses the same stage. `synth sim` and `synth sim --json` remain available on their own; `validate`, `export` and `place` never run ngspice.
 
 ## Tri-state native stages
 

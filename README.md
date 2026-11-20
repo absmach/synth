@@ -141,7 +141,7 @@ Start the MCP server over standard input and output:
 synth mcp --stdio
 ```
 
-Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details.
+Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details. For electrical checks, the [SPICE simulation skill](skills/spice-sim/SKILL.md) covers authoring a testbench, reading `synth sim` results, and reporting coverage.
 
 ## How It Works
 
