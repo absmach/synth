@@ -1555,7 +1555,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
     };
     if timeout.is_zero() {
         return failed(
-            vec![timeout_error(0.0)],
+            vec![deadline_error()],
             options.testbench_path.as_deref(),
             &coverage,
         );
@@ -2335,6 +2335,19 @@ fn timeout_error(seconds: f64) -> Diagnostic {
              Raise `[options] timeout` or shorten the analysis."
         ))
         .build()
+}
+
+fn deadline_error() -> Diagnostic {
+    sim_builder(
+        E_SYNTH_SIM_005,
+        Severity::Error,
+        "simulation deadline expired",
+    )
+    .message(
+        "the simulation deadline expired before ngspice started; \
+             raise `--timeout` or simplify the design",
+    )
+    .build()
 }
 
 /// A transient value is computed in Rust at full precision, but every other
