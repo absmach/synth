@@ -2400,8 +2400,10 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
 ) -> Result<Placement, PlaceError> {
     use synth_layout::pcb_courtyard_geometry_for_part;
 
-    // A spacing set on the board replaces the caller's courtyard margin.
-    let extra_margin_mm = spacing_gap_mm(board).unwrap_or(extra_margin_mm);
+    // A spacing set on the board is a floor, not a replacement: the export
+    // sweep still varies the caller's margin above it.
+    let extra_margin_mm =
+        spacing_gap_mm(board).map_or(extra_margin_mm, |gap| extra_margin_mm.max(gap));
 
     // Per-component courtyard geometry: (id, (cx, cy), (w, h)).
     let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
@@ -8014,7 +8016,12 @@ pub fn placement_spacing_mm(board: &Board) -> Option<f64> {
 /// `LABEL_ROOM_MM` from 2 mm up. `None` leaves the placer's own clearances.
 #[must_use]
 pub fn spacing_gap_mm(board: &Board) -> Option<f64> {
-    placement_spacing_mm(board).map(|s| if s >= 2.0 { s + LABEL_ROOM_MM } else { s })
+    placement_spacing_mm(board).map(|s| {
+        // Ramp the label room in over [1.5, 2.0] so 1.99 and 2.0 do not jump
+        // by a whole label height.
+        let room = ((s - 1.5) / 0.5).clamp(0.0, 1.0);
+        s + LABEL_ROOM_MM * room
+    })
 }
 
 /// The ring added round a dense part: twice the gap each side keeps, or the

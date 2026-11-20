@@ -3,6 +3,7 @@
 //! The `placement { spacing }` setting: parsed, lowered, and honoured by both
 //! placement paths as the least courtyard gap between any two parts.
 
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use synth_geometry::{Rect, nm_to_mm};
@@ -101,16 +102,62 @@ fn the_setting_is_parsed_and_lowered() {
     assert_eq!(rtd_afe(None).placement_spacing_nm, None);
 }
 
-/// Both paths must give the same placement with the setting absent as the raw
-/// solver gives; the rule pass is covered by `default_rules.rs`.
+/// A stable fingerprint of the serialized placement.
+fn placement_fingerprint(placement: &Placement) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    serde_json::to_vec(placement)
+        .expect("placement json")
+        .hash(&mut hasher);
+    hasher.finish()
+}
+
+/// Unset (no `placement` block) must produce the placement from before the
+/// setting existed, not merely another unset board.
 #[test]
 fn unset_places_exactly_as_before() {
     let board = rtd_afe(None);
-    let mut explicit_none = board.clone();
-    explicit_none.placement_spacing_nm = None;
+    let placement = synth_place::place(&board).expect("place");
     assert_eq!(
-        synth_place::place(&board).expect("place"),
-        synth_place::place(&explicit_none).expect("place")
+        placement_fingerprint(&placement),
+        7_819_567_515_846_993_930,
+        "unset placement changed; re-measure the pre-spacing golden"
+    );
+}
+
+/// The label room ramps in below 2 mm instead of jumping a whole label height.
+#[test]
+fn the_gap_ramps_continuously_at_the_two_mm_knee() {
+    let gap = |mm| synth_place::spacing_gap_mm(&with_spacing_mm(mm)).expect("spacing");
+    assert!(
+        (gap(2.0) - gap(1.99)).abs() < 0.1,
+        "1.99 -> {:.3}, 2.0 -> {:.3}",
+        gap(1.99),
+        gap(2.0)
+    );
+    assert!((gap(2.0) - 3.3).abs() < 1e-9);
+}
+
+/// A unit value is converted, and a non-numeric spacing is rejected by
+/// lowering without becoming a silent zero.
+#[test]
+fn mil_values_convert_and_non_finite_values_are_rejected() {
+    assert_eq!(
+        rtd_afe(Some("100mil")).placement_spacing_nm,
+        Some(2_540_000)
+    );
+    let source = rtd_source().replacen(
+        "  layers 4\n",
+        "  layers 4\n  placement { spacing = nan }\n",
+        1,
+    );
+    let parse = synth_parser::parse(&source, "spacing.synth");
+    assert!(
+        parse
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "E-SYNTH-PARSE-026"),
+        "non-numeric spacing must be a parse error: {:?}",
+        parse.diagnostics
     );
 }
 
