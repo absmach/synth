@@ -6,6 +6,7 @@ description = "Littelfuse SMAJ15A 400 W unidirectional TVS, 15 V standoff, 24.4 
 mpn = "SMAJ15A"
 kicad_symbol = "Device:D_Zener"
 kicad_footprint = "Diode_SMD:D_SMA"
+lcsc_pn = "C148216"
 
 [footprint_dimensions]
 width_mm = 6.5
