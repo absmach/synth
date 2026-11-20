@@ -95,16 +95,12 @@ fn design_with_sidecar(dir: &Path) -> PathBuf {
 }
 
 fn run_check(design: &Path, ngspice: &Path) -> Output {
-    run_check_with_budget(design, ngspice, "10")
-}
-
-fn run_check_with_budget(design: &Path, ngspice: &Path, budget: &str) -> Output {
     Command::new(env!("CARGO_BIN_EXE_synth"))
         .arg("check")
         .arg(design)
         .arg("--json")
         .env("NGSPICE", ngspice)
-        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", budget)
+        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", "10")
         .output()
         .expect("run synth check")
 }
@@ -243,9 +239,15 @@ fn a_sidecar_directory_is_fail_not_skipped() {
 fn a_timed_out_simulation_is_unknown() {
     let dir = Scratch::new("timeout");
     let design = design_with_sidecar(&dir);
+    let sidecar = std::fs::read_to_string(dir.join("divider.sim.toml")).expect("read sidecar");
+    std::fs::write(
+        dir.join("divider.sim.toml"),
+        format!("{sidecar}\n[options]\ntimeout = 1\n"),
+    )
+    .expect("write sidecar");
     let stub = stub_ngspice(&dir, "hang");
 
-    let output = run_check_with_budget(&design, &stub, "3");
+    let output = run_check(&design, &stub);
     let report = report(&output);
 
     assert_eq!(simulation(&report)["status"], "unknown", "{report:#}");
