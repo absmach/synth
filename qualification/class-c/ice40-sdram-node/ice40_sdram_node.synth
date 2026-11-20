@@ -84,6 +84,7 @@ board "ice40_sdram_node" {
 
   // ---- 3.3 V and 1.2 V rails ------------------------------------------------
   group "3V3 RAIL" color "#b45309" {
+    component R_SURGE: resistor "r_generic_1206" value "1" { placement_hint { near: "U1.vin" priority: hard } }
     component U1: regulator "ap7361c_33e" value "AP7361C-33E"
     component C2: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
     component C3: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "U1.vin" priority: hard } }
@@ -212,7 +213,8 @@ board "ice40_sdram_node" {
   // USB-C is a 5 V power sink only: 5.1 k pull-downs on CC1/CC2, D+/D-/SBU left open.
   net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 D5.io1 }
   net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 D5.io2 }
-  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode D5.vcc C1.p1 U1.vin C2.p1 C3.p1 TP1.p1 }
+  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode D5.vcc C1.p1 R_SURGE.p1 TP1.p1 }
+  power "+5V_REG" 5v class "PWR5" { R_SURGE.p2 U1.vin C2.p1 C3.p1 }
 
   power "+3V3" 3.3v class "PWR33" {
     U1.vout C4.p1 C5.p1 U2.vin C6.p1 U2.en

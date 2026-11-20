@@ -748,3 +748,12 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+
+[components.R_SURGE]
+x = 25.0
+y = 56.0
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0

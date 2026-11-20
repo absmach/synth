@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 72.0 x 67.0 mm, 4,823 mm2, 83 parts (74 excluding mounting holes and test points) |
+| Outline | 72.0 x 67.0 mm, 4,823 mm2, 84 parts (75 excluding mounting holes and test points) |
 | Courtyard fill | **28.4 %** of the board area, measured on the exported board (`layout_metrics.py`); the Class C target is 30 %, which at this outline needs about 1,447 mm2 of courtyard against about 1,370 mm2 now |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"`, JLCPCB's `JLC06161H-3313` stackup as declared in the source (prepreg 3313 0.0994 mm er 4.1, core 0.55 mm er 4.6, prepreg 2116 0.1088 mm er 4.16; outer copper 35 um, inner 15.2 um; [JLCPCB impedance tool](https://jlcpcb.com/impedance)), 1.47 mm in the STEP model |
 | Routing | 60 of 60 nets, 924 segments, 182 vias (0.46/0.2 mm: 68, 0.6/0.3 mm: 114), 1785.8 mm of track; the router's report and the delivered board agree (the delivered-board count) |
@@ -47,22 +47,26 @@ The 64 vias on the SDRAM signal nets: every `SD_DQ` via is within 0.76 mm of a g
 | Three LEDs, 1 k | 10 mA (3.3 V / 1 k each, which ignores the LED forward drop) | the design's own arithmetic |
 | Total known | 235 mA | |
 
-The SDRAM's active current, the FPGA's 3.3 V I/O bank current and the oscillator's supply current are not counted: the IS42S16400J current figures and the oscillator's were not read, so the budget is not closed for them. At the 5.25 V maximum VBUS the regulator dissipates 1.95 V x 0.235 A = 0.46 W, a 50 &deg;C rise: Tj is 75 &deg;C at 25 &deg;C ambient and 120 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.95 = 0.47 A` in total at 25 &deg;C ambient, which leaves 0.23 A for the uncounted loads, and at `(125 - 70) / 110 / 1.95 = 0.26 A` at 70 &deg;C ambient, which leaves 0.02 A: at 70 &deg;C the budget does not show room for the SDRAM. Dropout: 360 mV typical at 1 A, so at the 4.6 V worst-case rail the output stays in regulation with more than 1 V to spare.
+The SDRAM's active current, the FPGA's 3.3 V I/O bank current and the oscillator's supply current are not counted: the IS42S16400J current figures and the oscillator's were not read, so the budget is not closed for them. With `R_SURGE` (1 ohm) ahead of the regulator the input is at most 4.97 V at the 5.25 V maximum VBUS, so the regulator dissipates (4.97 V - 3.3 V) x 0.235 A = 0.39 W, a 43 &deg;C rise: Tj is 68 &deg;C at 25 &deg;C ambient and 113 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.67 = 0.54 A` in total at 25 &deg;C ambient, which leaves 0.31 A for the uncounted loads, and at `(125 - 70) / 110 / 1.67 = 0.30 A` at 70 &deg;C ambient, which leaves 0.06 A: at 70 &deg;C the budget shows little room for the SDRAM. Dropout: 360 mV typical at 1 A, so at the 4.47 V worst-case input (4.75 V less `F1` and `R_SURGE`) the output stays in regulation with 1.17 V to spare.
 
-`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.25 V maximum VBUS, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input, so a surge that drives `D1` into breakdown (6.67 V at the least) exceeds the regulator's rating by 0.17 V at the least and by about 3.8 V at the full clamp. No TVS with a standoff above 5.25 V clamps below 6.5 V, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at their input, so the board does not meet that margin; the surge is limited upstream by `F1` and the source, not by the regulator rating.
+`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.25 V maximum VBUS, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less, below the least breakdown of any TVS with a standoff above 5.25 V. So `R_SURGE`, 1 ohm, sits between `D1` and `U1`, with `C2` and `C3` behind it: a short clamp event is held off the regulator, and a sustained over-voltage is limited by `F1` opening; the arithmetic and the one remaining gap are in the requirement check below.
 
 ### Requirement check: regulator and input protection
 
+`R_SURGE`, 1 ohm (Yageo RC1206FR-071RL), sits between the TVS node (`D1`, `F1`, `C1`) and the regulator input, with `C2` and `C3` (20 uF) behind it.
+
 | Requirement | Our choice | Arithmetic | Result |
 |---|---|---|---|
-| The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | VBUS is at most 5.25 V, 0.75 V under 6.0 V; at the 4.75 V minimum less `F1` (0.21 ohm x 0.235 A = 0.05 V) the input is 4.70 V | Met |
-| Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | 4.70 V - 3.3 V = 1.40 V against 0.36 V at 1 A, less at 0.235 A | Met |
+| The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | VBUS is at most 5.25 V; less `F1` (0.21 ohm x 0.235 A = 0.05 V) and `R_SURGE` (0.235 V) the input is at most 4.97 V, 1.03 V under 6.0 V | Met |
+| Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | at the 4.75 V minimum the input is 4.75 - 0.05 - 0.235 = 4.47 V; 4.47 V - 3.3 V = 1.17 V against 0.36 V at 1 A, less at 0.235 A | Met |
 | The regulator carries every load | 1 A output | known loads 0.235 A, 24 % of the rating; the uncounted SDRAM, I/O and oscillator currents fit electrically up to 0.76 A | Met electrically |
-| The regulator sheds its dissipation | SOT-223, `RθJA` 110 C/W | 1.95 V x 0.235 A = 0.46 W gives 120 C at 70 C ambient and 75 C at 25 C ambient; the total at which Tj reaches 125 C is 0.47 A at 25 C and 0.26 A at 70 C | Met for the known loads; not shown at 70 C for the uncounted loads (0.02 A left) |
+| The regulator sheds its dissipation | SOT-223, `RθJA` 110 C/W | (4.97 V - 3.3 V) x 0.235 A = 0.39 W gives 113 C at 70 C ambient and 68 C at 25 C ambient; the total at which Tj reaches 125 C is 0.54 A at 25 C and 0.30 A at 70 C | Met for the known loads; at 70 C the uncounted loads have 0.06 A |
+| `R_SURGE` carries the load | 1 ohm, 250 mW | 0.235 A squared x 1 ohm = 0.055 W | Met |
 | The TVS does not conduct in operation | `D1` PTVS6V0S1UR, 6.0 V standoff, 6.67 V minimum breakdown | 5.25 V maximum VBUS is 0.75 V under the standoff | Met |
-| The regulator survives the TVS clamp | `U1` absolute maximum input 6.5 V | `D1` begins to conduct at 6.67 V minimum breakdown (7.02 V typical, 7.37 V maximum) and clamps at 10.3 V at 38.8 A (Nexperia PTVS6V0S1UR: 400 W, VRWM 6 V) | Not met: the regulator rating is 0.17 V under the least breakdown |
+| The regulator survives a short clamp event | `U1` absolute maximum input 6.5 V | `D1` clamps at up to 10.3 V at 38.8 A (Nexperia PTVS6V0S1UR: 400 W, VRWM 6 V, 6.67 to 7.37 V breakdown); the current through `R_SURGE` is at most (10.3 V - 4.5 V) / 1 ohm = 5.8 A, so a 60 ns event carries 0.35 uC, which raises 20 uF by 0.02 V and holds the regulator input near 5 V; the energy in the resistor is about 2 uJ (its pulse rating was not read) | Met for events of 60 ns |
+| The regulator survives a sustained over-voltage | `U1` absolute maximum input 6.5 V | `D1` holds the TVS node at about 7.0 V (typical breakdown) until `F1` (1.1 A hold, 2.2 A trip) opens; the regulator input is then 7.0 V - 0.235 V = 6.8 V, 0.3 V over its rating | Not met until `F1` opens |
 
-The last row is the one gap. It cannot be closed by choice of a low-dropout regulator, because the ones considered (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at the input, and it cannot be closed by choice of a TVS with a standoff above 5.25 V, because the least breakdown of such a part is above 6.5 V. What limits the stress on the regulator is upstream of it: `F1` (0.21 ohm maximum, 1.1 A hold, 2.2 A trip) is in series with `D1`, so a sustained over-voltage holds the input at about 7 V and opens `F1`, and the 10 uF capacitors `C2` and `C3` sit on the same node as `D1`, so they do not lower the clamp. Two changes would close it: a regulator rated above 10.3 V, or a series resistor of about 1 ohm between `D1` and `U1` with `C2` and `C3` behind it, which costs 0.24 V at 0.235 A and holds a 60 ns clamp event at 10 V to about 0.03 V on 20 uF (the charge through the resistor is (10 V / 1 ohm) x 60 ns = 0.6 uC). Neither is made here; the maintainer's choice is asked on the pull request.
+The sustained over-voltage row is the one gap. No low-dropout regulator considered (AP7361C, AP2114, AP2112K, LP5907, all rated 6.5 V or less at the input) closes it, and the parts that are rated above the clamp (AMS1117-3.3 and NCP1117ST33T3G, 15 V and 20 V) need an ESR-stabilised output capacitor, where this board has ceramics, and have `RθJA` 160 C/W on a minimum pad for the SOT-223 (onsemi NCP1117), against 110 C/W here. Closing the row would need a regulator rated above the clamp with ceramic stability.
 
 ## Layout and fill
 
@@ -70,7 +74,7 @@ The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdra
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 83 lines: 74 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
+[`fab/bom.csv`](fab/bom.csv) has 84 lines: 75 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J datasheet at Mouser could not be retrieved: its clock cycle (7 ns at CAS latency 3, -7 grade) is taken from a datasheet search result, and its setup and hold times were not read.
 
 ## Fabrication package
 

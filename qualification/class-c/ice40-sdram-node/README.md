@@ -7,7 +7,7 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISS
 | Group | Parts |
 |---|---|
 | Power entry | `J1` Korean Hroparts TYPE-C-31-M-12 USB-C receptacle (5 V from VBUS only, D+, D- and SBU unconnected) with `R2` and `R3`, 5.1 k pull-downs on CC1 and CC2; `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 2.2 A trip, 16 V); `D1` Nexperia PTVS6V0S1UR (6.0 V standoff, 6.67 V minimum breakdown) above the 5.25 V maximum input; `C1`; no reverse-polarity stage, since a Type-C receptacle cannot be mated reversed |
-| 3.3 V | `U1` Diodes AP7361C-33E-13 low-dropout regulator (1 A, 360 mV typical dropout at 1 A, SOT-223, stable with ceramic capacitors) with 10 uF capacitors `C2` to `C5` |
+| 3.3 V | `U1` Diodes AP7361C-33E-13 low-dropout regulator (1 A, 360 mV typical dropout at 1 A, SOT-223, stable with ceramic capacitors) with 10 uF capacitors `C2` to `C5`, behind the 1 ohm series resistor `R_SURGE` that keeps a clamp event of `D1` off the regulator input |
 | 1.2 V core | `U2` Texas Instruments TLV70012DDCR, TSOT-23-5, with `C6` and `C7`; the PLL supply `VCCPLL` through the ferrite bead `L1` (Murata BLM18AG601SN1D) and `C23` |
 | FPGA | `U3` Lattice iCE40HX4K-TQ144, supply decoupling 100 nF `C10` to `C24`; `X1`, 25 MHz oscillator on global buffer input `GBIN1` (`iot_197_gbin1`) with `C41`, since the iCE40HX has no internal oscillator; `CBSEL0` and `CBSEL1` pulled down by `RCB1` and `RCB2` |
 | SDRAM | `U4` ISSI IS42S16400J-7TLI (64 Mbit, 143 MHz, 3.0 to 3.6 V), decoupling `C30` to `C37`, six 22 ohm series resistors `RS1` to `RS6` at the FPGA end of the command, clock and control lines |
