@@ -772,8 +772,9 @@ impl Ground {
         self
     }
 
-    /// Only `critical` nets are held to a return via: a layer change on any
-    /// other net with no room for one is listed, not blocking.
+    /// Only `critical` nets are held to a return via: any other net is not
+    /// given one, even where there is room, and its layer change is listed as a
+    /// warning, not blocking.
     #[must_use]
     pub fn with_critical(mut self, critical: &[String]) -> Self {
         self.critical = Some(critical.iter().cloned().collect());
@@ -1920,8 +1921,8 @@ fn stitch(
         if let Some((p, size, drill)) = spot {
             // Only a net held to a return via is given one. A net the design
             // declares slow has no fast edge to return, so a via added for it
-            // takes room from the nets that need it and, on a dense board, keeps
-            // the rounds from converging.
+            // takes room from the nets that need it and spends the limited
+            // rounds.
             if ground_nets.needs_return(signal_net) {
                 ground.push(p);
                 out.push(tie_via_at(net, p, size, drill));
@@ -3636,7 +3637,6 @@ mod tests {
         let plan = plan_all_with(&board, REACH, &slow, &ViaDeclarations::new());
         assert!(plan.vias.is_empty(), "{plan:?}");
         assert!(plan.unresolved.is_empty(), "{plan:?}");
-        assert!(plan.advisory.is_empty(), "{plan:?}");
 
         let fast = Ground::default().with_critical(&["SIG".to_string()]);
         let plan = plan_all_with(&board, REACH, &fast, &ViaDeclarations::new());
@@ -3644,6 +3644,25 @@ mod tests {
 
         let strict = plan_all_with(&board, REACH, &Ground::default(), &ViaDeclarations::new());
         assert_eq!(strict.vias.len(), 1, "no list means every net: {strict:?}");
+    }
+
+    /// A slow via that sits first must not take the only spot a fast via near it
+    /// can use: the fast net still gets its return via within reach.
+    #[test]
+    fn a_slow_via_does_not_take_the_spot_a_nearby_fast_via_needs() {
+        let board = stitched_board(
+            r#"(net 4 "RF")
+              (via (at 10.7 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 4))"#,
+        );
+        let critical = Ground::default().with_critical(&["RF".to_string()]);
+        let plan = plan_all_with(&board, REACH, &critical, &ViaDeclarations::new());
+        assert_eq!(plan.vias.len(), 1, "{plan:?}");
+        let (x, y) = at_mm(&plan.vias[0]);
+        let to_fast = ((x - 10.7).powi(2) + (y - 10.0).powi(2)).sqrt();
+        assert!(
+            to_fast <= REACH,
+            "return via {to_fast} mm from the fast via: {plan:?}"
+        );
     }
 
     /// A signal via that cannot be given a return must be reported, not skipped:

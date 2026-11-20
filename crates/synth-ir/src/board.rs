@@ -627,8 +627,8 @@ pub struct NetClass {
     pub max_skew: Option<Length>,
     /// How fast the class's nets switch (`edge_rate slow`). `None` is the
     /// unknown case and is treated as fast: a generic output pin can carry a
-    /// fast edge, so only a class that says `slow` may lose its return via as
-    /// an advisory. Used by `synth_drc::return_path_critical_net_names`.
+    /// fast edge, so only a class that says `slow` is not given a return via, and
+    /// its layer change is a warning. Used by `synth_drc::return_path_critical_net_names`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edge_rate: Option<EdgeRate>,
     /// Copper layers the class's nets may be routed on (`layers "F.Cu"`),
