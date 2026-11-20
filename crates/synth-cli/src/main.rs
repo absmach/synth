@@ -185,7 +185,7 @@ enum Command {
         force: bool,
         /// Least courtyard-to-courtyard gap between any two parts, in mm
         /// (1.0 to 5.0). Overrides `placement { spacing }` in the board file.
-        #[arg(long, value_name = "MM")]
+        #[arg(long, value_name = "MM", value_parser = parse_spacing_mm)]
         spacing: Option<f64>,
         /// Release mode: refuse to accept any override flag. Suitable for CI
         /// and release gates, where a package that needed an override is not
@@ -1486,6 +1486,19 @@ fn manufacturer_profile_entry(name: &str, layers: &[u32]) -> serde_json::Value {
     entry
 }
 
+/// A finite spacing in the range the placer is tuned for.
+fn parse_spacing_mm(value: &str) -> Result<f64, String> {
+    let mm: f64 = value
+        .parse()
+        .map_err(|_| format!("`{value}` is not a number"))?;
+    if !mm.is_finite() || mm <= 0.0 {
+        return Err(format!(
+            "spacing must be a positive finite number, got `{value}`"
+        ));
+    }
+    Ok(mm)
+}
+
 fn capability_descriptor() -> serde_json::Value {
     let board_families = synth_place::board_family::PROFILES
         .iter()
@@ -1502,7 +1515,7 @@ fn capability_descriptor() -> serde_json::Value {
         .collect::<Vec<_>>();
 
     serde_json::json!({
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "compiler": {
             "name": "synth",
             "version": env!("CARGO_PKG_VERSION")
@@ -1527,8 +1540,8 @@ fn capability_descriptor() -> serde_json::Value {
         ],
         "language": {
             "syntax_version": "1.0",
-            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
-            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn"],
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant", "placement"],
+            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn", "spacing"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
         "geometry_and_constraints": {
@@ -1538,6 +1551,17 @@ fn capability_descriptor() -> serde_json::Value {
                 "height": {"option": "--height", "unit": "mm", "paired_with": "width"}
             },
             "layer_count": {"statement": "layers", "type": "integer", "min": 1, "max": 64},
+            "placement_spacing": {
+                "statement": "placement",
+                "body": "placement { spacing = 2.0mm }",
+                "setting": "spacing",
+                "type": "number",
+                "unit": "mm",
+                "min": 1.0,
+                "max": 5.0,
+                "option": "--spacing",
+                "notes": "least courtyard-to-courtyard gap between any two parts; the export margin sweep uses it as a floor"
+            },
             "schematic_page": {
                 "statement": "schematic",
                 "body": "schematic { paper = \"A4\" }",
@@ -3903,6 +3927,13 @@ fn dump_place(
             if family_dimensions.is_some() && (width.is_some() || height.is_some()) {
                 anyhow::bail!("--board-family cannot be combined with --width/--height")
             }
+            if let Some(board) = lowered.board.as_ref()
+                && let Some(mm) = synth_validate::placement_spacing_out_of_range(board)
+            {
+                anyhow::bail!(
+                    "placement spacing {mm} mm is outside the supported 1.0 mm to 5.0 mm range"
+                );
+            }
             let requested_dimensions = match (width, height, family_dimensions) {
                 (Some(w), Some(h), None) => Some((w, h)),
                 (None, None, family) => family,
@@ -4040,6 +4071,9 @@ fn route_design(
         .board
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("lowering produced no IR; nothing to route"))?;
+    if let Some(mm) = synth_validate::placement_spacing_out_of_range(board) {
+        anyhow::bail!("placement spacing {mm} mm is outside the supported 1.0 mm to 5.0 mm range");
+    }
 
     let out_dir = std::env::temp_dir().join(format!(
         "synth-route-{}-{}",
@@ -4558,9 +4592,9 @@ fn export_kicad(
             Vec::new(),
             format!("{blocking} blocking ERC diagnostic(s) suppressed by --force"),
         ));
-        if erc_diags.iter().any(|d| d.code == "E-SYNTH-PLACE-003") {
+        if erc_diags.iter().any(|d| d.code == "E-SYNTH-PLACE-005") {
             eprintln!(
-                "warning: [E-SYNTH-PLACE-003] the typed placement spacing is outside the \
+                "warning: [E-SYNTH-PLACE-005] the typed placement spacing is outside the \
                  supported 1.0 mm to 5.0 mm range; using it because of --force"
             );
         }

@@ -47,7 +47,7 @@ fn export(label: &str, file_spacing: Option<&str>, args: &[&str]) -> (Output, St
     (output, stderr)
 }
 
-const CODE: &str = "E-SYNTH-PLACE-003";
+const CODE: &str = "E-SYNTH-PLACE-005";
 
 #[test]
 fn the_flag_overrides_the_file_value() {

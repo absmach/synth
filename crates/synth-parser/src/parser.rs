@@ -1864,7 +1864,17 @@ impl Parser {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::Ident(name) if name == "spacing" => {
                     self.bump();
-                    if self.consume_eq_after_setting() {
+                    if spacing.is_some() {
+                        self.emit(
+                            self.peek().span,
+                            "E-SYNTH-PARSE-046",
+                            "duplicate `spacing` setting",
+                            "one `spacing` setting per placement block",
+                            "a second `spacing`; the first one stands".to_string(),
+                            None,
+                        );
+                    }
+                    if self.consume_eq_after_setting() && spacing.is_none() {
                         spacing = self.expect_value();
                     }
                 }

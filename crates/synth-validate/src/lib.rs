@@ -2154,11 +2154,23 @@ impl ErcRule for KeepoutMissingRadiusRule {
 /// Least and greatest `placement { spacing }` the placer is tuned for, in mm.
 const SPACING_RANGE_MM: (f64, f64) = (1.0, 5.0);
 
+/// The board's spacing when it is outside `SPACING_RANGE_MM`, in mm.
+///
+/// Callers without the ERC pass (`synth place`, `synth route`) use this to
+/// fail the same way `export-kicad` does instead of silently placing with a
+/// value the export would reject.
+#[must_use]
+pub fn placement_spacing_out_of_range(board: &synth_ir::Board) -> Option<f64> {
+    let mm = synth_geometry::nm_to_mm(board.placement_spacing_nm?);
+    let (low, high) = SPACING_RANGE_MM;
+    (!(low..=high).contains(&mm)).then_some(mm)
+}
+
 struct PlacementSpacingRangeRule;
 
 impl ErcRule for PlacementSpacingRangeRule {
     fn code(&self) -> &'static str {
-        "E-SYNTH-PLACE-003"
+        "E-SYNTH-PLACE-005"
     }
 
     fn category(&self) -> ErcCategory {

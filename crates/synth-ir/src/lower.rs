@@ -186,6 +186,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut schematic_paper: Option<SchematicPaper> = None;
     let mut schematic_overflow: Option<SchematicOverflow> = None;
     let mut placement_spacing_nm: Option<i64> = None;
+    let mut placement_span: Option<synth_diagnostics::Span> = None;
     // Declared fabrication processes. A set, because declaring the same
     // requirement in two places is a duplicate rather than a conflict.
     let mut required_processes: std::collections::BTreeSet<ProcessRequirement> =
@@ -213,10 +214,15 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
             StatementAst::Legends(l) => legends = l.enabled,
             StatementAst::Labels(l) => labels = l.enabled,
             StatementAst::Placement(pl) => {
-                if let Some(v) = &pl.spacing {
-                    match Length::try_from(v) {
-                        Ok(l) => placement_spacing_nm = Some(l.0),
-                        Err(e) => ctx.emit_unit_error(&e, "placement spacing"),
+                if let Some(first) = placement_span {
+                    ctx.emit_duplicate_placement(first, pl.span);
+                } else {
+                    placement_span = Some(pl.span);
+                    if let Some(v) = &pl.spacing {
+                        match Length::try_from(v) {
+                            Ok(l) => placement_spacing_nm = Some(l.0),
+                            Err(e) => ctx.emit_unit_error(&e, "placement spacing"),
+                        }
                     }
                 }
             }
@@ -1844,6 +1850,30 @@ impl<'a> LowerCtx<'a> {
             pin: pid,
             source_span: ep.span,
         })
+    }
+
+    /// A second `placement` block. The first one stands; the duplicate is
+    /// reported so the later block cannot silently replace it.
+    fn emit_duplicate_placement(
+        &mut self,
+        first: synth_diagnostics::Span,
+        again: synth_diagnostics::Span,
+    ) {
+        self.diagnostics.push(
+            DiagnosticBuilder::new(
+                "E-SYNTH-PLACE-006",
+                Severity::Error,
+                "duplicate placement statement",
+            )
+            .location(Location::from_span(self.file.to_string(), first))
+            .expected("a board declares one `placement` block at most")
+            .found(format!(
+                "a second `placement` at bytes {}..{}; the first one stands",
+                again.byte_start, again.byte_end
+            ))
+            .explanation_url("synth.docs/diagnostics/E-SYNTH-PLACE-006")
+            .build(),
+        );
     }
 
     /// A second `outline` statement on the board. The first one stands; the
