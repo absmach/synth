@@ -118,6 +118,10 @@ enum Command {
         /// Overwrite an existing `<design>.sim.toml` when drafting.
         #[arg(long, requires = "suggest")]
         force: bool,
+
+        /// Write the report as one JSON object to stdout.
+        #[arg(long, conflicts_with = "suggest")]
+        json: bool,
     },
 
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
@@ -1057,7 +1061,8 @@ fn main() -> ExitCode {
             registry,
             suggest,
             force,
-        } => sim(&input, registry.as_deref(), suggest, force),
+            json,
+        } => sim(&input, registry.as_deref(), suggest, force, json),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -3443,15 +3448,32 @@ fn sim(
     registry_dir: Option<&Path>,
     suggest: bool,
     force: bool,
+    json: bool,
 ) -> anyhow::Result<u8> {
-    let (source, file) = read_source(input)?;
+    let (source, file) = match read_source(input) {
+        Ok(pair) => pair,
+        Err(error) => {
+            if json {
+                write_sim_error_message_json(&error.to_string())?;
+            }
+            return Err(error);
+        }
+    };
+    let mut all_diagnostics = Vec::new();
+    let finish_error = |diagnostics: &[synth_diagnostics::Diagnostic]| -> anyhow::Result<u8> {
+        if json {
+            write_sim_error_json(diagnostics)?;
+        }
+        Ok(EXIT_VALIDATION_ERRORS)
+    };
     let parse = synth_parser::parse(&source, file.clone());
+    all_diagnostics.extend(parse.diagnostics.iter().cloned());
     write_sim_diagnostics(&parse.diagnostics)?;
     if parse.has_errors() {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     }
     let Some(ast) = parse.ast else {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     };
 
     let import_root = input
@@ -3459,25 +3481,31 @@ fn sim(
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let loader = synth_ir::FsImportLoader { root: import_root };
     let resolved = synth_ir::resolve_imports(&ast, &loader, &file);
+    all_diagnostics.extend(resolved.diagnostics.iter().cloned());
     write_sim_diagnostics(&resolved.diagnostics)?;
     if resolved
         .diagnostics
         .iter()
         .any(|d| d.severity.is_blocking())
     {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     }
 
     let Some(registry) = load_registry(registry_dir) else {
-        anyhow::bail!("could not load the component registry");
+        let message = "could not load the component registry";
+        if json {
+            write_sim_error_message_json(message)?;
+        }
+        anyhow::bail!("{message}");
     };
     let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    all_diagnostics.extend(lowered.diagnostics.iter().cloned());
     write_sim_diagnostics(&lowered.diagnostics)?;
     if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     }
     let Some(board) = lowered.board else {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     };
 
     if suggest {
@@ -3488,8 +3516,9 @@ fn sim(
     let testbench = match synth_sim::Testbench::from_path(&sidecar) {
         Ok(testbench) => testbench,
         Err(diagnostic) => {
-            write_sim_diagnostics(&[diagnostic])?;
-            return Ok(EXIT_VALIDATION_ERRORS);
+            all_diagnostics.push(diagnostic.clone());
+            write_sim_diagnostics(std::slice::from_ref(&diagnostic))?;
+            return finish_error(&all_diagnostics);
         }
     };
 
@@ -3515,39 +3544,85 @@ fn sim(
         },
     );
 
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    for measure in &report.measures {
-        let status = match (measure.min, measure.max) {
-            (None, None) => "MEASURED",
-            _ if measure.passed() => "PASS",
-            _ => "FAIL",
-        };
-        let limits = match (measure.min, measure.max) {
-            (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
-            (Some(min), None) => format!(" (min {min})"),
-            (None, Some(max)) => format!(" (max {max})"),
-            (None, None) => String::new(),
-        };
+    if json {
+        all_diagnostics.extend(report.diagnostics.iter().cloned());
+        write_sim_json(
+            report.passed(),
+            &report.measures,
+            &all_diagnostics,
+            &report.coverage,
+        )?;
+    } else {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        for measure in &report.measures {
+            let status = match (measure.min, measure.max) {
+                (None, None) => "MEASURED",
+                _ if measure.passed() => "PASS",
+                _ => "FAIL",
+            };
+            let limits = match (measure.min, measure.max) {
+                (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
+                (Some(min), None) => format!(" (min {min})"),
+                (None, Some(max)) => format!(" (max {max})"),
+                (None, None) => String::new(),
+            };
+            writeln!(
+                out,
+                "{status} {} = {} {}{limits}",
+                measure.name, measure.value, measure.unit
+            )?;
+        }
         writeln!(
             out,
-            "{status} {} = {} {}{limits}",
-            measure.name, measure.value, measure.unit
+            "coverage: modelled=[{}] ignored=[{}] unmodelled=[{}] measured=[{}]",
+            report.coverage.modelled.join(", "),
+            report.coverage.ignored.join(", "),
+            report.coverage.unmodelled.join(", "),
+            report.coverage.measured.join(", ")
         )?;
+        let blocking: Vec<_> = report
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity.is_blocking())
+            .cloned()
+            .collect();
+        write_sim_diagnostics(&blocking)?;
     }
-    let blocking: Vec<_> = report
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity.is_blocking())
-        .cloned()
-        .collect();
-    write_sim_diagnostics(&blocking)?;
 
     Ok(if report.passed() {
         EXIT_SUCCESS
     } else {
         EXIT_VALIDATION_ERRORS
     })
+}
+
+/// One stable JSON shape for `synth sim --json`.
+fn write_sim_json(
+    passed: bool,
+    measures: &[synth_sim::MeasureResult],
+    diagnostics: &[synth_diagnostics::Diagnostic],
+    coverage: &synth_sim::SimCoverage,
+) -> anyhow::Result<()> {
+    write_sim_payload_json(&synth_sim::report_json(
+        passed,
+        measures,
+        diagnostics,
+        coverage,
+    ))
+}
+
+fn write_sim_payload_json(report: &serde_json::Value) -> anyhow::Result<()> {
+    println!("{}", serde_json::to_string_pretty(report)?);
+    Ok(())
+}
+
+fn write_sim_error_json(diagnostics: &[synth_diagnostics::Diagnostic]) -> anyhow::Result<()> {
+    write_sim_json(false, &[], diagnostics, &synth_sim::SimCoverage::default())
+}
+
+fn write_sim_error_message_json(message: &str) -> anyhow::Result<()> {
+    write_sim_payload_json(&synth_sim::error_report_json(message))
 }
 
 /// Draft the sidecar from the compiled board and write it unless an existing

@@ -2290,7 +2290,12 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
         ..
     } = compile_design(args, default_registry)?;
     if compile_diagnostics.iter().any(|d| d.severity.is_blocking()) {
-        return Ok(sim_json(false, &[], &compile_diagnostics));
+        return Ok(synth_sim::report_json(
+            false,
+            &[],
+            &compile_diagnostics,
+            &synth_sim::SimCoverage::default(),
+        ));
     }
 
     let testbench_path = args["testbench_path"]
@@ -2298,7 +2303,14 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
         .map_or_else(|| synth_sim::sidecar_path(&design_path), PathBuf::from);
     let testbench = match synth_sim::Testbench::from_path(&testbench_path) {
         Ok(testbench) => testbench,
-        Err(diagnostic) => return Ok(sim_json(false, &[], &[diagnostic])),
+        Err(diagnostic) => {
+            return Ok(synth_sim::report_json(
+                false,
+                &[],
+                std::slice::from_ref(&diagnostic),
+                &synth_sim::SimCoverage::default(),
+            ));
+        }
     };
 
     let mut registry_dirs = Vec::new();
@@ -2325,30 +2337,12 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
     );
     let passed = report.passed();
     compile_diagnostics.extend(report.diagnostics);
-    Ok(sim_json(passed, &report.measures, &compile_diagnostics))
-}
-
-/// The one JSON shape `synth_simulate` returns, so the pass path and every
-/// error path stay identical.
-fn sim_json(
-    passed: bool,
-    measures: &[synth_sim::MeasureResult],
-    diagnostics: &[synth_diagnostics::Diagnostic],
-) -> Value {
-    serde_json::json!({
-        "passed": passed,
-        "measures": measures.iter().map(|measure| serde_json::json!({
-            "name": &measure.name,
-            "value": measure.value,
-            "unit": measure.unit,
-            "min": measure.min,
-            "max": measure.max,
-            // A measure with no limits has nothing to pass or fail; the CLI
-            // prints MEASURED, so `null` keeps agents from reading it as a pass.
-            "passed": (measure.min.is_some() || measure.max.is_some()).then(|| measure.passed()),
-        })).collect::<Vec<_>>(),
-        "diagnostics": diagnostics,
-    })
+    Ok(synth_sim::report_json(
+        passed,
+        &report.measures,
+        &compile_diagnostics,
+        &report.coverage,
+    ))
 }
 
 /// Resolve the schematic-side sidecar from an explicit path or the

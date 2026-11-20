@@ -111,6 +111,16 @@ fn run_sim(design: &Path, stub: &Path) -> Output {
         .expect("run synth sim")
 }
 
+fn run_sim_json(design: &Path, stub: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("sim")
+        .arg("--json")
+        .arg(design)
+        .env("NGSPICE", stub)
+        .output()
+        .expect("run synth sim --json")
+}
+
 #[test]
 fn divider_example_prints_pass() {
     let dir = scratch("pass");
@@ -128,6 +138,61 @@ fn divider_example_prints_pass() {
         stdout.contains("PASS vmid = 6 V (min 5.7, max 6.3)"),
         "{stdout}"
     );
+    assert!(
+        stdout.contains("coverage: modelled=[R1, R2] ignored=[] unmodelled=[] measured=[MID]"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn json_is_written_when_the_design_cannot_be_read() {
+    let dir = scratch("missing-design");
+    let design = dir.join("missing.synth");
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = run_sim_json(&design, &stub);
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON object");
+    assert_eq!(report["schema_version"], "synth.sim.v1");
+    assert_eq!(report["passed"], false);
+    assert!(
+        report["error"]
+            .as_str()
+            .is_some_and(|error| error.contains("missing.synth")),
+        "{report}"
+    );
+}
+
+#[test]
+fn json_reports_measures_and_coverage_without_human_lines() {
+    let dir = scratch("json");
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = run_sim_json(&example_design(), &stub);
+
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("stdout is one JSON object");
+    assert_eq!(report["schema_version"], "synth.sim.v1");
+    assert_eq!(report["passed"], true);
+    assert_eq!(report["measures"][0]["name"], "vmid");
+    assert_eq!(report["measures"][0]["value"], 6.0);
+    assert_eq!(
+        report["coverage"]["modelled"],
+        serde_json::json!(["R1", "R2"])
+    );
+    assert_eq!(report["coverage"]["ignored"], serde_json::json!([]));
+    assert_eq!(report["coverage"]["unmodelled"], serde_json::json!([]));
+    assert_eq!(report["coverage"]["measured"], serde_json::json!(["MID"]));
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("PASS vmid"), "{stdout}");
+    assert!(!stdout.contains("coverage:"), "{stdout}");
 }
 
 #[test]

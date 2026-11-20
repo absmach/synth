@@ -1548,6 +1548,19 @@ fn an_unconnected_pin_gives_008() {
 }
 
 #[test]
+fn an_unconnected_part_is_not_reported_as_unmodelled() {
+    let board = board(UNCONNECTED);
+    let testbench = testbench(DIVIDER_TB);
+    let (stub, _dir) = stub_ngspice("ok");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(!report.passed());
+    assert_eq!(report.coverage.modelled, vec!["R1", "R2"]);
+    assert!(report.coverage.unmodelled.is_empty());
+}
+
+#[test]
 fn a_series_capacitor_gives_008_naming_the_net() {
     let board = board(SERIES_CAPACITOR);
     let testbench = testbench(DIVIDER_TB);
@@ -2320,6 +2333,27 @@ fn ldo_simulates_through_the_stub() {
         (vout - 3.29967).abs() < 5e-4,
         "vout {vout} should be about 3.29967 V"
     );
+}
+
+#[test]
+fn coverage_excludes_a_part_whose_model_file_is_missing() {
+    let board = patched_ams1117(|spice| spice.file = "spice/does-not-exist.lib".into());
+    let testbench = testbench(LDO_TB);
+    let (stub, _dir) = stub_ngspice("ok");
+
+    let report = synth_sim::simulate(&board, &testbench, &ldo_options(&stub));
+
+    assert!(!report.passed());
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_002),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+    assert_eq!(report.coverage.modelled, vec!["R1"]);
+    assert_eq!(report.coverage.unmodelled, vec!["U1"]);
 }
 
 #[test]
