@@ -1,0 +1,24 @@
+Using SPARSE 1.3 as Direct Linear Solver
+Warning: singular matrix:  check node mid
+
+Note: Starting dynamic gmin stepping
+Warning: singular matrix:  check node mid
+
+Warning: Dynamic gmin stepping failed
+Note: Starting true gmin stepping
+Warning: singular matrix:  check node mid
+
+Warning: singular matrix:  check node mid
+
+Warning: singular matrix:  check node mid
+
+Warning: singular matrix:  check node mid
+
+Warning: True gmin stepping failed
+Note: Starting source stepping
+Warning: source stepping failed
+Note: Transient op started
+Note: Transient op finished successfully
+Warning from checkvalid: vector ghost is not available or has zero length.
+Error: RHS "v(ghost)" invalid
+Error: &m0: no such variable.

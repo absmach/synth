@@ -1,0 +1,7 @@
+* Synth-owned behavioural model for the AMS1117-3.3 fixed LDO.
+* Limitations: ideal 3.3 V source with series output resistance; no dropout,
+* no quiescent current, no transient, thermal or noise behaviour.
+.subckt ams1117_3v3 vin gnd vout params: rout=50m
+Vref vout int 3.3
+Rout int gnd {rout}
+.ends

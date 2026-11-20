@@ -4,9 +4,23 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use synth_supply::Distributor;
+
+thread_local! {
+    /// Test-only override for the ngspice binary. The MCP schema deliberately
+    /// has no such argument, so a remote caller cannot choose a command.
+    static TEST_NGSPICE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
+
+/// Point `synth_simulate` at a specific binary for this test thread. Test
+/// hook only: it is not part of the tool schema.
+#[doc(hidden)]
+pub fn set_test_ngspice(path: Option<PathBuf>) {
+    TEST_NGSPICE.with(|slot| *slot.borrow_mut() = path);
+}
 
 /// Tool description metadata exposed in `tools/list`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,7 +154,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "file_path": { "type": "string", "description": "Optional path to .synth source file on disk" },
                     "layout_file_path": { "type": "string", "description": "Optional agent or human placement sidecar" },
                     "allow_placement_warnings": { "type": "boolean", "description": "Route despite visual-review findings; use only for deliberate manual/debug routing (default false)" },
-                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout) or \"freerouting\" (managed)" },
+                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout), \"freerouting\" (managed JAR) or \"fastroute\" (managed Java-free binary)" },
                     "freerouting_jar": { "type": "string", "description": "Path to the FreeRouting JAR" },
                     "freerouting_java": { "type": "string", "description": "Java executable for FreeRouting" },
                     "kicad_routing_tools_repo": { "type": "string", "description": "KiCadRoutingTools checkout directory" },
@@ -224,7 +238,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
                     "place_route_budget_secs": { "type": "integer", "minimum": 0, "description": "Wall-clock budget in seconds for place_route_iterate (0 or absent: 900). Every routing run is capped at what is left, a share for the final route is kept back, and the result's placement_search says how many candidates were routed and whether the budget cut the search short. A router_timeout_secs under 30 starts no candidate run (a run that short cannot finish), only the final route. A whole number of seconds; anything else is refused." },
                     "place_route_iterate": { "type": "boolean", "description": "Choose the placement by routing each candidate and keeping the one that routes best, instead of the export path's route-free estimate. Opt-in: costs one extra route per candidate, and falls back to the normal choice when there is one candidate or the engine is unavailable." },
-                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout) or \"freerouting\" (managed)" },
+                    "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout), \"freerouting\" (managed JAR) or \"fastroute\" (managed Java-free binary)" },
                     "freerouting_jar": { "type": "string", "description": "Path to the FreeRouting JAR" },
                     "freerouting_java": { "type": "string", "description": "Java executable for FreeRouting" },
                     "kicad_routing_tools_repo": { "type": "string", "description": "KiCadRoutingTools checkout directory" },
@@ -610,6 +624,20 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 }
             }),
         },
+        McpToolInfo {
+            name: "synth_simulate".into(),
+            description: "Compile a design and run its `<design>.sim.toml` testbench sidecar through ngspice, returning measured values, their limits and structured diagnostics. A design path is required because the sidecar sits beside it; inline `source` is not supported. A missing measurement, a failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking E-SYNTH-SIM-* diagnostic with `passed: false`, never a silent pass.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "file_path": { "type": "string", "description": "Path to the .synth design file; its testbench sidecar is `<design>.sim.toml` beside it" },
+                    "testbench_path": { "type": "string", "description": "Optional explicit testbench sidecar path (defaults to `<design>.sim.toml`)" },
+                    "registry_path": { "type": "string", "description": "Optional custom component registry path" },
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                },
+                "required": ["file_path"]
+            }),
+        },
     ]
 }
 
@@ -656,6 +684,7 @@ pub fn call_tool(
         "synth_author_part" => execute_author_part(args, default_registry),
         "synth_search_registry_web" => execute_search_registry_web(args, default_registry),
         "synth_export_multiboard" => execute_export_multiboard(args),
+        "synth_simulate" => execute_simulate(args, default_registry),
         "synth_multi_agent_synthesize" => Ok(serde_json::json!({
             "status": "dev_stub",
             "message": format!("Tool '{name}' is under active local development.")
@@ -994,6 +1023,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "layers 4"
                 },
                 {
+                    "form": "outline <width><unit> x <height><unit>",
+                    "description": "Fixes the board rectangle: the exported Edge.Cuts is exactly this size, with its bottom-left corner at board coordinate (0, 0). At most one per board; omit it and the exporter fits the edge round the placed parts. Placement-sidecar x/y are millimetres from that origin. A mounting hole may sit on the edge (its drill must stay inside), and a part that does not fit is a placement diagnostic, not a larger board.",
+                    "example": "outline 60mm x 30mm"
+                },
+                {
                     "form": "manufacturer \"<name>\"",
                     "description": "Selects the DRC/manufacturing profile. At most one per board.",
                     "example": "manufacturer \"jlcpcb\""
@@ -1024,8 +1058,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "component U1: mcu \"stm32h743\" { placement_hint { region: top_left priority: hard } }"
                 },
                 {
-                    "form": "connect <REFDES>.<pin> -> <REFDES>.<pin>",
-                    "description": "Wires two component pins onto the same net. Pin names come from the part's registry entry. Repeat `connect` lines that share an endpoint to fan a net out to more than two pins.",
+                    "form": "connect <REFDES>.<pin> -> <REFDES>.<pin> [as \"<NET_NAME>\"] [class \"<netclass>\"]",
+                    "description": "Wires two component pins onto the same net. Pin names come from the part's registry entry. Repeat `connect` lines that share an endpoint to fan a net out to more than two pins. `as \"<NET_NAME>\"` joins a named net instead of an auto-named one. `class \"<netclass>\"` joins the declared netclass; without it the net is auto-classified.",
                     "example": "connect U1.vout -> C3.p1"
                 },
                 {
@@ -1034,9 +1068,9 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "diff_pair USB_DP USB_DN { impedance 90ohm }"
                 },
                 {
-                    "form": "keepout <name> { radius <value><unit> }",
-                    "description": "Declares a circular routing keepout zone (e.g. under an antenna).",
-                    "example": "keepout antenna { radius 15mm }"
+                    "form": "keepout <name> { radius <value><unit> [anchor \"<REFDES>\"] [at <x><unit> <y><unit>] [layers \"<layer>\", …] [allow \"<NET>\", …] }",
+                    "description": "Declares a circular routing rule area. Centre it on a component with `anchor \"REFDES\"` or on an explicit `at x y` board coordinate; without either, the keepout name must match a component's refdes or kind or it cannot be exported (E-SYNTH-KEEPOUT-003). `layers` limits the copper. `allow` makes it a corridor: the listed nets' tracks and vias may pass, every other net is excluded by the exported `.kicad_dru` rules.",
+                    "example": "keepout antenna { radius 15mm anchor \"U3\" layers \"F.Cu\", \"B.Cu\" }"
                 },
                 {
                     "form": "stackup { copper <thickness><unit> | insulator <thickness><unit> er <number> [material \"<name>\"] ... }",
@@ -1064,8 +1098,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "net \"I2C_SCL\" { U1.scl U2.pb6 }"
                 },
                 {
-                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [layers \"<layer>\", …] [color \"#rrggbb\"] }",
-                    "description": "Routing and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. Pin a controlled-impedance pair to outer layers to clear W-SYNTH-IMPEDANCE-001.",
+                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [impedance <value><unit>] [current <value><unit>] [plane] [max_length <value><unit>] [max_skew <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [edge_rate <slow|medium|fast>] [layers \"<layer>\", …] [color \"#rrggbb\"] }",
+                    "description": "Routing, signal-integrity and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. `plane` asks for a copper pour, `impedance` sets the target characteristic impedance, `current` the current budget, `max_length`/`max_skew` the routed-length budgets, and `edge_rate` the return-via tier. Use `class \"<name>\"` on `connect`, `net` or `power` to join the class.",
                     "example": "netclass \"PWR\" { trace_width 0.4mm clearance 0.25mm color \"#d55e00\" }"
                 },
                 {
@@ -1077,6 +1111,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "form": "legends <on|off>",
                     "description": "Connector pin legends, default off. When on, each external connector gets a compact pin:net list beside it. Off is usually right: a one-line `notes` block reads better than a generated table, and no-connect crosses already mark unused pins.",
                     "example": "legends on"
+                },
+                {
+                    "form": "labels <on|off>",
+                    "description": "Board-level silkscreen labels, default on. When off, the exported PCB carries none of the reference-designator or value text the exporter itself adds; text the library footprint owns (silk lines, courtyards) is untouched. Use off for boards whose silkscreen is drawn by hand or whose assembly wants a clean top.",
+                    "example": "labels off"
                 },
                 {
                     "form": "company \"<name>\"",
@@ -1365,13 +1404,13 @@ fn resolve_router(args: &Value) -> Result<synth_router::RouterEngine, String> {
         .unwrap_or_else(|| synth_router::RouterEngine::default().as_str());
     synth_router::RouterEngine::parse(requested).ok_or_else(|| {
         format!(
-            "unknown router `{requested}`; expected `freerouting` or `kicad-routing-tools`. \
+            "unknown router `{requested}`; expected `freerouting`, `fastroute` or `kicad-routing-tools`. \
              Call synth_router_capabilities to see which engines are installed."
         )
     })
 }
 
-/// Read the routing arguments a tool accepts, applying environment overrides.
+/// Read the routing arguments a tool accepts.
 ///
 /// The explicit arguments win because they arrive from the caller; the
 /// environment is the fallback that lets a machine configure its own
@@ -1379,18 +1418,7 @@ fn resolve_router(args: &Value) -> Result<synth_router::RouterEngine, String> {
 fn routing_request(args: &Value, engine: synth_router::RouterEngine) -> synth_router::RouteRequest {
     let mut request =
         synth_router::RouteRequest::new(Path::new("board.kicad_pcb"), Path::new("."), engine);
-    if let Some(jar) = args["freerouting_jar"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAR", jar);
-    }
-    if let Some(java) = args["freerouting_java"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAVA", java);
-    }
-    if let Some(repo) = args["kicad_routing_tools_repo"].as_str() {
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", repo);
-    }
-    if let Some(python) = args["kicad_routing_tools_python"].as_str() {
-        std::env::set_var("SYNTH_KRT_PYTHON", python);
-    }
+    apply_tool_args(&mut request.tools, args);
     if let Some(secs) = args["router_timeout_secs"].as_u64() {
         request.limits = request.limits.with_wall_clock(secs);
     }
@@ -1399,6 +1427,33 @@ fn routing_request(args: &Value, engine: synth_router::RouterEngine) -> synth_ro
         .as_bool()
         .unwrap_or(false);
     request
+}
+
+/// Overlay a tool call's tool-location arguments on the locations its request
+/// read from the environment.
+///
+/// They apply to that request only. Writing them into the process environment
+/// instead would leak one call's paths into every later call, and race with a
+/// concurrent one.
+fn apply_tool_args(tools: &mut synth_router::ToolPaths, args: &Value) {
+    let arg = |key: &str| {
+        args[key]
+            .as_str()
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
+    if let Some(jar) = arg("freerouting_jar") {
+        tools.freerouting_jar = Some(jar);
+    }
+    if let Some(java) = arg("freerouting_java") {
+        tools.freerouting_java = Some(java);
+    }
+    if let Some(repo) = arg("kicad_routing_tools_repo") {
+        tools.krt_repo = Some(repo);
+    }
+    if let Some(python) = arg("kicad_routing_tools_python") {
+        tools.krt_python = Some(python);
+    }
 }
 
 /// Append a Dataset 6 outcome record when a caller asked for one.
@@ -1422,20 +1477,14 @@ fn log_routing_outcome(args: &Value, report: &synth_router::RouteReport) {
 // signature in the dispatch table, even though discovery cannot fail.
 #[allow(clippy::unnecessary_wraps)]
 fn execute_router_capabilities(args: &Value) -> Result<Value, String> {
-    if let Some(jar) = args["freerouting_jar"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAR", jar);
-    }
-    if let Some(java) = args["freerouting_java"].as_str() {
-        std::env::set_var("SYNTH_FREEROUTING_JAVA", java);
-    }
-    if let Some(repo) = args["kicad_routing_tools_repo"].as_str() {
-        std::env::set_var("KICAD_ROUTING_TOOLS_REPO", repo);
-    }
-    if let Some(python) = args["kicad_routing_tools_python"].as_str() {
-        std::env::set_var("SYNTH_KRT_PYTHON", python);
-    }
     let out_dir = std::env::temp_dir().join(format!("synth-routers-{}", std::process::id()));
-    let capabilities = synth_router::capability::discover_all_in_out_dir(&out_dir);
+    let mut request = synth_router::RouteRequest::new(
+        Path::new("board.kicad_pcb"),
+        &out_dir,
+        synth_router::RouterEngine::default(),
+    );
+    apply_tool_args(&mut request.tools, args);
+    let capabilities = synth_router::capability::discover_all(&request);
     Ok(serde_json::json!({
         "engines": capabilities,
         "default_engine": synth_router::RouterEngine::default().as_str(),
@@ -1585,8 +1634,10 @@ fn route_design_externally_with(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
+    request.use_board_diff_pairs(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -1661,11 +1712,12 @@ fn route_report_payload(report: &synth_router::RouteReport) -> Value {
                 .as_ref()
                 .is_some_and(|v| v.blocking_count() == 0)
     );
-    payload["violations"] = serde_json::json!(report
-        .validation
-        .as_ref()
-        .map(|v| v.blocking_reasons.clone())
-        .unwrap_or_default());
+    payload["violations"] = serde_json::json!(
+        report
+            .validation
+            .as_ref()
+            .map_or_default(|v| v.blocking_reasons.clone())
+    );
     payload
 }
 
@@ -1976,12 +2028,11 @@ fn normalize_layout_op(args: &Value) -> Value {
         return op;
     };
     for key in ["ids", "y_mm", "x_mm", "scale", "grow"] {
-        if !obj.contains_key(key) {
-            if let Some(v) = args.get(key) {
-                if !v.is_null() {
-                    obj.insert(key.to_string(), v.clone());
-                }
-            }
+        if !obj.contains_key(key)
+            && let Some(v) = args.get(key)
+            && !v.is_null()
+        {
+            obj.insert(key.to_string(), v.clone());
         }
     }
     op
@@ -2025,10 +2076,10 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
     // approximation of it can differ by a few millimetres because it ran on
     // a different starting layout. Return the reloaded sheet, which is what
     // every later render and export will show.
-    if let (synth_layout::ops::LayoutOp::FitSheet { .. }, Some(saved)) = (&op, persisted.as_ref()) {
-        if let Some(path) = saved["saved_path"].as_str() {
-            layout = synth_layout::layout_with_sidecar(&board, Some(Path::new(path)));
-        }
+    if let (synth_layout::ops::LayoutOp::FitSheet { .. }, Some(saved)) = (&op, persisted.as_ref())
+        && let Some(path) = saved["saved_path"].as_str()
+    {
+        layout = synth_layout::layout_with_sidecar(&board, Some(Path::new(path)));
     }
 
     let mut response = serde_json::to_value(&layout).map_err(|e| e.to_string())?;
@@ -2140,16 +2191,16 @@ fn persist_layout_op(
     }
 
     let mut forced_net_labels: Vec<String> = Vec::new();
-    if let LayoutOp::ReplaceWireWithLabel { net } = op {
-        if let Some(n) = board.net(*net) {
-            if !sidecar.forced_net_labels.iter().any(|f| f.net == n.name) {
-                sidecar.forced_net_labels.push(ForcedNetLabel {
-                    net: n.name.clone(),
-                    source: OverrideSource::Agent,
-                });
-            }
-            forced_net_labels.push(n.name.clone());
+    if let LayoutOp::ReplaceWireWithLabel { net } = op
+        && let Some(n) = board.net(*net)
+    {
+        if !sidecar.forced_net_labels.iter().any(|f| f.net == n.name) {
+            sidecar.forced_net_labels.push(ForcedNetLabel {
+                net: n.name.clone(),
+                source: OverrideSource::Agent,
+            });
         }
+        forced_net_labels.push(n.name.clone());
     }
 
     if matches!(op, LayoutOp::FitSheet { .. }) {
@@ -2214,6 +2265,89 @@ fn compile_design(args: &Value, default_registry: Option<&Path>) -> Result<Compi
         board,
         file_name,
         diagnostics,
+    })
+}
+
+/// `synth_simulate`: a thin wrapper over [`synth_sim::simulate`]. Deck
+/// emission, process control and sentinel parsing stay in `synth-sim`; this
+/// only maps MCP arguments onto that seam.
+fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    if args["source"].as_str().is_some() {
+        return Err(
+            "synth_simulate needs a `file_path`; inline `source` is not supported because the \
+             `<design>.sim.toml` testbench sidecar must sit beside the design file"
+                .to_string(),
+        );
+    }
+    let design_path = PathBuf::from(args["file_path"].as_str().ok_or_else(|| {
+        "synth_simulate needs a `file_path`; its `<design>.sim.toml` testbench sidecar \
+         must sit beside the design file"
+            .to_string()
+    })?);
+    let CompiledDesign {
+        board,
+        diagnostics: mut compile_diagnostics,
+        ..
+    } = compile_design(args, default_registry)?;
+    if compile_diagnostics.iter().any(|d| d.severity.is_blocking()) {
+        return Ok(sim_json(false, &[], &compile_diagnostics));
+    }
+
+    let testbench_path = args["testbench_path"]
+        .as_str()
+        .map_or_else(|| synth_sim::sidecar_path(&design_path), PathBuf::from);
+    let testbench = match synth_sim::Testbench::from_path(&testbench_path) {
+        Ok(testbench) => testbench,
+        Err(diagnostic) => return Ok(sim_json(false, &[], &[diagnostic])),
+    };
+
+    let mut registry_dirs = Vec::new();
+    let tier1 = resolve_registry(args, default_registry);
+    if tier1.is_dir() {
+        registry_dirs.push(tier1);
+    }
+    if let Some(user) = resolve_user_registry_opt(args)
+        && user.is_dir()
+        && !registry_dirs.contains(&user)
+    {
+        registry_dirs.push(user);
+    }
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: TEST_NGSPICE.with(|slot| slot.borrow().clone()),
+            design_path: Some(design_path),
+            testbench_path: Some(testbench_path),
+            registry_dirs,
+        },
+    );
+    let passed = report.passed();
+    compile_diagnostics.extend(report.diagnostics);
+    Ok(sim_json(passed, &report.measures, &compile_diagnostics))
+}
+
+/// The one JSON shape `synth_simulate` returns, so the pass path and every
+/// error path stay identical.
+fn sim_json(
+    passed: bool,
+    measures: &[synth_sim::MeasureResult],
+    diagnostics: &[synth_diagnostics::Diagnostic],
+) -> Value {
+    serde_json::json!({
+        "passed": passed,
+        "measures": measures.iter().map(|measure| serde_json::json!({
+            "name": &measure.name,
+            "value": measure.value,
+            "unit": measure.unit,
+            "min": measure.min,
+            "max": measure.max,
+            // A measure with no limits has nothing to pass or fail; the CLI
+            // prints MEASURED, so `null` keeps agents from reading it as a pass.
+            "passed": (measure.min.is_some() || measure.max.is_some()).then(|| measure.passed()),
+        })).collect::<Vec<_>>(),
+        "diagnostics": diagnostics,
     })
 }
 
@@ -2596,13 +2730,11 @@ fn execute_schematic_baseline(
                 .get("inline_diff")
                 .and_then(Value::as_bool)
                 .unwrap_or(false)
+                && let Some(first) = sheets.first()
             {
-                if let Some(first) = sheets.first() {
-                    use base64::Engine as _;
-                    result["png_base64"] = serde_json::json!(
-                        base64::engine::general_purpose::STANDARD.encode(&first.png)
-                    );
-                }
+                use base64::Engine as _;
+                result["png_base64"] =
+                    serde_json::json!(base64::engine::general_purpose::STANDARD.encode(&first.png));
             }
             Ok(result)
         }
@@ -2899,44 +3031,44 @@ fn select_placement_by_route(
     // toward the component carrying most of its pins and keep it if better. It
     // is one more routing run, so it gets what is left, or is skipped.
     let mut hard_net_pass = "not_needed";
-    if let Some((best_cost, _, order)) = best.clone() {
-        if !order.is_empty() {
-            let hints = synth_place::hard_net_proximity_hints(board, &order);
-            if !hints.is_empty() {
-                if let Some(limit) = budget.candidate_limit(requested) {
-                    hard_net_pass = "run";
-                    let hinted = synth_place::with_hard_net_hints(board, &hints);
-                    if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars) {
-                        if let Some(candidate) = grouped.into_iter().next() {
-                            let began = std::time::Instant::now();
-                            let evaluated = evaluate_candidate_mcp(
-                                board,
-                                sidecars,
-                                args,
-                                engine,
-                                &candidate,
-                                usize::MAX,
-                                budget.run_clock(limit),
-                            )?;
-                            budget.note_run(began.elapsed());
-                            match evaluated {
-                                synth_router::search_budget::Attempt::Routed(evaluated) => {
-                                    if evaluated.cost < best_cost {
-                                        best = Some((evaluated.cost, candidate, order));
-                                    }
-                                }
-                                synth_router::search_budget::Attempt::NoTime => {
-                                    hard_net_pass = "skipped_for_budget";
-                                    truncated = true;
-                                }
-                                synth_router::search_budget::Attempt::EngineUnavailable => {}
+    if let Some((best_cost, _, order)) = best.clone()
+        && !order.is_empty()
+    {
+        let hints = synth_place::hard_net_proximity_hints(board, &order);
+        if !hints.is_empty() {
+            if let Some(limit) = budget.candidate_limit(requested) {
+                hard_net_pass = "run";
+                let hinted = synth_place::with_hard_net_hints(board, &hints);
+                if let Ok(grouped) = synth_kicad::placement_candidates(&hinted, sidecars)
+                    && let Some(candidate) = grouped.into_iter().next()
+                {
+                    let began = std::time::Instant::now();
+                    let evaluated = evaluate_candidate_mcp(
+                        board,
+                        sidecars,
+                        args,
+                        engine,
+                        &candidate,
+                        usize::MAX,
+                        budget.run_clock(limit),
+                    )?;
+                    budget.note_run(began.elapsed());
+                    match evaluated {
+                        synth_router::search_budget::Attempt::Routed(evaluated) => {
+                            if evaluated.cost < best_cost {
+                                best = Some((evaluated.cost, candidate, order));
                             }
                         }
+                        synth_router::search_budget::Attempt::NoTime => {
+                            hard_net_pass = "skipped_for_budget";
+                            truncated = true;
+                        }
+                        synth_router::search_budget::Attempt::EngineUnavailable => {}
                     }
-                } else {
-                    hard_net_pass = "skipped_for_budget";
-                    truncated = true;
                 }
+            } else {
+                hard_net_pass = "skipped_for_budget";
+                truncated = true;
             }
         }
     }
@@ -2984,11 +3116,13 @@ fn evaluate_candidate_mcp(
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     // Each candidate is scored by routing it, so it has to be routed the way
     // the board asked: without the escape intent a declared `escape { off }`
     // or a chosen method would change the winner.
     request.use_board_escapes(board);
     request.use_board_layer_pins(board);
+    request.use_board_diff_pairs(board);
     // Granting only. Reporting belongs to the run the caller keeps: this is
     // reached from `select_placement_by_route` inside `execute_export`, which
     // grants again for the chosen placement and puts any unmet requirement in
@@ -3224,8 +3358,10 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
             .unwrap_or_else(|| "jlc-standard".to_string()),
         board.layers,
     );
+    request.use_board_layers(board.layers);
     request.use_board_escapes(&board);
     request.use_board_layer_pins(&board);
+    request.use_board_diff_pairs(&board);
     let process_warnings = grant_processes(&mut request, &board);
     request.input_hash = sha256_of(&res.pcb_path);
     request.preserve_baseline().map_err(|f| f.to_string())?;
@@ -3382,7 +3518,7 @@ fn next_compact_permille(
     match bad {
         None => (good - step >= floor).then_some(good - step),
         Some(bad) if good - bad <= resolution => None,
-        Some(bad) => Some((good + bad) / 2),
+        Some(bad) => Some(i64::midpoint(good, bad)),
     }
 }
 
@@ -3423,7 +3559,7 @@ fn compact_direction(toward: Option<&str>) -> Result<(f64, f64), String> {
             _ => {
                 return Err(format!(
                     "toward must be center, a side (left, right, top, bottom) or a corner such as bottom_right, not '{toward}'"
-                ))
+                ));
             }
         }
     }
@@ -4028,11 +4164,10 @@ fn execute_place_with_hints(
 
     match placement_result {
         Ok((mut placement, report)) => {
-            if let Some(sc_path) = sidecar_opt.as_deref() {
-                if let Some(sidecar) = synth_layout::sidecar::SidecarLayout::load_from_file(sc_path)
-                {
-                    synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
-                }
+            if let Some(sc_path) = sidecar_opt.as_deref()
+                && let Some(sidecar) = synth_layout::sidecar::SidecarLayout::load_from_file(sc_path)
+            {
+                synth_place::apply_sidecar_overrides(&board, &mut placement, &sidecar);
             }
             let placement_description =
                 synth_place::describe_placement_external(&board, &placement);
@@ -4190,32 +4325,30 @@ fn execute_resolve_footprints(
         let cands = fr::candidates(&index, wanted, &pins, 3, 0.0);
         let best = fr::resolve_one(&index, wanted, &pins);
         let mut applied = None::<String>;
-        if apply {
-            if let (Some(best), Some(target)) = (best.as_ref(), resolve_user_registry_opt(args)) {
-                if let Some(part_def) = registry.lookup(part.id.as_str()) {
-                    let mut fixed = part_def.clone();
-                    fixed.kicad_footprint = Some(best.lib_id.clone());
-                    fixed.provenance = Some(synth_registry::Provenance {
-                        source: synth_registry::ProvenanceSource::Generated,
-                        generator: Some("synth-part-resolve-footprint 0.1".into()),
-                        ..Default::default()
-                    });
-                    let text = synth_registry::part_to_toml(
-                        &fixed,
-                        &[
-                            "Auto-repaired by `synth_resolve_footprints`.",
-                            "This file shadows the Tier-1 registry entry of the same id.",
-                            "`provenance.reviewed_by` is empty, so the part still reports",
-                            "W-SYNTH-PART-UNVERIFIED: set it once a human has checked the package.",
-                        ],
-                    );
-                    let _ = std::fs::create_dir_all(&target);
-                    let path = target.join(format!("{}.synth.toml", part.id));
-                    std::fs::write(&path, text)
-                        .map_err(|e| format!("writing {}: {e}", path.display()))?;
-                    applied = Some(path.display().to_string());
-                }
-            }
+        if apply
+            && let (Some(best), Some(target)) = (best.as_ref(), resolve_user_registry_opt(args))
+            && let Some(part_def) = registry.lookup(part.id.as_str())
+        {
+            let mut fixed = part_def.clone();
+            fixed.kicad_footprint = Some(best.lib_id.clone());
+            fixed.provenance = Some(synth_registry::Provenance {
+                source: synth_registry::ProvenanceSource::Generated,
+                generator: Some("synth-part-resolve-footprint 0.1".into()),
+                ..Default::default()
+            });
+            let text = synth_registry::part_to_toml(
+                &fixed,
+                &[
+                    "Auto-repaired by `synth_resolve_footprints`.",
+                    "This file shadows the Tier-1 registry entry of the same id.",
+                    "`provenance.reviewed_by` is empty, so the part still reports",
+                    "W-SYNTH-PART-UNVERIFIED: set it once a human has checked the package.",
+                ],
+            );
+            let _ = std::fs::create_dir_all(&target);
+            let path = target.join(format!("{}.synth.toml", part.id));
+            std::fs::write(&path, text).map_err(|e| format!("writing {}: {e}", path.display()))?;
+            applied = Some(path.display().to_string());
         }
         gaps.push(serde_json::json!({
             "part_id": part.id,
@@ -5128,11 +5261,17 @@ fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result
     // author who names a stock footprint has no reason to measure it.
     ensure_footprint_dimensions(&mut part)?;
 
+    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
+    // Reuse the registry loader's post-parse checks so the tool cannot write
+    // a part that every later registry load rejects.
+    let filename = format!("{}.synth.toml", part.id.as_str());
+    synth_registry::load_from_strs(&[(&filename, &serialized)])
+        .map_err(|e| format!("invalid part TOML: {e}"))?;
+
     let user_dir = resolve_user_registry(args)?;
     std::fs::create_dir_all(&user_dir).map_err(|e| format!("cannot create user registry: {e}"))?;
 
-    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
-    let path = user_dir.join(format!("{}.synth.toml", part.id.as_str()));
+    let path = user_dir.join(filename);
     std::fs::write(&path, serialized).map_err(|e| e.to_string())?;
 
     Ok(serde_json::json!({
@@ -5197,12 +5336,11 @@ fn execute_search_registry_web(
     if let Ok(m) = search_registry_dir(&tier1, query, "") {
         local.extend(m);
     }
-    if let Some(tier2) = synth_registry::user_registry_dir() {
-        if tier2 != tier1 {
-            if let Ok(m) = search_registry_dir(&tier2, query, "") {
-                local.extend(m);
-            }
-        }
+    if let Some(tier2) = synth_registry::user_registry_dir()
+        && tier2 != tier1
+        && let Ok(m) = search_registry_dir(&tier2, query, "")
+    {
+        local.extend(m);
     }
     local.dedup_by(|a, b| a["id"] == b["id"]);
     let mut seen = std::collections::HashSet::new();
@@ -5271,6 +5409,41 @@ fn infer_kind(lib_id: &str) -> String {
 }
 
 #[cfg(test)]
+mod tool_path_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn a_calls_tool_paths_stay_on_that_calls_request() {
+        let engine = synth_router::RouterEngine::Freerouting;
+        let first = routing_request(
+            &json!({ "freerouting_jar": "/call-one/freerouting.jar", "kicad_routing_tools_repo": "/call-one/krt" }),
+            engine,
+        );
+        assert_eq!(
+            first.tools.freerouting_jar,
+            Some(PathBuf::from("/call-one/freerouting.jar"))
+        );
+        assert_eq!(first.tools.krt_repo, Some(PathBuf::from("/call-one/krt")));
+
+        // A later call that names nothing sees the environment, not the
+        // previous call's paths.
+        let second = routing_request(&json!({}), engine);
+        assert_eq!(second.tools, synth_router::ToolPaths::from_env());
+    }
+
+    #[test]
+    fn an_empty_tool_argument_keeps_the_environment() {
+        let mut tools = synth_router::ToolPaths {
+            freerouting_java: Some(PathBuf::from("/env/java")),
+            ..synth_router::ToolPaths::default()
+        };
+        apply_tool_args(&mut tools, &json!({ "freerouting_java": "" }));
+        assert_eq!(tools.freerouting_java, Some(PathBuf::from("/env/java")));
+    }
+}
+
+#[cfg(test)]
 mod import_tool_tests {
     use super::*;
     use serde_json::json;
@@ -5313,11 +5486,13 @@ mod import_tool_tests {
         let result = call_tool("synth_erc_report", &json!({ "source": source }), None)
             .expect("ERC should return a structured failure");
         assert_eq!(result["erc_clean"], false);
-        assert!(result["violations"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|d| d["code"] == "E-SYNTH-COMP-001"));
+        assert!(
+            result["violations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|d| d["code"] == "E-SYNTH-COMP-001")
+        );
     }
 
     #[test]
@@ -5529,6 +5704,100 @@ electrical_type = "input"
         );
     }
 
+    /// A drive block without `datasheet_ref` parses but would break every
+    /// subsequent registry load. The tool must run the loader checks before
+    /// it creates the user registry or writes anything.
+    #[test]
+    fn author_part_rejects_an_invalid_drive_block_before_writing() {
+        let dir = scratch("author_bad_drive");
+        let user = dir.join("user_registry");
+        let toml_src = r#"
+id = "test_bad_drive_ic"
+kind = "ic"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 2.0
+
+[[pins]]
+name = "gpio5"
+number = "1"
+electrical_type = "bidirectional"
+[pins.drive]
+high_v = 3.3
+low_v = 0.0
+max_source_ma = 4.0
+max_sink_ma = 4.0
+"#;
+        let res = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": user.to_str().unwrap() }),
+            None,
+        );
+
+        assert!(
+            res.is_err(),
+            "a drive block without datasheet_ref must fail"
+        );
+        assert!(
+            res.unwrap_err().contains("datasheet_ref"),
+            "the loader error should name datasheet_ref"
+        );
+        assert!(
+            !user.exists(),
+            "the user registry must not be created before validation"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The loader checks also accept a valid drive block, and the written
+    /// part reloads through the same path `synth registry list` uses.
+    #[test]
+    fn author_part_writes_valid_drive_data_that_reloads() {
+        let dir = scratch("author_drive");
+        let toml_src = r#"
+id = "test_drive_ic"
+kind = "ic"
+
+[footprint_dimensions]
+width_mm = 2.0
+height_mm = 2.0
+
+[[pins]]
+name = "gpio5"
+number = "1"
+electrical_type = "bidirectional"
+[pins.drive]
+high_v = 3.3
+low_v = 0.0
+max_source_ma = 4.0
+max_sink_ma = 4.0
+output_resistance_ohm = 25.0
+datasheet_ref = "Table 5-1"
+"#;
+        let res = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": dir.to_str().unwrap() }),
+            None,
+        )
+        .expect("a valid drive block should be authored");
+
+        assert_eq!(res["status"], "authored");
+        let registry = synth_registry::load_dir(&dir).expect("the written part reloads");
+        let drive = registry
+            .lookup("test_drive_ic")
+            .expect("test_drive_ic")
+            .find_pin("gpio5")
+            .expect("gpio5")
+            .drive
+            .as_ref()
+            .expect("drive block");
+        assert_eq!(drive.high_v, 3.3);
+        assert_eq!(drive.max_source_ma, 4.0);
+        assert_eq!(drive.datasheet_ref.as_deref(), Some("Table 5-1"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn author_part_rejects_missing_id() {
         let dir = scratch("author_bad");
@@ -5569,8 +5838,9 @@ electrical_type = "input"
             );
             return;
         }
+        // The importer resolves the stock symbols exactly as `symbol_dir`
+        // was found above (`KICAD_SYMBOL_DIR`, then the distro path).
         let dir = scratch("import_kicad");
-        let () = std::env::set_var("KICAD_SYMBOL_DIR", &symbol_dir);
         let res = call_tool(
             "synth_import_part",
             &json!({ "source": "kicad", "lib_id": "Device:R", "footprint": footprint, "user_registry": dir.to_str().unwrap() }),
@@ -5649,9 +5919,10 @@ electrical_type = "input"
         assert_eq!(res["source"], "kicad-zip");
         assert_eq!(res["pin_count"].as_u64(), Some(2));
         assert!(dir.join("testpart.synth.toml").exists());
-        assert!(dir
-            .join("footprints/testpart.pretty/testpart.kicad_mod")
-            .exists());
+        assert!(
+            dir.join("footprints/testpart.pretty/testpart.kicad_mod")
+                .exists()
+        );
         // The footprint has pads and no courtyard, so the size is the pads' extent
         // (two 0.6 mm pads 2 mm apart). The part declares it, and the user
         // registry loads: without it `load_dir` failed for every part in it.
@@ -5934,6 +6205,28 @@ mod language_reference_tests {
     }
 
     #[test]
+    fn language_reference_documents_an_outline_that_parses() {
+        let result = execute_language_reference(&serde_json::json!({}));
+        let entry = result["grammar"]["statements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("outline")
+            })
+            .expect("outline statement documented");
+        let source = format!(
+            "board \"b\" {{\n layers 2\n {}\n}}",
+            entry["example"].as_str().unwrap()
+        );
+        let parse = synth_parser::parse(&source, "outline_example.synth".to_string());
+        assert!(parse.diagnostics.is_empty(), "{:?}", parse.diagnostics);
+    }
+
+    #[test]
     fn language_reference_documents_a_stackup_that_parses() {
         let result = execute_language_reference(&serde_json::json!({}));
         let entry = result["grammar"]["statements"]
@@ -5956,20 +6249,58 @@ mod language_reference_tests {
     }
 
     #[test]
+    fn language_reference_documents_net_classes_on_connect() {
+        let result = execute_language_reference(&serde_json::json!({}));
+        let statements = result["grammar"]["statements"].as_array().unwrap();
+        let connect = statements
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("connect <REFDES>.<pin> -> <REFDES>.<pin> [as")
+            })
+            .expect("the connect form names `as` and `class`");
+        assert!(
+            connect["form"]
+                .as_str()
+                .unwrap()
+                .contains("class \"<netclass>\"")
+        );
+        let netclass = statements
+            .iter()
+            .find(|s| {
+                s["form"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .starts_with("netclass")
+            })
+            .expect("the netclass form");
+        let form = netclass["form"].as_str().unwrap();
+        for attr in ["max_length", "max_skew", "impedance", "plane", "edge_rate"] {
+            assert!(form.contains(attr), "{attr} missing from {form}");
+        }
+    }
+
+    #[test]
     fn language_reference_returns_grammar_and_examples() {
         let result = execute_language_reference(&serde_json::json!({}));
         assert!(result["grammar"]["statements"].is_array());
-        assert!(!result["grammar"]["statements"]
-            .as_array()
-            .unwrap()
-            .is_empty());
+        assert!(
+            !result["grammar"]["statements"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
         let examples = result["examples"].as_array().expect("examples array");
         assert_eq!(examples.len(), 3);
         for example in examples {
-            assert!(example["source"]
-                .as_str()
-                .unwrap_or_default()
-                .contains("board \""));
+            assert!(
+                example["source"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .contains("board \"")
+            );
         }
     }
 
@@ -6088,7 +6419,7 @@ mod tool_registration_tests {
 
 #[cfg(test)]
 mod tests {
-    use super::{next_compact_permille, CompactAttempt};
+    use super::{CompactAttempt, next_compact_permille};
 
     fn attempt(permille: i64, passed: bool) -> CompactAttempt {
         CompactAttempt {

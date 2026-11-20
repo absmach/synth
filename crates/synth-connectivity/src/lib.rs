@@ -151,10 +151,12 @@ mod tests {
         };
 
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test".into(),
             layers: 2,
             manufacturer: None,
@@ -165,6 +167,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],

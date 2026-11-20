@@ -288,10 +288,12 @@ mod tests {
 
     fn empty_board() -> Board {
         Board {
+            outline: None,
             schematic_overflow: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test".to_string(),
             layers: 2,
             manufacturer: None,
@@ -302,6 +304,7 @@ mod tests {
             diff_pairs: Vec::new(),
             notes: vec![],
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],

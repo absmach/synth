@@ -14,6 +14,8 @@ courtyard_margin_mm = 0.25
 [operating_conditions]
 max_voltage_v = 40.0
 max_current_ma = 1000.0
+forward_voltage_v = 0.45
+forward_current_ma = 100.0
 
 [provenance]
 datasheet_url = "https://www.diodes.com/datasheet/download/1N5819HW.pdf"

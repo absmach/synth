@@ -97,14 +97,12 @@ pub fn user_footprint_libs() -> Vec<(String, PathBuf)> {
     if let Ok(entries) = std::fs::read_dir(&dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() {
-                if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                    if ext.eq_ignore_ascii_case("pretty") {
-                        if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
-                            out.push((name.to_string(), path));
-                        }
-                    }
-                }
+            if path.is_dir()
+                && let Some(ext) = path.extension().and_then(|e| e.to_str())
+                && ext.eq_ignore_ascii_case("pretty")
+                && let Some(name) = path.file_stem().and_then(|s| s.to_str())
+            {
+                out.push((name.to_string(), path));
             }
         }
     }

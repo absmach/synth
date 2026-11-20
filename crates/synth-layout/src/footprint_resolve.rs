@@ -316,12 +316,12 @@ fn pin_count(name: &str) -> Option<String> {
             // Split form. Tokenizing on `-`/`_` separates the class from its
             // count — `QFN-73` becomes `["qfn", "73"]` — so the count is the
             // *next* token, not the tail of this one.
-            if token == class {
-                if let Some(next) = tokens.get(i + 1) {
-                    if !next.is_empty() && next.chars().all(|c| c.is_ascii_digit()) {
-                        return Some(next.clone());
-                    }
-                }
+            if token == class
+                && let Some(next) = tokens.get(i + 1)
+                && !next.is_empty()
+                && next.chars().all(|c| c.is_ascii_digit())
+            {
+                return Some(next.clone());
             }
         }
     }
@@ -481,10 +481,10 @@ pub fn resolve_one(
     if top.score < AUTO_APPLY_MIN_SCORE {
         return None;
     }
-    if let Some(second) = ranked.next() {
-        if top.score - second.score < AUTO_APPLY_MIN_MARGIN {
-            return None;
-        }
+    if let Some(second) = ranked.next()
+        && top.score - second.score < AUTO_APPLY_MIN_MARGIN
+    {
+        return None;
     }
     Some(top)
 }

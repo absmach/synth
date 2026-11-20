@@ -30,7 +30,8 @@
 //! notes       = "notes" string "{" [string*] "}" ;
 //! diff_pair   = "diff_pair" net_ref net_ref "{" impedance? "}" ;
 //! net_ref     = ident | string ;
-//! keepout     = "keepout" ident "{" radius? "}" ;
+//! keepout     = "keepout" ident "{" attr* "}" ;
+//! keepout_attr = "radius" value | "anchor" string | "allow" string ("," string)* ;
 //! ```
 //!
 //! Abstract components, modules, variants, zones, and netclasses are
@@ -43,8 +44,8 @@ pub mod parser;
 pub mod token;
 
 pub use json::parse_json;
-pub use parser::{parse as parse_tokens, ParseResult};
-pub use token::{lex, LexError, Token, TokenKind};
+pub use parser::{ParseResult, parse as parse_tokens};
+pub use token::{LexError, Token, TokenKind, lex};
 
 /// One-shot convenience: lex and parse a source string.
 pub fn parse(source: &str, file: impl Into<String>) -> ParseResult {

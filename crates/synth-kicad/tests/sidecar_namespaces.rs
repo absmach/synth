@@ -14,8 +14,8 @@
 use std::path::{Path, PathBuf};
 
 use synth_layout::sidecar::{
-    OverridePriority, OverrideSource, SidecarKind, SidecarLayout, SidecarPlacement,
-    SIDECAR_SCHEMA_VERSION,
+    OverridePriority, OverrideSource, SIDECAR_SCHEMA_VERSION, SidecarKind, SidecarLayout,
+    SidecarPlacement,
 };
 
 fn workspace_root() -> PathBuf {

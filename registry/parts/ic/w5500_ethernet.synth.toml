@@ -276,3 +276,7 @@ net = "vdd"
 value = "100nf"
 count = 2
 
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

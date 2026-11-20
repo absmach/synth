@@ -72,10 +72,12 @@ fn create_test_board() -> Board {
     };
 
     Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "cem_test_board".to_string(),
         layers: 2,
         manufacturer: None,
@@ -86,6 +88,7 @@ fn create_test_board() -> Board {
         diff_pairs: vec![],
         notes: vec![],
         keepouts: vec![],
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

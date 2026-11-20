@@ -1,0 +1,12 @@
+* Synth simulation: diode
+V1 n_VCC 0 DC 5e0
+RR1 n_VCC n_MID 4.3e2
+DD1 n_MID 0 DD1
+.model DD1 D(IS=1.32799904e-8 N=2)
+.control
+op
+let m0 = v(n_MID)
+echo SYNTH_MEAS va $&m0
+echo SYNTH_DONE
+.endc
+.end

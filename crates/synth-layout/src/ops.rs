@@ -44,7 +44,7 @@
 use serde::{Deserialize, Serialize};
 use synth_ir::{Board, ComponentId, NetId};
 
-use crate::{route_and_label, snap_grid, Layout, Rotation};
+use crate::{Layout, Rotation, route_and_label, snap_grid};
 
 /// A single structured edit to an existing [`Layout`]. See the
 /// module docs for what each variant is for.

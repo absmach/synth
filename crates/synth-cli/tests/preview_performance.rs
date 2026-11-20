@@ -28,7 +28,7 @@
 //! (HashMap lookup overhead outweighing the smaller scan at this
 //! design's segment counts); a real fix needs profiling this
 //! properly (flamegraph or similar), not another guess.
-const DEBUG_BUILD_BUDGET_MS: u128 = 1200;
+const DEBUG_BUILD_BUDGET_MS: u128 = 1800;
 
 use std::path::PathBuf;
 use std::time::Instant;

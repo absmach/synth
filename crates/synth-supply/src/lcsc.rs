@@ -4,8 +4,8 @@
 
 use crate::distributor::Distributor;
 use crate::types::{
-    normalize_part_number, AssemblyEligibility, LifecycleStatus, PriceTier, PurchaseConstraints,
-    StockStatus, SupplyError, SupplyStatus,
+    AssemblyEligibility, LifecycleStatus, PriceTier, PurchaseConstraints, StockStatus, SupplyError,
+    SupplyStatus, normalize_part_number,
 };
 use async_trait::async_trait;
 use chrono::Utc;
@@ -168,7 +168,7 @@ impl Distributor for LcscDistributor {
                 return Err(SupplyError::NoExactMatch {
                     distributor: "LCSC".to_string(),
                     part_number: pn,
-                })
+                });
             }
         };
 
@@ -186,13 +186,13 @@ impl Distributor for LcscDistributor {
                     distributor: "LCSC".to_string(),
                     part_number: pn,
                     candidate_count: products.len(),
-                })
+                });
             }
             None => {
                 return Err(SupplyError::NoExactMatch {
                     distributor: "LCSC".to_string(),
                     part_number: pn,
-                })
+                });
             }
         };
 
@@ -206,7 +206,7 @@ impl Distributor for LcscDistributor {
         let price_tiers = product
             .product_price_list
             .as_ref()
-            .map(|prices| {
+            .map_or_default(|prices| {
                 prices
                     .iter()
                     .filter_map(|price| {
@@ -219,8 +219,7 @@ impl Distributor for LcscDistributor {
                         })
                     })
                     .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+            });
         let unit_price_usd = product
             .product_price_list
             .as_ref()

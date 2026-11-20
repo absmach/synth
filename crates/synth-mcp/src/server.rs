@@ -3,12 +3,17 @@
 //! MCP Server JSON-RPC 2.0 stdio & SSE transport implementation.
 
 use axum::{
-    response::IntoResponse,
-    routing::{get, post},
     Json, Router,
+    http::HeaderMap,
+    response::{
+        IntoResponse, Response,
+        sse::{Event, Sse},
+    },
+    routing::{get, post},
 };
 use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::{info, warn};
 
 use std::collections::HashMap;
@@ -97,7 +102,7 @@ pub fn handle_jsonrpc_request(req: Value, default_registry: Option<&Path>) -> Va
                 },
                 "serverInfo": {
                     "name": "synth-mcp",
-                    "version": "0.1.2"
+                    "version": "0.1.4"
                 },
                 "instructions": SERVER_INSTRUCTIONS
             }
@@ -260,6 +265,16 @@ fn progress_token(req: &Value) -> Option<Value> {
 /// Calls in flight, by request id, each with the flag `notifications/cancelled` sets.
 type InFlight = Arc<Mutex<HashMap<String, synth_router::process::CancelToken>>>;
 
+/// Where a running call's progress notifications go. stdio writes the line to
+/// stdout; HTTP sends it into that call's response stream.
+type Progress = Arc<dyn Fn(&str) + Send + Sync + 'static>;
+
+/// How a finished call's response is delivered. Each call gets its own, so a
+/// reply belongs to the request that asked for it: stdio writes the response
+/// line from the worker, HTTP sends the JSON text into that call's response
+/// stream or back to its awaiting handler.
+type Reply = Box<dyn FnOnce(Value) + Send + 'static>;
+
 /// A `tools/call` waiting for, or holding, the tool worker.
 struct Job {
     req: Value,
@@ -268,16 +283,165 @@ struct Job {
     /// Alive from the moment the call arrives, so a call queued behind a long
     /// export still tells its own client it is waiting.
     heartbeat: Option<Heartbeat>,
+    reply: Reply,
+}
+
+/// Key an in-flight call by connection and JSON-RPC id, so ids from two
+/// HTTP clients do not collide.
+fn in_flight_key(connection: &str, request_id: &str) -> String {
+    format!("{connection}\u{1f}{request_id}")
+}
+
+/// The one tool worker both transports share, plus the in-flight table.
+///
+/// Tool calls run one at a time, in arrival order, on a single worker thread:
+/// they write the same source files, sidecars and output directories and read
+/// process-wide settings, so two at once could overwrite each other. The
+/// handler that enqueued a call, and its transport's event loop, stay free,
+/// so `notifications/cancelled` and `ping` are seen while an export runs. A
+/// cancelled call sends neither further progress nor a response, and one
+/// cancelled before it starts never runs.
+struct Dispatcher {
+    queue: Option<std::sync::mpsc::Sender<Job>>,
+    in_flight: InFlight,
+    handle: Arc<dyn Fn(Value) -> Value + Send + Sync + 'static>,
+    interval: Duration,
+    /// The shared stdio writer. HTTP calls never use it: their replies go to
+    /// their own response stream.
+    write: Progress,
+    worker: Option<JoinHandle<()>>,
+}
+
+impl Dispatcher {
+    fn new(
+        handle: Arc<dyn Fn(Value) -> Value + Send + Sync + 'static>,
+        interval: Duration,
+        write: Progress,
+    ) -> Self {
+        let in_flight: InFlight = Arc::new(Mutex::new(HashMap::new()));
+        let (queue, jobs) = std::sync::mpsc::channel::<Job>();
+        let (worker_handle, worker_in_flight) = (Arc::clone(&handle), Arc::clone(&in_flight));
+        let worker = std::thread::spawn(move || {
+            for job in jobs {
+                // The call's token is the one every external router and KiCad run
+                // inside it watches, so a cancellation ends them, not only the reply.
+                synth_router::process::set_ambient_cancel(Some(job.cancelled.clone()));
+                let resp_val = if job.cancelled.is_cancelled() {
+                    Value::Null
+                } else {
+                    worker_handle(job.req)
+                };
+                synth_router::process::set_ambient_cancel(None);
+                drop(job.heartbeat);
+                worker_in_flight
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .remove(&job.key);
+                (job.reply)(resp_val);
+            }
+        });
+        Self {
+            queue: Some(queue),
+            in_flight,
+            handle,
+            interval,
+            write,
+            worker: Some(worker),
+        }
+    }
+
+    /// Runs a request on the calling task: the fast methods (`initialize`,
+    /// `tools/list`, `ping`) that must answer even while an export runs.
+    fn dispatch(&self, req: Value) -> Value {
+        (self.handle)(req)
+    }
+
+    /// Cancels the call with this connection and JSON-RPC request id.
+    fn cancel(&self, connection: &str, request_id: &str) {
+        let key = in_flight_key(connection, request_id);
+        let flag = self
+            .in_flight
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&key)
+            .cloned();
+        if let Some(flag) = flag {
+            flag.cancel();
+        }
+    }
+
+    /// Enqueues a `tools/call`: registers its id for `notifications/cancelled`,
+    /// starts its progress heartbeat against `progress` (a transport with no
+    /// place for notifications passes none), and hands it to the worker with
+    /// `reply` for the response.
+    fn submit(
+        &self,
+        req: Value,
+        connection: &str,
+        cancelled: synth_router::process::CancelToken,
+        progress: Option<Progress>,
+        reply: Reply,
+    ) {
+        let key = in_flight_key(connection, &req["id"].to_string());
+        self.in_flight
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(key.clone(), cancelled.clone());
+        let heartbeat_cancelled = cancelled.clone();
+        let heartbeat = progress_token(&req).zip(progress).map(|(token, progress)| {
+            Heartbeat::start(token, self.interval, move |message| {
+                if !heartbeat_cancelled.is_cancelled() {
+                    progress(&message);
+                }
+            })
+        });
+        let _ = self
+            .queue
+            .as_ref()
+            .expect("worker outlives its queue")
+            .send(Job {
+                req,
+                key,
+                cancelled,
+                heartbeat,
+                reply,
+            });
+    }
+
+    /// A stdio call: its progress and its response line go to the shared writer.
+    fn submit_stdio(&self, req: Value) {
+        let cancelled = synth_router::process::CancelToken::new();
+        let (write, flag) = (Arc::clone(&self.write), cancelled.clone());
+        let reply: Reply = Box::new(move |resp_val| {
+            if !flag.is_cancelled() && !resp_val.is_null() {
+                write(&serde_json::to_string(&resp_val).unwrap_or_default());
+            }
+        });
+        self.submit(
+            req,
+            "stdio",
+            cancelled,
+            Some(Arc::clone(&self.write)),
+            reply,
+        );
+    }
+}
+
+impl Drop for Dispatcher {
+    fn drop(&mut self) {
+        // Close the queue so the worker drains the jobs already sent, answers
+        // each one, and exits.
+        self.queue = None;
+        if let Some(worker) = self.worker.take() {
+            let _ = worker.join();
+        }
+    }
 }
 
 /// Answers a stream of request lines.
 ///
-/// Tool calls run one at a time, in arrival order, on a single worker thread:
-/// they write the same source files, sidecars and output directories and read
-/// process-wide settings, so two at once could overwrite each other. Everything
-/// else, and the read loop itself, stays free, so `notifications/cancelled` and
-/// `ping` are seen while an export runs. A cancelled call sends neither further
-/// progress nor a response, and one cancelled before it starts never runs.
+/// The stdio transport delegates to the shared [`Dispatcher`]: tool calls
+/// queue onto its worker, everything else answers on the read loop.
 async fn serve<R, W, H>(
     mut reader: tokio::io::Lines<R>,
     handle: Arc<H>,
@@ -288,36 +452,12 @@ async fn serve<R, W, H>(
     W: Fn(&str) + Send + Sync + 'static,
     H: Fn(Value) -> Value + Send + Sync + 'static,
 {
-    let in_flight: InFlight = Arc::new(Mutex::new(HashMap::new()));
-    let (queue, jobs) = std::sync::mpsc::channel::<Job>();
-    let worker = {
-        let (handle, write, in_flight) = (
-            Arc::clone(&handle),
-            Arc::clone(&write),
-            Arc::clone(&in_flight),
-        );
-        std::thread::spawn(move || {
-            for job in jobs {
-                // The call's token is the one every external router and KiCad run
-                // inside it watches, so a cancellation ends them, not only the reply.
-                synth_router::process::set_ambient_cancel(Some(job.cancelled.clone()));
-                let resp_val = if job.cancelled.is_cancelled() {
-                    Value::Null
-                } else {
-                    handle(job.req)
-                };
-                synth_router::process::set_ambient_cancel(None);
-                drop(job.heartbeat);
-                in_flight
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .remove(&job.key);
-                if !job.cancelled.is_cancelled() && !resp_val.is_null() {
-                    write(&serde_json::to_string(&resp_val).unwrap_or_default());
-                }
-            }
-        })
-    };
+    let write: Progress = write;
+    let dispatcher = Dispatcher::new(
+        Arc::new(move |req: Value| handle(req)),
+        interval,
+        Arc::clone(&write),
+    );
 
     while let Ok(Some(line)) = reader.next_line().await {
         let trimmed = line.trim();
@@ -340,19 +480,12 @@ async fn serve<R, W, H>(
         };
 
         if req_val["method"] == "notifications/cancelled" {
-            let target = req_val["params"]["requestId"].to_string();
-            if let Some(flag) = in_flight
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .get(&target)
-            {
-                flag.cancel();
-            }
+            dispatcher.cancel("stdio", &req_val["params"]["requestId"].to_string());
             continue;
         }
 
         if req_val["method"] != "tools/call" || req_val["id"].is_null() {
-            let resp_val = handle(req_val);
+            let resp_val = dispatcher.dispatch(req_val);
             // Null = notification, no response.
             if !resp_val.is_null() {
                 write(&serde_json::to_string(&resp_val).unwrap_or_default());
@@ -360,29 +493,10 @@ async fn serve<R, W, H>(
             continue;
         }
 
-        let key = req_val["id"].to_string();
-        let cancelled = synth_router::process::CancelToken::new();
-        in_flight
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(key.clone(), cancelled.clone());
-        let heartbeat = progress_token(&req_val).map(|token| {
-            let (write, cancelled) = (Arc::clone(&write), cancelled.clone());
-            Heartbeat::start(token, interval, move |message| {
-                if !cancelled.is_cancelled() {
-                    write(&message);
-                }
-            })
-        });
-        let _ = queue.send(Job {
-            req: req_val,
-            key,
-            cancelled,
-            heartbeat,
-        });
+        dispatcher.submit_stdio(req_val);
     }
-    drop(queue);
-    let _ = worker.join();
+    // Dropping the dispatcher closes the queue and joins the worker, so every
+    // call still queued is answered before the server exits.
 }
 
 /// Run MCP Server over standard I/O (stdin/stdout).
@@ -401,25 +515,148 @@ pub async fn run_stdio_server(default_registry: Option<PathBuf>) -> anyhow::Resu
     Ok(())
 }
 
+/// The JSON-RPC error the MCP spec prescribes for a request the client
+/// cancelled. stdio answers a cancelled call with nothing at all; HTTP has to
+/// return a response, so it answers with this instead.
+fn cancelled_error(id: &Value) -> Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": { "code": -32800, "message": "Request cancelled" }
+    })
+}
+
+/// The response text a finished HTTP call delivers: the result, or the
+/// cancellation error when the client cancelled the call (the worker answers a
+/// cancelled call with a null result, and a cancel that lands after the tool
+/// finished is one all the same).
+fn http_reply(cancelled: &synth_router::process::CancelToken, id: &Value, resp: &Value) -> String {
+    if cancelled.is_cancelled() || resp.is_null() {
+        cancelled_error(id).to_string()
+    } else {
+        resp.to_string()
+    }
+}
+
+/// The body of a streaming `tools/call` response: one SSE event per message
+/// while the call runs, ending when the reply drops the channel's last sender.
+struct CallStream(UnboundedReceiver<String>);
+
+impl futures_core::Stream for CallStream {
+    type Item = Result<Event, std::convert::Infallible>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        match self.get_mut().0.poll_recv(cx) {
+            std::task::Poll::Ready(Some(message)) => {
+                std::task::Poll::Ready(Some(Ok(Event::default().data(message))))
+            }
+            std::task::Poll::Ready(None) => std::task::Poll::Ready(None),
+            std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
+
+/// Runs a `tools/call` that carried a `progressToken` and answers with an SSE
+/// stream: progress events while the tool runs, the final JSON-RPC response as
+/// the last event. The handler returns at once, so the connection stays open
+/// while the worker runs the tool.
+fn streaming_call(dispatcher: &Dispatcher, connection: &str, req: Value) -> Response {
+    let id = req["id"].clone();
+    let (events, receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
+    let cancelled = synth_router::process::CancelToken::new();
+    let reply_cancelled = cancelled.clone();
+    let progress_events = events.clone();
+    let progress: Progress = Arc::new(move |message: &str| {
+        let _ = progress_events.send(message.to_string());
+    });
+    let reply: Reply = Box::new(move |resp_val| {
+        let _ = events.send(http_reply(&reply_cancelled, &id, &resp_val));
+    });
+    dispatcher.submit(req, connection, cancelled, Some(progress), reply);
+    Sse::new(CallStream(receiver)).into_response()
+}
+
+/// Runs a `tools/call` that carried no `progressToken` and answers with plain
+/// JSON as before — but on the shared worker, so `notifications/cancelled`
+/// reaches it. A cancelled call answers with the spec's cancellation error.
+async fn plain_call(dispatcher: &Dispatcher, connection: &str, req: Value) -> Response {
+    let id = req["id"].clone();
+    let (reply_tx, reply_rx) = tokio::sync::oneshot::channel::<Value>();
+    let cancelled = synth_router::process::CancelToken::new();
+    let (reply_id, reply_cancelled) = (id.clone(), cancelled.clone());
+    let reply: Reply = Box::new(move |resp_val| {
+        let _ = reply_tx.send(if reply_cancelled.is_cancelled() || resp_val.is_null() {
+            cancelled_error(&reply_id)
+        } else {
+            resp_val
+        });
+    });
+    dispatcher.submit(req, connection, cancelled, None, reply);
+    let resp_val = reply_rx.await.unwrap_or_else(|_| cancelled_error(&id));
+    Json(resp_val).into_response()
+}
+
 /// Handle HTTP JSON-RPC requests for SSE/HTTP endpoint.
 ///
-/// Runs each call synchronously and sends no progress or cancellation: only the
-/// stdio transport does, until the HTTP/SSE case (#359) is done.
-pub async fn handle_http_rpc(
-    axum::extract::State(default_registry): axum::extract::State<Option<PathBuf>>,
+/// Tool calls queue onto the same worker the stdio transport uses, one at a
+/// time, so this handler and the HTTP event loop stay free: a cancellation
+/// notification posted to any route is seen while an export runs. A call that
+/// carried `_meta.progressToken` answers with an SSE stream of progress
+/// notifications and, as the last event, the response; a call without one
+/// answers with plain JSON as before.
+#[allow(clippy::needless_pass_by_value)]
+async fn handle_http_rpc(
+    axum::extract::State(dispatcher): axum::extract::State<Arc<Dispatcher>>,
+    headers: HeaderMap,
     Json(payload): Json<Value>,
-) -> impl IntoResponse {
-    let resp = handle_jsonrpc_request(payload, default_registry.as_deref());
-    Json(resp)
+) -> Response {
+    // Requests on one client connection share a key, so two clients using the
+    // same JSON-RPC id cannot cancel each other. A client that needs a stable
+    // key behind a shared egress sets `x-mcp-connection-id`.
+    let connection = headers
+        .get("x-mcp-connection-id")
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("http");
+    // A cancellation notification: drop the in-flight token, send nothing back.
+    if payload["method"] == "notifications/cancelled" {
+        dispatcher.cancel(connection, &payload["params"]["requestId"].to_string());
+        return Json(Value::Null).into_response();
+    }
+
+    if payload["method"] != "tools/call" || payload["id"].is_null() {
+        return Json(dispatcher.dispatch(payload)).into_response();
+    }
+
+    if progress_token(&payload).is_some() {
+        streaming_call(&dispatcher, connection, payload)
+    } else {
+        plain_call(&dispatcher, connection, payload).await
+    }
+}
+
+/// The HTTP routes, wired to a dispatcher the way `run_sse_server` serves them.
+fn sse_router(dispatcher: Arc<Dispatcher>) -> Router {
+    Router::new()
+        .route("/rpc", post(handle_http_rpc))
+        .route("/message", post(handle_http_rpc))
+        .route("/sse", get(handle_http_rpc))
+        .with_state(dispatcher)
 }
 
 /// Run MCP Server over HTTP (SSE / REST transport).
 pub async fn run_sse_server(port: u16, default_registry: Option<PathBuf>) -> anyhow::Result<()> {
-    let app = Router::new()
-        .route("/rpc", post(handle_http_rpc))
-        .route("/message", post(handle_http_rpc))
-        .route("/sse", get(handle_http_rpc))
-        .with_state(default_registry);
+    let dispatcher = Arc::new(Dispatcher::new(
+        Arc::new(move |req| handle_jsonrpc_request(req, default_registry.as_deref())),
+        HEARTBEAT_INTERVAL,
+        // HTTP replies go to each call's own response stream; the stdio writer
+        // is the stdio transport's, not this one's.
+        Arc::new(|_: &str| {}),
+    ));
+    let app = sse_router(dispatcher);
 
     let addr = format!("127.0.0.1:{port}");
     let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -543,6 +780,46 @@ mod heartbeat_tests {
         let msgs = run(input, 80, 10);
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0]["id"], 1);
+    }
+
+    #[test]
+    fn cancelling_one_connection_does_not_stop_another_with_the_same_id() {
+        // Two HTTP clients both use JSON-RPC id 1. A cancellation keyed only
+        // by the id would let one client stop the other's call.
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        let wait = Arc::new(Mutex::new(wait));
+        let dispatcher = Dispatcher::new(
+            Arc::new(move |_req| {
+                let _ = wait.lock().unwrap().recv();
+                Value::Null
+            }),
+            Duration::from_millis(10),
+            Arc::new(|_: &str| {}),
+        );
+        let token = synth_router::process::CancelToken::new();
+        let watched = token.clone();
+        let reply: Reply = Box::new(|_| {});
+        dispatcher.submit(
+            serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call"}),
+            "client-a",
+            token,
+            None,
+            reply,
+        );
+
+        dispatcher.cancel("client-b", "1");
+        assert!(
+            !watched.is_cancelled(),
+            "another connection's id must not cancel this call"
+        );
+        dispatcher.cancel("client-a", "1");
+        assert!(
+            watched.is_cancelled(),
+            "the owning connection cancels its own call"
+        );
+
+        drop(release);
+        drop(dispatcher);
     }
 
     #[test]
@@ -695,5 +972,304 @@ mod heartbeat_tests {
             Arc::new(|_: &str| {}),
         ));
         assert_eq!(*ran.lock().unwrap(), vec![Value::from(1)]);
+    }
+}
+
+#[cfg(test)]
+mod http_tests {
+    use super::*;
+    use std::net::SocketAddr;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpStream;
+
+    /// Starts the HTTP routes on an ephemeral port, wired the way
+    /// `run_sse_server` wires them, with a custom tool handle and heartbeat
+    /// interval so tests can watch progress and cancellation.
+    async fn spawn_http(
+        handle: Arc<dyn Fn(Value) -> Value + Send + Sync + 'static>,
+        interval: Duration,
+    ) -> SocketAddr {
+        let dispatcher = Arc::new(Dispatcher::new(handle, interval, Arc::new(|_: &str| {})));
+        let app = sse_router(dispatcher);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        addr
+    }
+
+    /// Sends one HTTP request and returns the response once the server closes
+    /// the connection. HTTP/1.0 keeps the body free of chunked framing, so an
+    /// SSE body reads back as plain events.
+    async fn request(addr: SocketAddr, target: &str, body: impl Into<String>) -> (String, String) {
+        let body = body.into();
+        let mut stream = TcpStream::connect(addr).await.unwrap();
+        let message = format!(
+            "{target} HTTP/1.0\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}",
+            body.len()
+        );
+        stream.write_all(message.as_bytes()).await.unwrap();
+        let mut raw = String::new();
+        tokio::io::BufReader::new(stream)
+            .read_to_string(&mut raw)
+            .await
+            .unwrap();
+        let (headers, body) = raw.split_once("\r\n\r\n").unwrap_or((raw.as_str(), ""));
+        (headers.to_string(), body.to_string())
+    }
+
+    /// The `data:` payloads of an SSE body, in arrival order.
+    fn sse_data(body: &str) -> Vec<Value> {
+        body.split("\n\n")
+            .filter_map(|event| event.strip_prefix("data:"))
+            .map(|data| data.strip_prefix(' ').unwrap_or(data))
+            .map(|data| serde_json::from_str(data).unwrap())
+            .collect()
+    }
+
+    fn tools_call(id: u64, extra_params: &str) -> String {
+        format!(r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/call","params":{extra_params}}}"#)
+    }
+
+    #[tokio::test]
+    async fn a_call_with_a_token_streams_progress_then_its_response() {
+        let addr = spawn_http(
+            Arc::new(|req: Value| {
+                if req["method"] == "tools/call" {
+                    std::thread::sleep(Duration::from_millis(150));
+                }
+                serde_json::json!({"jsonrpc": "2.0", "id": req["id"], "result": {}})
+            }),
+            Duration::from_millis(20),
+        )
+        .await;
+        let (headers, body) = request(
+            addr,
+            "POST /rpc",
+            tools_call(1, r#"{"_meta":{"progressToken":"t"}}"#),
+        )
+        .await;
+
+        assert!(headers.contains("text/event-stream"), "got {headers}");
+        let msgs = sse_data(&body);
+        let beats: Vec<&Value> = msgs
+            .iter()
+            .filter(|m| m["method"] == "notifications/progress")
+            .collect();
+        assert!(beats.len() >= 2, "expected heartbeats, got {}", beats.len());
+        assert!(
+            beats.iter().all(|m| m["params"]["progressToken"] == "t"),
+            "{beats:?}"
+        );
+        // The response is the last event, behind the progress.
+        let last = msgs.last().unwrap();
+        assert_eq!(last["id"], 1);
+        assert!(last["result"].is_object(), "{last}");
+    }
+
+    #[tokio::test]
+    async fn a_call_without_a_token_answers_with_plain_json() {
+        let addr = spawn_http(
+            Arc::new(
+                |req: Value| serde_json::json!({"jsonrpc": "2.0", "id": req["id"], "result": {}}),
+            ),
+            HEARTBEAT_INTERVAL,
+        )
+        .await;
+        let (headers, body) = request(addr, "POST /message", tools_call(1, "{}")).await;
+        assert!(headers.contains("application/json"), "got {headers}");
+        let resp: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(resp["id"], 1);
+        assert!(resp["result"].is_object(), "{resp}");
+    }
+
+    /// Cancelling a running call ends the external process it waits on, and the
+    /// HTTP request answers with the cancellation error the MCP spec
+    /// prescribes, where stdio would send no response at all.
+    #[tokio::test]
+    async fn a_cancelled_call_stops_its_work_and_answers_the_spec_error() {
+        let addr = spawn_http(
+            Arc::new(|req: Value| {
+                if req["method"] == "tools/call" {
+                    let run = synth_router::process::run(
+                        std::path::Path::new("/bin/sh"),
+                        &["-c".to_string(), "sleep 60".to_string()],
+                        Duration::from_secs(60),
+                        4096,
+                    );
+                    let cancelled = run.is_ok_and(|r| r.cancelled);
+                    return serde_json::json!(
+                        {"jsonrpc": "2.0", "id": req["id"], "result": {"cancelled": cancelled}}
+                    );
+                }
+                serde_json::json!({"jsonrpc": "2.0", "id": req["id"], "result": {}})
+            }),
+            HEARTBEAT_INTERVAL,
+        )
+        .await;
+        let started = std::time::Instant::now();
+
+        let call = tokio::spawn(request(addr, "POST /rpc", tools_call(1, "{}")));
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let _ = request(
+            addr,
+            "POST /message",
+            r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}"#,
+        )
+        .await;
+        let (headers, body) = call.await.unwrap();
+
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "the sleep was waited out: {:?}",
+            started.elapsed()
+        );
+        assert!(headers.contains("application/json"), "got {headers}");
+        let resp: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(resp["error"]["code"], -32800);
+        assert_eq!(resp["error"]["message"], "Request cancelled");
+        assert_eq!(resp["id"], 1);
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_call_with_a_token_answers_the_spec_error_on_its_stream() {
+        let addr = spawn_http(
+            Arc::new(|req: Value| {
+                if req["method"] == "tools/call" {
+                    let _ = synth_router::process::run(
+                        std::path::Path::new("/bin/sh"),
+                        &["-c".to_string(), "sleep 60".to_string()],
+                        Duration::from_secs(60),
+                        4096,
+                    );
+                }
+                serde_json::json!({"jsonrpc": "2.0", "id": req["id"], "result": {}})
+            }),
+            HEARTBEAT_INTERVAL,
+        )
+        .await;
+        let started = std::time::Instant::now();
+
+        let call = tokio::spawn(request(
+            addr,
+            "POST /rpc",
+            tools_call(1, r#"{"_meta":{"progressToken":"t"}}"#),
+        ));
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let _ = request(
+            addr,
+            "POST /message",
+            r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":1}}"#,
+        )
+        .await;
+        let body = call.await.unwrap().1;
+
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "the sleep was waited out: {:?}",
+            started.elapsed()
+        );
+        let msgs = sse_data(&body);
+        let last = msgs.last().unwrap();
+        assert_eq!(last["error"]["code"], -32800, "{msgs:?}");
+        assert_eq!(last["id"], 1);
+    }
+
+    /// The fast methods answer while a call runs: the handler waits for the
+    /// worker instead of blocking on it, so `tools/list` is not stuck behind
+    /// an export.
+    #[tokio::test]
+    async fn a_second_request_is_answered_while_a_call_runs() {
+        let addr = spawn_http(
+            Arc::new(|req: Value| {
+                if req["method"] == "tools/call" {
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+                serde_json::json!({"jsonrpc": "2.0", "id": req["id"], "result": {}})
+            }),
+            Duration::from_secs(60),
+        )
+        .await;
+
+        let call = tokio::spawn(request(addr, "POST /rpc", tools_call(1, "{}")));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let started = std::time::Instant::now();
+        let (_, body) = request(
+            addr,
+            "POST /rpc",
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#,
+        )
+        .await;
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "tools/list waited for the call: {:?}",
+            started.elapsed()
+        );
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["id"], 2);
+        let (_, body) = call.await.unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["id"], 1);
+    }
+
+    /// A call queued behind a long export still answers, and one cancelled
+    /// while queued never runs.
+    #[tokio::test]
+    async fn a_call_cancelled_while_queued_never_runs() {
+        let ran = Arc::new(Mutex::new(Vec::<Value>::new()));
+        let seen = Arc::clone(&ran);
+        let addr = spawn_http(
+            Arc::new(move |req: Value| {
+                seen.lock().unwrap().push(req["id"].clone());
+                if req["method"] == "tools/call" {
+                    std::thread::sleep(Duration::from_millis(400));
+                }
+                serde_json::json!({"jsonrpc": "2.0", "id": req["id"], "result": {}})
+            }),
+            Duration::from_secs(60),
+        )
+        .await;
+
+        let first = tokio::spawn(request(addr, "POST /rpc", tools_call(1, "{}")));
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let second = tokio::spawn(request(addr, "POST /rpc", tools_call(2, "{}")));
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        let _ = request(
+            addr,
+            "POST /message",
+            r#"{"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":2}}"#,
+        )
+        .await;
+        let (_, body) = second.await.unwrap();
+        assert_eq!(
+            serde_json::from_str::<Value>(&body).unwrap()["error"]["code"],
+            -32800
+        );
+        first.await.unwrap();
+        assert_eq!(*ran.lock().unwrap(), vec![Value::from(1)]);
+    }
+
+    /// The production wiring: the real router, the real handler, JSON answers.
+    #[tokio::test]
+    async fn the_production_router_answers_tools_list_with_json() {
+        let dispatcher = Arc::new(Dispatcher::new(
+            Arc::new(|req| handle_jsonrpc_request(req, None)),
+            HEARTBEAT_INTERVAL,
+            Arc::new(|_: &str| {}),
+        ));
+        let app = sse_router(dispatcher);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        let (_, body) = request(
+            addr,
+            "POST /rpc",
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#,
+        )
+        .await;
+        let resp: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(resp["id"], 1);
+        assert!(!resp["result"]["tools"].as_array().unwrap().is_empty());
     }
 }

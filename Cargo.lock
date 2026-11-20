@@ -908,12 +908,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "http-range-header"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9171a2ea8a68358193d15dd5d70c1c10a2afc3e7e4c5bc92bc9f025cebd7359c"
-
-[[package]]
 name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1327,16 +1321,6 @@ name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6877bb514081ee2a7ff5ef9de3281f14a4dd4bceac4c09388074a6b5df8a139a"
-
-[[package]]
-name = "mime_guess"
-version = "2.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
-dependencies = [
- "mime",
- "unicase",
-]
 
 [[package]]
 name = "miniz_oxide"
@@ -1768,7 +1752,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower",
- "tower-http 0.6.11",
+ "tower-http",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -2250,7 +2234,7 @@ dependencies = [
 
 [[package]]
 name = "synth-ast"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2259,7 +2243,7 @@ dependencies = [
 
 [[package]]
 name = "synth-cli"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -2282,32 +2266,32 @@ dependencies = [
  "synth-place",
  "synth-registry",
  "synth-router",
+ "synth-sim",
  "synth-smt",
  "synth-supply",
  "synth-validate",
  "tokio",
+ "toml",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "synth-connectivity"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "indexmap",
  "serde",
- "smallvec",
  "synth-diagnostics",
  "synth-ir",
  "synth-layout",
  "synth-registry",
  "thiserror 2.0.21",
- "uuid",
 ]
 
 [[package]]
 name = "synth-cost"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2317,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "synth-diagnostics"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "insta",
  "schemars",
@@ -2333,7 +2317,7 @@ dependencies = [
 
 [[package]]
 name = "synth-drc"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "rayon",
  "serde",
@@ -2346,14 +2330,13 @@ dependencies = [
  "synth-pcb",
  "synth-place",
  "synth-registry",
- "synth-route",
  "thiserror 2.0.21",
  "toml",
 ]
 
 [[package]]
 name = "synth-geometry"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2363,7 +2346,7 @@ dependencies = [
 
 [[package]]
 name = "synth-ir"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "insta",
  "proptest",
@@ -2377,7 +2360,7 @@ dependencies = [
 
 [[package]]
 name = "synth-kicad"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "insta",
  "rayon",
@@ -2401,7 +2384,7 @@ dependencies = [
 
 [[package]]
 name = "synth-knowledge"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "include_dir",
  "serde",
@@ -2413,7 +2396,7 @@ dependencies = [
 
 [[package]]
 name = "synth-layout"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "insta",
  "proptest",
@@ -2423,18 +2406,20 @@ dependencies = [
  "synth-ir",
  "synth-parser",
  "synth-registry",
+ "tempfile",
  "toml",
  "zip",
 ]
 
 [[package]]
 name = "synth-mcp"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "axum",
  "base64 0.23.1",
  "chrono",
+ "futures-core",
  "insta",
  "schemars",
  "serde",
@@ -2455,20 +2440,20 @@ dependencies = [
  "synth-registry",
  "synth-render",
  "synth-router",
+ "synth-sim",
  "synth-supply",
  "synth-validate",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "toml",
- "tower-http 0.7.1",
  "tracing",
  "zip",
 ]
 
 [[package]]
 name = "synth-parser"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "insta",
  "proptest",
@@ -2482,7 +2467,7 @@ dependencies = [
 
 [[package]]
 name = "synth-pcb"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "serde",
  "serde_json",
@@ -2493,7 +2478,7 @@ dependencies = [
 
 [[package]]
 name = "synth-place"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "insta",
  "serde",
@@ -2509,19 +2494,18 @@ dependencies = [
 
 [[package]]
 name = "synth-registry"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "serde",
  "serde_json",
- "synth-diagnostics",
  "thiserror 2.0.21",
  "toml",
 ]
 
 [[package]]
 name = "synth-render"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "image",
  "resvg",
@@ -2530,28 +2514,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "synth-route"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "insta",
- "serde",
- "serde_json",
- "synth-diagnostics",
- "synth-geometry",
- "synth-ir",
- "synth-layout",
- "synth-parser",
- "synth-pcb",
- "synth-place",
- "synth-registry",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "synth-router"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
+ "nix",
  "serde",
  "serde_json",
  "sha2",
@@ -2568,15 +2534,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "synth-sim"
+version = "0.1.4"
+dependencies = [
+ "serde",
+ "synth-diagnostics",
+ "synth-ir",
+ "synth-parser",
+ "synth-registry",
+ "synth-router",
+ "synth-validate",
+ "toml",
+]
+
+[[package]]
 name = "synth-smt"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "synth-supply"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2585,7 +2565,6 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "synth-registry",
  "thiserror 2.0.21",
  "tokio",
  "urlencoding",
@@ -2594,26 +2573,22 @@ dependencies = [
 
 [[package]]
 name = "synth-validate"
-version = "0.1.2"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "chrono",
  "insta",
  "serde",
  "serde_json",
- "sha2",
- "synth-connectivity",
  "synth-diagnostics",
  "synth-drc",
  "synth-geometry",
  "synth-ir",
- "synth-kicad",
  "synth-knowledge",
  "synth-layout",
  "synth-parser",
  "synth-place",
  "synth-registry",
- "synth-route",
  "synth-supply",
  "toml",
 ]
@@ -2859,32 +2834,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tower-http"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08a05a66a4fdd61cbbe0a1d755ffe0ca6aba159dd4820936a0ff8a8278245b9c"
-dependencies = [
- "bitflags",
- "bytes",
- "futures-core",
- "futures-util",
- "http",
- "http-body",
- "http-body-util",
- "http-range-header",
- "httpdate",
- "mime",
- "mime_guess",
- "percent-encoding",
- "pin-project-lite",
- "tokio",
- "tokio-util",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
 name = "tower-layer"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2981,12 +2930,6 @@ name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
-
-[[package]]
-name = "unicase"
-version = "2.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
 
 [[package]]
 name = "unicode-bidi"

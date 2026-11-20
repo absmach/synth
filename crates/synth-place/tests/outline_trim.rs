@@ -8,7 +8,7 @@
 //! the fit left around the parts, and a connector docked to an edge owns that
 //! edge.
 
-use synth_geometry::{mm_to_nm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm};
 
 fn board_from(src: &str) -> synth_ir::Board {
     let registry_dir = std::path::Path::new("../..").join("registry").join("parts");

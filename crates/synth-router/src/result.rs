@@ -193,6 +193,9 @@ pub struct RouteArtifacts {
     /// Independently derived connectivity findings.
     #[serde(default)]
     pub connectivity_report: Option<PathBuf>,
+    /// Compact quality verdict derived from the independent validation.
+    #[serde(default)]
+    pub quality_report: Option<PathBuf>,
     /// `kicad-cli pcb drc` JSON report.
     #[serde(default)]
     pub drc_report: Option<PathBuf>,
@@ -228,6 +231,10 @@ impl RouteArtifacts {
             .connectivity_report
             .map(|p| resolve(&p))
             .filter(|p| !p.as_os_str().is_empty());
+        self.quality_report = self
+            .quality_report
+            .map(|p| resolve(&p))
+            .filter(|p| !p.as_os_str().is_empty());
         self.drc_report = self
             .drc_report
             .map(|p| resolve(&p))
@@ -251,6 +258,7 @@ impl RouteArtifacts {
             &self.session_log,
             &self.router_report,
             &self.connectivity_report,
+            &self.quality_report,
             &self.drc_report,
         ]
         .into_iter()

@@ -33,6 +33,9 @@ fn pin(name: &str, caps: &[PinCapability]) -> RegPin {
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -54,6 +57,7 @@ fn part(kind: &str, pins: Vec<RegPin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -94,10 +98,12 @@ fn net(id: u32, name: &str, endpoints: &[(u32, u32)]) -> Net {
 
 fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
     synth_ir::Board {
+        outline: None,
         schematic_overflow: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "test".to_string(),
         layers: 2,
         manufacturer: None,
@@ -108,6 +114,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

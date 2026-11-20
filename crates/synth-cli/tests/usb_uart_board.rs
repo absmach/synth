@@ -14,8 +14,8 @@ use std::process::Command;
 
 /// `mounting_hole_m2_5` is a 2.5 mm NPTH, so its edge is 1.25 mm from its centre.
 const HOLE_RADIUS_MM: f64 = 1.25;
-/// Least hole-edge-to-Edge.Cuts room a hole may keep. The tight fit leaves 1.5 mm.
-const MIN_RIM_MM: f64 = 1.5;
+/// Least hole-edge-to-Edge.Cuts room a hole may keep. The tight fit leaves 2.1 mm.
+const MIN_RIM_MM: f64 = 2.1;
 
 fn pairs_after(text: &str, key: &str) -> Vec<(f64, f64)> {
     text.match_indices(key)
@@ -32,8 +32,7 @@ fn mounting_holes_sit_one_per_corner_and_keep_a_rim_inside_edge_cuts() {
     let dir = std::env::temp_dir().join(format!("synth_usb_uart_board_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch dir");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
 
     let source = concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -45,6 +44,7 @@ fn mounting_holes_sit_one_per_corner_and_keep_a_rim_inside_edge_cuts() {
     Command::new(env!("CARGO_BIN_EXE_synth"))
         .args(["export-kicad", source, "--router", "free-routing", "--out"])
         .arg(&out)
+        .envs(router.envs())
         .output()
         .expect("run synth export-kicad");
     let text = std::fs::read_to_string(out.join("usb_uart.synth.kicad_pcb")).expect("unrouted PCB");

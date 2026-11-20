@@ -60,3 +60,8 @@ electrical_type = "power_output"
 name = "shield"
 number = "SH"
 electrical_type = "passive"
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

@@ -13,10 +13,10 @@
 
 use std::collections::HashMap;
 
-use synth_geometry::{mm_to_nm, Point, Rect, Rotation};
+use synth_geometry::{Point, Rect, Rotation, mm_to_nm};
 use synth_ir::{Board, ComponentId, NetId};
 
-use crate::{hpwl_total, overlaps_keepout, ComponentPlacement, PadOffsetLookup, PlaceError};
+use crate::{ComponentPlacement, PadOffsetLookup, PlaceError, hpwl_total, overlaps_keepout};
 
 /// Clearance gap kept around a placed macro (IC, connector, regulator) in
 /// nanometres (3.0 mm): room for the fan-out of its pads. Dropping this to
@@ -262,6 +262,76 @@ fn envelope_area_mm2(
 }
 
 /// Pack every passive in `order` along the hull built from `placements`.
+/// How far a per-pin decoupling capacitor's courtyard may sit from the pad it
+/// decouples, when no rule declares its own.
+///
+/// 3 mm — the loop length a 100 nF cap really wants — is not satisfiable
+/// beside an IC: the placer keeps a 3 mm routing channel around every macro's
+/// courtyard and an IC's power pads sit about a millimetre inside it, so the
+/// closest legal spot is already ~4 mm from the pad. 5 mm is the smallest
+/// distance that clears that channel with room to spare, and it is still far
+/// inside the 11 mm the HPWL rail centroid used to leave.
+pub(crate) const PER_PIN_DECOUPLING_DISTANCE_MM: f64 = 5.0;
+
+/// The pin pad every per-pin decoupling capacitor is bound to, and how far it
+/// may sit from that pad, by component.
+///
+/// The distance is the smallest `max_distance_mm` any `required_decoupling`
+/// rule on the anchor part declares for the bound pin, or
+/// [`PER_PIN_DECOUPLING_DISTANCE_MM`] when none does. Only placed anchors
+/// contribute: the capacitor packs after the macros, so an unplaced anchor
+/// has no pad to measure from and the cap takes the ordinary rail centroid.
+fn per_pin_decoupling_targets(
+    board: &Board,
+    placements: &[ComponentPlacement],
+    pad_offsets: &PadOffsetLookup,
+) -> HashMap<ComponentId, (Point, f64)> {
+    let by_id: HashMap<ComponentId, &ComponentPlacement> =
+        placements.iter().map(|p| (p.id, p)).collect();
+    let mut out = HashMap::new();
+    for cluster in synth_ir::recognize_clusters(board) {
+        let Some(anchor) = board.component(cluster.anchor) else {
+            continue;
+        };
+        let Some(anchor_placed) = by_id.get(&cluster.anchor) else {
+            continue;
+        };
+        for member in &cluster.members {
+            if member.role != synth_ir::MemberRole::DecouplingCap {
+                continue;
+            }
+            let pin = member.binding.anchor_pin.0;
+            let offset = pad_offsets
+                .lookup(cluster.anchor, pin as usize)
+                .unwrap_or((0, 0));
+            let pad = crate::apply_rotation(**anchor_placed, offset);
+            let pin_name = anchor
+                .part
+                .as_ref()
+                .and_then(|p| p.pins.get(pin as usize))
+                .map(|p| p.name.clone());
+            let declared = anchor.part.as_ref().and_then(|p| {
+                p.required_decoupling
+                    .iter()
+                    .filter(|rule| {
+                        pin_name
+                            .as_deref()
+                            .is_some_and(|name| rule.net.eq_ignore_ascii_case(name))
+                    })
+                    .filter_map(|rule| rule.max_distance_mm)
+                    .fold(None, |best: Option<f64>, value| {
+                        Some(best.map_or(value, |best| best.min(value)))
+                    })
+            });
+            out.insert(
+                member.component,
+                (pad, declared.unwrap_or(PER_PIN_DECOUPLING_DISTANCE_MM)),
+            );
+        }
+    }
+    out
+}
+
 fn pack_passives_in_order(
     board: &Board,
     placements: &mut Vec<ComponentPlacement>,
@@ -290,6 +360,12 @@ fn pack_passives_in_order(
     let mut net_pad_positions: HashMap<NetId, Vec<Point>> = HashMap::new();
     update_net_pad_positions(board, placements, pad_offsets, &mut net_pad_positions);
 
+    // Per-pin decoupling capacitors (absmach/synth#377): a cap the cluster
+    // recognizer bound to an IC's supply/vref pin belongs beside that pad,
+    // not at the centroid of the rail it draws from. The macro that carries
+    // the pin is already placed, so the pad position is known here.
+    let decoupling_targets = per_pin_decoupling_targets(board, placements, pad_offsets);
+
     // 3. Pack each passive component
     for &comp_id in order {
         let (w_mm, h_mm) = courtyard_lookup[&comp_id];
@@ -302,11 +378,14 @@ fn pack_passives_in_order(
 
         // Find connected target nets for this component
         let comp_nets = get_component_nets(board, comp_id);
-        let target_point = compute_target_centroid(board, &comp_nets, &net_pad_positions)
+        let target_point = decoupling_targets
+            .get(&comp_id)
+            .map(|(pad, _)| *pad)
+            .or_else(|| compute_target_centroid(board, &comp_nets, &net_pad_positions))
             .unwrap_or_else(|| {
                 Point::new(
-                    (usable.min.x_nm + usable.max.x_nm) / 2,
-                    (usable.min.y_nm + usable.max.y_nm) / 2,
+                    i64::midpoint(usable.min.x_nm, usable.max.x_nm),
+                    i64::midpoint(usable.min.y_nm, usable.max.y_nm),
                 )
             });
 
@@ -314,6 +393,11 @@ fn pack_passives_in_order(
             hull.sample_boundary_candidates(target_point, usable, unrot_half_w, unrot_half_h);
 
         let mut best_choice: Option<(Point, Rotation, i64)> = None;
+        let mut best_near_choice: Option<(Point, Rotation, i64)> = None;
+        let decoupling_limit = decoupling_targets
+            .get(&comp_id)
+            .map_or(i64::MAX, |(_, limit)| mm_to_nm(*limit));
+        let limit_nm2 = decoupling_limit.saturating_mul(decoupling_limit);
 
         for cand in &candidates {
             for &rot in &[
@@ -387,11 +471,35 @@ fn pack_passives_in_order(
                 {
                     best_choice = Some((*cand, rot, cost));
                 }
+                // A spot whose courtyard reaches within the declared distance
+                // of the pin pad is a better decoupling spot than any farther
+                // one, however well it scores on wire length: the capacitor's
+                // job is the local charge, not the average rail.
+                if let Some((pad, _)) = decoupling_targets.get(&comp_id) {
+                    let dx = (cand_rect.min.x_nm - pad.x_nm)
+                        .max(pad.x_nm - cand_rect.max.x_nm)
+                        .max(0);
+                    let dy = (cand_rect.min.y_nm - pad.y_nm)
+                        .max(pad.y_nm - cand_rect.max.y_nm)
+                        .max(0);
+                    if dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy)) <= limit_nm2
+                        && best_near_choice
+                            .as_ref()
+                            .is_none_or(|(_, _, best_cost)| cost < *best_cost)
+                    {
+                        best_near_choice = Some((*cand, rot, cost));
+                    }
+                }
             }
         }
 
-        // Apply best placement or fallback legal position search
-        if let Some((best_pt, best_rot, _)) = best_choice {
+        // Apply best placement or fallback legal position search. A per-pin
+        // decoupling capacitor prefers the closest HPWL-winning candidate
+        // within its pin's distance; only when no candidate gets that close
+        // does the global HPWL winner stand, and the review names the
+        // achieved distance.
+        let choice = best_near_choice.or(best_choice);
+        if let Some((best_pt, best_rot, _)) = choice {
             let placement = ComponentPlacement {
                 id: comp_id,
                 center: best_pt,

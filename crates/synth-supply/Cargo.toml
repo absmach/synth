@@ -22,7 +22,6 @@ chrono = { workspace = true }
 dirs-next = "2.0"
 urlencoding = "2.1"
 async-trait = "0.1"
-synth-registry = { workspace = true }
 
 [dev-dependencies]
 wiremock = "0.6"

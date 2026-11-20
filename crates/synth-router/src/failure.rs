@@ -259,6 +259,16 @@ fn default_remediation(engine: RouterEngine, reason: RouterFailureReason) -> Str
                  set KICAD_ROUTING_TOOLS_REPO"
                     .to_string()
             }
+            RouterEngine::Fastroute => {
+                "install the FastRoute binary and pass --fastroute-binary, or set \
+                 SYNTH_FASTROUTE_BIN"
+                    .to_string()
+            }
+            RouterEngine::Internal => {
+                "the internal router is compiled in; nothing needs installing, so an \
+                 unavailable internal router names a different problem"
+                    .to_string()
+            }
         },
         RouterFailureReason::JarMissing => {
             "point --freerouting-jar at a readable freerouting JAR (or SYNTH_FREEROUTING_JAR)"

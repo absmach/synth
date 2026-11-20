@@ -1,0 +1,23 @@
+
+Note: No compatibility mode selected!
+
+
+Circuit: * measure a missing vector
+
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+
+Initial Transient Solution
+--------------------------
+
+Node                                   Voltage
+----                                   -------
+in                                           1
+v1#branch                               -0.001
+
+
+No. of Data Rows : 1008
+ meas tran vmax max v(ghost) failed!
+
+SYNTH_DONE
+Note: Simulation executed from .control section 

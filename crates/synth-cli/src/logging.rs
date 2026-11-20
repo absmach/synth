@@ -15,7 +15,7 @@
 use std::io::IsTerminal;
 
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 /// Environment variable holding a `tracing` filter directive.
 pub const FILTER_ENV: &str = "SYNTH_LOG";

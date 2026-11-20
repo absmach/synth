@@ -84,10 +84,10 @@ pub fn infer_power_domains(board: &Board) -> PowerDomainMap {
             "gnd" | "vss" | "vssa" | "vee" | "agnd" | "dgnd" | "vneg"
         ) {
             is_gnd = true;
-        } else if declared_rail.is_none() {
-            if let Some(v) = parse_voltage_from_name(&name_lower) {
-                inferred_rail = Some(v);
-            }
+        } else if declared_rail.is_none()
+            && let Some(v) = parse_voltage_from_name(&name_lower)
+        {
+            inferred_rail = Some(v);
         }
 
         // Check connected pin definitions
@@ -97,10 +97,9 @@ pub fn infer_power_domains(board: &Board) -> PowerDomainMap {
                     is_gnd = true;
                 } else if pin.electrical_type == ElectricalType::PowerOutput
                     && declared_rail.is_none()
+                    && let Some(v) = pin.nominal_voltage_v()
                 {
-                    if let Some(v) = pin.nominal_voltage_v() {
-                        inferred_rail = Some(v);
-                    }
+                    inferred_rail = Some(v);
                 }
             }
         }

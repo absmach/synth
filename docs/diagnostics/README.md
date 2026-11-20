@@ -8,7 +8,7 @@ Each page MUST follow this shape:
 # E-SYNTH-XXX-NNN — short title
 
 **Severity:** error | warning | info | fatal
-**Stage:** parse | semantic | erc | place | route | drc | mfg
+**Stage:** parse | semantic | erc | place | route | drc | mfg | sim
 
 ## What this means
 One paragraph explaining the rule.

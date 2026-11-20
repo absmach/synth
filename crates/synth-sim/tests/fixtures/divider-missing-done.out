@@ -1,0 +1,12 @@
+
+Note: No compatibility mode selected!
+
+
+Circuit: * truncated control block: the done sentinel never prints
+
+Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
+
+
+No. of Data Rows : 1
+SYNTH_MEAS vmid 6
+Note: Simulation executed from .control section 

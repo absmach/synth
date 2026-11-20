@@ -23,7 +23,7 @@ use synth_ir::{Board, ComponentId, NetId, PinId};
 use synth_registry::{ElectricalType, Part, PinCapability};
 
 use crate::config::{ErcConfig, PinConflictTable};
-use crate::{endpoint_has_any_capability, ErcCategory, ErcRule};
+use crate::{ErcCategory, ErcRule, endpoint_has_any_capability};
 
 // -----------------------------------------------------------------------------
 // Shared helpers
@@ -139,10 +139,10 @@ fn pullup_on_net<'a>(
         if other == net {
             continue;
         }
-        if is_rail_net(domains, other) {
-            if let Some(v) = net_voltage(domains, other) {
-                return Some((component, v));
-            }
+        if is_rail_net(domains, other)
+            && let Some(v) = net_voltage(domains, other)
+        {
+            return Some((component, v));
         }
     }
     None
@@ -230,6 +230,37 @@ fn divider_output_v(board: &Board, domains: &Domains, net: NetId, rail_v: f64) -
 /// A protection device passes surge current rather than drawing steady
 /// current, so it is not a load (see [`PowerBudgetRule`]) and is what
 /// satisfies the connector-protection rule ([`net_has_protection`]).
+/// Whether a rail member's `max_current_ma` is a rating rather than a draw, so
+/// [`PowerBudgetRule`] must not count it as load on the rail.
+///
+/// - A protection device's figure is its clamping/surge rating: a TVS on a rail
+///   idles at microamps and only conducts during a surge. Counting it charges
+///   the regulator a full amp for a part that draws nothing, and the "fix" for
+///   a failing budget would be to drop the protection.
+/// - A connector's figure is its contact rating: a header idles at nothing, and
+///   an off-board load behind it is unknown to the compiler. Counting it charged
+///   an 800 mA LDO 3 A for an SWD header (`header_1x5`) whose VTref pin sits on
+///   the 3.3 V rail.
+/// - A zener's figure is its rating too: as a clamp on a signal or a rail it
+///   idles at leakage. Counting it charged a power hub's 3.3 V rail 150 mA for
+///   every sense-line clamp.
+fn max_current_is_a_rating(part: &synth_registry::Part) -> bool {
+    is_protection_part(part) || part.kind.eq_ignore_ascii_case("connector") || is_zener_part(part)
+}
+
+/// Whether a part is a zener diode, judged from its id and description the way
+/// [`is_protection_part`] judges protection parts.
+fn is_zener_part(part: &synth_registry::Part) -> bool {
+    part.kind.eq_ignore_ascii_case("diode")
+        && format!(
+            "{} {}",
+            part.id.as_str(),
+            part.description.as_deref().unwrap_or("")
+        )
+        .to_ascii_lowercase()
+        .contains("zener")
+}
+
 fn is_protection_part(part: &synth_registry::Part) -> bool {
     let hay = format!(
         "{} {} {}",
@@ -548,6 +579,183 @@ impl ErcRule for PullupRailMismatchRule {
 }
 
 // -----------------------------------------------------------------------------
+// E-SYNTH-POWER-012 — connector/discrete outside its operating envelope
+// -----------------------------------------------------------------------------
+
+/// A connector, diode or transistor sitting on a declared power rail the
+/// board runs outside the envelope its registry entry declares. The part
+/// kinds in scope are the ones a Class-A review carries ratings for: they
+/// pass current and stand off voltage rather than regulating it, and none
+/// of the other power rules asks about them — `E-SYNTH-POWER-008` looks at
+/// pull-ups, `009` at regulator inputs, `010` at regulator budgets. A part
+/// without `operating_conditions` has nothing declared to violate, so it
+/// stays out of the rule rather than being guessed at.
+fn part_is_zener(part: &Part) -> bool {
+    let id = part.id.as_str().to_ascii_lowercase();
+    let description = part
+        .description
+        .as_deref()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let mpn = part.mpn.as_deref().unwrap_or_default().to_ascii_lowercase();
+    id.contains("zener")
+        || description.contains("zener")
+        || mpn.contains("zener")
+        || mpn.starts_with("bzt52")
+}
+
+pub(crate) struct OperatingEnvelopeRule;
+
+impl OperatingEnvelopeRule {
+    /// Whether this part is one the rule judges. The declared envelope is
+    /// load-bearing documentation (a 12 V input through a 5 V-rated
+    /// connector is the failure that started the check), so only the kinds
+    /// a review actually rates are compared.
+    fn in_scope(part: &Part) -> bool {
+        // A zener's inverse breakdown voltage is its function, not a rail it
+        // must stand off: D9 on the protected power entry clamps a gate at a
+        // rail the diode is meant to exceed.
+        if part_is_zener(part) {
+            return false;
+        }
+        matches!(
+            part.kind.to_ascii_lowercase().as_str(),
+            "connector" | "diode" | "transistor"
+        )
+    }
+
+    /// The rail a pin of `component` sits on, as the rule sees it: a net
+    /// with a declared (or inferred) rail voltage. Ground is not a rail.
+    fn overstressed(
+        board: &Board,
+        domains: &Domains,
+        component: &synth_ir::Component,
+        part: &Part,
+    ) -> Option<String> {
+        for (idx, _pin) in part.pins.iter().enumerate() {
+            // One floating pin must not end the scan: a later connected pin
+            // can still be overstressed.
+            let Some(net_id) = pin_net(board, component.id, PinId(idx as u32)) else {
+                continue;
+            };
+            let Some(net) = board.net(net_id) else {
+                continue;
+            };
+            if !is_rail_net(domains, net_id) {
+                continue;
+            }
+            // Voltage: the rail's nominal voltage above the part's declared
+            // maximum is the overstress the review asks about.
+            if let Some(rail_v) = net_voltage(domains, net_id)
+                && let Some(max_v) = part
+                    .operating_conditions
+                    .as_ref()
+                    .and_then(|oc| oc.max_voltage_v)
+                && rail_v > max_v + 1e-6
+            {
+                return Some(format!("a {rail_v:.1}V rail"));
+            }
+            // Current: a rail whose declared budget exceeds the part's
+            // declared maximum. The budget is the netclass `current` the
+            // board declares for the rail's nets; a rail without one has no
+            // budget to exceed.
+            if let Some(budget_ma) = current_budget_ma(board, net)
+                && exceeds_current(part, budget_ma)
+            {
+                return Some(format!("a rail with a {budget_ma:.0}mA budget"));
+            }
+        }
+        None
+    }
+}
+
+/// The declared current budget, in mA, of the netclass a rail's net joins.
+fn current_budget_ma(board: &Board, net: &synth_ir::Net) -> Option<f64> {
+    let class = net.netclass.as_deref()?;
+    board
+        .netclasses
+        .iter()
+        .find(|c| c.name == class)
+        .and_then(|c| c.current)
+        .map(synth_ir::Current::to_amps)
+        .map(|amps| amps * 1000.0)
+}
+
+/// Whether a declared budget is above the part's own `max_current_ma`.
+fn exceeds_current(part: &Part, budget_ma: f64) -> bool {
+    part.operating_conditions
+        .as_ref()
+        .and_then(|oc| oc.max_current_ma)
+        .is_some_and(|max_ma| budget_ma > max_ma + 1e-6)
+}
+
+impl ErcRule for OperatingEnvelopeRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-POWER-012"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Power
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let domains = domains(board);
+        let mut out = Vec::new();
+        for component in &board.components {
+            let Some(part) = component.part.as_ref() else {
+                continue;
+            };
+            if !Self::in_scope(part) || part.operating_conditions.is_none() {
+                continue;
+            }
+            let Some(what) = Self::overstressed(board, &domains, component, part) else {
+                continue;
+            };
+            let Some(conditions) = part.operating_conditions.as_ref() else {
+                continue;
+            };
+            let declared = format!(
+                "{}–{}V, {}mA",
+                conditions
+                    .min_voltage_v
+                    .map_or("?".to_string(), |v| format!("{v:.1}")),
+                conditions
+                    .max_voltage_v
+                    .map_or("?".to_string(), |v| format!("{v:.1}")),
+                conditions
+                    .max_current_ma
+                    .map_or("?".to_string(), |ma| format!("{ma:.0}"))
+            );
+            let mut b = DiagnosticBuilder::new(
+                self.code(),
+                Severity::Error,
+                "part operated outside its declared operating envelope",
+            )
+            .location(Location::from_span(file.to_string(), component.source_span))
+            .expected(format!(
+                "every declared power rail reaching {} to sit inside its envelope {declared}",
+                component.describe()
+            ))
+            .found(format!(
+                "{} is placed where {what} reaches it",
+                component.describe()
+            ))
+            .message(format!(
+                "the envelope {} declares is {declared}, but {what} runs through it; \
+                 move the part to a rail inside its envelope or pick a part rated for it",
+                component.describe()
+            ))
+            .explanation_url(format!("synth.docs/diagnostics/{}", self.code()));
+            b = b.entity(synth_diagnostics::EntityRef::Component {
+                id: component.refdes.clone(),
+            });
+            out.push(b.build());
+        }
+        out
+    }
+}
+
+// -----------------------------------------------------------------------------
 // E-SYNTH-POWER-009 — regulator input outside its operating range
 // -----------------------------------------------------------------------------
 
@@ -687,10 +895,10 @@ fn part_supplies_a_rail(part: &synth_registry::Part) -> bool {
         return false;
     };
     // An explicit answer wins over inference.
-    if let Some(budget) = oc.power_budget {
-        if !budget {
-            return false;
-        }
+    if let Some(budget) = oc.power_budget
+        && !budget
+    {
+        return false;
     }
     // Otherwise a part supplies a rail when it has a power_output pin,
     // preserving the previous generic behaviour for any supply kind.
@@ -708,6 +916,7 @@ impl ErcRule for PowerBudgetRule {
         ErcCategory::Power
     }
 
+    #[allow(clippy::too_many_lines)]
     fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for regulator in &board.components {
@@ -751,12 +960,16 @@ impl ErcRule for PowerBudgetRule {
                 let Some(load_part) = load.part.as_ref() else {
                     continue;
                 };
-                // A protection device's `max_current_ma` is its clamping/surge
-                // rating, not a steady draw: a TVS on a rail idles at microamps
-                // and only conducts during a surge. Counting it charges the
-                // regulator a full amp for a part that draws nothing, and the
-                // "fix" for a failing budget would be to drop the protection.
-                if is_protection_part(load_part) {
+                if max_current_is_a_rating(load_part) {
+                    continue;
+                }
+                // A connector's `max_current_ma` is the contact rating, not a
+                // draw the rail must supply. Counting it charged a 3 A header
+                // as a 3 A load on a 250 mA regulator.
+                if matches!(
+                    load_part.kind.as_str(),
+                    "connector" | "jack" | "test_point" | "mounting_hole" | "fiducial"
+                ) {
                     continue;
                 }
                 let Some(draw) = load_part
@@ -877,6 +1090,13 @@ impl ErcRule for FloatingCmosInputRule {
                 }
                 let pid = PinId(idx as u32);
                 if board.nets_containing(component.id, pid).next().is_some() {
+                    continue;
+                }
+                if board.no_connects.iter().any(|declared| {
+                    declared.refdes.eq_ignore_ascii_case(&component.refdes)
+                        && (declared.pin.eq_ignore_ascii_case(&pin.name)
+                            || declared.pin.eq_ignore_ascii_case(&pin.number.0))
+                }) {
                     continue;
                 }
                 out.push(
@@ -1317,10 +1537,10 @@ fn numbers_in(text: &str) -> Vec<f64> {
             cur.clear();
         }
     }
-    if !cur.is_empty() {
-        if let Ok(v) = cur.parse() {
-            out.push(v);
-        }
+    if !cur.is_empty()
+        && let Ok(v) = cur.parse()
+    {
+        out.push(v);
     }
     out
 }
@@ -2350,6 +2570,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         }
     }
 }

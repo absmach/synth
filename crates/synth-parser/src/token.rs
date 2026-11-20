@@ -26,6 +26,7 @@ pub enum TokenKind {
     KwBoard,
     KwImport,
     KwLayers,
+    KwOutline,
     KwManufacturer,
     KwRevision,
     KwCompany,
@@ -33,6 +34,7 @@ pub enum TokenKind {
     KwStackup,
     KwRequires,
     KwLegends,
+    KwLabels,
     KwComponent,
     KwConnect,
     KwNet,
@@ -446,6 +448,7 @@ impl<'a> Lexer<'a> {
             "board" => TokenKind::KwBoard,
             "import" => TokenKind::KwImport,
             "layers" => TokenKind::KwLayers,
+            "outline" => TokenKind::KwOutline,
             "manufacturer" => TokenKind::KwManufacturer,
             "revision" => TokenKind::KwRevision,
             "company" => TokenKind::KwCompany,
@@ -453,6 +456,7 @@ impl<'a> Lexer<'a> {
             "stackup" => TokenKind::KwStackup,
             "requires" => TokenKind::KwRequires,
             "legends" => TokenKind::KwLegends,
+            "labels" => TokenKind::KwLabels,
             "component" => TokenKind::KwComponent,
             "connect" => TokenKind::KwConnect,
             "net" => TokenKind::KwNet,
@@ -525,7 +529,7 @@ mod tests {
     #[test]
     fn keywords_recognized() {
         let ks = kinds(
-            "board import layers manufacturer revision company schematic stackup requires legends component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance max_skew couple trace_width clearance radius value tolerance voltage power_rating dielectric variant description",
+            "board import layers outline manufacturer revision company schematic stackup requires legends labels component connect net power notes dnp module interface bus use bind prefix param as class diff_pair netclass keepout group sheet impedance max_skew couple trace_width clearance radius value tolerance voltage power_rating dielectric variant description",
         );
         assert_eq!(
             ks,
@@ -533,6 +537,7 @@ mod tests {
                 TokenKind::KwBoard,
                 TokenKind::KwImport,
                 TokenKind::KwLayers,
+                TokenKind::KwOutline,
                 TokenKind::KwManufacturer,
                 TokenKind::KwRevision,
                 TokenKind::KwCompany,
@@ -540,6 +545,7 @@ mod tests {
                 TokenKind::KwStackup,
                 TokenKind::KwRequires,
                 TokenKind::KwLegends,
+                TokenKind::KwLabels,
                 TokenKind::KwComponent,
                 TokenKind::KwConnect,
                 TokenKind::KwNet,

@@ -107,12 +107,12 @@ fn run_export(
     design_file: &Path,
     envs: &[(&str, &str)],
 ) -> std::process::Output {
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(dir);
+    let router = stub_router::install(dir);
     let out = dir.join("out");
     let report_path = dir.join("verification.json");
     let mut command = Command::new(SYNTH);
     command
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design_file)
         .arg("--out")
@@ -383,9 +383,9 @@ fn a_missing_executable_is_unknown_and_blocks_a_requested_check() {
     let report_path = dir.join("verification.json");
     // The gate is fail-closed on routing, so a router has to be present for
     // this test to be about the missing KiCad and nothing else.
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -504,9 +504,9 @@ fn an_unsupported_version_is_unknown_before_the_tool_runs() {
         std::fs::set_permissions(&cli, perms).expect("chmod");
     }
     let report_path = dir.join("verification.json");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -561,9 +561,9 @@ fn a_plain_export_still_succeeds_but_records_the_unknown() {
     // The gate is fail-closed on routing, so this test needs a route to
     // isolate what it is about: KiCad being absent is an unknown, not a
     // failure, and that must stay true once routing is satisfied.
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -609,9 +609,9 @@ fn a_plain_export_with_allow_incomplete_is_a_draft_not_a_failure() {
     // pipeline uses to hand an un-routed board to an external router.
     let dir = scratch("plain_draft");
     let report_path = dir.join("verification.json");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -648,9 +648,9 @@ fn allow_incomplete_refuses_to_emit_fabrication_artifacts() {
     // check `--allow-incomplete --gerbers` would emit them from an unrouted
     // board and only afterwards fail.
     let dir = scratch("draft_fab");
-    let _lock = stub_router::serialised();
-    let _router = stub_router::install(&dir);
+    let router = stub_router::install(&dir);
     let output = Command::new(SYNTH)
+        .envs(router.envs())
         .arg("export-kicad")
         .arg(design())
         .arg("--out")
@@ -680,9 +680,9 @@ mod release_gate {
         // `export-kicad` as a subprocess, so the stub router has to be in
         // the environment for both.
         let dir = scratch(&format!("check_{label}"));
-        let _lock = stub_router::serialised();
-        let _router = stub_router::install(&dir);
+        let router = stub_router::install(&dir);
         let output = Command::new(SYNTH)
+            .envs(router.envs())
             .arg("check")
             .arg(design())
             .arg("--fab")
@@ -839,9 +839,9 @@ exit 0"#
     fn the_failing_counts_print_under_the_manufacturing_stage() {
         let dir = scratch("gate_text");
         let cli = stub(&dir, &drc_stub(UNCONNECTED));
-        let _lock = stub_router::serialised();
-        let _router = stub_router::install(&dir);
+        let router = stub_router::install(&dir);
         let output = Command::new(SYNTH)
+            .envs(router.envs())
             .arg("check")
             .arg(design())
             .arg("--fab")

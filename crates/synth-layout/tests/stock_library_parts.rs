@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 
 use synth_layout::qualify_facts::InstalledKicad;
-use synth_registry::qualify::{qualify_part, CheckStatus};
+use synth_registry::qualify::{CheckStatus, qualify_part};
 
 const DEFAULT_FOOTPRINT_DIR: &str = "/usr/share/kicad/footprints";
 
@@ -68,6 +68,18 @@ fn parts_that_named_missing_libraries_qualify_against_the_stock_ones() {
         "at24c512_eeprom",
         "m24m02_eeprom",
         "mpu6050_imu",
+        // #87: a six-pad balun declared only pads 1-4.
+        "balun_2g4",
+        // #157: these three once named libraries KiCad does not ship.
+        "tvs_array_5v",
+        "mp2307_buck",
+        "osc_smd_25mhz",
+        // #152: the pin map is the RP2350A, not the RP2040's.
+        "rp2350",
+        // #428: the record once named `Transistor_FET:AO3400A`, a symbol
+        // some stock libraries do not ship; it now names the generic
+        // `Q_NMOS_GSD` and must still qualify against them.
+        "ao3400a_nmos",
     ] {
         let part = registry
             .lookup(id)

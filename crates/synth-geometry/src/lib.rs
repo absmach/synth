@@ -64,10 +64,10 @@ pub mod sim_oracles;
 pub mod stackup;
 
 pub use sim_oracles::{
+    ComponentThermalEstimate, CoupledGeometry, MicrostripParams, SiImpedanceResult, UnreachableZ0,
     calculate_microstrip_z0, calculate_stripline_z0, coupled_microstrip_zdiff_ohms,
     derive_coupled_microstrip, derive_microstrip_width_mm, estimate_component_thermal,
-    outer_microstrip_params, ComponentThermalEstimate, CoupledGeometry, MicrostripParams,
-    SiImpedanceResult, UnreachableZ0,
+    outer_microstrip_params,
 };
 pub use stackup::{CopperLayerGeometry, StackupProfile, StackupSource, TraceModel};
 

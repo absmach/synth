@@ -90,11 +90,15 @@ pub struct UnreachableZ0 {
 
 #[must_use]
 pub fn outer_microstrip_params(stackup: &synth_ir::Stackup) -> Option<MicrostripParams> {
-    let [synth_ir::StackupLayer::Copper { thickness, .. }, synth_ir::StackupLayer::Insulator {
-        thickness: height,
-        er,
-        ..
-    }, ..] = stackup.layers.as_slice()
+    let [
+        synth_ir::StackupLayer::Copper { thickness, .. },
+        synth_ir::StackupLayer::Insulator {
+            thickness: height,
+            er,
+            ..
+        },
+        ..,
+    ] = stackup.layers.as_slice()
     else {
         return None;
     };
