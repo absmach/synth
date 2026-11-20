@@ -12,6 +12,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[path = "../../synth-sim/tests/support/stub_build.rs"]
 mod stub_build;
 
+#[path = "stub_router/mod.rs"]
+mod stub_router;
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -216,6 +219,34 @@ fn an_out_of_limit_measure_makes_the_simulation_stage_fail() {
             .expect("diagnostics")
             .iter()
             .any(|diagnostic| diagnostic["code"] == "E-SYNTH-SIM-004"),
+        "{report:#}"
+    );
+}
+
+#[test]
+fn fab_keeps_the_simulation_stage() {
+    let dir = Scratch::new("fab");
+    let design = design_with_sidecar(&dir);
+    let stub = stub_ngspice(&dir, "ok");
+    let router = stub_router::install(&dir);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("check")
+        .arg(&design)
+        .arg("--fab")
+        .arg("--json")
+        .envs(router.envs())
+        .env("NGSPICE", &stub)
+        .env("KICAD_CLI", dir.join("missing-kicad-cli"))
+        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", "30")
+        .output()
+        .expect("run synth check --fab");
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "pass", "{report:#}");
+    assert_eq!(report["status"], "fail", "{report:#}");
+    assert_eq!(
+        report["stages"]["manufacturing"]["status"], "unknown",
         "{report:#}"
     );
 }

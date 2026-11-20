@@ -123,8 +123,9 @@ enum Command {
         #[arg(long, conflicts_with = "suggest")]
         json: bool,
 
-        /// Cap the whole `synth sim` run in seconds. The sidecar's own
-        /// timeout still applies when it is shorter.
+        /// Cap the ngspice run in seconds. It is applied after the design is
+        /// compiled; the sidecar's own timeout still applies when it is
+        /// shorter.
         #[arg(long, value_name = "SECS", conflicts_with = "suggest")]
         timeout: Option<f64>,
     },
@@ -2022,8 +2023,11 @@ fn simulation_stage(
         }));
     }
 
+    // Leave enough time for the simulator's own process-tree kill to run
+    // before the supervisor's deadline; never less than 250 ms.
+    let margin = std::time::Duration::from_secs(2).min(std::time::Duration::from_secs(budget) / 4);
     let sim_budget = std::cmp::max(
-        std::time::Duration::from_secs(budget).mul_f64(0.75),
+        std::time::Duration::from_secs(budget).saturating_sub(margin),
         std::time::Duration::from_millis(250),
     );
     let mut args = base.to_vec();

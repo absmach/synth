@@ -32,7 +32,7 @@ synth sim examples/divider/divider.synth
 
 The design must have a testbench sidecar beside it, named
 `<design>.sim.toml` (for `divider.synth`, that is `divider.sim.toml`).
-`--timeout <secs>` caps the whole `synth sim` run from command start; the
+`--timeout <secs>` caps the ngspice run after the design is compiled; the
 sidecar's own `[options] timeout` still applies when it is shorter.
 `synth check` uses this cap to keep the simulation inside its stage budget.
 
