@@ -8,7 +8,7 @@ All figures come from the files of the first of the three exports (KiCad 10.0.6)
 
 | | |
 |---|---|
-| Outline | 80.3 x 72.0 mm, 5,781 mm2, 82 parts (73 excluding mounting holes and test points) |
+| Outline | 80.3 x 72.0 mm, 5,781 mm2, 83 parts (74 excluding mounting holes and test points) |
 | Courtyard fill | **22.7 %** of the board area, measured on the exported board (`layout_metrics.py`, the author's script; its output is not committed); the Class C target is 30 %, which at this outline needs about 1,730 mm2 of courtyard (the board holds about 1,312 mm2) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"`, JLCPCB's `JLC06161H-3313` stackup as declared in the source (prepreg 3313 0.0994 mm er 4.1, core 0.55 mm er 4.6, prepreg 2116 0.1088 mm er 4.16; outer copper 35 um, inner 15.2 um; [JLCPCB impedance tool](https://jlcpcb.com/impedance)), 1.47 mm in the STEP model |
 | Routing | 46 of 46 nets, 644 segments, 155 vias (0.46/0.2 mm: 89, 0.6/0.3 mm: 66), 1650.2 mm of track; the router's report (from the author's run, not committed in this package) and the delivered board agree (the delivered-board count) |
@@ -39,7 +39,7 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 
 ## 3.3 V regulator thermal budget
 
-`U1` (AP7361C-33E, SOT-223) drops at most 5 V to 3.3 V, so it dissipates `P = (5.0 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, held to 125 &deg;C here (Diodes AP7361C datasheet DS37274 Rev. 5-2: SOT223 `RθJA = 110 °C/W`, 360 mV typical dropout at 1 A for the 3.3 V version, 1 A output, input 2.2 to 6.0 V recommended and 6.5 V absolute maximum). `W-SYNTH-THERMAL-001` is not reported for `U1`.
+`U1` (AP7361C-33E, SOT-223) drops at most 5.15 V (5.5 V in, less the drops of `F1`, `Q3` and `R_SURGE`) to 3.3 V, so it dissipates `P = (5.15 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, held to 125 &deg;C here (Diodes AP7361C datasheet DS37274 Rev. 5-2: SOT223 `RθJA = 110 °C/W`, 360 mV typical dropout at 1 A for the 3.3 V version, 1 A output, input 2.2 to 6.0 V recommended and 6.5 V absolute maximum). `W-SYNTH-THERMAL-001` is not reported for `U1`.
 
 | Load on `+3V3` | Current used | Source |
 |---|---|---|
@@ -48,25 +48,29 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 | Four LEDs, 470 ohm | 28 mA (3.3 V / 470 ohm each, which ignores the LED forward drop) | the design's own arithmetic |
 | Total | 253 mA | |
 
-At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 47 &deg;C rise: Tj is 72 &deg;C at 25 &deg;C ambient and 117 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.7 = 0.53 A` in total at 25 &deg;C ambient and at `(125 - 70) / 110 / 1.7 = 0.29 A` at 70 &deg;C ambient, which leaves about 0.04 A at 70 &deg;C for the FPGA's 3.3 V I/O current, which depends on the design and is not counted above. The load currents are datasheet maxima added together, which no operating state reaches at once. Dropout: 360 mV typical at 1 A, so at 253 mA and the 4.6 V worst-case rail below the output stays in regulation with more than 1 V to spare. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1`.
+At 253 mA the regulator dissipates 1.85 V x 0.253 A = 0.47 W, a 51 &deg;C rise: Tj is 77 &deg;C at 25 &deg;C ambient and 122 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.85 = 0.49 A` in total at 25 &deg;C ambient and at `(125 - 70) / 110 / 1.85 = 0.27 A` at 70 &deg;C ambient, which leaves about 0.02 A at 70 &deg;C for the FPGA's 3.3 V I/O current, which depends on the design and is not counted above. The load currents are datasheet maxima added together, which no operating state reaches at once. Dropout: 360 mV typical at 1 A, so at the 4.40 V worst-case input (4.65 V rail less `R_SURGE`) the output stays in regulation with 1.10 V to spare. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1` or `R_SURGE`.
 
 ## Input surge
 
-`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.5 V maximum input, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.0 V recommended and 6.5 V absolute maximum at its input, so a surge that drives `D1` into breakdown (6.67 V at the least) exceeds the regulator's absolute rating by 0.17 V at the least and by about 3.8 V at the full clamp. No TVS with a standoff above 5.5 V clamps below 6.5 V, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at their input, so this board does not meet that margin: the input surge is limited upstream by `F1` and the source, not by the regulator rating. `Q3` is protected by `D_GZ`, a 5.1 V zener from its gate to its source, which holds the gate-source voltage under the SI2301CDS's 8 V rating while the source follows a surge to 10.3 V behind the 10 k gate resistor `R40`.
+`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.5 V maximum input, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input, and every low-dropout regulator this board could use (AP7361C, AP2114, AP2112K, LP5907) is rated 6.5 V or less, below the least breakdown of any TVS with a standoff above 5.5 V. So `R_SURGE`, 1 ohm, sits between the +5 V rail and `U1`, with `C2` and `C3` behind it: a short clamp event is held off the regulator, and a sustained over-voltage is limited by `F1` opening; the arithmetic and the one remaining gap are in the requirement check below. `Q3` is protected by `D_GZ`, a 5.1 V zener from its gate to its source, which holds the gate-source voltage under the SI2301CDS's 8 V rating while the source follows a surge to 10.3 V behind the 10 k gate resistor `R40`.
 
 ### Requirement check: regulator and input protection
 
+`R_SURGE`, 1 ohm (Yageo RC1206FR-071RL), sits between the +5 V rail (`Q3`, `D1`, `C1`, and the `F2` branch to HDMI pin 18) and the regulator input, with `C2` and `C3` (20 uF) behind it. It is not in the HDMI path, so the pin-18 arithmetic below is unchanged.
+
 | Requirement | Our choice | Arithmetic | Result |
 |---|---|---|---|
-| The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | the input is at most 5.5 V, 0.5 V under 6.0 V | Met |
-| Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | 4.61 V worst-case rail - 3.3 V = 1.31 V against 0.36 V at 1 A | Met |
-| The regulator carries the load and sheds its dissipation | 1 A, SOT-223, `RθJA` 110 C/W | 1.7 V x 0.253 A = 0.43 W gives 72 C at 25 C ambient and 117 C at 70 C ambient, under 125 C | Met |
+| The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | the input is at most 5.5 V less `F1`, `Q3` (0.10 V at 0.31 A) and `R_SURGE` (0.25 V), 5.15 V, 0.85 V under 6.0 V | Met |
+| Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | the worst-case rail is 4.65 V (4.75 V less 0.065 V in `F1` and 0.034 V in `Q3` at 0.31 A); less `R_SURGE` 0.25 V the input is 4.40 V; 4.40 V - 3.3 V = 1.10 V against 0.36 V at 1 A | Met |
+| The regulator carries the load and sheds its dissipation | 1 A, SOT-223, `RθJA` 110 C/W | (5.15 V - 3.3 V) x 0.253 A = 0.47 W gives 77 C at 25 C ambient and 122 C at 70 C ambient, under 125 C; the total at which Tj reaches 125 C is 0.49 A at 25 C and 0.27 A at 70 C | Met |
+| `R_SURGE` carries the load | 1 ohm, 250 mW | 0.253 A squared x 1 ohm = 0.064 W | Met |
 | HDMI pin 18 stays at 4.8 V or more | `Q3` P-MOSFET stage instead of the Schottky | worst-case drops 0.138 V (`F1`, `Q3`, `F2`), so 4.94 V is needed at `J1` | Met when `J1` carries 4.94 V or more, which the README states |
 | `Q3` survives the surge on its gate | `D_GZ` 5.1 V zener from gate to source, `R40` 10 k | with the source at the 10.3 V clamp the gate follows at the source less 4.8 to 5.4 V, so the gate-source voltage stays under 5.4 V against the 8 V rating, with 0.52 mA (2.7 mW) in `D_GZ` | Met |
 | The TVS does not conduct in operation | `D1` PTVS6V0S1UR, 6.0 V standoff, 6.67 V minimum breakdown | 5.5 V maximum input is 0.5 V under the standoff | Met |
-| The regulator survives the TVS clamp | `U1` absolute maximum input 6.5 V | `D1` begins to conduct at 6.67 V minimum breakdown and clamps at 10.3 V at 38.8 A | Not met: the regulator rating is 0.17 V under the least breakdown |
+| The regulator survives a short clamp event | `U1` absolute maximum input 6.5 V | `D1` clamps at up to 10.3 V at 38.8 A; the current through `R_SURGE` is at most (10.3 V - 4.5 V) / 1 ohm = 5.8 A, so a 60 ns event carries 0.35 uC, which raises 20 uF by 0.02 V and holds the regulator input near 5 V; the energy in the resistor is about 2 uJ (its pulse rating was not read) | Met for events of 60 ns |
+| The regulator survives a sustained over-voltage | `U1` absolute maximum input 6.5 V | `D1` holds the +5 V rail at about 7.0 V (typical breakdown) until `F1` opens; the regulator input is then 7.0 V - 0.25 V = 6.75 V, 0.25 V over its rating | Not met until `F1` opens |
 
-The last row is the one gap, for the reasons given in "Input surge" above: every low-dropout regulator considered is rated 6.5 V or less, and no TVS with a standoff above 5.5 V breaks down below 6.5 V. `F1` limits a sustained over-voltage by opening. A regulator rated above 10.3 V, or a series resistor of about 1 ohm between `D1` and `U1` with `C2` and `C3` behind it, would close it; neither is made here and the maintainer's choice is asked on the pull request.
+The sustained over-voltage row is the one gap, for the reasons given under "Input surge": every low-dropout regulator considered is rated 6.5 V or less, and the 15 V and 20 V parts (AMS1117-3.3, NCP1117ST33T3G) need an ESR-stabilised output capacitor and have a higher `RθJA` in the SOT-223.
 
 ## +5 V at the HDMI connector (pin 18)
 
@@ -91,7 +95,7 @@ The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 82 lines: 73 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
+[`fab/bom.csv`](fab/bom.csv) has 83 lines: 74 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J1` is a hand-fit through-hole part. Two lines carry a sourcing note: the 2 k resistors (`R9`, `R10`, UNI-ROYAL 0603WAF2001T5E, LCSC `C22975`) showed 0 in stock on the LCSC page read, and the onsemi SRV05-4MR6T1G (`D3`) has no onsemi listing at LCSC, so it is sourced from DigiKey. The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 
