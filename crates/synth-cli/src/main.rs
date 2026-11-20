@@ -2030,6 +2030,10 @@ fn simulation_stage(
         std::time::Duration::from_secs(budget).saturating_sub(margin),
         std::time::Duration::from_millis(250),
     );
+    let sim_budget = std::cmp::min(
+        sim_budget,
+        std::time::Duration::from_secs_f64(synth_sim::MAX_TIMEOUT_SECONDS),
+    );
     let mut args = base.to_vec();
     args.extend([
         "sim".to_string(),

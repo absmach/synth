@@ -252,6 +252,25 @@ fn fab_keeps_the_simulation_stage() {
 }
 
 #[test]
+fn a_high_stage_budget_still_runs_the_simulation() {
+    let dir = Scratch::new("high-budget");
+    let design = design_with_sidecar(&dir);
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("check")
+        .arg(&design)
+        .arg("--json")
+        .env("NGSPICE", &stub)
+        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", "4000")
+        .output()
+        .expect("run synth check");
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "pass", "{report:#}");
+}
+
+#[test]
 fn a_sidecar_directory_is_fail_not_skipped() {
     let dir = Scratch::new("sidecar-directory");
     let design = dir.join("divider.synth");
