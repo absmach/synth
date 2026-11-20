@@ -1514,6 +1514,7 @@ fn capability_descriptor() -> serde_json::Value {
             {"name": "layout", "evidence": ["layout_ir"]},
             {"name": "placement", "evidence": ["placement_ir", "placement_hash"]},
             {"name": "routing", "evidence": ["routing_ir", "routing_hash"]},
+            {"name": "simulation", "evidence": ["sim_report", "sim_status"]},
             {"name": "drc", "evidence": ["drc_report", "drc_status"]},
             {"name": "kicad_export", "evidence": ["artifact_hashes", "archive_sha256"]}
         ],
@@ -1710,6 +1711,9 @@ fn check(
     let validate_pass =
         !validate_timed_out && validate_output.status.success() && validate_parse_ok;
 
+    let simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass)?;
+    let sim_pass = matches!(simulation["status"].as_str(), Some("pass" | "skipped"));
+
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
         drc_args.extend(["drc".into(), "--pretty".into(), input.display().to_string()]);
@@ -1746,6 +1750,7 @@ fn check(
             "result": validate_json,
         }),
     );
+    stages.insert("simulation".into(), simulation);
     stages.insert(
         "drc".into(),
         serde_json::json!({
@@ -1869,7 +1874,7 @@ fn check(
         );
     }
 
-    let pass = validate_pass && drc_pass && (!fab || fab_pass);
+    let pass = validate_pass && sim_pass && drc_pass && (!fab || fab_pass);
     let unverified = unverified_claims(&source, input, registry);
     let report = serde_json::json!({
         "schema_version": "synth.check.v1",
@@ -1977,6 +1982,79 @@ impl PreFabDrc {
             Self::Unknown => "unknown",
         }
     }
+}
+
+/// Run the sidecar, when there is one, and classify the result for `check`.
+///
+/// `skipped` is not evidence either way and does not block. `unknown` means
+/// the sidecar exists but the simulator could not run, so it blocks just like
+/// the other unknown physical stages.
+fn simulation_stage(
+    exe: &Path,
+    input: &Path,
+    registry: Option<&Path>,
+    budget: u64,
+    base: &[String],
+    validate_pass: bool,
+) -> anyhow::Result<serde_json::Value> {
+    if !validate_pass {
+        return Ok(serde_json::json!({
+            "status": "skipped",
+            "reason": "source gate failed",
+        }));
+    }
+    let sidecar = synth_sim::sidecar_path(input);
+    if !sidecar.is_file() {
+        return Ok(serde_json::json!({
+            "status": "skipped",
+            "reason": "no testbench sidecar",
+        }));
+    }
+
+    let mut args = base.to_vec();
+    args.extend([
+        "sim".to_string(),
+        "--json".to_string(),
+        input.display().to_string(),
+    ]);
+    if let Some(dir) = registry {
+        args.extend(["--registry".to_string(), dir.display().to_string()]);
+    }
+    let (output, timed_out) = run_check_child(exe, &args, budget)?;
+    if timed_out {
+        return Ok(serde_json::json!({
+            "status": "unknown",
+            "reason": "timeout",
+            "detail": "`synth sim` exceeded its stage budget",
+        }));
+    }
+
+    let Ok(result) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return Ok(serde_json::json!({
+            "status": "unknown",
+            "reason": "unreadable simulation report",
+            "stderr": String::from_utf8_lossy(&output.stderr),
+        }));
+    };
+    if output.status.success() && result["passed"].as_bool() == Some(true) {
+        return Ok(serde_json::json!({"status": "pass", "result": result}));
+    }
+    let simulator_unavailable = result["diagnostics"].as_array().is_some_and(|diagnostics| {
+        diagnostics.iter().any(|diagnostic| {
+            matches!(
+                diagnostic["code"].as_str(),
+                Some(synth_sim::E_SYNTH_SIM_001 | synth_sim::E_SYNTH_SIM_005)
+            )
+        })
+    });
+    if simulator_unavailable {
+        return Ok(serde_json::json!({
+            "status": "unknown",
+            "reason": "simulator unavailable",
+            "result": result,
+        }));
+    }
+    Ok(serde_json::json!({"status": "fail", "result": result}))
 }
 
 /// Classify a `synth drc` run record.
