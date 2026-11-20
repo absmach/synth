@@ -1,0 +1,31 @@
+id = "c_samsung_cl31a226kahnnne"
+kind = "capacitor"
+description = "Samsung CL31A226KAHNNNE, 22 uF +/-10 % 25 V X5R 1206 MLCC, 1.60 mm max thickness, -55 to 85 C, +/-15 % over temperature; JLCPCB C12891"
+mpn = "CL31A226KAHNNNE"
+lcsc_pn = "C12891"
+kicad_symbol = "Device:C"
+kicad_footprint = "Capacitor_SMD:C_1206_3216Metric"
+
+[footprint_dimensions]
+width_mm = 4.6
+height_mm = 2.3
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 25.0
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.lcsc.com/datasheet/lcsc_datasheet_2304140030_Samsung-Electro-Mechanics-CL31A226KAHNNNE_C12891.pdf"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-11-06"

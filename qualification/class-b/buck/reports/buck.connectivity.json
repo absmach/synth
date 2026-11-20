@@ -15,12 +15,12 @@
     "open": [],
     "unconnected_pads": [],
     "via_in_pad": [
-      "via at (32.400, 14.800) mm U1.9",
-      "via at (32.400, 16.000) mm U1.9",
-      "via at (32.400, 17.200) mm U1.9",
-      "via at (33.600, 14.800) mm U1.9",
-      "via at (33.600, 16.000) mm U1.9",
-      "via at (33.600, 17.200) mm U1.9"
+      "via at (32.400, 12.800) mm U1.9",
+      "via at (32.400, 14.000) mm U1.9",
+      "via at (32.400, 15.200) mm U1.9",
+      "via at (33.600, 12.800) mm U1.9",
+      "via at (33.600, 14.000) mm U1.9",
+      "via at (33.600, 15.200) mm U1.9"
     ],
     "undersized_vias": [],
     "undersized_tracks": []
@@ -28,7 +28,7 @@
   "kicad_drc": {
     "errors": 0,
     "unconnected": 0,
-    "warnings": 0
+    "warnings": 25
   },
   "blocking_reasons": [],
   "unavailable_checks": []
