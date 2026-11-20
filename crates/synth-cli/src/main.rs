@@ -1613,7 +1613,7 @@ fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
                 println!("{command:<20} yes");
             }
             println!();
-            println!("PHYSICAL STAGES: layout, placement, routing, drc, kicad_export");
+            println!("PHYSICAL STAGES: layout, placement, routing, simulation, drc, kicad_export");
             println!(
                 "BOARD FAMILY PROFILES: {} shipped",
                 synth_place::board_family::PROFILES.len()
@@ -1895,7 +1895,10 @@ fn check(
     } else {
         println!("{} {}", if pass { "PASS" } else { "FAIL" }, input.display());
         let manufacturing = &report["stages"]["manufacturing"];
-        for (name, stage) in report["stages"].as_object().into_iter().flatten() {
+        for name in ["source", "simulation", "drc", "manufacturing"] {
+            let Some(stage) = report["stages"].get(name) else {
+                continue;
+            };
             println!(
                 "  {name}: {}",
                 stage["status"].as_str().unwrap_or("unknown")

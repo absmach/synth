@@ -105,6 +105,16 @@ fn run_check(design: &Path, ngspice: &Path) -> Output {
         .expect("run synth check")
 }
 
+fn run_check_human(design: &Path, ngspice: &Path) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("check")
+        .arg(design)
+        .env("NGSPICE", ngspice)
+        .env("SYNTH_CHECK_STAGE_BUDGET_SECS", "10")
+        .output()
+        .expect("run synth check")
+}
+
 fn report(output: &Output) -> serde_json::Value {
     serde_json::from_slice(&output.stdout).unwrap_or_else(|error| {
         panic!(
@@ -169,6 +179,7 @@ fn an_out_of_limit_measure_makes_the_simulation_stage_fail() {
     let report = report(&output);
 
     assert_eq!(simulation(&report)["status"], "fail", "{report:#}");
+    assert_eq!(report["status"], "fail", "{report:#}");
     assert!(
         simulation(&report)["result"]["diagnostics"]
             .as_array()
@@ -211,6 +222,21 @@ fn a_malformed_sidecar_makes_the_simulation_stage_fail() {
             .any(|diagnostic| diagnostic["code"] == "E-SYNTH-SIM-007"),
         "{report:#}"
     );
+}
+
+#[test]
+fn human_output_prints_simulation_between_source_and_drc() {
+    let dir = Scratch::new("human-order");
+    let design = design_with_sidecar(&dir);
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = run_check_human(&design, &stub);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let source = stdout.find("  source:").expect("source line");
+    let simulation = stdout.find("  simulation:").expect("simulation line");
+    let drc = stdout.find("  drc:").expect("drc line");
+
+    assert!(source < simulation && simulation < drc, "{stdout}");
 }
 
 #[test]
