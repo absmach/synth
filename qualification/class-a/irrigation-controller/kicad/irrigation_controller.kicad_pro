@@ -151,8 +151,15 @@
       "/NRST": "SIG",
       "/OSC_IN": "SIG",
       "/OSC_OUT": "SIG",
+      "/SOIL1_A": "SIG",
+      "/SOIL1_B": "SIG",
+      "/SOIL2_A": "SIG",
+      "/SOIL2_B": "SIG",
       "/SWCLK": "SIG",
       "/SWDIO": "SIG",
+      "/VALVE1_ISENSE": "PWR12",
+      "/VALVE1_SW": "PWR12",
+      "/VALVE2_ISENSE": "PWR12",
       "/VALVE2_SW": "PWR12",
       "BUCK_BS": "SIG",
       "BUCK_COMP": "SIG",
@@ -168,7 +175,6 @@
       "I2C_SDA": "SIG",
       "ID_VCAP": "SIG",
       "LED_N12_A": "SIG",
-      "LED_N33_A": "SIG",
       "LED_PWR_A": "SIG",
       "LED_VALVE_A": "SIG",
       "LED_VALVE_DRV": "SIG",
@@ -178,23 +184,29 @@
       "Q1_GATE": "SIG",
       "SNUB1": "SIG",
       "SNUB2": "SIG",
-      "SOIL1_ADC": "SIG",
-      "SOIL1_EXC": "SIG",
-      "SOIL1_EXC_EN": "SIG",
-      "SOIL1_PROBE": "SIG",
-      "SOIL1_SENSE": "SIG",
-      "SOIL2_ADC": "SIG",
-      "SOIL2_EXC": "SIG",
-      "SOIL2_EXC_EN": "SIG",
-      "SOIL2_PROBE": "SIG",
-      "SOIL2_SENSE": "SIG",
+      "SOIL1_A": "SIG",
+      "SOIL1_ADC_A": "SIG",
+      "SOIL1_ADC_B": "SIG",
+      "SOIL1_B": "SIG",
+      "SOIL1_DRV_A": "SIG",
+      "SOIL1_DRV_B": "SIG",
+      "SOIL2_A": "SIG",
+      "SOIL2_ADC_A": "SIG",
+      "SOIL2_ADC_B": "SIG",
+      "SOIL2_B": "SIG",
+      "SOIL2_DRV_A": "SIG",
+      "SOIL2_DRV_B": "SIG",
       "SWCLK": "SIG",
       "SWDIO": "SIG",
       "VALVE1_GATE": "SIG",
       "VALVE1_GATE_Q": "SIG",
+      "VALVE1_ISENSE": "PWR12",
+      "VALVE1_IS_ADC": "SIG",
       "VALVE1_SW": "PWR12",
       "VALVE2_GATE": "SIG",
       "VALVE2_GATE_Q": "SIG",
+      "VALVE2_ISENSE": "PWR12",
+      "VALVE2_IS_ADC": "SIG",
       "VALVE2_SW": "PWR12",
       "VIN_12V_RAW": "PWR12",
       "VIN_FUSED": "PWR12_IN"
@@ -234,7 +246,35 @@
       },
       {
         "netclass": "PWR12",
+        "pattern": "/*/VALVE1_ISENSE"
+      },
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VALVE1_SW"
+      },
+      {
+        "netclass": "PWR12",
+        "pattern": "/*/VALVE2_ISENSE"
+      },
+      {
+        "netclass": "PWR12",
         "pattern": "/*/VALVE2_SW"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SOIL1_A"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SOIL1_B"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SOIL2_A"
+      },
+      {
+        "netclass": "SIG",
+        "pattern": "/*/SOIL2_B"
       }
     ]
   },
@@ -247,10 +287,6 @@
     [
       "33ebc9e3-0681-554a-ac8a-89a67d5a6adc",
       ""
-    ],
-    [
-      "3659adec-be84-5346-baed-95cb9701f184",
-      "irrigation_controller_POWER_INPUT.kicad_sch"
     ],
     [
       "a365cb74-ad70-5a28-8f87-b4e0801147d3",
@@ -287,14 +323,6 @@
     [
       "9b48410e-bbdd-5589-be21-31a0bbf2519e",
       "irrigation_controller_LEDS.kicad_sch"
-    ],
-    [
-      "3a16d184-a2bb-5db1-afd7-2f158057c85f",
-      "irrigation_controller_3V3_RAIL_DECOUPLING.kicad_sch"
-    ],
-    [
-      "f4f64e0d-0c96-570c-a589-7b501a86f1ac",
-      "irrigation_controller_12V_RAIL_DECOUPLING.kicad_sch"
     ],
     [
       "646407be-44d9-599f-adfc-e60b5df40aa9",
