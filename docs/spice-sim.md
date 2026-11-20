@@ -53,7 +53,7 @@ synth sim --json examples/divider/divider.synth
 ```
 
 The object has a stable `schema_version`, `passed`, `measures`, `diagnostics`
-and `coverage`. `coverage` is the list of what the run actually used:
+and `coverage`. `coverage` is the list of what the run used and measured:
 
 | Field | Meaning |
 | ----- | ------- |
