@@ -102,7 +102,7 @@ No JLCPCB DFM, BOM-matching or quote run is recorded for this package.
 
 ## Images
 
-[`images/`](images/) holds `top.png`, `bottom.png` and `angled.png` (3D renders of the board) and `schematic.pdf` (the schematic, one page per sheet).
+[`images/`](images/) holds `top.png`, `bottom.png` and `angled.png` (3D renders of the board) and `schematic.pdf` (all schematic sheets on one page).
 
 ## How to check
 
