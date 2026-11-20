@@ -2333,7 +2333,7 @@ fn execute_simulate(args: &Value, default_registry: Option<&Path>) -> Result<Val
             design_path: Some(design_path),
             testbench_path: Some(testbench_path),
             registry_dirs,
-            timeout_secs: None,
+            deadline: None,
         },
     );
     let passed = report.passed();

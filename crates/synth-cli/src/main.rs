@@ -123,8 +123,8 @@ enum Command {
         #[arg(long, conflicts_with = "suggest")]
         json: bool,
 
-        /// Cap the ngspice run in seconds. The sidecar's own timeout still
-        /// applies when it is shorter.
+        /// Cap the whole `synth sim` run in seconds. The sidecar's own
+        /// timeout still applies when it is shorter.
         #[arg(long, value_name = "SECS", conflicts_with = "suggest")]
         timeout: Option<f64>,
     },
@@ -2022,12 +2022,16 @@ fn simulation_stage(
         }));
     }
 
+    let sim_budget = std::cmp::max(
+        std::time::Duration::from_secs(budget).mul_f64(0.75),
+        std::time::Duration::from_millis(250),
+    );
     let mut args = base.to_vec();
     args.extend([
         "sim".to_string(),
         "--json".to_string(),
         "--timeout".to_string(),
-        budget.saturating_sub(2).max(1).to_string(),
+        format!("{:.3}", sim_budget.as_secs_f64()),
         input.display().to_string(),
     ]);
     if let Some(dir) = registry {
@@ -3577,6 +3581,8 @@ fn sim(
     {
         anyhow::bail!("--timeout must be a positive finite number of seconds");
     }
+    let deadline = timeout_secs
+        .map(|secs| std::time::Instant::now() + std::time::Duration::from_secs_f64(secs));
     let (source, file) = match read_source(input) {
         Ok(pair) => pair,
         Err(error) => {
@@ -3667,7 +3673,7 @@ fn sim(
             design_path: Some(input.to_path_buf()),
             testbench_path: Some(sidecar.clone()),
             registry_dirs,
-            timeout_secs,
+            deadline,
             ..synth_sim::SimOptions::default()
         },
     );

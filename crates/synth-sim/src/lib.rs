@@ -1285,9 +1285,9 @@ pub struct SimOptions {
     pub testbench_path: Option<PathBuf>,
     /// Registry directories a `[spice]` model file may be resolved from.
     pub registry_dirs: Vec<PathBuf>,
-    /// Upper bound for this run. The testbench's own timeout still applies
-    /// when it is shorter.
-    pub timeout_secs: Option<f64>,
+    /// Absolute wall-clock deadline for this run. The testbench's own
+    /// timeout still applies when it is shorter.
+    pub deadline: Option<std::time::Instant>,
 }
 
 impl SimOptions {
@@ -1548,10 +1548,18 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         .options
         .timeout
         .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
-    let timeout = options
-        .timeout_secs
-        .filter(|cap| cap.is_finite() && *cap > 0.0)
-        .map_or(timeout, |cap| timeout.min(Duration::from_secs_f64(cap)));
+    let timeout = if let Some(deadline) = options.deadline {
+        timeout.min(deadline.saturating_duration_since(std::time::Instant::now()))
+    } else {
+        timeout
+    };
+    if timeout.is_zero() {
+        return failed(
+            vec![timeout_error(0.0)],
+            options.testbench_path.as_deref(),
+            &coverage,
+        );
+    }
     let (run, run_dir) = match run_ngspice(&deck, dialect, options, timeout) {
         Ok(run) => run,
         Err(diagnostic) => {

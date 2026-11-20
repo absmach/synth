@@ -423,7 +423,7 @@ fn options(stub: &Path) -> synth_sim::SimOptions {
         design_path: Some(PathBuf::from("divider.synth")),
         testbench_path: Some(PathBuf::from("divider.sim.toml")),
         registry_dirs: Vec::new(),
-        timeout_secs: None,
+        deadline: None,
     }
 }
 
@@ -443,7 +443,7 @@ fn ldo_options(stub: &Path) -> synth_sim::SimOptions {
         design_path: Some(PathBuf::from("ldo.synth")),
         testbench_path: Some(PathBuf::from("ldo.sim.toml")),
         registry_dirs: vec![registry_parts_dir()],
-        timeout_secs: None,
+        deadline: None,
     }
 }
 
@@ -2395,7 +2395,7 @@ fn ldo_model_report(label: &str, text: &str) -> Option<synth_sim::SimReport> {
             design_path: Some(PathBuf::from("ldo.synth")),
             testbench_path: Some(PathBuf::from("ldo.sim.toml")),
             registry_dirs: vec![scratch.path().to_path_buf()],
-            timeout_secs: None,
+            deadline: None,
         },
     ))
 }
@@ -2917,7 +2917,7 @@ fn a_model_with_a_nested_include_is_rejected_without_running() {
         design_path: Some(PathBuf::from("ldo.synth")),
         testbench_path: Some(PathBuf::from("ldo.sim.toml")),
         registry_dirs: vec![scratch.path().to_path_buf()],
-        timeout_secs: None,
+        deadline: None,
     };
 
     let report = synth_sim::simulate(&board, &testbench, &options);
@@ -3738,7 +3738,7 @@ fn simulate_creates_the_plot_directory_before_running_ngspice() {
         design_path: Some(PathBuf::from("rc.synth")),
         testbench_path: Some(sidecar),
         registry_dirs: Vec::new(),
-        timeout_secs: None,
+        deadline: None,
     };
 
     let report = synth_sim::simulate(&board(RC), &testbench, &options);
@@ -3838,7 +3838,7 @@ fn example_options(design: &Path, testbench: &Path, ngspice: &Path) -> synth_sim
         design_path: Some(design.to_path_buf()),
         testbench_path: Some(testbench.to_path_buf()),
         registry_dirs: Vec::new(),
-        timeout_secs: None,
+        deadline: None,
     }
 }
 
@@ -3990,7 +3990,7 @@ fn assert_plot_refused(plot: &str, scratch: &Scratch, outside: &Path) {
         design_path: Some(PathBuf::from("rc.synth")),
         testbench_path: Some(sidecar),
         registry_dirs: Vec::new(),
-        timeout_secs: None,
+        deadline: None,
     };
 
     let report = synth_sim::simulate(&board(RC), &testbench, &options);
