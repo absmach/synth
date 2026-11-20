@@ -1,0 +1,58 @@
+id = "ap7361c_33e"
+kind = "regulator"
+description = "Diodes AP7361C-33E-13 3.3V 1A low-dropout LDO, 360 mV typical dropout at 1 A, SOT-223, fixed output, no enable pin"
+mpn = "AP7361C-33E-13"
+lcsc_pn = "C500795"
+kicad_symbol = "Regulator_Linear:AP7361C-33E"
+kicad_footprint = "Package_TO_SOT_SMD:SOT-223-3_TabPin2"
+# Pins are the SOT223 column of the "Pin Descriptions" table of Diodes DS37274
+# Rev. 5-2: IN 1, GND 2 (the tab), OUT 3. The stock KiCad symbol numbers its
+# pins the same way (VI 1, GND 2, VO 3). The SOT223 package has no enable pin.
+# Ratings from the same datasheet: input 2.2 to 6.0 V recommended, 6.5 V
+# absolute maximum, 1 A output, RthetaJA 110 C/W for the SOT223.
+[footprint_dimensions]
+width_mm = 7.0
+height_mm = 6.7
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.2
+max_voltage_v = 6.0
+max_current_ma = 1000.0
+max_power_mw = 1100
+thermal_resistance_c_per_w = 110
+
+[[pins]]
+name = "vin"
+number = "1"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "vout"
+number = "3"
+electrical_type = "power_output"
+required = true
+
+[[required_decoupling]]
+net = "vin"
+value = "1uf"
+count = 1
+
+[[required_decoupling]]
+net = "vout"
+value = "2.2uf"
+count = 1
+
+[provenance]
+# Authored from the cited datasheet and reviewed by the pull request author, who confirmed the review on 2026-11-20. An independent review is open.
+source = "authored"
+datasheet_url = "https://www.diodes.com/assets/Datasheets/AP7361C.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-20"

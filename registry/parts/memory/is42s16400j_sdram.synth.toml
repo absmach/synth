@@ -22,6 +22,8 @@ description = "ISSI IS42S16400J 64Mbit SDR SDRAM, 4M x 16, 143MHz, TSOP-II-54"
 kicad_symbol = "Memory_RAM:IS42S16400J-xC"
 kicad_footprint = "Package_SO:TSOP-II-54_22.2x10.16mm_P0.8mm"
 mpn = "IS42S16400J-7TLI"
+lcsc_pn = "C2979137"
+datasheet_url = "https://www.mouser.com/datasheet/3/3722/1/42-45S16400J.pdf"
 
 [footprint_dimensions]
 # Courtyard extent of that footprint; the body is 10.16 x 22.2 mm.
