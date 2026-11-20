@@ -1918,8 +1918,14 @@ fn stitch(
         };
         let spot = usual.or_else(in_pad_spot).or_else(compact);
         if let Some((p, size, drill)) = spot {
-            ground.push(p);
-            out.push(tie_via_at(net, p, size, drill));
+            // Only a net held to a return via is given one. A net the design
+            // declares slow has no fast edge to return, so a via added for it
+            // takes room from the nets that need it and, on a dense board, keeps
+            // the rounds from converging.
+            if ground_nets.needs_return(signal_net) {
+                ground.push(p);
+                out.push(tie_via_at(net, p, size, drill));
+            }
         } else if ground_nets.needs_return(signal_net) {
             if ground_nets.fine_pitch_advisory && in_fine_pitch_breakout(&fine_pads, vx, vy) {
                 advisory.push(format!(
@@ -3618,6 +3624,26 @@ mod tests {
             1,
             "no list means every net: {strict:?}"
         );
+    }
+
+    /// A net that carries no fast edge is not given a return via even where
+    /// there is room for one, and a critical net is.
+    #[test]
+    fn a_slow_net_with_room_for_a_return_via_is_not_given_one() {
+        let board = stitched_board("");
+
+        let slow = Ground::default().with_critical(&["CLK".to_string()]);
+        let plan = plan_all_with(&board, REACH, &slow, &ViaDeclarations::new());
+        assert!(plan.vias.is_empty(), "{plan:?}");
+        assert!(plan.unresolved.is_empty(), "{plan:?}");
+        assert!(plan.advisory.is_empty(), "{plan:?}");
+
+        let fast = Ground::default().with_critical(&["SIG".to_string()]);
+        let plan = plan_all_with(&board, REACH, &fast, &ViaDeclarations::new());
+        assert_eq!(plan.vias.len(), 1, "{plan:?}");
+
+        let strict = plan_all_with(&board, REACH, &Ground::default(), &ViaDeclarations::new());
+        assert_eq!(strict.vias.len(), 1, "no list means every net: {strict:?}");
     }
 
     /// A signal via that cannot be given a return must be reported, not skipped:
