@@ -54,6 +54,20 @@ At 253 mA the regulator dissipates 1.7 V x 0.253 A = 0.43 W, a 47 &deg;C rise: T
 
 `D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.5 V maximum input, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.0 V recommended and 6.5 V absolute maximum at its input, so a surge that drives `D1` into breakdown (6.67 V at the least) exceeds the regulator's absolute rating by 0.17 V at the least and by about 3.8 V at the full clamp. No TVS with a standoff above 5.5 V clamps below 6.5 V, and the low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less at their input, so this board does not meet that margin: the input surge is limited upstream by `F1` and the source, not by the regulator rating. `Q3` is protected by `D_GZ`, a 5.1 V zener from its gate to its source, which holds the gate-source voltage under the SI2301CDS's 8 V rating while the source follows a surge to 10.3 V behind the 10 k gate resistor `R40`.
 
+### Requirement check: regulator and input protection
+
+| Requirement | Our choice | Arithmetic | Result |
+|---|---|---|---|
+| The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | the input is at most 5.5 V, 0.5 V under 6.0 V | Met |
+| Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | 4.61 V worst-case rail - 3.3 V = 1.31 V against 0.36 V at 1 A | Met |
+| The regulator carries the load and sheds its dissipation | 1 A, SOT-223, `RθJA` 110 C/W | 1.7 V x 0.253 A = 0.43 W gives 72 C at 25 C ambient and 117 C at 70 C ambient, under 125 C | Met |
+| HDMI pin 18 stays at 4.8 V or more | `Q3` P-MOSFET stage instead of the Schottky | worst-case drops 0.138 V (`F1`, `Q3`, `F2`), so 4.94 V is needed at `J1` | Met when `J1` carries 4.94 V or more, which the README states |
+| `Q3` survives the surge on its gate | `D_GZ` 5.1 V zener from gate to source, `R40` 10 k | with the source at the 10.3 V clamp the gate follows at the source less 4.8 to 5.4 V, so the gate-source voltage stays under 5.4 V against the 8 V rating, with 0.52 mA (2.7 mW) in `D_GZ` | Met |
+| The TVS does not conduct in operation | `D1` PTVS6V0S1UR, 6.0 V standoff, 6.67 V minimum breakdown | 5.5 V maximum input is 0.5 V under the standoff | Met |
+| The regulator survives the TVS clamp | `U1` absolute maximum input 6.5 V | `D1` begins to conduct at 6.67 V minimum breakdown and clamps at 10.3 V at 38.8 A | Not met: the regulator rating is 0.17 V under the least breakdown |
+
+The last row is the one gap, for the reasons given in "Input surge" above: every low-dropout regulator considered is rated 6.5 V or less, and no TVS with a standoff above 5.5 V breaks down below 6.5 V. `F1` limits a sustained over-voltage by opening. A regulator rated above 10.3 V, or a series resistor of about 1 ohm between `D1` and `U1` with `C2` and `C3` behind it, would close it; neither is made here and the maintainer's choice is asked on the pull request.
+
 ## +5 V at the HDMI connector (pin 18)
 
 An HDMI source must present 4.8 to 5.3 V on pin 18. The path is `J1` to `F1` to `Q3` to the +5 V rail to `F2` to pin 18. Worst-case drops at the resistances the datasheets give, with 55 mA on pin 18 (the HDMI source minimum) and 0.253 A drawn by `U1` ahead of `F2`, so 0.308 A through `F1` and `Q3`:
