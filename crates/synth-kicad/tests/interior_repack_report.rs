@@ -76,3 +76,54 @@ fn interior_repack_placement_report() {
         }
     }
 }
+
+/// The interior repack must not move a frozen part and must not grow HPWL.
+#[test]
+fn interior_repack_keeps_frozen_parts_and_does_not_grow_hpwl() {
+    use std::collections::{HashMap, HashSet};
+
+    let board = load_board("fixtures/kicad-reference/secure_tracker.synth");
+    let base = synth_place::place(&board).expect("place");
+    let before: HashMap<_, _> = base
+        .components
+        .iter()
+        .map(|placed| (placed.id, placed.center))
+        .collect();
+    let frozen: HashSet<_> = base
+        .components
+        .iter()
+        .filter(|placed| {
+            board.component(placed.id).is_some_and(|component| {
+                matches!(
+                    component.kind.as_str(),
+                    "resistor" | "capacitor" | "inductor" | "diode" | "led"
+                )
+            })
+        })
+        .take(3)
+        .map(|placed| placed.id)
+        .collect();
+    assert!(!frozen.is_empty(), "fixture needs passives to freeze");
+    let repacked = synth_place::repack_interior(&board, base.clone(), &frozen);
+    for id in &frozen {
+        assert_eq!(
+            repacked
+                .components
+                .iter()
+                .find(|placed| placed.id == *id)
+                .expect("frozen part")
+                .center,
+            before[id],
+            "repack moved a frozen part"
+        );
+    }
+    let hpwl = |placement: &synth_place::Placement| {
+        synth_place::score::score_placement(&board, placement).hpwl_total_nm
+    };
+    assert!(
+        hpwl(&repacked) <= hpwl(&base),
+        "repack grew HPWL from {} to {}",
+        hpwl(&base),
+        hpwl(&repacked)
+    );
+}

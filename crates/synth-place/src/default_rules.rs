@@ -104,7 +104,7 @@ const COMPRESS_MAX_STEPS: usize = 40;
 const COMPRESS_JUMP_TRIES: usize = 5;
 
 /// Default wall-clock budget for the feedback loop, in seconds.
-const REFINE_BUDGET_S: u64 = 90;
+const REFINE_BUDGET_S: u64 = 3600;
 
 /// Default wall-clock budget for wall compression, in seconds.
 const COMPRESS_BUDGET_S: u64 = 120;
@@ -690,7 +690,7 @@ pub(crate) fn compression_enabled() -> bool {
 ///
 /// This is called by [`crate::finish_outline`] after the outline fit, unless
 /// `SYNTH_PLACE_COMPRESS=0` is set. Calling it directly always compresses,
-/// up to its wall-clock budget (120 s, or `SYNTH_PLACE_COMPRESS_BUDGET_S`).
+/// up to its wall-clock failsafe (120 s, or `SYNTH_PLACE_COMPRESS_BUDGET_S`).
 pub fn compress_outline(board: &Board, placement: &mut Placement) {
     let deadline = std::time::Instant::now()
         + budget_seconds("SYNTH_PLACE_COMPRESS_BUDGET_S", COMPRESS_BUDGET_S);
@@ -1267,10 +1267,10 @@ struct RefineFinding {
 /// The error is the weighted sum from the placement judge: overlaps, overhang,
 /// USB offset, undocked connectors, close groups, header row, lone parts,
 /// largest empty rectangle, area, alignment and ring. The loop stops at 12
-/// iterations, when no untried finding remains, after two kept iterations
-/// gain less than 1 %, or when its wall-clock budget (90 s, or
-/// `SYNTH_PLACE_REFINE_BUDGET_S`) expires; expiry keeps the last accepted
-/// placement and writes `stop budget` to the trace. A fix that raises the
+/// iterations, when no untried finding remains, or after two kept iterations
+/// gain less than 1 %. The wall-clock budget is a failsafe (an hour by
+/// default, or `SYNTH_PLACE_REFINE_BUDGET_S`), not the normal completion
+/// bound, so a normal run is deterministic. A fix that raises the
 /// outline area by more than `AREA_GUARD_STEP` over the state before it is
 /// rejected, and one that would take the pass past `AREA_GUARD_TOTAL` over
 /// its entry stops it; both record `area_guard` in the trace. Every iteration

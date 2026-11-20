@@ -2183,8 +2183,9 @@ const MIN_MARGIN_MM: f64 = 0.25;
 pub fn default_part_margin_mm() -> f64 {
     std::env::var("SYNTH_PLACE_PART_MARGIN_MM")
         .ok()
-        .and_then(|value| value.parse().ok())
-        .map_or(DEFAULT_MARGIN_MM, |value: f64| value.max(MIN_MARGIN_MM))
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+        .map_or(DEFAULT_MARGIN_MM, |value| value.clamp(MIN_MARGIN_MM, 5.0))
 }
 
 /// The greedy packer's perimeter inset, scaled with the part margin from the
@@ -2283,7 +2284,7 @@ fn place_with_dimensions_rotated(
         &courtyards_mm,
         rotation_overrides,
         false,
-        BOARD_MARGIN_MM,
+        board_margin_mm(),
         0,
         &PinnedPlacements::new(),
     )?;
@@ -2515,7 +2516,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             &courtyards_mm,
             rotation_overrides,
             true,
-            BOARD_MARGIN_MM,
+            board_margin_mm(),
             seed,
             pinned,
         ) {
@@ -9081,10 +9082,11 @@ fn repack_anchors(board: &Board) -> std::collections::HashSet<ComponentId> {
     }
     for keepout in &board.keepouts {
         let name = keepout.name.to_lowercase();
+        if name.is_empty() {
+            continue;
+        }
         if let Some(anchor) = board.components.iter().find(|component| {
-            component.refdes.to_lowercase() == name
-                || component.kind.to_lowercase() == name
-                || component.refdes.to_lowercase().starts_with(&name)
+            component.refdes.to_lowercase() == name || component.kind.to_lowercase() == name
         }) {
             anchors.insert(anchor.id);
         }
@@ -11799,13 +11801,14 @@ board "near" {
             let expected = match value.as_str() {
                 "0.5" => 0.5,
                 "0.1" | "0.25" => 0.25,
-                "nonsense" => 1.5,
+                "1e300" | "100" => 5.0,
+                "inf" | "nonsense" => 1.5,
                 other => panic!("unexpected child value {other}"),
             };
             assert_eq!(default_part_margin_mm(), expected, "override {value}");
             return;
         }
-        for value in ["0.5", "0.1", "0.25", "nonsense"] {
+        for value in ["0.5", "0.1", "0.25", "1e300", "100", "inf", "nonsense"] {
             reexec_with_part_margin(
                 "tests::part_margin_override_parses_and_clamps_at_a_quarter_millimetre",
                 value,
