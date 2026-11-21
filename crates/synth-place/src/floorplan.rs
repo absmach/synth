@@ -200,7 +200,7 @@ fn hinted_edge(comp: &synth_ir::Component) -> Option<BoardEdge> {
 }
 
 /// The outline edge nearest a point.
-fn nearest_edge(point: Point, usable: Rect) -> BoardEdge {
+pub(crate) fn nearest_edge(point: Point, usable: Rect) -> BoardEdge {
     [
         (point.y_nm - usable.min.y_nm, BoardEdge::Top),
         (usable.max.x_nm - point.x_nm, BoardEdge::Right),

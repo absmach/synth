@@ -1,0 +1,17 @@
+// A corner-seated mounting hole inside a group must leave the review box, so
+// the rules' settle and the judge draw the same box.
+board "group_corner_hole" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  group "POWER" color "#c2410c" {
+    component U1: mcu "mpu6050_imu"
+    component C1: capacitor "c_generic_0603"
+    component J1: connector "jst_ph_2pin"
+    component H1: mounting_hole "mounting_hole_m2_5"
+  }
+
+  group "LEDS" color "#15803d" {
+    component R1: resistor "r_generic_0603"
+  }
+}

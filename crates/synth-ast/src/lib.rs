@@ -69,6 +69,7 @@ pub enum StatementAst {
     Group(GroupStmt),
     Sheet(SheetStmt),
     Schematic(SchematicStmt),
+    Placement(PlacementStmt),
     Stackup(StackupStmt),
     Requires(RequiresStmt),
     NoConnect(NoConnectStmt),
@@ -101,6 +102,7 @@ impl StatementAst {
             StatementAst::Group(s) => s.span,
             StatementAst::Sheet(s) => s.span,
             StatementAst::Schematic(s) => s.span,
+            StatementAst::Placement(s) => s.span,
             StatementAst::Stackup(s) => s.span,
             StatementAst::Requires(s) => s.span,
             StatementAst::NoConnect(s) => s.span,
@@ -163,6 +165,15 @@ pub enum GroupAttr {
 pub struct SheetStmt {
     pub name: String,
     pub statements: Vec<StatementAst>,
+    pub span: Span,
+}
+
+/// `placement { spacing = 2.0mm }` — board-level placement settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlacementStmt {
+    /// Least courtyard-to-courtyard gap between any two parts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<ValueWithUnit>,
     pub span: Span,
 }
 

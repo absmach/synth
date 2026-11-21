@@ -24,20 +24,10 @@ use crate::{ComponentPlacement, PadOffsetLookup, PlaceError, hpwl_total, overlap
 /// most 9 under the built-in router, so it stays.
 const CLEARANCE_GAP_NM: i64 = 3_000_000;
 
-/// Clearance gap kept around a placed passive in nanometres (1.5 mm).
-///
-/// Passive-to-passive spacing was 3.0 mm, which left wide empty bands (a
-/// buck-converter board came out 57 x 55 mm). Measured over the reference
-/// fixtures, the examples and that buck with FreeRouting and
-/// `kicad-cli pcb drc`: at 1.5 mm no board gained a DRC error or an unrouted
-/// pad/track, outlines shrank by up to 45% (`ref_usb_cdc` 2895 -> 1612 mm2),
-/// and 1.0 mm and below added unconnected copper-pour fragments on more boards.
-const PASSIVE_CLEARANCE_GAP_NM: i64 = 1_500_000;
-
 /// Gap to keep around the already-placed component `id`.
-fn gap_around(id: ComponentId, passives: &[ComponentId]) -> i64 {
+fn gap_around(id: ComponentId, passives: &[ComponentId], passive_gap_nm: i64) -> i64 {
     if passives.contains(&id) {
-        PASSIVE_CLEARANCE_GAP_NM
+        passive_gap_nm
     } else {
         CLEARANCE_GAP_NM
     }
@@ -398,6 +388,9 @@ fn pack_passives_in_order(
             .get(&comp_id)
             .map_or(i64::MAX, |(_, limit)| mm_to_nm(*limit));
         let limit_nm2 = decoupling_limit.saturating_mul(decoupling_limit);
+        // The passive gap follows the part margin so a board placed at a
+        // tighter margin is not repacked at the 1.5 mm default.
+        let passive_gap_nm = mm_to_nm(crate::default_part_margin_mm());
 
         for cand in &candidates {
             for &rot in &[
@@ -426,6 +419,7 @@ fn pack_passives_in_order(
                     courtyard_lookup,
                     courtyard_offset_lookup,
                     exact_contact,
+                    passive_gap_nm,
                 ) {
                     continue;
                 }
@@ -515,7 +509,7 @@ fn pack_passives_in_order(
                     Some(passive_offset),
                     0,
                 ),
-                PASSIVE_CLEARANCE_GAP_NM,
+                passive_gap_nm,
             );
             update_net_pad_positions(board, placements, pad_offsets, &mut net_pad_positions);
         } else if let Some(fallback_pt) = find_nearest_legal_slot(
@@ -541,7 +535,7 @@ fn pack_passives_in_order(
             placements.push(fallback);
             hull.add_center(
                 crate::courtyard_rect_for_placement(&fallback, w_mm, h_mm, Some(passive_offset), 0),
-                PASSIVE_CLEARANCE_GAP_NM,
+                passive_gap_nm,
             );
             update_net_pad_positions(board, placements, pad_offsets, &mut net_pad_positions);
         } else {
@@ -574,6 +568,7 @@ fn find_nearest_legal_slot(
     exact_contact: bool,
 ) -> Option<Point> {
     let pitch = 500_000; // 0.5 mm grid step
+    let passive_gap_nm = mm_to_nm(crate::default_part_margin_mm());
     let temp_placed: Vec<(ComponentId, Rect)> = placements
         .iter()
         .map(|p| {
@@ -621,6 +616,7 @@ fn find_nearest_legal_slot(
                     courtyard_lookup,
                     courtyard_offset_lookup,
                     exact_contact,
+                    passive_gap_nm,
                 )
                 && !overlaps_keepout(cand_rect, id, board, usable, |pid| {
                     temp_placed
@@ -757,6 +753,7 @@ fn intersects_placed(
     courtyard_lookup: &HashMap<ComponentId, (f64, f64)>,
     courtyard_offset_lookup: &HashMap<ComponentId, (f64, f64)>,
     exact_contact: bool,
+    passive_gap_nm: i64,
 ) -> bool {
     for p in placements {
         let (w_mm, h_mm) = courtyard_lookup[&p.id];
@@ -765,7 +762,7 @@ fn intersects_placed(
             w_mm,
             h_mm,
             courtyard_offset_lookup.get(&p.id).copied(),
-            gap_around(p.id, passives),
+            gap_around(p.id, passives, passive_gap_nm),
         );
         let overlap = if exact_contact {
             overlaps_interior(rect, p_rect)

@@ -452,6 +452,32 @@ fn label_box(part: &LabelPart, pos: LabelPos) -> Rect {
     )
 }
 
+/// How many shown labels sit on another part's courtyard or on another label.
+pub(crate) fn count_overlaps(
+    parts: &[LabelPart],
+    placed: &HashMap<ComponentId, LabelPos>,
+) -> usize {
+    let boxes: Vec<(usize, Rect)> = parts
+        .iter()
+        .enumerate()
+        .filter_map(|(i, part)| {
+            let pos = *placed.get(&part.id)?;
+            (!pos.hidden).then(|| (i, label_box(part, pos)))
+        })
+        .collect();
+    boxes
+        .iter()
+        .enumerate()
+        .filter(|(k, (i, b))| {
+            parts
+                .iter()
+                .enumerate()
+                .any(|(j, other)| j != *i && other.courtyard.intersects(b))
+                || boxes[..*k].iter().any(|(_, other)| other.intersects(b))
+        })
+        .count()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

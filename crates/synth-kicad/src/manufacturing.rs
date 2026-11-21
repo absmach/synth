@@ -371,6 +371,7 @@ mod tests {
             company: None,
             schematic_paper: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             components: vec![component],
             nets: vec![],
             diff_pairs: vec![],

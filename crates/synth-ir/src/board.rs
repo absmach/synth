@@ -56,6 +56,11 @@ pub struct Board {
     /// [`SchematicOverflow::Grow`], the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schematic_overflow: Option<SchematicOverflow>,
+    /// Least courtyard-to-courtyard gap between any two parts, in nanometres
+    /// (`placement { spacing = 2.0mm }`, or `export-kicad --spacing`). `None`
+    /// leaves the placer's own clearances untouched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_spacing_nm: Option<i64>,
     pub components: Vec<Component>,
     pub nets: Vec<Net>,
     pub diff_pairs: Vec<DiffPair>,
