@@ -2365,7 +2365,7 @@ fn deadline_error() -> Diagnostic {
     )
     .message(
         "the simulation deadline expired before ngspice started; \
-             raise `--timeout` or simplify the design",
+             raise `--timeout` or the `synth check` stage budget, or simplify the design",
     )
     .build()
 }
