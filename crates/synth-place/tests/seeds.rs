@@ -39,7 +39,11 @@ fn a_seed_varies_a_legal_placement_deterministically() {
             .expect("placement must succeed")
     };
 
-    let canonical = synth_place::place_with_tuning(&board, 1.5, &overrides).expect("place");
+    // Every caller now gets the placement rules applied after the solve, so
+    // the canonical arrangement is the non-seeded wrapper, not the raw solver
+    // (`place_with_tuning`), which stops before the rules.
+    let canonical =
+        synth_place::place_with_tuning_and_sidecar(&board, 1.5, &overrides, None).expect("place");
     assert_eq!(
         place(0),
         canonical,
