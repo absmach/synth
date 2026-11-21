@@ -128,6 +128,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(ResetCapabilityFloatingRule),
         Box::new(BootModeFloatingRule),
         Box::new(AnalogDigitalMixingRule),
+        Box::new(PlacementSpacingRangeRule),
         Box::new(KeepoutMissingRadiusRule),
         Box::new(KeepoutZeroRadiusRule),
         Box::new(KeepoutWithoutAnchorRule),
@@ -2149,6 +2150,56 @@ impl ErcRule for KeepoutMissingRadiusRule {
 // -----------------------------------------------------------------------------
 // E-SYNTH-KEEPOUT-002 — keepout with non-positive radius
 // -----------------------------------------------------------------------------
+
+/// Least and greatest `placement { spacing }` the placer is tuned for, in mm.
+const SPACING_RANGE_MM: (f64, f64) = (1.0, 5.0);
+
+/// The board's spacing when it is outside `SPACING_RANGE_MM`, in mm.
+///
+/// Callers without the ERC pass (`synth place`, `synth route`) use this to
+/// fail the same way `export-kicad` does instead of silently placing with a
+/// value the export would reject.
+#[must_use]
+pub fn placement_spacing_out_of_range(board: &synth_ir::Board) -> Option<f64> {
+    let mm = synth_geometry::nm_to_mm(board.placement_spacing_nm?);
+    let (low, high) = SPACING_RANGE_MM;
+    (!(low..=high).contains(&mm)).then_some(mm)
+}
+
+struct PlacementSpacingRangeRule;
+
+impl ErcRule for PlacementSpacingRangeRule {
+    fn code(&self) -> &'static str {
+        "E-SYNTH-PLACE-005"
+    }
+
+    fn category(&self) -> ErcCategory {
+        ErcCategory::Geometry
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        let Some(nm) = board.placement_spacing_nm else {
+            return Vec::new();
+        };
+        let mm = synth_geometry::nm_to_mm(nm);
+        let (low, high) = SPACING_RANGE_MM;
+        if (low..=high).contains(&mm) {
+            return Vec::new();
+        }
+        vec![DiagnosticBuilder::new(
+            self.code(),
+            Severity::Error,
+            format!(
+                "placement spacing {mm} mm is outside the supported range {low:.1} mm to {high:.1} mm"
+            ),
+        )
+        .location(Location::from_span(file.to_string(), synth_diagnostics::Span::new(0, 0)))
+        .expected(format!("a spacing from {low:.1} mm to {high:.1} mm"))
+        .found(format!("{mm} mm"))
+        .explanation_url(format!("synth.docs/diagnostics/{}", self.code()))
+        .build()]
+    }
+}
 
 struct KeepoutZeroRadiusRule;
 
@@ -4559,6 +4610,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -4960,6 +5012,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5117,6 +5170,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5210,6 +5264,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5309,6 +5364,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5465,6 +5521,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5624,6 +5681,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -5697,6 +5755,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

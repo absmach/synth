@@ -37,6 +37,11 @@ Each metric is normalized to `[0, 1]`; the 0–100 composite is 100 × the equal
 
 `synth_place::fitness(board, placement) -> PlacementFitness` is the public seam. The MCP `synth_describe_placement` handler merges the report into its response, so an agent sees it without the placement description itself paying for the measurement. `describe_placement` and the placer's refine loop are unchanged.
 
+## Environment
+
+- `SYNTH_EXPORT_FITNESS` set to any value makes `export-kicad` write the report as `<stem>.fitness.json` beside the exported PCB. Unset writes nothing.
+- `SYNTH_PLACE_PART_MARGIN_MM` sets the placer's courtyard margin, which the exported placement is fitted with. Values below 0.25 mm are raised to that floor; an unparseable value is ignored and the 1.5 mm default applies.
+
 ## Qualification
 
 Run the corpus report:

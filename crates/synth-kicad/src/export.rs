@@ -38,6 +38,11 @@ pub enum ExportError {
         #[source]
         source: serde_json::Error,
     },
+    #[error("could not serialize placement fitness: {source}")]
+    SerializeFitness {
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("placement failed: {source}")]
     Placement {
         #[source]
@@ -246,19 +251,84 @@ pub fn placement_for_export(
 /// Candidate placements for a caller that can route and wants to choose.
 ///
 /// A superset of what [`export_with_sidecars`] itself chooses among: the
-/// export's own candidates plus a spread of placement-margin variants, so a
+/// export's own winner plus a spread of placement-margin variants, so a
 /// place→route→re-place loop has genuinely different arrangements to route.
-/// Ordered deterministically, duplicates removed; the first is always the
-/// export's own preferred placement.
+/// Ordered deterministically, duplicates removed. The first entry is the
+/// export's route-free winner ([`placement_for_export`]); it leads so an
+/// equal route keeps the smaller board.
 ///
 /// # Errors
 /// [`ExportError::Placement`] when the placer finds no legal placement.
+///
+/// # Panics
+/// Panics only when every solver pass returned but none recorded an error,
+/// which would be a programming error in the candidate loop.
 pub fn placement_candidates(
     board: &Board,
     sidecars: &Sidecars,
 ) -> Result<Vec<synth_place::Placement>, ExportError> {
-    place_candidates_with_margins(board, sidecars.placement_path(), &[0.5, 2.5], &[1, 2])
-        .map_err(|source| ExportError::Placement { source })
+    let margins = [relative_margin(-1.0), relative_margin(1.0)];
+    let mut candidates = Vec::new();
+    let mut first_error = None;
+    // The export winner is the smallest placement the route-free path would
+    // ship. Offer it to the router first: if routing ties, the smaller board
+    // wins instead of a route-loop-only arrangement the export never saw.
+    match place_for_export_default(board, sidecars.placement_path()) {
+        Ok(export) => candidates.push(export),
+        Err(error) => {
+            eprintln!("warning: export winner solve failed: {error}");
+            first_error = Some(error);
+        }
+    }
+    for (_source, candidate) in
+        place_candidates_with_margins(board, sidecars.placement_path(), &margins, &[1, 2], true)
+            .map_err(|source| ExportError::Placement { source })?
+    {
+        if !candidates.contains(&candidate) {
+            candidates.push(candidate);
+        }
+    }
+    if candidates.is_empty() {
+        return Err(ExportError::Placement {
+            source: first_error.expect("a failed solve records its error"),
+        });
+    }
+    Ok(candidates)
+}
+
+/// Placements after the interior repack pass, for the route A/B only.
+///
+/// Not used by the export path. The pass is experimental until the four-board
+/// route A/B shows unrouted nets do not regress.
+///
+/// # Errors
+/// [`ExportError::Placement`] when the placer finds no legal placement.
+pub fn repacked_placement_candidates(
+    board: &Board,
+    sidecars: &Sidecars,
+) -> Result<Vec<synth_place::Placement>, ExportError> {
+    let frozen: std::collections::HashSet<synth_ir::ComponentId> = sidecars
+        .placement_path()
+        .filter(|path| path.exists())
+        .and_then(synth_layout::sidecar::SidecarLayout::load_from_file)
+        .map_or_else(std::collections::HashSet::new, |sidecar| {
+            board
+                .components
+                .iter()
+                .filter(|component| sidecar.components.contains_key(&component.refdes))
+                .map(|component| component.id)
+                .collect()
+        });
+    let candidates = placement_candidates(board, sidecars)?;
+    let mut repacked = Vec::with_capacity(candidates.len());
+    for candidate in candidates {
+        let mut candidate = synth_place::repack_interior(board, candidate, &frozen);
+        synth_place::finish_outline(board, &mut candidate);
+        if !repacked.contains(&candidate) {
+            repacked.push(candidate);
+        }
+    }
+    Ok(repacked)
 }
 
 fn export_inner(
@@ -482,6 +552,25 @@ fn export_inner(
         None => place_for_export(board, sidecars.placement_path())
             .map_err(|source| ExportError::Placement { source })?,
     };
+    let fitness_path = out_dir.join(format!("{stem}.fitness.json"));
+    if std::env::var_os("SYNTH_EXPORT_FITNESS").is_some() {
+        let report = synth_place::fitness(board, &placement);
+        let mut value = serde_json::to_value(&report)
+            .map_err(|source| ExportError::SerializeFitness { source })?;
+        value["schema_version"] = serde_json::json!("1");
+        let text = serde_json::to_string_pretty(&value)
+            .map_err(|source| ExportError::SerializeFitness { source })?;
+        // The report is diagnostic; a write failure must not lose the PCB.
+        if let Err(error) = write_file(&fitness_path, &text) {
+            eprintln!(
+                "warning: could not write {}: {error}",
+                fitness_path.display()
+            );
+        }
+    } else {
+        // A previous run's report must not masquerade as this export's.
+        let _ = std::fs::remove_file(&fitness_path);
+    }
     // The export is the un-routed baseline. Copper is generated by an
     // external router, which reads this file and writes its own candidate
     // back; Synth does not synthesize traces here, so nothing downstream
@@ -718,10 +807,39 @@ fn place_for_export(
     board: &Board,
     sidecar: Option<&Path>,
 ) -> Result<synth_place::Placement, synth_place::PlaceError> {
-    Ok(place_candidates(board, sidecar)?
+    place_for_export_default(board, sidecar)
+}
+
+/// The export's own route-free winner, ignoring the RePlAce seam.
+fn place_for_export_default(
+    board: &Board,
+    sidecar: Option<&Path>,
+) -> Result<synth_place::Placement, synth_place::PlaceError> {
+    let has_sidecar = sidecar.is_some_and(Path::exists);
+    // An auto-sized board without an author's floorplan is the margin/seed
+    // sweep. The rules do the same work for every candidate, so generate the
+    // candidates without them, choose with the same key, and finish the winner
+    // once. Finishing a second candidate (the hinted one) was tested: it won
+    // FPV on area but left its USB 0.73 mm off the edge midpoint, past the
+    // judge's 0.5 mm limit, because placement_key does not score the rules'
+    // centring. One finish keeps the arrangement the key already chose.
+    let finish_after = board.outline.is_none() && !has_sidecar;
+    let candidates = place_candidates(board, sidecar, !finish_after)?;
+    let (source, mut best) = candidates
         .into_iter()
-        .min_by_key(|placement| placement_key(board, placement))
-        .expect("the hinted placement is always a candidate"))
+        .min_by_key(|(source, placement)| placement_key(source, placement))
+        .expect("the hinted placement is always a candidate");
+    if finish_after {
+        synth_place::finish_default_placement(&source, &mut best, has_sidecar);
+        synth_place::fit_outline_with_passive_margin_mm(
+            &source,
+            &mut best,
+            synth_place::tight_edge_margin_mm(&source),
+            synth_place::passive_edge_margin_mm(&source),
+        );
+        synth_place::trim_outline_to_grid(&source, &mut best);
+    }
+    Ok(best)
 }
 
 /// Every placement the export chooses among, in a deterministic order.
@@ -734,11 +852,19 @@ fn place_for_export(
 fn place_candidates(
     board: &Board,
     sidecar: Option<&Path>,
-) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
+    finish_rules: bool,
+) -> Result<Vec<(Board, synth_place::Placement)>, synth_place::PlaceError> {
     // Seeds 1 to 8: widening to 1..16 reproduced env_logger's failing
-    // arrangement. 1.25 and 1.0 mm are the two density steps below the 1.5 mm
-    // base that improved the tuning corpus without breaking a board.
-    place_candidates_with_margins(board, sidecar, &[1.25, 1.0], &[1, 2, 3, 4, 5, 6, 7, 8])
+    // arrangement. The two density steps are offsets from the caller's
+    // default margin, so the override moves the whole sweep.
+    let margins = [relative_margin(-0.25), relative_margin(-0.5)];
+    place_candidates_with_margins(
+        board,
+        sidecar,
+        &margins,
+        &[1, 2, 3, 4, 5, 6, 7, 8],
+        finish_rules,
+    )
 }
 
 /// One step below the tightest caller margin, tried only on dense boards.
@@ -746,7 +872,9 @@ fn place_candidates(
 /// profile checks, and a dense board has enough parallel channels that the
 /// seeded repack gains area without stranding a net. 0.9 mm kept all 12 corpus
 /// boards clean; 0.85 and 0.8 mm changed no board (Oct 2026).
-const TIGHTEST_SEEDED_MARGIN_MM: f64 = 0.9;
+fn relative_margin(offset: f64) -> f64 {
+    (synth_place::default_part_margin_mm() + offset).max(0.25)
+}
 
 /// Seeds the tightest-margin sweep tries, taken from the end of the caller's
 /// list. At 0.9 mm the first four seeds never won a corpus board, while seed
@@ -777,16 +905,36 @@ fn place_candidates_with_margins(
     sidecar: Option<&Path>,
     extra_margins: &[f64],
     extra_seeds: &[u64],
-) -> Result<Vec<synth_place::Placement>, synth_place::PlaceError> {
+    finish_rules: bool,
+) -> Result<Vec<(Board, synth_place::Placement)>, synth_place::PlaceError> {
     // Match synth-place::place() and the MCP gates. Starting the export
     // with a different courtyard margin can select a different legal
     // placement, making the exported PCB disagree with the placement the
     // agent just reviewed.
-    let margin = 1.5_f64;
+    let margin = synth_place::default_part_margin_mm();
     // Flash packages are oriented so their QSPI edge faces the MCU; this
     // override has to be applied here too or export reruns placement with
     // a different orientation than the placer just used.
     let rotation_overrides = flash_rotation_overrides(board);
+    let place = |board: &Board, margin: f64, seed: u64| {
+        if finish_rules {
+            synth_place::place_with_tuning_and_sidecar_seeded(
+                board,
+                margin,
+                &rotation_overrides,
+                sidecar,
+                seed,
+            )
+        } else {
+            synth_place::place_with_tuning_and_sidecar_seeded_unruled(
+                board,
+                margin,
+                &rotation_overrides,
+                sidecar,
+                seed,
+            )
+        }
+    };
     // The hinted pass is a candidate, not a precondition. Taking it with `?`
     // refused the whole export the moment it failed, before the unhinted
     // pass, the other margins or the other seeds had been tried — so a board
@@ -795,8 +943,8 @@ fn place_candidates_with_margins(
     // Keep the error instead, and report it only if nothing places at all.
     let mut candidates = Vec::new();
     let mut first_error = None;
-    match synth_place::place_with_tuning_and_sidecar(board, margin, &rotation_overrides, sidecar) {
-        Ok(hinted) => candidates.push(hinted),
+    match place(board, margin, 0) {
+        Ok(hinted) => candidates.push((board.clone(), hinted)),
         Err(error) => first_error = Some(error),
     }
 
@@ -814,24 +962,14 @@ fn place_candidates_with_margins(
             for component in &mut unhinted.components {
                 component.placement_hint = None;
             }
-            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
-                &unhinted,
-                margin,
-                &rotation_overrides,
-                sidecar,
-            ) {
-                candidates.push(candidate);
+            if let Ok(candidate) = place(&unhinted, margin, 0) {
+                candidates.push((unhinted.clone(), candidate));
             }
         }
 
         for &extra in extra_margins {
-            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar(
-                board,
-                extra,
-                &rotation_overrides,
-                sidecar,
-            ) {
-                candidates.push(candidate);
+            if let Ok(candidate) = place(board, extra, 0) {
+                candidates.push((board.clone(), candidate));
             }
         }
 
@@ -839,14 +977,8 @@ fn place_candidates_with_margins(
             if seed == 0 {
                 continue;
             }
-            if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
-                board,
-                margin,
-                &rotation_overrides,
-                sidecar,
-                seed,
-            ) {
-                candidates.push(candidate);
+            if let Ok(candidate) = place(board, margin, seed) {
+                candidates.push((board.clone(), candidate));
             }
         }
 
@@ -864,14 +996,8 @@ fn place_candidates_with_margins(
                 if seed == 0 {
                     continue;
                 }
-                if let Ok(candidate) = synth_place::place_with_tuning_and_sidecar_seeded(
-                    board,
-                    TIGHTEST_SEEDED_MARGIN_MM,
-                    &rotation_overrides,
-                    sidecar,
-                    seed,
-                ) {
-                    candidates.push(candidate);
+                if let Ok(candidate) = place(board, relative_margin(-0.6), seed) {
+                    candidates.push((board.clone(), candidate));
                 }
             }
         }
@@ -886,30 +1012,30 @@ fn place_candidates_with_margins(
     // A declared `outline` is the board the author asked for: fitting a tight
     // rim round the parts would silently replace it.
     if board.outline.is_none() {
-        for candidate in &mut candidates {
+        for (source, candidate) in &mut candidates {
             synth_place::fit_outline_with_passive_margin_mm(
-                board,
+                source,
                 candidate,
-                synth_place::tight_edge_margin_mm(board),
-                synth_place::passive_edge_margin_mm(board),
+                synth_place::tight_edge_margin_mm(source),
+                synth_place::passive_edge_margin_mm(source),
             );
-            synth_place::trim_outline_to_grid(board, candidate);
+            synth_place::trim_outline_to_grid(source, candidate);
         }
     }
     // The outline is final now: put each corner-hinted mounting hole into the
     // corner it asked for when that spot is free.
-    for candidate in &mut candidates {
+    for (source, candidate) in &mut candidates {
         synth_place::snap_features_to_corners(
-            board,
+            source,
             candidate,
-            synth_place::passive_edge_margin_mm(board),
+            synth_place::passive_edge_margin_mm(source),
         );
     }
 
-    let mut distinct: Vec<synth_place::Placement> = Vec::with_capacity(candidates.len());
-    for candidate in candidates {
-        if !distinct.contains(&candidate) {
-            distinct.push(candidate);
+    let mut distinct: Vec<(Board, synth_place::Placement)> = Vec::with_capacity(candidates.len());
+    for (source, candidate) in candidates {
+        if !distinct.iter().any(|(_, known)| *known == candidate) {
+            distinct.push((source, candidate));
         }
     }
     if distinct.is_empty() {

@@ -138,6 +138,7 @@ pub fn board(
         company: None,
         schematic_paper: None,
         schematic_overflow: None,
+        placement_spacing_nm: None,
         components,
         nets,
         diff_pairs,

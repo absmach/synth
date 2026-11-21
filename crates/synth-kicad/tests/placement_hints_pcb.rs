@@ -495,6 +495,29 @@ fn crowded_source() -> String {
 }
 
 #[test]
+fn the_iteration_candidate_set_starts_with_the_export_winner() {
+    let board = lower_source(&crowded_source(), "candidates.synth");
+    let sidecars = synth_kicad::Sidecars::default();
+    let winner = synth_kicad::placement_for_export(&board, &sidecars)
+        .expect("the export must choose a placement");
+    let candidates =
+        synth_kicad::placement_candidates(&board, &sidecars).expect("candidates must build");
+    assert_eq!(
+        candidates.first(),
+        Some(&winner),
+        "the export winner must be the first route-loop candidate"
+    );
+    assert_eq!(
+        candidates
+            .iter()
+            .filter(|candidate| *candidate == &winner)
+            .count(),
+        1,
+        "the export winner must appear exactly once"
+    );
+}
+
+#[test]
 fn the_iteration_candidate_set_offers_distinct_placements() {
     let board = lower_source(&crowded_source(), "candidates.synth");
     let sidecars = synth_kicad::Sidecars::default();
