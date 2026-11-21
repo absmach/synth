@@ -260,7 +260,7 @@ jobs:
             synth export-kicad fixtures/designs/hello.synth --out output/hello
             ```
 
-            `synth check DESIGN.synth --json` is the deterministic, model-free gate for CI: it runs compiler validation and DRC and returns structured diagnostics with source locations. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files.
+            `synth check DESIGN.synth --json` is the deterministic gate for CI: it runs compiler validation, DRC and the testbench when one exists, and returns structured diagnostics with source locations. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files.
 
             ## Agent integration
 

@@ -41,7 +41,7 @@ The descriptor has ten top-level keys:
 | `schema_version`           | Which version of this contract you are reading.                                             |
 | `compiler`                 | The `name` and `version` of the binary that answered.                                       |
 | `commands`                 | Each CLI subcommand, and whether it is available.                                           |
-| `physical_stages`          | The layout, placement, routing, DRC and export stages, each with its evidence.              |
+| `physical_stages`          | The layout, placement, routing, simulation, DRC and export stages, each with its evidence.  |
 | `manufacturer_profiles`    | The built-in fabrication limits, per profile.                                               |
 | `language`                 | The statements, attributes and endpoint forms the parser will accept.                       |
 | `geometry_and_constraints` | Board size, layer count, schematic page, `routing_constraints` and `fabrication_processes`. |
