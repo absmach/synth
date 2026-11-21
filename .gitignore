@@ -54,3 +54,4 @@ audit.jsonl
 # These are fetched per machine (see docs/kicad-workflows.md), not vendored.
 /tools/freerouting/
 /tools/jre25/
+/tools/KiCadRoutingTools/
