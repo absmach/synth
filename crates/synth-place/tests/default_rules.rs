@@ -1591,7 +1591,6 @@ fn compression_leaves_a_tight_board_unchanged() {
     assert_eq!(placement, before, "a tight board must not move");
 }
 
-#[ignore = "compression leaves rtd group/dock gate failures; tracked"]
 #[test]
 fn compression_keeps_the_usb_centred() {
     let _guard = lock_compress_env();
@@ -1813,7 +1812,6 @@ fn finish_outline_compresses_by_default() {
     );
 }
 
-#[ignore = "compression breaks the rtd group/dock gates; tracked"]
 #[test]
 fn compression_adds_no_visual_review_finding() {
     let _guard = lock_compress_env();
