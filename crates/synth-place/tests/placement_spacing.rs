@@ -48,14 +48,6 @@ fn rtd_afe(spacing: Option<&str>) -> Board {
     lower(&source)
 }
 
-/// The spacings checked; `SYNTH_TEST_SPACINGS=2.5` narrows a debugging run.
-fn spacings() -> Vec<f64> {
-    std::env::var("SYNTH_TEST_SPACINGS").map_or_else(
-        |_| vec![1.0, 2.5, 4.0, 5.0],
-        |v| v.split(',').filter_map(|s| s.parse().ok()).collect(),
-    )
-}
-
 fn with_spacing_mm(mm: f64) -> Board {
     let mut board = rtd_afe(None);
     board.placement_spacing_nm = Some(synth_geometry::mm_to_nm(mm));
@@ -193,11 +185,30 @@ fn check_spacing(label: &str, board: &Board, placement: &Placement, spacing_mm: 
     }
 }
 
+/// One spacing case. Split so nextest runs the four solves in parallel and
+/// each stays under the 960 s terminate-after.
+fn check_default_spacing(mm: f64) {
+    let board = with_spacing_mm(mm);
+    let placement = synth_place::place(&board).expect("place");
+    check_spacing("default", &board, &placement, mm, true);
+}
+
 #[test]
-fn default_path_keeps_every_pair_at_the_spacing() {
-    for mm in spacings() {
-        let board = with_spacing_mm(mm);
-        let placement = synth_place::place(&board).expect("place");
-        check_spacing("default", &board, &placement, mm, true);
-    }
+fn default_path_keeps_every_pair_at_1_0_mm() {
+    check_default_spacing(1.0);
+}
+
+#[test]
+fn default_path_keeps_every_pair_at_2_5_mm() {
+    check_default_spacing(2.5);
+}
+
+#[test]
+fn default_path_keeps_every_pair_at_4_0_mm() {
+    check_default_spacing(4.0);
+}
+
+#[test]
+fn default_path_keeps_every_pair_at_5_0_mm() {
+    check_default_spacing(5.0);
 }
