@@ -57,6 +57,13 @@ fn bundled_dir() -> Option<PathBuf> {
         for candidate in [
             "/usr/share/kicad/footprints",
             "/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints",
+            "D:\\Program Files\\KiCad\\10.0\\share\\kicad\\footprints",
+            "C:\\Program Files\\KiCad\\10.0\\share\\kicad\\footprints",
+            "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints",
+            "C:\\Program Files\\KiCad\\8.0\\share\\kicad\\footprints",
+            "C:\\Program Files\\KiCad\\7.0\\share\\kicad\\footprints",
+            "D:\\Program Files\\KiCad\\9.0\\share\\kicad\\footprints",
+            "D:\\Program Files\\KiCad\\8.0\\share\\kicad\\footprints",
         ] {
             let p = PathBuf::from(candidate);
             if p.is_dir() {

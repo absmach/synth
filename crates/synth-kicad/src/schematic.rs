@@ -168,7 +168,7 @@ pub(crate) fn build_schematic_from_layout_with_warnings(
             name: None,
             uuid: root_uuid,
             project_name: &board.name,
-            symbol_path: None,
+            symbol_path: Some(format!("/{root_uuid}")),
             members: None,
             power_drivers: None,
             root_furniture: None,
@@ -587,7 +587,7 @@ pub(crate) fn build_sheet_schematic(
     // sheets. No long wires, no top rails. Unroutable nets were merged
     // into `layout.net_labels` by `synth_layout::layout`, so this loop
     // covers the routing-fallback labels too.
-    let single_sheet = render.symbol_path.is_none();
+    let single_sheet = render.name.is_none() && render.root_furniture.is_none();
     for label in &layout.net_labels {
         let color = net_colors.get(&label.net).copied();
         if let Some(sexps) =

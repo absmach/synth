@@ -52,6 +52,13 @@ fn bundled_dir() -> Option<PathBuf> {
         for candidate in [
             "/usr/share/kicad/symbols",
             "/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols",
+            "D:\\Program Files\\KiCad\\10.0\\share\\kicad\\symbols",
+            "C:\\Program Files\\KiCad\\10.0\\share\\kicad\\symbols",
+            "C:\\Program Files\\KiCad\\9.0\\share\\kicad\\symbols",
+            "C:\\Program Files\\KiCad\\8.0\\share\\kicad\\symbols",
+            "C:\\Program Files\\KiCad\\7.0\\share\\kicad\\symbols",
+            "D:\\Program Files\\KiCad\\9.0\\share\\kicad\\symbols",
+            "D:\\Program Files\\KiCad\\8.0\\share\\kicad\\symbols",
         ] {
             let p = PathBuf::from(candidate);
             if p.is_dir() {

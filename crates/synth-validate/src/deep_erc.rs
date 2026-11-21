@@ -93,6 +93,9 @@ fn component_supply_v(
             continue;
         }
         let net = pin_net(board, component.id, PinId(idx as u32))?;
+        if domains.get(net).is_some_and(synth_ir::PowerDomainKind::is_ground) {
+            continue;
+        }
         if let Some(v) = net_voltage(domains, net) {
             return Some(v);
         }
