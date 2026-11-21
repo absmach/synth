@@ -1753,6 +1753,7 @@ pub(crate) fn corner_seated(rect: Rect, outline: Rect) -> bool {
 struct Rows {
     area: f64,
     usb: Option<f64>,
+    usb_limit: Option<f64>,
     dock: Option<f64>,
     dock_failures: usize,
     alignment: Option<f64>,
@@ -1770,6 +1771,7 @@ impl Rows {
         Self {
             area: measured("outline_area").unwrap_or(f64::MAX),
             usb: measured("usb_offset"),
+            usb_limit: metric("usb_offset").and_then(|row| row.limit),
             dock: measured("docking"),
             dock_failures: failures("docking"),
             alignment: measured("alignment"),
@@ -1786,9 +1788,23 @@ fn judged_better(before: &Rows, after: &Rows) -> bool {
     after.area < before.area - 1e-6 && metrics_not_worse(before, after)
 }
 
-/// Every measured row is at least as good, and there is no overlap.
+/// No measured row is worse, and there is no overlap. The one exception is a
+/// limited row that still passes while the fold also seats a connector, see
+/// ADR 0002.
 fn metrics_not_worse(before: &Rows, after: &Rows) -> bool {
-    !went_up(after.usb, before.usb)
+    // A row with a pass/fail limit may move while it still passes, but only
+    // when the fold also seats a connector the input left off its wall:
+    // rejecting the rtd pack because the USB moved 0.435 mm inside its 0.5 mm
+    // limit kept two docking failures and six group-gap failures.
+    let usb_ok = match (after.usb, after.usb_limit) {
+        (Some(usb_after), Some(limit))
+            if usb_after <= limit && after.dock_failures < before.dock_failures =>
+        {
+            true
+        }
+        _ => !went_up(after.usb, before.usb),
+    };
+    usb_ok
         && !went_down(after.dock, before.dock)
         && after.dock_failures <= before.dock_failures
         && !went_down(after.alignment.map(|a| a + ALIGN_SLACK), before.alignment)
@@ -1836,10 +1852,9 @@ pub(crate) fn fold_is_better(
         return false;
     }
     let judge_start = std::time::Instant::now();
-    let better = judged_better(
-        &Rows::of(&judge(board, &before)),
-        &Rows::of(&judge(board, after)),
-    );
+    let before_rows = Rows::of(&judge(board, &before));
+    let after_rows = Rows::of(&judge(board, after));
+    let better = judged_better(&before_rows, &after_rows);
     crate::stage_trace::record_time("fold_judge", judge_start.elapsed());
     better
 }
@@ -2276,9 +2291,10 @@ mod tests {
 
     #[test]
     fn a_worse_result_is_rejected() {
-        let before = Rows {
+        let mut before = Rows {
             area: 4_000.0,
             usb: Some(0.0),
+            usb_limit: Some(0.5),
             dock: Some(1.0),
             dock_failures: 0,
             alignment: Some(0.9),
@@ -2290,6 +2306,7 @@ mod tests {
         let mut after = Rows {
             area: 3_000.0,
             usb: Some(0.0),
+            usb_limit: Some(0.5),
             dock: Some(1.0),
             dock_failures: 0,
             alignment: Some(0.9),
@@ -2307,6 +2324,22 @@ mod tests {
         after.area = 3_000.0;
         after.overlaps = 1;
         assert!(!judged_better(&before, &after), "an overlap must reject");
+        after.overlaps = 0;
+        after.usb = Some(0.45);
+        assert!(
+            !judged_better(&before, &after),
+            "a USB offset that moved must reject when the fold fixes no docking"
+        );
+        before.dock_failures = 1;
+        assert!(
+            judged_better(&before, &after),
+            "a USB offset inside its limit may move when the fold seats a connector"
+        );
+        after.usb = Some(0.6);
+        assert!(
+            !judged_better(&before, &after),
+            "a USB offset past its limit must reject"
+        );
     }
 
     #[test]
