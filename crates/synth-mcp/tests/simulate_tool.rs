@@ -300,6 +300,7 @@ fn an_unbounded_measurement_reports_measured_not_passed() {
         .expect("the tool returns a result");
 
     assert_eq!(result["passed"], true, "{result}");
+    assert_eq!(result["limits_checked"], 0, "{result}");
     assert_eq!(result["measures"][0]["value"], 6.0);
     assert!(
         result["measures"][0]["passed"].is_null(),

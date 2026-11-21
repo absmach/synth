@@ -626,7 +626,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_simulate".into(),
-            description: "Compile a design and run its `<design>.sim.toml` testbench sidecar through ngspice, returning measured values, their limits and structured diagnostics. A design path is required because the sidecar sits beside it; inline `source` is not supported. A missing measurement, a failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking E-SYNTH-SIM-* diagnostic with `passed: false`, never a silent pass.".into(),
+            description: "Compile a design and run its `<design>.sim.toml` testbench sidecar through ngspice. The result carries `schema_version`, `passed`, `limits_checked`, measured values with their limits, structured diagnostics and `coverage` (`modelled`, `ignored`, `unmodelled`, `measured`). A design path is required because the sidecar sits beside it; inline `source` is not supported. A missing measurement, a failed measurement, a missing SPICE model, missing ngspice, a timeout, or a simulation setup error is blocking or unknown as appropriate, never a silent pass.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {

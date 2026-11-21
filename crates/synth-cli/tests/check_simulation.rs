@@ -5,9 +5,12 @@
 
 #![cfg(unix)]
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use sha2::{Digest, Sha256};
 
 #[path = "../../synth-sim/tests/support/stub_build.rs"]
 mod stub_build;
@@ -194,6 +197,18 @@ fn a_passing_sidecar_makes_the_simulation_stage_pass() {
     assert_eq!(
         simulation(&report)["result"]["coverage"]["modelled"],
         serde_json::json!(["R1", "R2"]),
+        "{report:#}"
+    );
+    let sidecar = std::fs::read(dir.join("divider.sim.toml")).expect("read sidecar");
+    let expected = Sha256::digest(&sidecar)
+        .iter()
+        .fold(String::new(), |mut hash, byte| {
+            let _ = write!(hash, "{byte:02x}");
+            hash
+        });
+    assert_eq!(
+        simulation(&report)["testbench_sha256"],
+        expected,
         "{report:#}"
     );
 }

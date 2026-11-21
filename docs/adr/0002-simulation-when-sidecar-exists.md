@@ -14,8 +14,9 @@ model.
 
 `synth check` runs the sidecar when one exists and reports a `simulation`
 stage. No sidecar, or a failed source gate, is `skipped` and non-blocking. A
-sidecar that cannot run — because ngspice is missing or the run timed out — is
-`unknown` and blocks, like the other unknown physical stages. A blocking
+sidecar that cannot run — because ngspice is missing, the run timed out, the
+report was unreadable, or setup failed — is `unknown` and blocks, like the
+other unknown physical stages. A blocking
 simulation diagnostic is `fail` and blocks.
 
 `validate`, `export` and `place` still never run ngspice. Simulation remains a

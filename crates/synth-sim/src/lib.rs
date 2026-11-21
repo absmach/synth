@@ -1432,9 +1432,14 @@ pub fn report_json(
     diagnostics: &[Diagnostic],
     coverage: &SimCoverage,
 ) -> serde_json::Value {
+    let limits_checked = measures
+        .iter()
+        .filter(|measure| measure.min.is_some() || measure.max.is_some())
+        .count();
     serde_json::json!({
         "schema_version": SIM_REPORT_SCHEMA,
         "passed": passed,
+        "limits_checked": limits_checked,
         "measures": measures.iter().map(|measure| serde_json::json!({
             "name": &measure.name,
             "value": measure.value,
@@ -1544,14 +1549,19 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         );
     }
 
-    let timeout = testbench
+    let testbench_timeout = testbench
         .options
         .timeout
         .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
-    let timeout = if let Some(deadline) = options.deadline {
-        timeout.min(deadline.saturating_duration_since(std::time::Instant::now()))
+    let (timeout, timeout_source) = if let Some(deadline) = options.deadline {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining < testbench_timeout {
+            (remaining, TimeoutSource::Deadline)
+        } else {
+            (testbench_timeout, TimeoutSource::Testbench)
+        }
     } else {
-        timeout
+        (testbench_timeout, TimeoutSource::Testbench)
     };
     if timeout.is_zero() {
         return failed(
@@ -1560,7 +1570,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
             &coverage,
         );
     }
-    let (run, run_dir) = match run_ngspice(&deck, dialect, options, timeout) {
+    let (run, run_dir) = match run_ngspice(&deck, dialect, options, timeout, timeout_source) {
         Ok(run) => run,
         Err(diagnostic) => {
             return failed(
@@ -1836,8 +1846,14 @@ fn locate(diagnostics: &mut [Diagnostic], path: Option<&Path>) {
 
 /// Default wall-clock budget, overridable with `[options] timeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Upper bound on `[options] timeout`; `Instant + Duration` must not overflow.
-/// Upper bound for a simulation deadline, in seconds.
+/// Which limit bounded the run, so a timeout names the right knob.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TimeoutSource {
+    Testbench,
+    Deadline,
+}
+/// Upper bound on `[options] timeout` and `--timeout`; `Instant + Duration`
+/// must not overflow.
 pub const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
 /// Upper bound on `[analysis.tran]` output points (stop/step). A transient
 /// is the run most likely to hang or fill the disk, so the cap keeps a
@@ -1856,6 +1872,7 @@ fn run_ngspice(
     dialect: Option<SpiceDialect>,
     options: &SimOptions,
     timeout: Duration,
+    timeout_source: TimeoutSource,
 ) -> Result<(Invocation, TempDir), Diagnostic> {
     let dir = TempDir::create()
         .map_err(|e| ngspice_error(format!("could not create a temporary directory: {e}")))?;
@@ -1894,7 +1911,7 @@ fn run_ngspice(
     })?;
 
     if run.timed_out {
-        return Err(timeout_error(timeout.as_secs_f64()));
+        return Err(timeout_error(timeout.as_secs_f64(), timeout_source));
     }
     Ok((run, dir))
 }
@@ -2328,12 +2345,15 @@ fn pin_current_wrong_way(name: &str, value: f64, limit: &PinDriveLimit) -> Diagn
         .build()
 }
 
-fn timeout_error(seconds: f64) -> Diagnostic {
+fn timeout_error(seconds: f64, source: TimeoutSource) -> Diagnostic {
+    let raise = match source {
+        TimeoutSource::Testbench => "Raise `[options] timeout` or shorten the analysis.",
+        TimeoutSource::Deadline => {
+            "Raise `--timeout` or the `synth check` stage budget, or shorten the analysis."
+        }
+    };
     sim_builder(E_SYNTH_SIM_005, Severity::Error, "ngspice timed out")
-        .message(format!(
-            "ngspice was killed after {seconds}s. \
-             Raise `[options] timeout` or shorten the analysis."
-        ))
+        .message(format!("ngspice was killed after {seconds}s. {raise}"))
         .build()
 }
 

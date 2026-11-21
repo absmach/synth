@@ -139,7 +139,9 @@ fn divider_example_prints_pass() {
         "{stdout}"
     );
     assert!(
-        stdout.contains("coverage: modelled=[R1, R2] ignored=[] unmodelled=[] measured=[MID]"),
+        stdout.contains(
+            "coverage: modelled=[R1, R2] ignored=[] unmodelled=[] measured=[MID] limits_checked=1"
+        ),
         "{stdout}"
     );
 }
@@ -149,6 +151,7 @@ fn an_invalid_timeout_is_a_usage_error() {
     for value in ["0", "3601"] {
         let output = Command::new(env!("CARGO_BIN_EXE_synth"))
             .arg("sim")
+            .arg("--json")
             .arg("--timeout")
             .arg(value)
             .arg(example_design())
@@ -156,9 +159,37 @@ fn an_invalid_timeout_is_a_usage_error() {
             .unwrap_or_else(|error| panic!("run synth sim --timeout {value}: {error}"));
 
         assert_eq!(output.status.code(), Some(2), "--timeout {value}");
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(stderr.contains("--timeout"), "{stderr}");
+        let report: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("stdout is one JSON object");
+        assert_eq!(report["schema_version"], "synth.sim.v1");
+        assert_eq!(report["passed"], false);
+        assert!(
+            report["error"]
+                .as_str()
+                .is_some_and(|error| error.contains("--timeout")),
+            "{report}"
+        );
     }
+}
+
+#[test]
+fn timeout_caps_the_cli_run_and_names_the_limit() {
+    let dir = scratch("timeout");
+    let stub = stub_ngspice(&dir, "hang");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("sim")
+        .arg("--timeout")
+        .arg("1")
+        .arg(example_design())
+        .env("NGSPICE", &stub)
+        .output()
+        .expect("run synth sim --timeout 1");
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("E-SYNTH-SIM-005"), "{stderr}");
+    assert!(stderr.contains("--timeout"), "{stderr}");
 }
 
 #[test]
@@ -197,6 +228,7 @@ fn json_reports_measures_and_coverage_without_human_lines() {
         serde_json::from_slice(&output.stdout).expect("stdout is one JSON object");
     assert_eq!(report["schema_version"], "synth.sim.v1");
     assert_eq!(report["passed"], true);
+    assert_eq!(report["limits_checked"], 1);
     assert_eq!(report["measures"][0]["name"], "vmid");
     assert_eq!(report["measures"][0]["value"], 6.0);
     assert_eq!(

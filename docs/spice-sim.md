@@ -32,9 +32,12 @@ synth sim examples/divider/divider.synth
 
 The design must have a testbench sidecar beside it, named
 `<design>.sim.toml` (for `divider.synth`, that is `divider.sim.toml`).
-`--timeout <secs>` caps the ngspice run after the design is compiled; the
-sidecar's own `[options] timeout` still applies when it is shorter.
-`synth check` uses this cap to keep the simulation inside its stage budget.
+`--timeout <secs>` is the deadline for the whole `synth sim` run. Compile time
+is not interrupted, but it counts against the deadline and reduces what is
+left for ngspice; an expired deadline returns `E-SYNTH-SIM-005` without
+starting the simulator. The sidecar's own `[options] timeout` still applies
+when it is shorter. `synth check` uses this cap to keep the simulation inside
+its stage budget.
 
 The command prints one line per measure:
 
@@ -68,7 +71,9 @@ and `coverage`. `coverage` is the list of what the run used and measured:
 
 The human output prints the same four lists on one coverage line. A part the
 emitter could not wire is named by its diagnostic; it is not added to
-`unmodelled`, which is specifically about unusable models.
+`unmodelled`, which is specifically about unusable models. `limits_checked`
+counts the measures that had a `min` or `max`; zero means the run checked no
+limits, even if its measures are reported as `MEASURED`.
 
 ### Check integration
 
@@ -81,10 +86,12 @@ same stage.
 | `skipped` | No sidecar, or the source gate failed. | No |
 | `pass` | The testbench ran and every blocking diagnostic is clear. | No |
 | `fail` | A blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit measure. | Yes |
-| `unknown` | The sidecar exists but ngspice is missing, timed out, or the report was unreadable. | Yes |
+| `unknown` | The sidecar exists but the simulator could not run: ngspice is missing, it timed out, the report was unreadable, or setup failed (for example the registry did not load). | Yes |
 
 An unknown stage is not a pass: install ngspice or remove the sidecar
-deliberately. A sidecar that exists but cannot run blocks the check.
+deliberately. A sidecar that exists but cannot run blocks the check. The
+stage carries `testbench_sha256` so a pass is tied to the sidecar revision,
+not only the `.synth` source hash.
 
 ### Drafting a testbench (`--suggest`)
 
@@ -213,6 +220,7 @@ the tool has no argument for it, so a remote caller cannot choose a command.
 <-- { "jsonrpc": "2.0", "id": 4,
       "result": { "schema_version": "synth.sim.v1",
                   "passed": true,
+                  "limits_checked": 1,
                   "measures": [ { "name": "vmid", "value": 6.0,
                                   "unit": "V", "min": 5.7, "max": 6.3,
                                   "passed": true } ],

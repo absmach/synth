@@ -2201,6 +2201,36 @@ fn missing_binary_gives_001() {
 }
 
 #[test]
+fn an_expired_deadline_gives_005_without_starting_ngspice() {
+    let board = board(DIVIDER);
+    let testbench = testbench(DIVIDER_TB);
+    let options = synth_sim::SimOptions {
+        deadline: Some(
+            Instant::now()
+                .checked_sub(Duration::from_secs(1))
+                .expect("an instant one second ago"),
+        ),
+        ..synth_sim::SimOptions::default()
+    };
+
+    let report = synth_sim::simulate(&board, &testbench, &options);
+
+    assert!(!report.passed());
+    assert!(report.measures.is_empty());
+    assert!(
+        report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_005
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("deadline expired"))
+        }),
+        "diagnostics: {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
 fn timeout_gives_005_and_kills_the_process_and_grandchild() {
     let board = board(DIVIDER);
     let testbench =

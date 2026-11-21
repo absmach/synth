@@ -123,9 +123,10 @@ enum Command {
         #[arg(long, conflicts_with = "suggest")]
         json: bool,
 
-        /// Cap the ngspice run in seconds. It is applied after the design is
-        /// compiled; the sidecar's own timeout still applies when it is
-        /// shorter.
+        /// Deadline for the whole `synth sim` run in seconds. Compile time is
+        /// not interrupted but counts against the deadline; an expired
+        /// deadline returns E-SYNTH-SIM-005 without starting ngspice. The
+        /// sidecar's own timeout still applies when it is shorter.
         #[arg(long, value_name = "SECS", conflicts_with = "suggest")]
         timeout: Option<f64>,
     },
@@ -1720,7 +1721,10 @@ fn check(
     let validate_pass =
         !validate_timed_out && validate_output.status.success() && validate_parse_ok;
 
-    let simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass)?;
+    let mut simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass)?;
+    if let Ok(bytes) = std::fs::read(synth_sim::sidecar_path(input)) {
+        simulation["testbench_sha256"] = serde_json::json!(sha256_hex(&bytes));
+    }
     let sim_pass = matches!(simulation["status"].as_str(), Some("pass" | "skipped"));
 
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
@@ -3587,10 +3591,14 @@ fn sim(
     if let Some(timeout) = timeout_secs
         && (!timeout.is_finite() || timeout <= 0.0 || timeout > synth_sim::MAX_TIMEOUT_SECONDS)
     {
-        anyhow::bail!(
+        let message = format!(
             "--timeout must be greater than 0 and at most {} seconds",
             synth_sim::MAX_TIMEOUT_SECONDS
         );
+        if json {
+            write_sim_error_message_json(&message)?;
+        }
+        anyhow::bail!(message);
     }
     let deadline = timeout_secs
         .map(|secs| std::time::Instant::now() + std::time::Duration::from_secs_f64(secs));
@@ -3720,11 +3728,16 @@ fn sim(
         }
         writeln!(
             out,
-            "coverage: modelled=[{}] ignored=[{}] unmodelled=[{}] measured=[{}]",
+            "coverage: modelled=[{}] ignored=[{}] unmodelled=[{}] measured=[{}] limits_checked={}",
             report.coverage.modelled.join(", "),
             report.coverage.ignored.join(", "),
             report.coverage.unmodelled.join(", "),
-            report.coverage.measured.join(", ")
+            report.coverage.measured.join(", "),
+            report
+                .measures
+                .iter()
+                .filter(|measure| measure.min.is_some() || measure.max.is_some())
+                .count()
         )?;
         let blocking: Vec<_> = report
             .diagnostics

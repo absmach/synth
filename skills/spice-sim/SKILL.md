@@ -76,8 +76,9 @@ had no limits; it is not a pass.
 - `pass`: the testbench ran and every blocking diagnostic is clear.
 - `fail`: a blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit
   measure.
-- `unknown`: the sidecar exists but ngspice is missing, timed out, or the
-  report was unreadable.
+- `unknown`: the sidecar exists but the simulator could not run: ngspice is
+  missing, timed out, the report was unreadable, or setup failed (for example
+  the registry did not load).
 
 `fail` and `unknown` block the check. `skipped` and `pass` do not.
 
@@ -89,6 +90,10 @@ Use `coverage` from the JSON result:
 - `ignored`: refdes values from the sidecar.
 - `unmodelled`: parts with no usable model.
 - `measured`: net, element and pin targets named by measures.
+
+`limits_checked` counts measures with a `min` or `max`; zero means the run
+checked no limits. A `simulation` stage also carries `testbench_sha256`, so a
+pass is tied to the sidecar revision.
 
 Say what the run covered and what it did not. Do not describe a partial
 simulation as full-board verification.

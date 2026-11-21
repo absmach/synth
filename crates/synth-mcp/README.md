@@ -63,7 +63,7 @@ testbench sidecar through ngspice.
 
 | Tool             | Purpose                                                                                                                                                                                                                                                                                                                                                            |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `synth_simulate` | Simulate a design and return each measured value, its limits, structured diagnostics and coverage. Requires `file_path`: the sidecar sits beside the design, so inline `source` is not supported. Optional `testbench_path`. The binary comes from `NGSPICE`, then `PATH`. A missing or failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking `E-SYNTH-SIM-*` diagnostic, never a silent pass. |
+| `synth_simulate` | Simulate a design and return `schema_version`, `limits_checked`, each measured value with its limits, structured diagnostics and coverage. Requires `file_path`: the sidecar sits beside the design, so inline `source` is not supported. Optional `testbench_path`. The binary comes from `NGSPICE`, then `PATH`. A missing or failed measurement, a missing SPICE model, missing ngspice or a timeout is a blocking `E-SYNTH-SIM-*` diagnostic, never a silent pass. |
 
 ```jsonrpc
 --> { "jsonrpc": "2.0", "id": 4, "method": "tools/call",
@@ -73,6 +73,7 @@ testbench sidecar through ngspice.
 <-- { "jsonrpc": "2.0", "id": 4,
       "result": { "schema_version": "synth.sim.v1",
                   "passed": true,
+                  "limits_checked": 1,
                   "measures": [ { "name": "vmid", "value": 6.0,
                                   "min": 5.7, "max": 6.3, "passed": true } ],
                   "diagnostics": [ ... ],

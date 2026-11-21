@@ -36,5 +36,6 @@ _Avoid_: passed, not applicable
 
 **Unknown**:
 A simulation-stage status meaning the sidecar exists but the simulator could
-not run. It blocks the check, because absence of evidence is not a pass.
+not run — missing tool, timeout, unreadable report, or setup failure. It
+blocks the check, because absence of evidence is not a pass.
 _Avoid_: failed, skipped
