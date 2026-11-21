@@ -91,6 +91,7 @@ fn board() -> Board {
         outline: None,
         required_processes: std::collections::BTreeSet::new(),
         schematic_overflow: None,
+        placement_spacing_nm: None,
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,

@@ -2676,6 +2676,17 @@ fn footprint_half_extent_mm(part: &synth_registry::Part) -> (f64, f64) {
     (w / 2.0, h / 2.0)
 }
 
+/// How many silk reference labels the export would put on another part's
+/// courtyard or on another label, with no sidecar label overrides.
+#[must_use]
+pub fn silk_label_overlaps(board: &Board, placement: &Placement) -> usize {
+    let by_id: HashMap<ComponentId, &ComponentPlacement> =
+        placement.components.iter().map(|p| (p.id, p)).collect();
+    let parts = label_parts(board, &by_id);
+    let placed = silk_labels::place_labels(&parts, placement.board_outline, &HashMap::new(), &[]);
+    silk_labels::count_overlaps(&parts, &placed)
+}
+
 /// Everything the label placer needs about each placed part.
 fn label_parts(
     board: &Board,
@@ -4372,6 +4383,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -4507,6 +4519,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -4594,6 +4607,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -4747,6 +4761,7 @@ mod tests {
             legends: false,
             labels: true,
             no_connects: Vec::new(),
+            placement_spacing_nm: None,
             name: "revision_board".to_string(),
             layers: 2,
             outline: None,
@@ -4796,6 +4811,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

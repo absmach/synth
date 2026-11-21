@@ -995,6 +995,7 @@ mod tests {
             company: None,
             schematic_paper: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             components: Vec::new(),
             nets: Vec::new(),
             diff_pairs: Vec::new(),
