@@ -213,11 +213,30 @@ fn default_path_keeps_every_pair_at_5_0_mm() {
     check_default_spacing(5.0);
 }
 
+/// One RePlAce spacing case, split for the same per-test timeout as the
+/// default path.
+fn check_replace_spacing(mm: f64) {
+    let board = with_spacing_mm(mm);
+    let placement = synth_place::place_with_replace(&board).expect("place");
+    check_spacing("replace", &board, &placement, mm, true);
+}
+
 #[test]
-fn replace_path_keeps_every_pair_at_the_spacing() {
-    for mm in spacings() {
-        let board = with_spacing_mm(mm);
-        let placement = synth_place::place_with_replace(&board).expect("place");
-        check_spacing("replace", &board, &placement, mm, true);
-    }
+fn replace_path_keeps_every_pair_at_1_0_mm() {
+    check_replace_spacing(1.0);
+}
+
+#[test]
+fn replace_path_keeps_every_pair_at_2_5_mm() {
+    check_replace_spacing(2.5);
+}
+
+#[test]
+fn replace_path_keeps_every_pair_at_4_0_mm() {
+    check_replace_spacing(4.0);
+}
+
+#[test]
+fn replace_path_keeps_every_pair_at_5_0_mm() {
+    check_replace_spacing(5.0);
 }
