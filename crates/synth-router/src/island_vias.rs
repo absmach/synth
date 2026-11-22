@@ -92,12 +92,13 @@ pub struct TieVia {
 pub struct TieOutcome {
     /// How many vias were added.
     pub added: usize,
-    /// Islands that hold copper of their own and are still tied to nothing: no
-    /// spot holds a via, or the rounds ran out. Each is a reason the board must
-    /// not be delivered, because KiCad refuses a zone against itself.
+    /// Islands that hold copper of their own and are still tied to nothing
+    /// because the rounds ran out, and pads no via fits in. Each is a reason the
+    /// board must not be delivered.
     pub unresolved: Vec<String>,
-    /// Signal vias on a slow net that no ground return via could be placed for:
-    /// listed for the review, not a reason to hold the board back.
+    /// Islands no spot holds a via for, and signal vias on a slow or medium net
+    /// that no ground return via could be placed for: listed for the review. The
+    /// board's DRC still blocks an island it reports as unconnected.
     pub advisory: Vec<String>,
 }
 
@@ -425,7 +426,7 @@ impl Groups {
 pub struct TiePlan {
     /// The vias that tie an island to its net's main pour.
     pub vias: Vec<TieVia>,
-    /// Copper-bearing islands no via fits in: a finding, not a success.
+    /// Copper-bearing pad ties no via fits in: a finding, not a success.
     pub unresolved: Vec<String>,
     /// Slow-net signal vias with no room for a return via: advisories.
     pub advisory: Vec<String>,
@@ -528,8 +529,8 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
                 plan.vias.push(tie);
             } else {
                 let first = &regions[members[0]];
-                plan.unresolved.push(format!(
-                    "an island of net {net} on {} near ({:.2}, {:.2}) mm holds copper but is tied to nothing, and no spot in it and the main pour holds a {} mm via clear of the pads, vias and tracks beside it",
+                plan.advisory.push(format!(
+                    "an island of net {net} on {} near ({:.2}, {:.2}) mm holds copper but is tied to nothing, and no spot in it and the main pour holds a {} mm via clear of the pads, vias and tracks beside it; the board's DRC decides whether it blocks",
                     first.layer,
                     f64::midpoint(first.min.0, first.max.0),
                     f64::midpoint(first.min.1, first.max.1),
@@ -3302,12 +3303,13 @@ mod tests {
         let board = PcbBoard::parse(text).expect("board must parse");
         let plan = plan_ties(&board, &ViaDeclarations::new());
         assert!(plan.vias.is_empty());
+        assert!(plan.unresolved.is_empty(), "{plan:?}");
         assert_eq!(
-            plan.unresolved.len(),
+            plan.advisory.len(),
             1,
-            "a live island with no room for a via must be a finding: {plan:?}"
+            "a live island with no room for a via must be listed: {plan:?}"
         );
-        assert!(plan.unresolved[0].contains("GND"), "{plan:?}");
+        assert!(plan.advisory[0].contains("GND"), "{plan:?}");
     }
 
     const COMPACT_ISLAND_BOARD: &str = r#"(kicad_pcb
@@ -4101,7 +4103,7 @@ mod tests {
         };
         let plan = plan_ties(&board, &declared);
         assert!(plan.vias.is_empty(), "{plan:?}");
-        assert_eq!(plan.unresolved.len(), 1, "{plan:?}");
+        assert_eq!(plan.advisory.len(), 1, "{plan:?}");
     }
 
     /// The via drills every layer, so a track of another net on an inner layer
