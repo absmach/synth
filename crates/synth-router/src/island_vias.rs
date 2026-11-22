@@ -711,6 +711,7 @@ pub struct Ground {
     underpad: BTreeSet<String>,
     /// The nets that declare a medium edge: they keep the return-via requirement
     /// but look for the via in the wider window of `synth_drc::MEDIUM_EDGE_WINDOW_NM`.
+    /// A medium net with no spot for one is an advisory, not blocking.
     medium: BTreeSet<String>,
     /// Opt-in: a missing fast-edge return via in a fine-pitch pad breakout is
     /// an advisory, not blocking. Needs SI-review sign-off; off by default.
@@ -1927,6 +1928,10 @@ fn stitch(
                 ground.push(p);
                 out.push(tie_via_at(net, p, size, drill));
             }
+        } else if ground_nets.medium.contains(signal_net) && ground_nets.needs_return(signal_net) {
+            advisory.push(format!(
+                "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the net declares a medium edge, so the loop is left as an advisory"
+            ));
         } else if ground_nets.needs_return(signal_net) {
             if ground_nets.fine_pitch_advisory && in_fine_pitch_breakout(&fine_pads, vx, vy) {
                 advisory.push(format!(
@@ -3793,6 +3798,37 @@ mod tests {
         );
         let board = PcbBoard::parse(&text).expect("parses");
         assert_eq!(stitch_vias(&board, REACH, &[]).len(), 1);
+    }
+
+    /// A medium edge is the design's declared claim, so a medium net with no
+    /// spot for a return via is an advisory, and a fast net is still blocking.
+    #[test]
+    fn a_medium_net_with_no_room_for_a_return_via_is_an_advisory() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 3 0) (xy 3 3) (xy 0 3)))
+            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 3 0) (xy 3 3) (xy 0 3)))))"#;
+        let board = PcbBoard::parse(text).expect("parses");
+        let medium = Ground::default().with_medium(&["SIG".to_string()]);
+        let plan = stitch(&board, REACH, &[], &medium, &ViaDeclarations::new());
+        assert!(plan.unresolved.is_empty(), "{:?}", plan.unresolved);
+        assert_eq!(plan.advisory.len(), 1, "{:?}", plan.advisory);
+        assert!(
+            plan.advisory[0].contains("medium edge"),
+            "{:?}",
+            plan.advisory
+        );
+        let fast = stitch(
+            &board,
+            REACH,
+            &[],
+            &Ground::default(),
+            &ViaDeclarations::new(),
+        );
+        assert_eq!(fast.unresolved.len(), 1, "{:?}", fast.unresolved);
     }
 
     /// With no free spot in reach, a ground pad within reach takes the return via

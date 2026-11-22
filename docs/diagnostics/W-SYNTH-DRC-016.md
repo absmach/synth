@@ -29,7 +29,8 @@ warning, with the net and the position, and does not block.
 
 A net class may instead declare `edge_rate medium`: edges no faster than 0.3 ns.
 The net keeps the return-via requirement, but looks for the ground via within
-6 mm of the signal via, not one dielectric height. The 6 mm is a twentieth of
+6 mm of the signal via, not one dielectric height. Where no spot for one exists,
+the layer change is listed as this warning and does not block the export. The 6 mm is a twentieth of
 the wavelength at the knee of a 0.3 ns edge (0.35 / 0.3 ns, about 1.2 GHz, in
 FR4 of relative permittivity 4.3, about 124 mm), a rule of thumb that PCB design
 guides give as a tenth to a twentieth of the wavelength. The stackup's thickest
