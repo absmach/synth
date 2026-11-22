@@ -216,27 +216,30 @@ fn run_rounds(
         &declared,
     );
     let mut unresolved = plan.unresolved;
-    unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
+    let mut advisory = plan.advisory;
+    for (i, via) in plan.vias.iter().enumerate() {
+        let (x, y) = (via.at.x_mm(), via.at.y_mm());
         if i < islands {
-            format!(
-                "a ground island on net {} near ({:.2}, {:.2}) mm is still untied after {MAX_ROUNDS} rounds",
-                via.net,
-                via.at.x_mm(),
-                via.at.y_mm()
-            )
+            unresolved.push(format!(
+                "a ground island on net {} near ({x:.2}, {y:.2}) mm is still untied after {MAX_ROUNDS} rounds",
+                via.net
+            ));
+        } else if plan.medium_returns.contains(&i) {
+            advisory.push(format!(
+                "a medium net still wants a ground return via on net {} near ({x:.2}, {y:.2}) mm after {MAX_ROUNDS} rounds; the net declares a medium edge, so the loop is left as an advisory",
+                via.net
+            ));
         } else {
-            format!(
-                "a signal via still wants a ground return via on net {} near ({:.2}, {:.2}) mm after {MAX_ROUNDS} rounds",
-                via.net,
-                via.at.x_mm(),
-                via.at.y_mm()
-            )
+            unresolved.push(format!(
+                "a signal via still wants a ground return via on net {} near ({x:.2}, {y:.2}) mm after {MAX_ROUNDS} rounds",
+                via.net
+            ));
         }
-    }));
+    }
     Ok(TieOutcome {
         added,
         unresolved,
-        advisory: plan.advisory,
+        advisory,
     })
 }
 
@@ -426,6 +429,8 @@ pub struct TiePlan {
     pub unresolved: Vec<String>,
     /// Slow-net signal vias with no room for a return via: advisories.
     pub advisory: Vec<String>,
+    /// The places in `vias` of the return vias a medium net asked for.
+    pub medium_returns: Vec<usize>,
 }
 
 /// The vias that would tie each unjoined, copper-bearing island of every
@@ -683,6 +688,9 @@ pub fn plan_all_with(
 ) -> TiePlan {
     let mut plan = plan_ties_and_pads(board, ground, declared);
     let stitched = stitch(board, reach_mm, &plan.vias, ground, declared);
+    let first = plan.vias.len();
+    plan.medium_returns
+        .extend(stitched.medium.iter().map(|i| first + i));
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
     plan.advisory.extend(stitched.advisory);
@@ -796,6 +804,8 @@ struct Stitched {
     vias: Vec<TieVia>,
     unresolved: Vec<String>,
     advisory: Vec<String>,
+    /// The places in `vias` of the return vias a medium net asked for.
+    medium: Vec<usize>,
 }
 
 /// A pad's copper as a rectangle turned to the pad's own angle.
@@ -1765,6 +1775,7 @@ fn stitch(
         vias: Vec::new(),
         unresolved: Vec::new(),
         advisory: Vec::new(),
+        medium: Vec::new(),
     };
     let pours = pours(board);
     let Some((net, regions)) = pours
@@ -1867,6 +1878,7 @@ fn stitch(
     let mut out = Vec::new();
     let mut offsets_by_window: HashMap<u64, Vec<(f64, f64)>> = HashMap::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
+    let mut medium = Vec::new();
     for &(vx, vy, ref signal_net) in &signals {
         let (reach_mm, window) = ground_nets.reach_and_window(signal_net, reach_mm);
         if ground
@@ -1926,6 +1938,9 @@ fn stitch(
             // rounds.
             if ground_nets.needs_return(signal_net) {
                 ground.push(p);
+                if ground_nets.medium.contains(signal_net) {
+                    medium.push(out.len());
+                }
                 out.push(tie_via_at(net, p, size, drill));
             }
         } else if ground_nets.medium.contains(signal_net) && ground_nets.needs_return(signal_net) {
@@ -1948,6 +1963,7 @@ fn stitch(
         vias: out,
         unresolved,
         advisory,
+        medium,
     }
 }
 
@@ -4344,6 +4360,36 @@ mod tests {
                 .iter()
                 .any(|u| u.contains("no ground return via")),
             "the unresolved return path was dropped: {outcome:?}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A medium net's return via that the rounds did not place is an advisory,
+    /// where a fast net's is blocking.
+    #[test]
+    fn a_medium_return_via_left_after_the_rounds_is_an_advisory() {
+        let text = stitched_text(r#"(0 "F.Cu" signal) (2 "B.Cu" signal)"#, "");
+        let path = scratch_file("medium_spent", &text);
+        let run = |ground: &Ground| {
+            tie_islands_with(&path, ground, &mut |_| Ok(Some(text.clone())))
+                .expect("the repair runs")
+        };
+        let medium = run(&Ground::default().with_medium(&["SIG".to_string()]));
+        assert!(
+            medium.unresolved.iter().all(|u| !u.contains("still wants")),
+            "{medium:?}"
+        );
+        assert!(
+            medium
+                .advisory
+                .iter()
+                .any(|a| a.contains("medium net still wants")),
+            "{medium:?}"
+        );
+        let fast = run(&Ground::default());
+        assert!(
+            fast.unresolved.iter().any(|u| u.contains("still wants")),
+            "{fast:?}"
         );
         let _ = std::fs::remove_file(&path);
     }
