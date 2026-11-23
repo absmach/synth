@@ -1,4 +1,0 @@
-# Placement and export tests run full solves in release and take several
-# minutes; the default 4x60s terminate-after kills them before they report.
-[profile.default]
-slow-timeout = { period = "120s", terminate-after = 8 }
