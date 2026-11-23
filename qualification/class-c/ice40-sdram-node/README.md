@@ -1,6 +1,12 @@
 # iCE40HX4K SDR SDRAM node with a USB-C power input (Class C, case 2)
 
-An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISSI IS42S16400J, TSOP-II-54), an SPI boot flash, a 1x6 programming header and three status LEDs, powered from a USB-C receptacle (5 V only), on six copper layers. It answers #329 under #40: a board whose memory interface is length- and impedance-sensitive, made by an agent driving `synth mcp`. The interface is a single-data-rate SDRAM driven by a soft controller in the FPGA fabric: there is no DQS strobe, no differential pair and no DDR claim. Case 2 is claimed for the routing of the memory lines (length, skew, impedance) only: the board uses the SDRAM's upper byte, and no controller or bitstream has run on it, so no interface timing (setup, hold, 143 MHz operation) is claimed. Jeff Mboya is the author of this pull request and has self-reviewed it; the independent PCB expert sign-off required by #40 is open (see [`QUALIFICATION.md`](QUALIFICATION.md), Human review).
+An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISSI IS42S16400J, TSOP-II-54), an SPI boot flash, a 1x6 programming header and three status LEDs, powered from a USB-C receptacle (5 V only), on six copper layers.
+
+It answers #329 under #40: a board whose memory interface is length- and impedance-sensitive, made by an agent driving `synth mcp`. The interface is a single-data-rate SDRAM driven by a soft controller in the FPGA fabric. There is no DQS strobe, no differential pair and no DDR claim.
+
+Case 2 is claimed for the routing of the memory lines (length, skew, impedance) only. The board uses the SDRAM's upper byte, and no controller or bitstream has run on it, so no interface timing (setup, hold, 143 MHz operation) is claimed.
+
+Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open (see [`QUALIFICATION.md`](QUALIFICATION.md), Human review).
 
 ## The board
 
@@ -14,6 +20,8 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISS
 | Configuration | `U5` Winbond W25Q128JVSIQ, SOIC-8 208 mil, master SPI; `R10` and `R11` pull `CRESET_B` and `CDONE` up, `R12` the chip select, `R13` and `R14` the write-protect and hold pins; `J2` 1x6 programming header (SS_B, SCK, SDI, SDO, CRESET_B, GND) |
 | Indicators and test points | `D5` PRTR5V0U2X ESD array on the CC lines at the receptacle, `D2` red (3.3 V present), `D3` green (CDONE, buffered by the N-MOSFET `Q2` AO3400A because CDONE is open-drain), `D4` green user LED; test points `TP1` to `TP7`; two M2.5 mounting holes at opposite corners |
 
-The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040), the part model in [`registry/parts/fpga/ice40hx4k_tq144.synth.toml`](../../../registry/parts/fpga/ice40hx4k_tq144.synth.toml) is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet. The memory pins sit on the FPGA's left side facing the SDRAM, in the order of the SDRAM's near pin row, so the data bus runs straight across with no crossings.
+The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040). The part model in [`registry/parts/fpga/ice40hx4k_tq144.synth.toml`](../../../registry/parts/fpga/ice40hx4k_tq144.synth.toml) is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet.
 
-The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md). Gerber content hash `e4663ac189`.
+The memory pins sit on the FPGA's left side facing the SDRAM, in the order of the SDRAM's near pin row, so the data bus runs straight across with no crossings.
+
+See [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. See [`PROVENANCE.md`](PROVENANCE.md) for how the board was made. Gerber content hash `e4663ac189`.
