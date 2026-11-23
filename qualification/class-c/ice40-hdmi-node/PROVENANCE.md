@@ -22,4 +22,11 @@ Synth findings from this board: #425 (silkscreen, since closed), #428 (flattened
 
 ## How an export is run
 
-the export harness, a script not kept in the repository, calls the `synth_export` tool of `synth mcp --stdio` on the workspace's `.synth`, its placement sidecar and `user-registry/`. It reads `KICAD_ROUTING_TOOLS_REPO` and `SYNTH_KRT_PYTHON` (KiCadRoutingTools `9399bfb2` and the Python of its virtual environment; the defaults in the file are the author's earlier machine), sets `SYNTH_USER_REGISTRY_DIR` to the workspace's `user-registry/`, and sets `SYNTH_SOURCE_REVISION`, which the routing record carries as `source_revision`. The workspace holds a `registry/parts` link to the build's registry. Each export goes into an empty directory. The routing record and the export traces carry paths of the machine the exports ran on.
+The export harness is a script not kept in the repository. It calls the `synth_export` tool of `synth mcp --stdio` on the workspace's `.synth`, its placement sidecar and `user-registry/`.
+
+- It reads `KICAD_ROUTING_TOOLS_REPO` and `SYNTH_KRT_PYTHON`: KiCadRoutingTools `9399bfb2` and the Python of its virtual environment. The defaults in the file are the author's earlier machine.
+- It sets `SYNTH_USER_REGISTRY_DIR` to the workspace's `user-registry/`.
+- It sets `SYNTH_SOURCE_REVISION`, which the routing record carries as `source_revision`.
+- The workspace holds a `registry/parts` link to the build's registry.
+- Each export goes into an empty directory.
+- The routing record and the export traces carry paths of the machine the exports ran on.

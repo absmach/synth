@@ -1,6 +1,12 @@
 # Qualification: iCE40HX4K HDMI (DVI-style TMDS) node (Class C, case 3)
 
-**Status:** the board is routed and released (49 of 49 nets connected, 0 open, from the export's routing report), the exported KiCad files, a fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)); the router's report, the pair measurements and the layout metrics quoted in this document come from the author's run of the export this package was built from, and no report or measurement file is committed in this package. The delivered pairs stay within their declared 25 mm intra-pair skew budget (the measured numbers are in the TMDS pair measurements table below), but they are not a coupled differential interface: the router routes P and N as independent nets on different layers, the gap between the legs is 1 to 3.5 mm against the 0.15 mm class clearance, and the differential impedance is not established. Spacing, coupling and impedance are not met, and no HDMI compliance is claimed.
+**Status:** the board is routed and released. The export's routing report shows 49 of 49 nets connected and 0 open.
+
+- The exported KiCad files, the fabrication package and the STEP model are committed in [`kicad/`](kicad/), [`fab/`](fab/) and [`models/`](models/).
+- The router's report, the pair measurements and the layout metrics in this document come from the author's run of the export this package was built from. No report or measurement file is committed.
+- The delivered pairs stay within the declared 25 mm intra-pair skew budget. See the TMDS pair measurements table.
+- The pairs are not a coupled differential interface. The router routes P and N as independent nets on different layers, and the gap between the legs is 1 to 3.5 mm against the 0.15 mm class clearance.
+- Spacing, coupling and differential impedance are not met. No HDMI compliance is claimed.
 
 ## What was measured
 
@@ -27,17 +33,55 @@ Each TMDS lane is two nets per leg: the FPGA pin to the 270 ohm source resistor 
 | `CK` | 7.5 + 39.1 = 46.6 mm | 6.9 + 43.4 = 50.2 mm | 3.64 mm | 25 mm | 4 / 5 | 0.04 / 2.05 mm |
 
 - **Inter-pair mismatch:** the mean pair lengths are 44.7 (`D0`), 42.9 (`D1`), 34.9 (`D2`) and 48.4 mm (`CK`), a mismatch of 13.54 mm; no inter-pair budget is declared in the source.
-- **Skew budget.** Every `diff_pair` declares `max_skew 25mm`. The TMDS transmitter rule is 0.15 Tbit between the two halves of a pair, with Tbit = 0.1 x the pixel period (secondary sources, not the HDMI 1.4 text: [Texas Instruments SLVA747](https://ti.com/lit/pdf/SLVA747) and the layout notes of Analog Devices and Chrontel). The 25 MHz oscillator gives a 40 ns pixel period (VGA timing, 252 Mbit/s per lane), so Tbit = 4.0 ns and 0.15 Tbit = 0.6 ns, which is 85 mm at 7.0 ps/mm (stripline, er 4.4); 25 mm is 0.175 ns, 29 % of that limit. The delivered skew is 0.83 mm at best (`D2`) and 4.86 mm at worst (`D0`) by the sum of segments above; the export reports no blocking signal-integrity finding (`signal_integrity_blocking` is 0 in the export response). The sums of segments in the pair measurements (the author's run; the file is not committed) are the delivered pair measure this README uses; the DRC's own length-matching figures are not committed and are not quoted. The router wrapper never calls KiCadRoutingTools' pair router, so P and N are routed as independent nets ([#447](https://github.com/absmach/synth/issues/447)) and Synth's export gate did not carry the class skew budgets through in the revision used ([#147](https://github.com/absmach/synth/issues/147), since closed). The pairs are therefore not coupled: the gap between the two legs is 1 to 2 mm at the median, not the 0.15 mm class clearance.
-- **Width and impedance.** The class declares 0.127 mm tracks (the board's minimum track width) and a 0.15 mm clearance, which the closed-form microstrip estimate gives as 96.7 ohm differential on the declared stackup: Z0 = 87/sqrt(er+1.41) x ln(5.98 h / (0.8 w + t)) = 87/2.347 x ln(0.5944/0.1366) = 54.5 ohm at h = 0.0994 mm, er = 4.1, t = 35 um, and Zdiff = 2 Z0 (1 - 0.48 exp(-0.96 s / h)) = 96.7 ohm at s = 0.15 mm. It is an estimate, not a field solve. The delivered TMDS tracks are 0.127 to 0.13 mm, so the delivered single-ended impedance is about 54 ohm; the delivered differential impedance is not established because the pairs are not coupled. The router put the halves of the pairs on different layers (for example `HDMI_D1_P` runs 13.4 mm on `In1.Cu` and `HDMI_D1_N` 23.4 mm on `In4.Cu`; `HDMI_D2_P` 18.7 mm on `In2.Cu` and `HDMI_D2_N` 24.6 mm on `F.Cu`), so the estimate above, made for an outer-layer microstrip over the 0.0994 mm prepreg, does not describe those runs and no impedance is claimed for them.
+- **Skew budget.**
+  - Every `diff_pair` declares `max_skew 25mm`.
+  - The TMDS transmitter rule is 0.15 Tbit between the two halves of a pair, with Tbit = 0.1 x the pixel period. The sources are secondary: [Texas Instruments SLVA747](https://ti.com/lit/pdf/SLVA747) and the layout notes of Analog Devices and Chrontel, not the HDMI 1.4 text.
+  - The 25 MHz oscillator gives a 40 ns pixel period (VGA timing, 252 Mbit/s per lane). Tbit is 4.0 ns and 0.15 Tbit is 0.6 ns, which is 85 mm at 7.0 ps/mm (stripline, er 4.4). The 25 mm budget is 0.175 ns, 29 % of that limit.
+  - The delivered skew is 0.83 mm at best (`D2`) and 4.86 mm at worst (`D0`), by the sums of segments above.
+  - The export reports no blocking signal-integrity finding (`signal_integrity_blocking` is 0).
+  - The sums of segments are the delivered pair measure this document uses. The DRC's length-matching figures are not committed and are not quoted.
+  - The router wrapper never calls the KiCadRoutingTools pair router, so P and N are routed as independent nets ([#447](https://github.com/absmach/synth/issues/447)). The export gate did not carry the class skew budgets through in the revision used ([#147](https://github.com/absmach/synth/issues/147), since closed).
+  - The pairs are therefore not coupled. The gap between the two legs is 1 to 2 mm at the median, not the 0.15 mm class clearance.
+- **Width and impedance.**
+  - The class declares 0.127 mm tracks (the board's minimum track width) and a 0.15 mm clearance.
+  - The closed-form microstrip estimate gives 96.7 ohm differential on the declared stackup. It is an estimate, not a field solve.
+    - Z0 = 87/sqrt(er+1.41) x ln(5.98 h / (0.8 w + t)) = 87/2.347 x ln(0.5944/0.1366) = 54.5 ohm, at h = 0.0994 mm, er = 4.1, t = 35 um.
+    - Zdiff = 2 Z0 (1 - 0.48 exp(-0.96 s / h)) = 96.7 ohm, at s = 0.15 mm.
+  - The delivered TMDS tracks are 0.127 to 0.13 mm. The single-ended impedance is about 54 ohm.
+  - The differential impedance is not established, because the pairs are not coupled.
+  - The router put the halves of the pairs on different layers. `HDMI_D1_P` runs 13.4 mm on `In1.Cu` and `HDMI_D1_N` 23.4 mm on `In4.Cu`. `HDMI_D2_P` runs 18.7 mm on `In2.Cu` and `HDMI_D2_N` 24.6 mm on `F.Cu`.
+  - The estimate is for an outer-layer microstrip over the 0.0994 mm prepreg. It does not describe those runs, and no impedance is claimed for them.
 - **Drive levels.** With the iCE40 output at 0 V behind 270 ohm into the sink's 50 ohm pull-up to 3.3 V, the line sits at 3.3 V x 270 / (270 + 50) = 2.78 V; at 3.3 V it sits at 3.3 V, a swing of 0.52 V single-ended. The output impedance of the iCE40 pin is not included.
 
 ### Return paths and the edge rate of the TMDS nets
 
-The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a ground via within a window of the thickest dielectric; it blocks the release for a fast net. A declared `diff_pair` and a differential pin type are inferred fast. The TMDS and source classes declare `edge_rate medium` because the nets are driven only by the iCE40 through a 270 ohm resistor, and Lattice's IBIS model `ice40.ibs` rev 2.5 gives 20 to 80 % rise and fall times of at least 0.976 ns (banks 0 to 2, `lvc330io`) and 0.728 ns (bank 3, `lvc330_b3io`) at the fast corner, so no edge on these nets is faster than 0.3 ns. Synth's `edge_rate medium` tier ([#445](https://github.com/absmach/synth/issues/445), since closed) widens the window to 6 mm; the Synth commit named in [`PROVENANCE.md`](PROVENANCE.md) lets a declared `medium` replace the inference from a `diff_pair` or a differential pin, and a clock, RF or analog pin, a crystal or a switching node still prove a fast edge. Measured on the delivered board, centre to centre, the TMDS layer-change vias are within 0.63 to 6.01 mm (`D0`), 0.70 to 4.66 mm (`D1`), 0.70 to 3.89 mm (`D2`) and 0.63 to 3.11 mm (`CK`) of a ground via. The 6.01 mm via of `D0` is just outside the 6 mm window.
+The rule `W-SYNTH-DRC-016` asks for a ground via within a window of the thickest dielectric of a layer-change via on a fast net.
+
+- The rule blocks the release for a fast net. A declared `diff_pair` and a differential pin type are inferred fast.
+- The TMDS and source classes declare `edge_rate medium`. The nets are driven only by the iCE40 through a 270 ohm resistor.
+- Lattice's IBIS model `ice40.ibs` rev 2.5 gives 20 to 80 % rise and fall times of at least 0.976 ns (banks 0 to 2, `lvc330io`) and 0.728 ns (bank 3, `lvc330_b3io`) at the fast corner. No edge on these nets is faster than 0.3 ns.
+- The `edge_rate medium` tier ([#445](https://github.com/absmach/synth/issues/445), since closed) widens the window to 6 mm.
+- The Synth commit named in [`PROVENANCE.md`](PROVENANCE.md) lets a declared `medium` replace the inference from a `diff_pair` or a differential pin. A clock, RF or analog pin, a crystal or a switching node still proves a fast edge.
+
+Measured on the delivered board, centre to centre, the TMDS layer-change vias are within these distances of a ground via:
+
+| Lane | Distance to a ground via |
+|---|---|
+| `D0` | 0.63 to 6.01 mm |
+| `D1` | 0.70 to 4.66 mm |
+| `D2` | 0.70 to 3.89 mm |
+| `CK` | 0.63 to 3.11 mm |
+
+The 6.01 mm via of `D0` is just outside the 6 mm window.
 
 ## 3.3 V regulator thermal budget
 
-`U1` (AP7361C-33E, SOT-223) drops at most 5.15 V (5.5 V in, less the drops of `F1`, `Q3` and `R_SURGE`) to 3.3 V, so it dissipates `P = (5.15 - 3.3) x I` and its junction sits at `Tj = TA + P x RθJA`, held to 125 &deg;C here (Diodes AP7361C datasheet DS37274 Rev. 5-2: SOT223 `RθJA = 110 °C/W`, 360 mV typical dropout at 1 A for the 3.3 V version, 1 A output, input 2.2 to 6.0 V recommended and 6.5 V absolute maximum). `W-SYNTH-THERMAL-001` is not reported for `U1`.
+`U1` (AP7361C-33E, SOT-223) drops at most 5.15 V to 3.3 V. The input is 5.5 V less the drops of `F1`, `Q3` and `R_SURGE`.
+
+- Dissipation is `P = (5.15 - 3.3) x I`.
+- The junction sits at `Tj = TA + P x RthJA`, held to 125 degC here.
+- Diodes AP7361C datasheet DS37274 Rev. 5-2 gives `RthJA = 110 degC/W` for SOT223, 360 mV typical dropout at 1 A for the 3.3 V version, 1 A output, input 2.2 to 6.0 V recommended and 6.5 V absolute maximum.
+- `W-SYNTH-THERMAL-001` is not reported for `U1`.
 
 | Load on `+3V3` | Current used | Source |
 |---|---|---|
@@ -46,11 +90,22 @@ The rule `W-SYNTH-DRC-016` asks that a layer-change via on a fast net have a gro
 | Four LEDs, 470 ohm | 28 mA (3.3 V / 470 ohm each, which ignores the LED forward drop) | the design's own arithmetic |
 | Total | 253 mA | |
 
-At 253 mA the regulator dissipates 1.85 V x 0.253 A = 0.47 W, a 51 &deg;C rise: Tj is 77 &deg;C at 25 &deg;C ambient and 122 &deg;C at 70 &deg;C ambient, under 125 &deg;C. Tj reaches 125 &deg;C at `(125 - 25) / 110 / 1.85 = 0.49 A` in total at 25 &deg;C ambient and at `(125 - 70) / 110 / 1.85 = 0.27 A` at 70 &deg;C ambient, which leaves about 0.02 A at 70 &deg;C for the FPGA's 3.3 V I/O current, which depends on the design and is not counted above. The load currents are datasheet maxima added together, which no operating state reaches at once. Dropout: 360 mV typical at 1 A, so at the 4.40 V worst-case input (4.65 V rail less `R_SURGE`) the output stays in regulation with 1.10 V to spare. The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1` or `R_SURGE`.
+At 253 mA the regulator dissipates 1.85 V x 0.253 A = 0.47 W, a 51 degC rise.
+
+- Tj is 77 degC at 25 degC ambient and 122 degC at 70 degC ambient, under 125 degC.
+- Tj reaches 125 degC at (125 - 25) / 110 / 1.85 = 0.49 A in total at 25 degC ambient, and at (125 - 70) / 110 / 1.85 = 0.27 A at 70 degC ambient.
+- At 70 degC that leaves about 0.02 A for the FPGA's 3.3 V I/O current. That current depends on the design and is not counted above.
+- The load currents are datasheet maxima added together. No operating state reaches them at once.
+- Dropout is 360 mV typical at 1 A. At the 4.40 V worst-case input (4.65 V rail less `R_SURGE`) the output stays in regulation with 1.10 V to spare.
+- The HDMI 5 V output is fed from the 5 V rail through `F2`, not through `U1` or `R_SURGE`.
 
 ## Input surge
 
-`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.5 V maximum input, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input, and every low-dropout regulator this board could use (AP7361C, AP2114, AP2112K, LP5907) is rated 6.5 V or less, below the least breakdown of any TVS with a standoff above 5.5 V. So `R_SURGE`, 1 ohm, sits between the +5 V rail and `U1`, with `C2` and `C3` behind it: a short clamp event is held off the regulator, and a sustained over-voltage is limited by `F1` opening; the arithmetic and the one remaining gap are in the requirement check below. `Q3` is protected by `D_GZ`, a 5.1 V zener from its gate to its source, which holds the gate-source voltage under the SI2301CDS's 8 V rating while the source follows a surge to 10.3 V behind the 10 k gate resistor `R40`.
+`D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.5 V maximum input, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A.
+
+- `U1` is rated 6.5 V absolute maximum at its input. Every low-dropout regulator this board could use (AP7361C, AP2114, AP2112K, LP5907) is rated 6.5 V or less, below the least breakdown of any TVS with a standoff above 5.5 V.
+- `R_SURGE`, 1 ohm, therefore sits between the +5 V rail and `U1`, with `C2` and `C3` behind it. A short clamp event is held off the regulator, and a sustained over-voltage is limited by `F1` opening. The arithmetic and the one remaining gap are in the requirement check below.
+- `Q3` is protected by `D_GZ`, a 5.1 V zener from its gate to its source. It holds the gate-source voltage under the SI2301CDS's 8 V rating while the source follows a surge to 10.3 V behind the 10 k gate resistor `R40`.
 
 ### Requirement check: regulator and input protection
 
@@ -60,7 +115,7 @@ At 253 mA the regulator dissipates 1.85 V x 0.253 A = 0.47 W, a 51 &deg;C rise: 
 |---|---|---|---|
 | The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | the input is at most 5.5 V less `F1`, `Q3` (0.10 V at 0.31 A) and `R_SURGE` (0.25 V), 5.15 V, 0.85 V under 6.0 V | Met |
 | Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | the worst-case rail is 4.65 V (4.75 V less 0.065 V in `F1` and 0.034 V in `Q3` at 0.31 A); less `R_SURGE` 0.25 V the input is 4.40 V; 4.40 V - 3.3 V = 1.10 V against 0.36 V at 1 A | Met |
-| The regulator carries the load and sheds its dissipation | 1 A, SOT-223, `RθJA` 110 C/W | (5.15 V - 3.3 V) x 0.253 A = 0.47 W gives 77 C at 25 C ambient and 122 C at 70 C ambient, under 125 C; the total at which Tj reaches 125 C is 0.49 A at 25 C and 0.27 A at 70 C | Met |
+| The regulator carries the load and sheds its dissipation | 1 A, SOT-223, `RthJA` 110 C/W | (5.15 V - 3.3 V) x 0.253 A = 0.47 W gives 77 C at 25 C ambient and 122 C at 70 C ambient, under 125 C; the total at which Tj reaches 125 C is 0.49 A at 25 C and 0.27 A at 70 C | Met |
 | `R_SURGE` carries the load | 1 ohm, 250 mW | 0.253 A squared x 1 ohm = 0.064 W | Met |
 | HDMI pin 18 stays at 4.8 V or more | `Q3` P-MOSFET stage instead of the Schottky | worst-case drops 0.138 V (`F1`, `Q3`, `F2`), so 4.94 V is needed at `J1` | Met when `J1` carries 4.94 V or more, which the README states |
 | `Q3` survives the surge on its gate | `D_GZ` 5.1 V zener from gate to source, `R40` 10 k | with the source at the 10.3 V clamp the gate follows at the source less 4.8 to 5.4 V, so the gate-source voltage stays under 5.4 V against the 8 V rating, with 0.52 mA (2.7 mW) in `D_GZ` | Met |
@@ -68,7 +123,7 @@ At 253 mA the regulator dissipates 1.85 V x 0.253 A = 0.47 W, a 51 &deg;C rise: 
 | The regulator survives a short clamp event | `U1` absolute maximum input 6.5 V | `D1` clamps at up to 10.3 V at 38.8 A; the current through `R_SURGE` is at most (10.3 V - 4.5 V) / 1 ohm = 5.8 A, so a 60 ns event carries 0.35 uC, which raises 20 uF by 0.02 V and holds the regulator input near 5 V; the energy in the resistor is about 2 uJ (its pulse rating was not read) | Met for events of 60 ns |
 | The regulator survives a sustained over-voltage | `U1` absolute maximum input 6.5 V | `D1` holds the +5 V rail at about 7.0 V (typical breakdown) until `F1` opens; the regulator input is then 7.0 V - 0.25 V = 6.75 V, 0.25 V over its rating | Not met until `F1` opens |
 
-The sustained over-voltage row is the one gap, for the reasons given under "Input surge": every low-dropout regulator considered is rated 6.5 V or less, and the 15 V and 20 V parts (AMS1117-3.3, NCP1117ST33T3G) need an ESR-stabilised output capacitor and have a higher `RθJA` in the SOT-223.
+The sustained over-voltage row is the one gap, for the reasons given under "Input surge": every low-dropout regulator considered is rated 6.5 V or less, and the 15 V and 20 V parts (AMS1117-3.3, NCP1117ST33T3G) need an ESR-stabilised output capacitor and have a higher `RthJA` in the SOT-223.
 
 ## +5 V at the HDMI connector (pin 18)
 
