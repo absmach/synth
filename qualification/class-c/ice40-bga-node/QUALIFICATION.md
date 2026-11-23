@@ -21,7 +21,9 @@ All figures come from the files of the export this package was built from (KiCad
 | BGA escape | `escape { method underpad }` on `U1`; the board has 21 vias at 0.35/0.2 mm, the size of a filled and capped via in a ball pad; see the BGA escape notes below the table |
 | USB-C | `J1` sits on the left edge with its mating opening facing the edge (rotation 270, courtyard 0.05 mm from Edge.Cuts); `escape { off }` on `J1` and on the MCU `U5`, which are not ball grids |
 | USB pair | D+ and D- run from `J1` through 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11`, declared as 90 ohm differential pairs (the connector side and the MCU side) in the `USB` class (0.12 mm tracks, locked to `F.Cu`, `edge_rate fast`); see the USB pair notes below the table |
-| Warnings | 83 in the export's `kicad-cli` DRC report with zone refill (not committed): 81 `lib_footprint_issues` (silkscreen cut back from vias and pads by the exporter, #425), 1 `silk_overlap` and 1 `silk_over_copper`; 0 unconnected items |
+| DRC rules | The 21 vias at 0.35/0.2 mm are below the 0.46 mm and 0.13 mm floors of the board setup. The rules file `kicad/ice40_bga_node.kicad_dru` lowers the floor to 0.35 mm and 0.075 mm for vias of that size inside the courtyard of `U1`, the filled and capped via-in-pad process of `jlc-advanced`. KiCad loads the file when it sits beside the board. Without it, DRC reports 21 `via_diameter` and 21 `annular_width` errors |
+| Zone fill | The committed board carries refilled zones (`kicad-cli pcb drc --refill-zones --save-board`), and the Gerbers are plotted from that fill. `kicad-cli pcb drc` without a refill reports 0 unconnected items on it |
+| Warnings | 83 in the export's `kicad-cli` DRC report with zone refill (not committed): 81 `lib_footprint_issues` (silkscreen cut back from vias and pads by the exporter, #425), 1 `silk_overlap` and 1 `silk_over_copper`; 0 errors and 0 unconnected items with the rules file `kicad/ice40_bga_node.kicad_dru` beside the board |
 | Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy; see the engine verdict notes below the table |
 
 BGA escape notes:
@@ -139,9 +141,8 @@ Follow these steps to check the board.
    kicad-cli sch erc kicad/ice40_bga_node.kicad_sch
    synth validate ice40_bga_node.synth
    ```
-   ```
 
-4. Read the results. The first command verifies every file below `SHA256SUMS`.
+4. Read the results. The first command verifies every file below `SHA256SUMS`. The DRC reads `kicad/ice40_bga_node.kicad_dru` because it sits beside the board.
 
 Note: The parts this board adds to the registry are in `registry/parts/` of the repository.
 
@@ -160,7 +161,7 @@ PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `f
 |---|---|
 | PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/`, the exported KiCad board and the STEP model of `fab/` |
 | Return paths | the return-path rule as applied by the export gate |
-| ERC | not re-run for this package |
+| ERC | 0 errors in `kicad-cli sch erc`; the warnings are library symbol and footprint-link warnings, and their number depends on the configured library tables |
 | DRC | the 83 warnings of the KiCad DRC run with zone refill, 0 unconnected items |
 | Placement | the placement on 60.9 x 48.5 mm, as pinned in `ice40_bga_node.placement.layout.toml` |
 | Parts and values | the BOM identities of `fab/bom.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
