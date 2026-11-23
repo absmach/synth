@@ -6021,14 +6021,16 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         // A label whose text only repeats the pin name beside it is visual
         // noise. When another endpoint spells the net out, leave the
         // self-named pins unlabelled and flag that endpoint instead. A net
-        // whose every pin is self-named still needs one flag: `wired_subnets`
-        // wires the remaining pins to it, so dropping every label would
-        // disconnect them. `pick_net_label` uppercases pin-derived names, so
-        // compare case-insensitively.
+        // whose every pin is self-named keeps a label on each pin: those
+        // labels are the only thing naming the copper, and `wired_subnets`
+        // draws no wires for such a net, so reducing them to one flag leaves
+        // KiCad reporting the other pins unconnected. The comparison is
+        // deliberately exact: a lowercase pin name is not the same token as
+        // the uppercased label, and suppressing it leaves the pin unwired.
         let spells_net = |endpoint: &synth_ir::NetEndpoint| {
             board
                 .pin(endpoint.component, endpoint.pin)
-                .is_some_and(|pin| pin.name.eq_ignore_ascii_case(&label))
+                .is_some_and(|pin| pin.name == label)
         };
         let has_other_name = net.endpoints.iter().any(|endpoint| !spells_net(endpoint));
         // A net that leaves its region is wired inside each region it touches
@@ -6036,20 +6038,15 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         // The self-name suppression below only applies to a net contained in
         // one region: a regional flag may be the only label in that region.
         let mut flagged_regions: Vec<Option<&str>> = Vec::new();
-        let mut kept_self_named = false;
         for ep in &net.endpoints {
-            let self_named = spells_net(ep);
             if crosses {
                 let region = region_of(ep.component);
                 if flagged_regions.contains(&region) {
                     continue;
                 }
                 flagged_regions.push(region);
-            } else if self_named {
-                if has_other_name || kept_self_named {
-                    continue;
-                }
-                kept_self_named = true;
+            } else if has_other_name && spells_net(ep) {
+                continue;
             }
             labels.push(NetLabel {
                 net: net.id,
@@ -9704,7 +9701,7 @@ mod documentation_tests {
     }
 
     #[test]
-    fn an_all_self_named_net_keeps_one_flag_and_wires_the_rest() {
+    fn an_all_self_named_net_keeps_a_label_on_every_pin() {
         let part = |name: &str| part("resistor", vec![pin(name), pin("p2")]);
         let b = board_with_notes(
             vec![
@@ -9722,17 +9719,15 @@ mod documentation_tests {
             .filter(|label| label.net == NetId(0))
             .map(|label| label.component)
             .collect();
-        assert_eq!(labels, vec![ComponentId(0)], "one flag keeps the net name");
-        assert!(
-            wired_subnets(&b, &layout)
-                .iter()
-                .any(|net| net.id == NetId(0) && net.endpoints.len() == 3),
-            "the other two pins are wired to the flag"
+        assert_eq!(
+            labels,
+            vec![ComponentId(0), ComponentId(1), ComponentId(2)],
+            "no endpoint spells the net out, so every self-name label stays"
         );
     }
 
     #[test]
-    fn a_lowercase_self_named_pin_is_suppressed_too() {
+    fn a_lowercase_pin_name_is_not_treated_as_the_uppercased_label() {
         let part = |name: &str| part("resistor", vec![pin(name), pin("p2")]);
         let b = board_with_notes(
             vec![
@@ -9752,8 +9747,8 @@ mod documentation_tests {
             .collect();
         assert_eq!(
             labels,
-            vec![ComponentId(1)],
-            "pin-derived labels are uppercased, so compare case-insensitively"
+            vec![ComponentId(0), ComponentId(1), ComponentId(2)],
+            "only an exact self-name is suppressed; lowercase pins keep their labels"
         );
     }
 
