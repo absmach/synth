@@ -10081,6 +10081,49 @@ board "near" {
         assert!(!desc.component_regions.is_empty());
     }
 
+    /// The group alone must not excuse a part from the connector's escape
+    /// corridor: only a support part wired to the connector may sit there.
+    #[test]
+    fn a_same_group_part_with_no_net_still_blocks_the_connector_corridor() {
+        let components = r##"
+            component U1: mcu "rp2350"
+            group "PORT" color "#be123c" {
+                component J1: connector "header_1x8"
+                component R1: resistor "r_generic_0603" value "10k"
+                component R2: resistor "r_generic_0603" value "10k"
+            }
+            component R3: resistor "r_generic_0603" value "10k"
+            component R4: resistor "r_generic_0603" value "10k"
+            connect J1.p1 -> R2.p1
+        "##;
+        let (board, mut placement) = row_board(components, &[0.0; 6]);
+        move_part(&mut placement, &board, "J1", 15.0, 15.0);
+        move_part(&mut placement, &board, "U1", 50.0, 15.0);
+        move_part(&mut placement, &board, "R1", 28.0, 15.0);
+        move_part(&mut placement, &board, "R2", 33.0, 15.0);
+        move_part(&mut placement, &board, "R3", 38.0, 15.0);
+        move_part(&mut placement, &board, "R4", 43.0, 15.0);
+        let desc = describe_placement(&board, &placement);
+        let warning = desc
+            .visual_review
+            .findings
+            .iter()
+            .find(|finding| finding.contains("escape corridor"))
+            .unwrap_or_else(|| panic!("{:?}", desc.visual_review.findings));
+        assert!(
+            warning.contains("R1"),
+            "a same-group part with no net to the connector is a blocker: {warning}"
+        );
+        assert!(
+            warning.contains("R3") && warning.contains("R4"),
+            "parts outside the group are blockers: {warning}"
+        );
+        assert!(
+            !warning.contains("R2"),
+            "a same-group support part wired to the connector is excused: {warning}"
+        );
+    }
+
     /// The DFM distance between a through-hole and an SMD part, from #380:
     /// compaction keeps it, and the review reports the pair when the layout
     /// sits closer anyway (a pinned hint holds the part where the author

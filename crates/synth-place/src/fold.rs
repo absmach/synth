@@ -2179,6 +2179,102 @@ mod tests {
     }
 
     #[test]
+    fn a_single_part_group_folds_to_one_free_block() {
+        let pieces = vec![piece(0, "resistor", 10.0, 10.0, 11.6, 10.8)];
+        let groups = BTreeMap::from([("G".to_string(), vec![0_usize])]);
+        let units = make_units(
+            &pieces,
+            &groups,
+            rect(0.0, 0.0, 60.0, 60.0),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+        .expect("units");
+        assert_eq!(units.len(), 1);
+        assert_eq!(units[0].wall, None, "a lone passive has no wall to dock on");
+        assert_eq!(units[0].local.len(), 1);
+        assert_eq!(units[0].local[0].0, 0);
+    }
+
+    #[test]
+    fn a_connector_only_group_lays_its_row_flush() {
+        // Two headers side by side with no block to pack: one row on the
+        // bottom edge, both courtyards on the edge.
+        let mut first = piece(0, "connector", 5.0, 16.0, 8.54, 27.16);
+        first.part = "header_1x4".to_string();
+        first.pins = 4;
+        let mut second = piece(1, "connector", 30.0, 16.0, 33.54, 27.16);
+        second.part = "header_1x4".to_string();
+        second.pins = 4;
+        let pieces = vec![first, second];
+        let groups = BTreeMap::from([("G".to_string(), vec![0_usize, 1])]);
+        let units = make_units(
+            &pieces,
+            &groups,
+            rect(0.0, 0.0, 60.0, 30.0),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+        .expect("units");
+        assert_eq!(units.len(), 1, "both headers share the bottom row");
+        assert_eq!(units[0].wall, Some(BOTTOM));
+        assert_eq!(units[0].local.len(), 2);
+        let scene = Scene {
+            units: &units,
+            holes: &[],
+            margins: Margins::default(),
+            block_gap: mm_to_nm(BLOCK_GAP_MM),
+            export_margin: mm_to_nm(1.25),
+        };
+        let board = mm_to_nm(30.0);
+        let rows = scene
+            .wall_layout(mm_to_nm(60.0), board)
+            .expect("the row fits");
+        assert_eq!(rows[0].1.max.y_nm, board, "the row docks flush");
+    }
+
+    #[test]
+    fn a_rotated_connector_keeps_its_quarter_and_docks_flush() {
+        // A 1x04 header already turned a quarter; the wall turn is relative
+        // to that quarter and the courtyard still reaches the top edge.
+        let mut header = piece(0, "connector", 0.0, 0.0, 11.16, 3.54);
+        header.part = "header_1x4".to_string();
+        header.pins = 4;
+        header.quarter = 1;
+        header.hint = Some(TOP);
+        header.hint_hard = true;
+        let groups = BTreeMap::from([("G".to_string(), vec![0_usize])]);
+        let units = make_units(
+            &[header],
+            &groups,
+            rect(0.0, 0.0, 60.0, 60.0),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+        .expect("units");
+        let unit = &units[0];
+        assert_eq!(unit.wall, Some(TOP));
+        let &(_, lx, ly, turn) = unit.local.first().expect("placed");
+        assert_eq!(turn, 2, "two more quarters keep the long row on the top");
+        let scene = Scene {
+            units: &units,
+            holes: &[],
+            margins: Margins::default(),
+            block_gap: mm_to_nm(BLOCK_GAP_MM),
+            export_margin: mm_to_nm(1.25),
+        };
+        let board = mm_to_nm(60.0);
+        let rows = scene.wall_layout(board, board).expect("the row fits");
+        let (_, row) = rows[0];
+        let (_, cy) = unit_point(TOP, row, unit, lx, ly);
+        assert_eq!(
+            cy - mm_to_nm(3.54) / 2,
+            0,
+            "the turned courtyard reaches the top edge"
+        );
+    }
+
+    #[test]
     fn a_worse_result_is_rejected() {
         let before = Rows {
             area: 4_000.0,
