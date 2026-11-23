@@ -25,3 +25,11 @@ The interface is DVI-style. The iCE40 cannot source TMDS levels, so each line is
 The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040); the part model in `registry/parts/fpga/ice40hx4k_tq144.synth.toml` is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet. The four lanes use the four adjacent pin pairs on the FPGA's left side (pins 1 and 2, 3 and 4, 7 and 8, 9 and 10), in the same top-to-bottom order as the connector's lanes, so no pair crosses another; the eight source resistors sit in one column between the FPGA and the connector.
 
 The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).
+
+## Not verified by Synth
+
+- **HDMI compliance:** none is claimed. The interface is DVI-style, with LVCMOS33 outputs through series resistors.
+- **Coupled pairs:** the pairs are routed as independent nets on different layers, so they are not a coupled differential interface.
+- **Impedance:** the differential impedance is not established. Only an analytic estimate for an outer-layer microstrip is given.
+- **Pair spacing:** the delivered gap between the legs does not meet the 0.15 mm class clearance.
+- **Review:** the board has a self-review only. The independent PCB expert sign-off required by #40 is open.
