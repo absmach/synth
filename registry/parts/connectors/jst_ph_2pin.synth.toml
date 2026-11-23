@@ -13,9 +13,9 @@ courtyard_margin_mm = 0.25
 mating_face = "bottom"
 
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+min_voltage_v = 0.0
+max_voltage_v = 100.0
+max_current_ma = 2000.0
 
 [[pins]]
 name = "p1"
@@ -27,4 +27,7 @@ name = "p2"
 number = "2"
 electrical_type = "passive"
 
-
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

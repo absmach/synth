@@ -278,17 +278,17 @@ mod tests {
 
     #[test]
     fn zero_means_the_default_budget() {
-        assert_eq!(SearchBudget::start(0).total(), Duration::from_secs(900));
+        assert_eq!(SearchBudget::start(0).total(), Duration::from_mins(15));
         assert_eq!(SearchBudget::start(120).total(), Duration::from_secs(120));
     }
 
     #[test]
     fn a_run_is_capped_at_what_is_left_not_at_the_routers_full_timeout() {
-        let budget = SearchBudget::with_limits(Duration::from_secs(900), MS(10));
+        let budget = SearchBudget::with_limits(Duration::from_mins(15), MS(10));
         let limit = budget
-            .candidate_limit(Duration::from_secs(1200))
+            .candidate_limit(Duration::from_mins(20))
             .expect("room");
-        assert!(limit <= Duration::from_secs(900), "{limit:?}");
+        assert!(limit <= Duration::from_mins(15), "{limit:?}");
         let small = budget
             .candidate_limit(Duration::from_secs(60))
             .expect("room");
@@ -344,7 +344,7 @@ mod tests {
     #[test]
     fn a_candidate_whose_preparation_used_its_time_is_skipped_and_the_search_goes_on() {
         let mut budget =
-            SearchBudget::with_limits(Duration::from_secs(900), Duration::from_secs(10));
+            SearchBudget::with_limits(Duration::from_mins(15), Duration::from_secs(10));
         let search = route_candidates::<_, u32, ()>(
             &["slow", "fast"],
             &mut budget,
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn a_router_timeout_below_the_minimum_run_starts_no_candidate() {
         let budget = SearchBudget::with_floors(
-            Duration::from_secs(900),
+            Duration::from_mins(15),
             Duration::from_secs(MIN_RUN_SECS),
             Duration::from_secs(MIN_FINAL_SECS),
         );
@@ -405,22 +405,22 @@ mod tests {
         budget.note_run(Duration::from_secs(70));
         // 100 s left, 70 s kept for the final route: a candidate gets 30 s.
         let limit = budget
-            .candidate_limit(Duration::from_secs(1200))
+            .candidate_limit(Duration::from_mins(20))
             .expect("room");
         assert!(limit <= Duration::from_secs(30), "{limit:?}");
         // And once the reserve is more than is left, nothing starts.
         budget.note_run(Duration::from_secs(120));
-        assert_eq!(budget.candidate_limit(Duration::from_secs(1200)), None);
+        assert_eq!(budget.candidate_limit(Duration::from_mins(20)), None);
     }
 
     #[test]
     fn the_final_route_gets_only_what_is_left_and_is_skipped_when_nothing_is() {
-        let budget = SearchBudget::with_limits(Duration::from_secs(900), MS(10));
-        let limit = budget.final_limit(Duration::from_secs(1200)).expect("room");
-        assert!(limit <= Duration::from_secs(900), "{limit:?}");
+        let budget = SearchBudget::with_limits(Duration::from_mins(15), MS(10));
+        let limit = budget.final_limit(Duration::from_mins(20)).expect("room");
+        assert!(limit <= Duration::from_mins(15), "{limit:?}");
         let spent = SearchBudget::with_limits(Duration::ZERO, MS(10));
         assert_eq!(
-            spent.final_limit(Duration::from_secs(1200)),
+            spent.final_limit(Duration::from_mins(20)),
             None,
             "with the budget gone the route is not started"
         );
@@ -432,21 +432,19 @@ mod tests {
     fn candidate_runs_and_the_final_route_together_fit_the_budget() {
         let short = SearchBudget::start(30);
         assert_eq!(
-            short.candidate_limit(Duration::from_secs(1200)),
+            short.candidate_limit(Duration::from_mins(20)),
             None,
             "a 30 s budget is all final route"
         );
-        let final_only = short.final_limit(Duration::from_secs(1200)).expect("room");
+        let final_only = short.final_limit(Duration::from_mins(20)).expect("room");
         assert!(final_only <= Duration::from_secs(30), "{final_only:?}");
 
         let long = SearchBudget::start(900);
-        let run = long
-            .candidate_limit(Duration::from_secs(1200))
-            .expect("room");
-        let fin = long.final_limit(Duration::from_secs(1200)).expect("room");
+        let run = long.candidate_limit(Duration::from_mins(20)).expect("room");
+        let fin = long.final_limit(Duration::from_mins(20)).expect("room");
         // The longest a run can last, then what the final route is then left.
-        assert!(run + Duration::from_secs(MIN_FINAL_SECS) <= Duration::from_secs(900));
-        assert!(fin <= Duration::from_secs(900));
+        assert!(run + Duration::from_secs(MIN_FINAL_SECS) <= Duration::from_mins(15));
+        assert!(fin <= Duration::from_mins(15));
     }
 
     /// Runs that each take 80 ms against a 200 ms budget: the search stops
@@ -460,7 +458,7 @@ mod tests {
         let search = route_candidates::<_, _, ()>(
             &candidates,
             &mut budget,
-            Duration::from_secs(1200),
+            Duration::from_mins(20),
             |&candidate, index, clock| {
                 limits.push(clock.left());
                 std::thread::sleep(MS(80));

@@ -70,12 +70,27 @@ pub struct Board {
     /// a per-pin dump, so legends are opt-in.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub legends: bool,
+    /// Board-level silkscreen/fab label control (`labels on|off`, default
+    /// on): when off, the PCB exporter suppresses the reference-designator
+    /// and value text it adds to footprints. Text the library footprint
+    /// itself owns (silk lines, courtyard outlines) is untouched
+    /// (absmach/synth#374).
+    #[serde(default)]
+    pub labels: bool,
     pub keepouts: Vec<Keepout>,
+    /// Pins declared intentionally unused (`no_connect U1.L9`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub no_connects: Vec<NoConnect>,
     /// Declared physical layer stack (`stackup { … }`). `None` when the
     /// design does not declare one; the exported board then keeps its fixed
     /// default thickness and carries no stackup section.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stackup: Option<Stackup>,
+    /// Fixed board rectangle (`outline 60mm x 30mm`), bottom-left at the
+    /// board origin. `None` means Edge.Cuts is fitted round the placed parts,
+    /// which is the historical behaviour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outline: Option<BoardOutline>,
     /// Declared routing-constraint classes (`netclass "PWR" { … }`).
     /// Nets join a class via `class "PWR"` on their `net`, `power`,
     /// or `connect` statement; the PCB exporter emits one KiCad
@@ -107,6 +122,14 @@ pub struct Board {
     /// profile that offers it.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub required_processes: BTreeSet<ProcessRequirement>,
+    pub source_span: Span,
+}
+
+/// The board rectangle a design declares, in integer nanometres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoardOutline {
+    pub width: Length,
+    pub height: Length,
     pub source_span: Span,
 }
 
@@ -460,10 +483,30 @@ pub struct Note {
     pub source_span: Span,
 }
 
+/// A pin the design declares intentionally unused (`no_connect U1.L9`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoConnect {
+    pub refdes: String,
+    pub pin: String,
+    pub source_span: Span,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Keepout {
     pub name: String,
     pub radius: Option<Length>,
+    /// Component refdes whose placed centre anchors the zone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+    /// Explicit board coordinate, in millimetres.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<(Length, Length)>,
+    /// Copper layers the rule area covers; empty means every copper layer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<String>,
+    /// Nets whose copper the keepout lets through (`allow "TMDS_D2+"`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_nets: Vec<String>,
     pub source_span: Span,
 }
 

@@ -1,11 +1,11 @@
 id = "balun_2g4"
 kind = "filter"
 description = "2.4 GHz balun + matching network, integrated SMD"
-kicad_footprint = "RF_Converter:Johanson_0805"
+kicad_footprint = "RF_Converter:Balun_Johanson_1.6x0.8mm"
 
 [footprint_dimensions]
-width_mm = 5.0
-height_mm = 5.0
+width_mm = 1.6
+height_mm = 0.8
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
@@ -33,3 +33,17 @@ name = "gnd"
 number = "4"
 electrical_type = "passive"
 
+[[pins]]
+name = "gnd_2"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "gnd_3"
+number = "6"
+electrical_type = "passive"
+
+[provenance]
+source = "seed"
+reviewed_by = "synth-seed-review"
+reviewed_at = "2026-11-13"

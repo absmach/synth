@@ -23,10 +23,11 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::capability::{which, BUNDLED_JRE_DIR, PINNED_FREEROUTING_JAR};
+use crate::capability::{BUNDLED_JRE_DIR, PINNED_FREEROUTING_JAR, which};
 use crate::contract::{FreeroutingOptions, RouteRequest, RouterEngine};
 use crate::failure::{RouterFailure, RouterFailureReason, RouterStage};
 use crate::result::{RouteArtifacts, RouteStatistics, RouterProvenance};
+use crate::tools::ToolPaths;
 
 /// The helper script that drives the JAR, the Specctra export, and the
 /// SES import.
@@ -96,21 +97,8 @@ pub struct FreeroutingReport {
 /// Pure so the argv can be asserted in a test without a JVM: this is the
 /// boundary where a wrong flag silently changes routing behaviour, and it
 /// is the cheapest place to pin it.
-#[must_use]
-pub fn build_command(
-    request: &RouteRequest,
-    helper: &Path,
-    jar: &Path,
-    java: &Path,
-) -> Vec<String> {
+fn command_tail(request: &RouteRequest) -> Vec<String> {
     let mut args = vec![
-        helper.display().to_string(),
-        request.router_input_path().display().to_string(),
-        request.candidate_path().display().to_string(),
-        "--jar".to_string(),
-        jar.display().to_string(),
-        "--java".to_string(),
-        java.display().to_string(),
         // Bounded on both axes. An unbounded pass count is how a router
         // run turns into an unbounded CI job.
         "--passes".to_string(),
@@ -134,6 +122,56 @@ pub fn build_command(
     args
 }
 
+#[must_use]
+pub fn build_command(
+    request: &RouteRequest,
+    helper: &Path,
+    jar: &Path,
+    java: &Path,
+) -> Vec<String> {
+    let mut args = vec![
+        helper.display().to_string(),
+        request.router_input_path().display().to_string(),
+        request.candidate_path().display().to_string(),
+        "--jar".to_string(),
+        jar.display().to_string(),
+        "--java".to_string(),
+        java.display().to_string(),
+    ];
+    args.extend(command_tail(request));
+    args
+}
+
+/// The same Specctra round trip, driven by a FastRoute binary instead of a
+/// JAR and JVM. FastRoute accepts `-mp`/`-mt`, so all of the shared limits
+/// travel unchanged; only FastRoute's own algorithm switches are added.
+#[must_use]
+pub fn build_command_fastroute(
+    request: &RouteRequest,
+    helper: &Path,
+    binary: &Path,
+) -> Vec<String> {
+    let mut args = vec![
+        helper.display().to_string(),
+        request.router_input_path().display().to_string(),
+        request.candidate_path().display().to_string(),
+        "--binary".to_string(),
+        binary.display().to_string(),
+    ];
+    args.extend(command_tail(request));
+    let options = &request.fastroute;
+    if options.parity {
+        args.push("--fastroute-parity".to_string());
+    }
+    if !options.enhancements {
+        args.push("--fastroute-no-enhancements".to_string());
+    }
+    if let Some(starts) = options.multi_start {
+        args.extend(["--fastroute-multi-start".to_string(), starts.to_string()]);
+    }
+    args
+}
+
 /// Run FreeRouting over the request's baseline.
 ///
 /// Returns a [`Candidate`] when the engine produced a board, and a
@@ -142,11 +180,23 @@ pub fn build_command(
 /// failure mode.
 #[allow(clippy::too_many_lines)]
 pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
-    // FreeRouting's command builder has no way to pin a net to layers: the
-    // Specctra round trip would route these nets wherever the engine likes
-    // and leave the violation to post-route DRC. Refusing the request here
-    // keeps a layer-pinned board from being reported as routed when it is
-    // not. KiCadRoutingTools does implement the pin.
+    route_engine(request, RouterEngine::Freerouting)
+}
+
+/// Run either engine that speaks the Specctra DSN→SES contract.
+///
+/// Both share the export, clean-netlist, import and validation path; only
+/// the way the engine is launched differs. Keeping one implementation means
+/// a fix to the round trip cannot land for FreeRouting and silently miss
+/// FastRoute.
+pub fn route_engine(
+    request: &RouteRequest,
+    engine: RouterEngine,
+) -> Result<Candidate, RouterFailure> {
+    // The Specctra round trip has no way to pin a net to layers: these
+    // engines would route the net wherever they like and leave the
+    // violation to post-route DRC. Refusing here keeps a layer-pinned board
+    // from being reported as routed when it is not. KRT implements the pin.
     if !request.net_layers.is_empty() {
         let nets = request
             .net_layers
@@ -155,16 +205,16 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
             .collect::<Vec<_>>()
             .join(", ");
         return Err(RouterFailure::for_stage(
-            RouterEngine::Freerouting,
+            engine,
             RouterStage::Capability,
             RouterFailureReason::Unsupported,
             format!(
-                "FreeRouting cannot pin nets to copper layers, and the request pins {nets}; \
+                "{engine} cannot pin nets to copper layers, and the request pins {nets}; \
                  use KiCadRoutingTools or drop the netclass `layers` constraint"
             ),
         ));
     }
-    let prerequisites = Prerequisite::resolve(request)?;
+    let prerequisites = Prerequisite::resolve(request, engine)?;
     run_with(request, &prerequisites)
 }
 
@@ -174,37 +224,60 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
 /// as a capability error before any work starts, rather than as a spawn
 /// failure from inside the adapter.
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum EngineInvocation {
+    Jar { jar: PathBuf, java: PathBuf },
+    Binary { binary: PathBuf },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct Prerequisite {
+    engine: RouterEngine,
     python: PathBuf,
-    jar: PathBuf,
-    java: PathBuf,
     helper: PathBuf,
+    invocation: EngineInvocation,
 }
 
 impl Prerequisite {
-    fn resolve(_request: &RouteRequest) -> Result<Self, RouterFailure> {
-        let jar = resolve_jar().ok_or_else(|| {
+    fn resolve(request: &RouteRequest, engine: RouterEngine) -> Result<Self, RouterFailure> {
+        let tools = &request.tools;
+        let invocation = if engine == RouterEngine::Fastroute {
+            let binary = crate::capability::resolve_fastroute(tools).ok_or_else(|| {
+                RouterFailure::for_stage(
+                    engine,
+                    RouterStage::Capability,
+                    RouterFailureReason::NotInstalled,
+                    "no FastRoute binary found; set SYNTH_FASTROUTE_BIN or pass \
+                     --fastroute-binary",
+                )
+            })?;
+            EngineInvocation::Binary { binary }
+        } else {
+            let jar = resolve_jar(tools).ok_or_else(|| {
+                RouterFailure::for_stage(
+                    engine,
+                    RouterStage::Capability,
+                    RouterFailureReason::JarMissing,
+                    format!(
+                        "no FreeRouting JAR found; looked for {PINNED_FREEROUTING_JAR} under \
+                         tools/freerouting/. Set SYNTH_FREEROUTING_JAR or pass --freerouting-jar."
+                    ),
+                )
+            })?;
+            let java = resolve_java(tools).ok_or_else(|| {
+                RouterFailure::for_stage(
+                    engine,
+                    RouterStage::Capability,
+                    RouterFailureReason::JavaMissing,
+                    format!(
+                        "no Java runtime found; looked at {BUNDLED_JRE_DIR}/bin/java and `java`"
+                    ),
+                )
+            })?;
+            EngineInvocation::Jar { jar, java }
+        };
+        let python = resolve_helper_python(tools).ok_or_else(|| {
             RouterFailure::for_stage(
-                RouterEngine::Freerouting,
-                RouterStage::Capability,
-                RouterFailureReason::JarMissing,
-                format!(
-                    "no FreeRouting JAR found; looked for {PINNED_FREEROUTING_JAR} under \
-                     tools/freerouting/. Set SYNTH_FREEROUTING_JAR or pass --freerouting-jar."
-                ),
-            )
-        })?;
-        let java = resolve_java().ok_or_else(|| {
-            RouterFailure::for_stage(
-                RouterEngine::Freerouting,
-                RouterStage::Capability,
-                RouterFailureReason::JavaMissing,
-                format!("no Java runtime found; looked at {BUNDLED_JRE_DIR}/bin/java and `java`"),
-            )
-        })?;
-        let python = resolve_helper_python().ok_or_else(|| {
-            RouterFailure::for_stage(
-                RouterEngine::Freerouting,
+                engine,
                 RouterStage::Capability,
                 RouterFailureReason::NotInstalled,
                 "no `python3` on PATH can import KiCad's `pcbnew` bindings, which \
@@ -214,7 +287,7 @@ impl Prerequisite {
         })?;
         let helper = crate::repo_tool(HELPER).ok_or_else(|| {
             RouterFailure::for_stage(
-                RouterEngine::Freerouting,
+                engine,
                 RouterStage::Capability,
                 RouterFailureReason::NotInstalled,
                 format!("{HELPER} was not found in the repository's tools/ directory"),
@@ -222,10 +295,10 @@ impl Prerequisite {
         })?;
 
         Ok(Self {
+            engine,
             python,
-            jar,
-            java,
             helper,
+            invocation,
         })
     }
 }
@@ -237,10 +310,10 @@ fn run_with(
     prerequisites: &Prerequisite,
 ) -> Result<Candidate, RouterFailure> {
     let Prerequisite {
+        engine,
         python,
-        jar,
-        java,
         helper,
+        invocation: engine_invocation,
     } = prerequisites.clone();
 
     // The duplicate-run guard is held by `crate::route`, the single
@@ -250,7 +323,10 @@ fn run_with(
         let _ = std::fs::create_dir_all(parent);
     }
 
-    let argv = build_command(request, &helper, &jar, &java);
+    let argv = match &engine_invocation {
+        EngineInvocation::Jar { jar, java } => build_command(request, &helper, jar, java),
+        EngineInvocation::Binary { binary } => build_command_fastroute(request, &helper, binary),
+    };
     let start = std::time::Instant::now();
     let invocation = crate::process::run(
         &python,
@@ -260,7 +336,7 @@ fn run_with(
     )
     .map_err(|error| {
         RouterFailure::for_stage(
-            RouterEngine::Freerouting,
+            engine,
             RouterStage::Route,
             if error.not_found {
                 RouterFailureReason::NotInstalled
@@ -299,16 +375,38 @@ fn run_with(
         settings.insert("output_truncated".to_string(), "true".to_string());
     }
 
+    if engine == RouterEngine::Fastroute {
+        settings.insert("parity".to_string(), request.fastroute.parity.to_string());
+        settings.insert(
+            "enhancements".to_string(),
+            request.fastroute.enhancements.to_string(),
+        );
+        if let Some(starts) = request.fastroute.multi_start {
+            settings.insert("multi_start".to_string(), starts.to_string());
+        }
+    }
+
+    let (engine_version, runtime_version) = match &engine_invocation {
+        EngineInvocation::Jar { jar, java } => (
+            report
+                .as_ref()
+                .and_then(|r| r.jar.clone())
+                .or_else(|| jar.file_name().map(|n| n.to_string_lossy().into_owned())),
+            report
+                .as_ref()
+                .and_then(|r| r.java_version.clone())
+                .or_else(|| crate::capability::probe_runtime_version(java)),
+        ),
+        EngineInvocation::Binary { binary } => (
+            crate::capability::probe_version(binary, &["--version"]),
+            None,
+        ),
+    };
+
     let provenance = RouterProvenance {
-        engine: RouterEngine::Freerouting.as_str().to_string(),
-        engine_version: report
-            .as_ref()
-            .and_then(|r| r.jar.clone())
-            .or_else(|| jar.file_name().map(|n| n.to_string_lossy().into_owned())),
-        runtime_version: report
-            .as_ref()
-            .and_then(|r| r.java_version.clone())
-            .or_else(|| crate::capability::probe_runtime_version(&java)),
+        engine: engine.as_str().to_string(),
+        engine_version,
+        runtime_version,
         profile: request.profile_name.clone(),
         command: invocation.command.clone(),
         settings,
@@ -318,17 +416,17 @@ fn run_with(
         duration_ms,
     };
 
-    check_process_outcome(RouterEngine::Freerouting, HELPER, &invocation, request)?;
+    check_process_outcome(engine, HELPER, &invocation, request)?;
 
-    // Exit code zero with no board is FreeRouting's characteristic
-    // failure: it completes cleanly after routing nothing.
+    // Exit code zero with no board is the characteristic failure of both
+    // Specctra engines: they complete cleanly after routing nothing.
     if !request.candidate_path().is_file() {
         return Err(RouterFailure::for_stage(
-            RouterEngine::Freerouting,
+            engine,
             RouterStage::Import,
             RouterFailureReason::NoOutput,
             format!(
-                "FreeRouting exited successfully but wrote no board at {}; the baseline \
+                "{engine} exited successfully but wrote no board at {}; the baseline \
                  export is preserved unchanged",
                 request.candidate_path().display()
             ),
@@ -449,14 +547,11 @@ pub fn check_process_outcome(
 /// before any looser match so a stray newer JAR in the directory cannot
 /// silently change which engine version runs.
 #[must_use]
-pub fn resolve_jar() -> Option<PathBuf> {
-    if let Some(configured) = std::env::var_os("SYNTH_FREEROUTING_JAR")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return configured.is_file().then_some(configured);
+pub fn resolve_jar(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.freerouting_jar {
+        return configured.is_file().then(|| configured.clone());
     }
-    for base in tool_roots() {
+    for base in tool_roots(tools) {
         let jar = base.join("freerouting").join(PINNED_FREEROUTING_JAR);
         if jar.is_file() {
             return Some(jar);
@@ -465,14 +560,14 @@ pub fn resolve_jar() -> Option<PathBuf> {
     None
 }
 
-fn resolve_java() -> Option<PathBuf> {
-    if let Some(configured) = std::env::var_os("SYNTH_FREEROUTING_JAVA")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
-    {
-        return configured.is_file().then_some(configured);
+/// The Java runtime that runs FreeRouting: the configured one, else the
+/// bundled JRE, else `java` on `PATH`.
+#[must_use]
+pub fn resolve_java(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.freerouting_java {
+        return configured.is_file().then(|| configured.clone());
     }
-    for base in tool_roots() {
+    for base in tool_roots(tools) {
         let bundled = base.join("jre25").join("bin").join("java");
         if bundled.is_file() {
             return Some(bundled);
@@ -483,13 +578,10 @@ fn resolve_java() -> Option<PathBuf> {
 
 /// Directories that may hold `tools/freerouting/` and the bundled JRE.
 #[must_use]
-pub fn tool_roots() -> Vec<PathBuf> {
+pub fn tool_roots(tools: &ToolPaths) -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Ok(configured) = std::env::var("SYNTH_TOOLS_DIR") {
-        let path = PathBuf::from(configured);
-        if !path.as_os_str().is_empty() {
-            roots.push(path);
-        }
+    if let Some(configured) = &tools.tools_dir {
+        roots.push(configured.clone());
     }
     if let Some(root) = crate::repo_root() {
         roots.push(root.join("tools"));
@@ -517,18 +609,14 @@ pub fn tool_roots() -> Vec<PathBuf> {
 /// import `pcbnew` is answered at the route stage, where a failure names the
 /// module and the fix.
 ///
-/// `SYNTH_FREEROUTING_PYTHON` overrides the search outright.
-pub fn resolve_helper_python() -> Option<PathBuf> {
-    if let Some(configured) = override_python() {
-        return Some(configured);
+/// [`ToolPaths::freerouting_python`] (`SYNTH_FREEROUTING_PYTHON`) overrides
+/// the search outright.
+#[must_use]
+pub fn resolve_helper_python(tools: &ToolPaths) -> Option<PathBuf> {
+    if let Some(configured) = &tools.freerouting_python {
+        return Some(configured.clone());
     }
     which("python3").or_else(|| which("python"))
-}
-
-fn override_python() -> Option<PathBuf> {
-    std::env::var_os("SYNTH_FREEROUTING_PYTHON")
-        .map(PathBuf::from)
-        .filter(|p| !p.as_os_str().is_empty())
 }
 
 fn read_report(path: &Path) -> Option<FreeroutingReport> {
@@ -604,6 +692,41 @@ mod tests {
             Path::new("/opt/java/bin/java"),
         )
         .join(" ")
+    }
+
+    #[test]
+    fn fastroute_uses_the_binary_without_leaking_jar_or_java_flags() {
+        let mut request = request();
+        request.fastroute.parity = true;
+        request.fastroute.enhancements = false;
+        request.fastroute.multi_start = Some(4);
+        let args = build_command_fastroute(
+            &request,
+            Path::new("/repo/tools/freeroute_autoroute.py"),
+            Path::new("/opt/fastroute"),
+        );
+        let joined = args.join(" ");
+        assert!(joined.contains("--binary /opt/fastroute"), "{joined}");
+        assert!(joined.contains("--fastroute-parity"), "{joined}");
+        assert!(joined.contains("--fastroute-no-enhancements"), "{joined}");
+        assert!(joined.contains("--fastroute-multi-start 4"), "{joined}");
+        assert!(!joined.contains("--jar"), "{joined}");
+        assert!(!joined.contains("--java"), "{joined}");
+        assert!(
+            joined.contains("--passes 40"),
+            "the shared limits still travel"
+        );
+    }
+
+    #[test]
+    fn the_jar_command_carries_no_fastroute_flags() {
+        let mut request = request();
+        request.fastroute.parity = true;
+        request.fastroute.multi_start = Some(4);
+        let joined = argv(&request);
+        assert!(joined.contains("--jar"), "{joined}");
+        assert!(!joined.contains("--binary"), "{joined}");
+        assert!(!joined.contains("--fastroute"), "{joined}");
     }
 
     fn invocation(stderr: &str, exit_code: Option<i32>) -> crate::process::Invocation {

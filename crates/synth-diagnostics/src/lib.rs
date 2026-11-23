@@ -29,8 +29,8 @@ pub use diagnostic::{
 };
 pub use harness::{AgentHarness, HarnessRunResult, HarnessStrategy};
 pub use location::{ByteOffset, FileId, LineCol, Location, Span};
-pub use native::{NativeCheckEvidence, NativeCheckStatus, UnknownReason, STDERR_CAPTURE_LIMIT};
-pub use patch::{apply_smt_patch, Patch, PatchError, PatchKind};
+pub use native::{NativeCheckEvidence, NativeCheckStatus, STDERR_CAPTURE_LIMIT, UnknownReason};
+pub use patch::{Patch, PatchError, PatchKind, apply_smt_patch};
 pub use severity::Severity;
 
 /// Stable schema version of the diagnostic JSON wire format.

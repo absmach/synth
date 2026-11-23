@@ -199,8 +199,7 @@ impl Connectivity {
                 let other_terminals = self
                     .nets
                     .get(&other)
-                    .map(|n| n.terminals.clone())
-                    .unwrap_or_default();
+                    .map_or_default(|n| n.terminals.clone());
 
                 for t in &other_terminals {
                     self.pin_to_net.insert((t.component, t.pin), canonical_id);
@@ -218,8 +217,7 @@ impl Connectivity {
     pub fn pins_on_net(&self, net_id: NetId) -> Vec<(ComponentId, PinId)> {
         self.nets
             .get(&net_id)
-            .map(|n| n.terminals.iter().map(|t| (t.component, t.pin)).collect())
-            .unwrap_or_default()
+            .map_or_default(|n| n.terminals.iter().map(|t| (t.component, t.pin)).collect())
     }
 
     /// Check if a net has any power output pin (for power source validation).

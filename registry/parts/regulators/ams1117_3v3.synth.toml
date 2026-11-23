@@ -19,6 +19,14 @@ max_current_ma = 800.0
 max_power_mw = 1200
 thermal_resistance_c_per_w = 90
 
+[spice]
+file = "spice/ams1117_3v3.lib"
+subckt = "ams1117_3v3"
+pin_order = ["vin", "gnd", "vout"]
+
+[spice.params]
+rout = "100m"
+
 [[pins]]
 name = "gnd"
 number = "1"

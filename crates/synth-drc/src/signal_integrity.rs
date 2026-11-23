@@ -19,12 +19,12 @@
 
 use std::collections::BTreeMap;
 
-use synth_geometry::{mm_to_nm, nm_to_mm, Layer, Point, StackupProfile};
+use synth_geometry::{Layer, Point, StackupProfile, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, Length, Net, NetId};
 use synth_pcb::{Routing, Segment};
 
-use crate::profile::ManufacturerProfile;
 use crate::Violation;
+use crate::profile::ManufacturerProfile;
 
 /// IPC-2221 external-layer ampacity: the width a trace needs to carry
 /// `current_ua` with a `delta_t_c` rise over `thickness_nm` copper.
@@ -338,11 +338,7 @@ pub fn check_diff_pair_skew(board: &Board, routing: &Routing) -> Vec<Violation> 
 type CoupledRun = (i64, i64, Segment, Segment, Layer);
 
 fn min_max(a: i64, b: i64) -> (i64, i64) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 /// Edge (crosstalk) coupling between two axis-aligned segments that run
@@ -359,12 +355,12 @@ fn parallel_run(a: &Segment, b: &Segment, coupling_nm: i64) -> Option<(i64, i64)
     let both_horizontal = a.start.y_nm == a.end.y_nm && b.start.y_nm == b.end.y_nm;
     let both_vertical = a.start.x_nm == a.end.x_nm && b.start.x_nm == b.end.x_nm;
     let (gap, overlap) = if both_horizontal {
-        let gap = (a.start.y_nm - b.start.y_nm).abs() - (a.width_nm + b.width_nm) / 2;
+        let gap = (a.start.y_nm - b.start.y_nm).abs() - i64::midpoint(a.width_nm, b.width_nm);
         let (a_lo, a_hi) = min_max(a.start.x_nm, a.end.x_nm);
         let (b_lo, b_hi) = min_max(b.start.x_nm, b.end.x_nm);
         (gap, a_hi.min(b_hi) - a_lo.max(b_lo))
     } else if both_vertical {
-        let gap = (a.start.x_nm - b.start.x_nm).abs() - (a.width_nm + b.width_nm) / 2;
+        let gap = (a.start.x_nm - b.start.x_nm).abs() - i64::midpoint(a.width_nm, b.width_nm);
         let (a_lo, a_hi) = min_max(a.start.y_nm, a.end.y_nm);
         let (b_lo, b_hi) = min_max(b.start.y_nm, b.end.y_nm);
         (gap, a_hi.min(b_hi) - a_lo.max(b_lo))

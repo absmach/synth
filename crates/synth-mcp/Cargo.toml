@@ -19,9 +19,10 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+# Stream trait for the SSE response body; already in the tree via axum.
+futures-core = "0.3"
 schemars = { workspace = true }
 axum = { workspace = true }
-tower-http = { workspace = true }
 synth-diagnostics = { workspace = true }
 synth-geometry = { workspace = true }
 synth-ast = { workspace = true }
@@ -34,6 +35,7 @@ synth-layout = { workspace = true }
 synth-place = { workspace = true }
 synth-pcb = { workspace = true }
 synth-router = { workspace = true }
+synth-sim = { workspace = true }
 synth-drc = { workspace = true }
 synth-kicad = { workspace = true }
 synth-render = { workspace = true }

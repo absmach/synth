@@ -488,10 +488,11 @@ impl SchematicGrid {
         // Sanity check: deduplicate consecutive identical points
         let mut clean: Vec<(f64, f64)> = Vec::new();
         for &pt in &world_pts {
-            if let Some(last) = clean.last() {
-                if (pt.0 - last.0).abs() < 0.01 && (pt.1 - last.1).abs() < 0.01 {
-                    continue;
-                }
+            if let Some(last) = clean.last()
+                && (pt.0 - last.0).abs() < 0.01
+                && (pt.1 - last.1).abs() < 0.01
+            {
+                continue;
             }
             clean.push(pt);
         }

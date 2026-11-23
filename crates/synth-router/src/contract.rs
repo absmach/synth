@@ -14,13 +14,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::failure::RouterFailure;
 
-/// Which external engine generates the copper.
+/// Which engine generates the copper.
 ///
-/// FreeRouting is the default because it is the bundled, managed path.
-/// KiCadRoutingTools must be selected explicitly because it is an external
-/// checkout with its own Python environment. There is no third variant and
-/// no built-in fallback: if the selected engine cannot run, the run fails
+/// FreeRouting is the managed JAR path, FastRoute the managed Java-free
+/// binary with the same DSN→SES contract, and KiCadRoutingTools an external
+/// checkout with its own Python environment. KiCadRoutingTools is the
+/// default because it is the one the setup script installs. There is no
+/// built-in fallback: if the selected engine cannot run, the run fails
 /// (see [`crate::RouterFailure`]).
+/// [`Self::Internal`] is the workspace's own deterministic router: it is
+/// never the default and never enters a best-of portfolio, so "which router
+/// produced this copper" is always an explicit name or a deliberate internal
+/// run the record states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RouterEngine {
@@ -31,6 +36,17 @@ pub enum RouterEngine {
     #[default]
     #[serde(rename = "kicad-routing-tools", alias = "kicadroutingtools")]
     KiCadRoutingTools,
+    /// FastRoute, a Java-free Rust port of FreeRouting speaking the same
+    /// Specctra DSN→SES contract. Driven as an optional external binary.
+    #[serde(rename = "fastroute", alias = "fast-route")]
+    Fastroute,
+    /// The workspace's own deterministic router (`synth-route`).
+    ///
+    /// Not driven through the request-only contract — it needs the compiled
+    /// board, which only the compiling surface has — so a caller that asks
+    /// `route()` for it gets a structured refusal rather than copper from a
+    /// surprise engine.
+    Internal,
 }
 
 impl RouterEngine {
@@ -40,6 +56,8 @@ impl RouterEngine {
         match self {
             Self::Freerouting => "freerouting",
             Self::KiCadRoutingTools => "kicad-routing-tools",
+            Self::Fastroute => "fastroute",
+            Self::Internal => "internal",
         }
     }
 
@@ -53,6 +71,8 @@ impl RouterEngine {
         match value.trim().to_ascii_lowercase().as_str() {
             "freerouting" | "free-routing" => Some(Self::Freerouting),
             "kicad-routing-tools" | "kicadroutingtools" | "krt" => Some(Self::KiCadRoutingTools),
+            "fastroute" | "fast-route" | "fast_route" => Some(Self::Fastroute),
+            "internal" | "synth-route" => Some(Self::Internal),
             _ => None,
         }
     }
@@ -67,16 +87,18 @@ impl RouterEngine {
         match self {
             Self::Freerouting => "freerouting",
             Self::KiCadRoutingTools => "kicadroutingtools",
+            Self::Fastroute => "fastroute",
+            Self::Internal => "internal",
         }
     }
 
-    /// All engines, in the order capability discovery should report them.
+    /// All external engines, in the order capability discovery reports them.
     ///
     /// The default engine leads, so a caller reading the first entry gets the
     /// engine an unconfigured run would use.
     #[must_use]
-    pub fn all() -> [Self; 2] {
-        [Self::KiCadRoutingTools, Self::Freerouting]
+    pub fn all() -> [Self; 3] {
+        [Self::KiCadRoutingTools, Self::Freerouting, Self::Fastroute]
     }
 }
 
@@ -113,7 +135,7 @@ pub struct RouterLimits {
 impl Default for RouterLimits {
     fn default() -> Self {
         Self {
-            wall_clock: Duration::from_secs(20 * 60),
+            wall_clock: Duration::from_mins(20),
             max_output_bytes: 1024 * 1024,
             max_passes: 40,
             max_threads: 4,
@@ -178,6 +200,37 @@ impl Default for FreeroutingOptions {
         Self {
             clean_netlist: true,
             retain_session: true,
+        }
+    }
+}
+
+/// FastRoute-specific knobs.
+///
+/// FastRoute shares FreeRouting's DSN→SES round trip and its pass/thread
+/// limits, so only the flags that change which algorithm runs live here.
+/// Keeping them separate stops a FreeRouting or KRT flag from reaching an
+/// engine that would silently ignore it while the run record claimed it
+/// had been applied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FastrouteOptions {
+    /// Byte-identical Freerouting behaviour (deterministic, slower).
+    pub parity: bool,
+    /// FastRoute's bug fixes and routing improvements (on by default).
+    pub enhancements: bool,
+    /// Extra shuffled-order starts when connections remain unrouted.
+    pub multi_start: Option<u32>,
+}
+
+impl Default for FastrouteOptions {
+    fn default() -> Self {
+        Self {
+            parity: std::env::var_os("SYNTH_FASTROUTE_PARITY").is_some(),
+            enhancements: std::env::var("SYNTH_FASTROUTE_ENHANCEMENTS")
+                .ok()
+                .is_none_or(|value| !matches!(value.as_str(), "0" | "false" | "no")),
+            multi_start: std::env::var("SYNTH_FASTROUTE_MULTI_START")
+                .ok()
+                .and_then(|value| value.parse().ok()),
         }
     }
 }
@@ -449,6 +502,35 @@ impl RouteRequest {
             .collect();
     }
 
+    /// Take the declared differential pairs the verdict must enforce.
+    ///
+    /// Carried by net name with the declared `max_skew`, so the independent
+    /// validation pass — which reads only the delivered board — can re-derive
+    /// each pair's skew from the copper and block a pair outside its budget.
+    /// Lives here for the reason [`Self::use_board_escapes`] does: there are
+    /// several routing entry points, and a declaration honoured by only one of
+    /// them is a pair the others silently release.
+    pub fn use_board_diff_pairs(&mut self, board: &synth_ir::Board) {
+        self.diff_pairs = synth_ir::resolve_pairs_with_budgets(board)
+            .into_iter()
+            .map(|(pair, budget)| {
+                let name_of = |net: synth_ir::NetId| {
+                    board
+                        .nets
+                        .iter()
+                        .find(|net_ir| net_ir.id == net)
+                        .map_or_else(String::new, |net_ir| net_ir.name.clone())
+                };
+                DiffPairRequest {
+                    positive: name_of(pair.positive_net),
+                    negative: name_of(pair.negative_net),
+                    max_skew_nm: budget,
+                }
+            })
+            .filter(|pair| !pair.positive.is_empty() && !pair.negative.is_empty())
+            .collect();
+    }
+
     /// Adopt the fabrication floor a manufacturer profile imposes.
     ///
     /// Keeps whatever via-in-pad permission was already granted: an operator
@@ -484,6 +566,8 @@ pub struct RouteRequest {
     pub engine: RouterEngine,
     pub limits: RouterLimits,
     pub freerouting: FreeroutingOptions,
+    #[serde(default)]
+    pub fastroute: FastrouteOptions,
     pub kicad_routing_tools: KiCadRoutingToolsOptions,
     /// Fabrication policy applied during independent validation.
     pub policy: FabricationPolicy,
@@ -536,6 +620,30 @@ pub struct RouteRequest {
     /// request that carries one, rather than silently ignoring the pin.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub net_layers: Vec<NetLayers>,
+    /// Where the engines and their runtimes are found.
+    ///
+    /// Read from the environment when the request is built; a caller with
+    /// explicit settings overwrites fields here instead of exporting them.
+    /// Never serialised: these are machine-local paths, not part of the
+    /// routing contract, and a deserialised request re-reads its own
+    /// environment.
+    #[serde(skip_serializing, default = "crate::tools::ToolPaths::from_env")]
+    pub tools: crate::tools::ToolPaths,
+
+    /// The copper layer count the compiled board declares, when the caller
+    /// knows it.
+    ///
+    /// The exported board file *should* say the same thing, and the escape
+    /// analysis normally reads it from there. Recording the declaration
+    /// anyway gives the advice a source of truth that cannot disagree with
+    /// the file it was written into.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declared_layers: Option<u32>,
+    /// The declared `diff_pair` requests, by net name with the declared
+    /// `max_skew`. The verdict re-derives each pair's intra-pair skew from the
+    /// delivered copper and blocks a pair outside its budget.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub diff_pairs: Vec<DiffPairRequest>,
 }
 
 /// One net's layer pin: the copper layers it may be routed on.
@@ -543,6 +651,34 @@ pub struct RouteRequest {
 pub struct NetLayers {
     pub net: String,
     pub layers: Vec<String>,
+}
+
+/// One declared differential pair, as the routing verdict must enforce it.
+///
+/// The request carries the pair by net *name* — what the exported board file
+/// and the independent connectivity pass key copper on — because the verdict
+/// never consults the IR; it re-derives everything from the delivered copper.
+/// The declared `max_skew` travels with the pair: a pair whose halves differ
+/// by more than it blocks the release, in the same verdict pipeline as the
+/// return-via blockers.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiffPairRequest {
+    /// Net name of the positive half.
+    pub positive: String,
+    /// Net name of the negative half.
+    pub negative: String,
+    /// The length the halves may differ by, in nanometres. `None` records the
+    /// pair but sets no budget, so no skew is enforced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_skew_nm: Option<i64>,
+}
+
+impl DiffPairRequest {
+    /// Whether the pair declares a skew budget at all.
+    #[must_use]
+    pub fn declares_skew(&self) -> bool {
+        self.max_skew_nm.is_some_and(|nm| nm > 0)
+    }
 }
 
 impl RouteRequest {
@@ -603,6 +739,12 @@ impl RouteRequest {
     #[must_use]
     pub fn report_path(&self) -> PathBuf {
         self.out_dir.join(format!("{}.routing.json", self.stem))
+    }
+
+    /// Compact quality verdict: connected, DRC-clean, and with what counts.
+    #[must_use]
+    pub fn quality_report_path(&self) -> PathBuf {
+        self.out_dir.join(format!("{}.quality.json", self.stem))
     }
 
     /// Independent connectivity findings.
@@ -719,6 +861,7 @@ impl RouteRequest {
             engine,
             limits: RouterLimits::default(),
             freerouting: FreeroutingOptions::default(),
+            fastroute: FastrouteOptions::default(),
             kicad_routing_tools: KiCadRoutingToolsOptions::default(),
             escapes: Vec::new(),
             escapes_off: Vec::new(),
@@ -732,7 +875,21 @@ impl RouteRequest {
             return_via_medium_nets: Vec::new(),
             fine_pitch_return_via_advisory: false,
             net_layers: Vec::new(),
+            tools: crate::tools::ToolPaths::from_env(),
+
+            declared_layers: None,
+            diff_pairs: Vec::new(),
         }
+    }
+
+    /// Record the copper layer count the compiled board declares.
+    ///
+    /// The escape analysis reads the exported board's own layer list; this
+    /// gives it the board's declaration to prefer when the two could
+    /// disagree.
+    pub fn use_board_layers(&mut self, layers: u32) -> &mut Self {
+        self.declared_layers = Some(layers);
+        self
     }
 }
 
@@ -830,6 +987,7 @@ mod tests {
     /// on what it declares.
     fn empty_board() -> synth_ir::Board {
         synth_ir::Board {
+            outline: None,
             name: "t".to_string(),
             layers: 4,
             manufacturer: None,
@@ -842,7 +1000,9 @@ mod tests {
             diff_pairs: Vec::new(),
             notes: Vec::new(),
             legends: false,
+            labels: true,
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: Vec::new(),
             buses: Vec::new(),
@@ -871,6 +1031,25 @@ mod tests {
             RouterEngine::parse(" freerouting "),
             Some(RouterEngine::Freerouting)
         );
+        assert_eq!(
+            RouterEngine::parse("fast-route"),
+            Some(RouterEngine::Fastroute)
+        );
+        assert_eq!(
+            RouterEngine::parse("FASTROUTE"),
+            Some(RouterEngine::Fastroute)
+        );
+    }
+
+    #[test]
+    fn every_engine_has_a_distinct_identifier_and_artifact_tag() {
+        let mut identifiers = std::collections::BTreeSet::new();
+        let mut tags = std::collections::BTreeSet::new();
+        for engine in RouterEngine::all() {
+            assert!(identifiers.insert(engine.as_str()));
+            assert!(tags.insert(engine.artifact_tag()));
+        }
+        assert_eq!(RouterEngine::all().len(), 3);
     }
 
     #[test]
@@ -1123,5 +1302,84 @@ mod tests {
 
         assert!(request.policy.allow_via_in_pad);
         assert!(!request.policy.process_fills_via_in_pad);
+    }
+
+    /// A board that declares a `diff_pair` with a budget hands the verdict a
+    /// request carrying the pair by net name, budget included, so the
+    /// delivered copper can be measured against it (absmach/synth#447).
+    #[test]
+    fn a_declared_diff_pair_reaches_the_verdict_request() {
+        let mut board = empty_board();
+        board.nets = vec![
+            synth_ir::Net {
+                id: synth_ir::NetId(0),
+                name: "USB_DP".to_string(),
+                auto_named: false,
+                endpoints: vec![synth_ir::NetEndpoint {
+                    component: synth_ir::ComponentId(1),
+                    pin: synth_ir::PinId(0),
+                    source_span: synth_diagnostics::Span::new(0, 0),
+                }],
+                netclass: None,
+                voltage: None,
+            },
+            synth_ir::Net {
+                id: synth_ir::NetId(1),
+                name: "USB_DN".to_string(),
+                auto_named: false,
+                endpoints: vec![synth_ir::NetEndpoint {
+                    component: synth_ir::ComponentId(1),
+                    pin: synth_ir::PinId(1),
+                    source_span: synth_diagnostics::Span::new(0, 0),
+                }],
+                netclass: None,
+                voltage: None,
+            },
+        ];
+        board.diff_pairs = vec![synth_ir::DiffPair {
+            positive: "U1_usb_dp".to_string(),
+            negative: "U1_usb_dn".to_string(),
+            positive_net: Some(synth_ir::NetId(0)),
+            negative_net: Some(synth_ir::NetId(1)),
+            impedance: None,
+            max_skew: Some(synth_ir::Length(150_000)),
+            couple: None,
+            source_span: synth_diagnostics::Span::new(0, 0),
+        }];
+
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.use_board_diff_pairs(&board);
+
+        assert_eq!(request.diff_pairs.len(), 1, "{:?}", request.diff_pairs);
+        let pair = &request.diff_pairs[0];
+        assert_eq!(pair.positive, "USB_DP");
+        assert_eq!(pair.negative, "USB_DN");
+        assert_eq!(pair.max_skew_nm, Some(150_000));
+        assert!(pair.declares_skew());
+    }
+
+    /// A board with no `diff_pair` leaves the request without any, and a
+    /// pair without a budget is carried without enforcing one.
+    #[test]
+    fn a_board_with_no_declared_pair_enforces_no_skew() {
+        let mut request = RouteRequest::new(
+            std::path::Path::new("board.kicad_pcb"),
+            std::path::Path::new("out"),
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.use_board_diff_pairs(&empty_board());
+        assert!(request.diff_pairs.is_empty());
+        assert!(
+            !DiffPairRequest {
+                positive: "A".to_string(),
+                negative: "B".to_string(),
+                max_skew_nm: None,
+            }
+            .declares_skew()
+        );
     }
 }

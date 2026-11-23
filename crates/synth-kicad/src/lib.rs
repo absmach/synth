@@ -54,6 +54,7 @@ pub mod import;
 pub mod manufacturing;
 pub mod multisheet;
 mod pcb;
+pub use pcb::{PcbBuildError, build_pcb};
 pub mod pin_reconcile;
 mod pnp;
 mod sch_svg;
@@ -65,15 +66,15 @@ mod symbol_lib;
 pub mod uuid_v5;
 
 pub use erc_validate::{
-    run_kicad_erc, KicadErcItem, KicadErcViolation, NativeErcOutcome, ERC_STAGE,
+    ERC_STAGE, KicadErcItem, KicadErcViolation, NativeErcOutcome, run_kicad_erc,
 };
 pub use export::{
-    export, export_for_design, export_schematic_only, export_with_placement, export_with_sidecar,
+    ExportError, ExportResult, SchematicExportResult, Sidecars, export, export_for_design,
+    export_schematic_only, export_with_placement, export_with_sidecar,
     export_with_sidecar_and_routing_order, export_with_sidecars,
     export_with_sidecars_and_routing_order, placement_candidates, placement_for_export,
-    ExportError, ExportResult, SchematicExportResult, Sidecars,
 };
-pub use sch_svg::{run_kicad_svg_export, SvgExportError};
+pub use sch_svg::{SvgExportError, run_kicad_svg_export};
 
 /// Configure exporter worker-count compatibility for the CLI's shared jobs
 /// option. The RP2350 repair loop is intentionally deterministic and performs
@@ -81,18 +82,18 @@ pub use sch_svg::{run_kicad_svg_export, SvgExportError};
 /// pool where applicable.
 pub fn set_worker_threads(_n: usize) {}
 
-pub use fab::{run as run_fab, FabArtifacts, FabError, FabRequest};
-pub use import::{import_project, ImportError, NormalisedRecord, IMPORTER_VERSION};
+pub use fab::{FabArtifacts, FabError, FabRequest, run as run_fab};
+pub use import::{IMPORTER_VERSION, ImportError, NormalisedRecord, import_project};
 pub use manufacturing::{
-    build_bundle_manifest, build_jlcpcb_bom_csv, build_jlcpcb_cpl_csv, AppliedCorrection,
-    BundleManifest, CplResult, ManufacturingError, PlacementCorrection,
+    AppliedCorrection, BundleManifest, CplResult, ManufacturingError, PlacementCorrection,
+    build_bundle_manifest, build_jlcpcb_bom_csv, build_jlcpcb_cpl_csv,
 };
 pub use pin_reconcile::physical_terminal;
 pub use pnp::build_pnp_csv;
 pub use schem_erc::{
-    attach_locations as attach_schem_erc_locations, check as check_schem_erc,
+    SchemErcConfig, attach_locations as attach_schem_erc_locations, check as check_schem_erc,
     check_sheets as check_schem_erc_sheets,
     check_sheets_with_config as check_schem_erc_sheets_with_config,
-    check_with_config as check_schem_erc_with_config, SchemErcConfig,
+    check_with_config as check_schem_erc_with_config,
 };
 pub use symbol_lib::build_pwr_flag_fallback;

@@ -40,10 +40,10 @@ fn test_w_synth_supply_001_fires_on_obsolete_component_in_cache() {
     let mut board = lowered.board.expect("board");
 
     // Temporarily point one component's lcsc_pn to the test obsolete part
-    if let Some(comp) = board.components.first_mut() {
-        if let Some(part) = comp.part.as_mut() {
-            part.lcsc_pn = Some("C14663_TEST_OBSOLETE".to_string());
-        }
+    if let Some(comp) = board.components.first_mut()
+        && let Some(part) = comp.part.as_mut()
+    {
+        part.lcsc_pn = Some("C14663_TEST_OBSOLETE".to_string());
     }
 
     let diags = synth_validate::run_erc(&board, file);

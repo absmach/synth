@@ -1,0 +1,12 @@
+* Synth simulation: led
+V1 n_VCC 0 DC 5e0
+RR1 n_VCC n_MID 1.5e2
+DLED1 n_MID 0 DLED1
+.model DLED1 D(IS=3.23716481e-19 N=2)
+.control
+op
+let m0 = v(n_MID)
+echo SYNTH_MEAS va $&m0
+echo SYNTH_DONE
+.endc
+.end

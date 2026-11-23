@@ -33,7 +33,7 @@
 use std::io::Read;
 use std::path::Path;
 
-use crate::kicad_lib_loader::{first_symbol_name, physical_pins_from_source, PhysicalPin};
+use crate::kicad_lib_loader::{PhysicalPin, first_symbol_name, physical_pins_from_source};
 
 /// Everything extracted from one SnapEDA/UltraLibrarian-style export
 /// zip: the part's pin inventory (from its `.kicad_sym`) and, when

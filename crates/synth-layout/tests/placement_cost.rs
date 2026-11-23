@@ -9,8 +9,8 @@
 
 use std::path::{Path, PathBuf};
 
-use synth_layout::score::placement_cost;
 use synth_layout::Layout;
+use synth_layout::score::placement_cost;
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

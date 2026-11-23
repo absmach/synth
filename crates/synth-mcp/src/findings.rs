@@ -79,10 +79,10 @@ pub fn cap(
         let mut order = VecDeque::new();
         while order.len() < per_code && subjects.values().any(|queue| !queue.is_empty()) {
             for queue in subjects.values_mut() {
-                if order.len() < per_code {
-                    if let Some(index) = queue.pop_front() {
-                        order.push_back(index);
-                    }
+                if order.len() < per_code
+                    && let Some(index) = queue.pop_front()
+                {
+                    order.push_back(index);
                 }
             }
         }

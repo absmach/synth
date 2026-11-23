@@ -12,7 +12,7 @@ use std::fmt::Write as _;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use synth_geometry::{nm_to_mm, Layer};
+use synth_geometry::{Layer, nm_to_mm};
 use synth_ir::{AssemblyDisposition, Board, ProcurementLock};
 use synth_place::Placement;
 
@@ -346,6 +346,7 @@ mod tests {
             footprint_dimensions: None,
             operating_conditions: None,
             provenance: None,
+            spice: None,
         };
         let component = Component {
             id: ComponentId(0),
@@ -362,6 +363,7 @@ mod tests {
             source_span: Span::new(0, 0),
         };
         let board = Board {
+            outline: None,
             name: "fixture".into(),
             layers: 2,
             manufacturer: None,
@@ -374,7 +376,9 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             legends: false,
+            labels: true,
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             required_processes: std::collections::BTreeSet::new(),

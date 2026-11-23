@@ -1,0 +1,7 @@
+board "allow_without_net" {
+  layers 2
+  keepout tmds_corridor {
+    radius 6mm
+    allow
+  }
+}

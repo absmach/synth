@@ -16,11 +16,12 @@ use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
     DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
-    KeepoutAttr, KeepoutStmt, LayersStmt, LegendsStmt, ManufacturerStmt, ModuleDeclStmt,
-    NetDeclAst, NetclassAttr, NetclassStmt, NotesDeclAst, ParamDeclAst, PlacementHintAst,
-    PlacementHintAttr, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt,
-    RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
-    StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
+    KeepoutAttr, KeepoutStmt, LabelsStmt, LayersStmt, LegendsStmt, ManufacturerStmt,
+    ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt, NoConnectStmt, NotesDeclAst,
+    OutlineStmt, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst,
+    PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst,
+    SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit,
+    VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -305,10 +306,12 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<StatementAst> {
         match self.peek_kind() {
             TokenKind::KwLayers => self.parse_layers().map(StatementAst::Layers),
+            TokenKind::KwOutline => self.parse_outline().map(StatementAst::Outline),
             TokenKind::KwManufacturer => self.parse_manufacturer().map(StatementAst::Manufacturer),
             TokenKind::KwRevision => self.parse_revision().map(StatementAst::Revision),
             TokenKind::KwCompany => self.parse_company().map(StatementAst::Company),
             TokenKind::KwLegends => self.parse_legends().map(StatementAst::Legends),
+            TokenKind::KwLabels => self.parse_labels().map(StatementAst::Labels),
             TokenKind::KwComponent => self.parse_component().map(StatementAst::Component),
             TokenKind::KwVariant => self.parse_variant().map(StatementAst::Variant),
             TokenKind::KwConnect => self.parse_connection().map(StatementAst::Connection),
@@ -328,12 +331,15 @@ impl Parser {
             TokenKind::KwSchematic => self.parse_schematic().map(StatementAst::Schematic),
             TokenKind::KwStackup => self.parse_stackup().map(StatementAst::Stackup),
             TokenKind::KwRequires => self.parse_requires().map(StatementAst::Requires),
+            TokenKind::Ident(name) if name == "no_connect" => {
+                Some(StatementAst::NoConnect(self.parse_no_connect()))
+            }
             _ => {
                 self.emit(
                     self.peek().span,
                     "E-SYNTH-PARSE-011",
                     "expected statement keyword",
-                    "one of: layers, manufacturer, revision, company, legends, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet, requires",
+                    "one of: layers, manufacturer, revision, company, legends, labels, schematic, stackup, component, variant, connect, net, power, notes, module, interface, bus, use, bind, diff_pair, netclass, keepout, group, sheet, requires",
                     self.describe_current(),
                     None,
                 );
@@ -406,6 +412,56 @@ impl Parser {
             count: u32::try_from(n).unwrap(),
             span: Span::new(start, end),
         })
+    }
+
+    /// `outline <width> x <height>` — a fixed board rectangle whose
+    /// bottom-left corner is the board origin.
+    fn parse_outline(&mut self) -> Option<OutlineStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `outline`
+        let width = self.expect_value()?;
+        let width = self.outline_dimension(width, "width")?;
+        if !matches!(self.peek_kind(), TokenKind::Ident(name) if name == "x") {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-041",
+                "expected `x` between the outline width and height",
+                "`x`, e.g. `outline 60mm x 30mm`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let height = self.expect_value()?;
+        let height = self.outline_dimension(height, "height")?;
+        let end = self.last_offset();
+        Some(OutlineStmt {
+            width,
+            height,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Reject a non-positive outline dimension where it was written; the
+    /// unit itself is checked during lowering.
+    fn outline_dimension(&mut self, value: ValueWithUnit, side: &str) -> Option<ValueWithUnit> {
+        if value.literal.parse::<f64>().is_ok_and(|v| v > 0.0) {
+            return Some(value);
+        }
+        self.emit(
+            value.span,
+            "E-SYNTH-PARSE-042",
+            "outline dimension must be positive",
+            "a positive length, e.g. `60mm`",
+            format!(
+                "`{}{}` as the outline {side}",
+                value.literal,
+                value.unit.as_str()
+            ),
+            None,
+        );
+        None
     }
 
     fn parse_manufacturer(&mut self) -> Option<ManufacturerStmt> {
@@ -502,6 +558,46 @@ impl Parser {
         };
         let end = self.last_offset();
         Some(LegendsStmt {
+            enabled,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// Parse a `labels on|off` board statement (absmach/synth#374). The
+    /// default is `on`; anything but the bare identifiers `on`/`off` is
+    /// `E-SYNTH-PARSE-033` with a patch inserting the valid form, as
+    /// `legends` does.
+    fn parse_labels(&mut self) -> Option<LabelsStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `labels`
+        let val_span = self.peek().span;
+        let word =
+            self.expect_ident("E-SYNTH-PARSE-033", "expected `on` or `off` after `labels`")?;
+        let enabled = match word.as_str() {
+            "on" => true,
+            "off" => false,
+            _ => {
+                self.emit(
+                    val_span,
+                    "E-SYNTH-PARSE-033",
+                    "expected `on` or `off` after `labels`",
+                    "`on` or `off`",
+                    word,
+                    Some(Patch {
+                        confidence: 0.8,
+                        rationale: Some("labels takes only `on` or `off`".into()),
+                        patch_consequence_preview: None,
+                        kind: PatchKind::ReplaceRange {
+                            range: val_span,
+                            replacement: "on".into(),
+                        },
+                    }),
+                );
+                return None;
+            }
+        };
+        let end = self.last_offset();
+        Some(LabelsStmt {
             enabled,
             span: Span::new(start, end),
         })
@@ -760,18 +856,18 @@ impl Parser {
         // Per-instance sourcing. Plain identifiers, not reserved words, so a
         // design that already uses `mpn` as a name keeps parsing. Stored
         // lowercase, which never collides with the capitalised KiCad fields.
-        if let TokenKind::Ident(name) = self.peek_kind() {
-            if name == "lcsc_pn" || name == "mpn" {
-                let key = name.clone();
-                self.bump();
-                if let Some(s) = self.expect_string(
-                    "E-SYNTH-PARSE-002",
-                    "expected a quoted value after the field keyword",
-                ) {
-                    properties.insert(key, s);
-                }
-                return true;
+        if let TokenKind::Ident(name) = self.peek_kind()
+            && (name == "lcsc_pn" || name == "mpn")
+        {
+            let key = name.clone();
+            self.bump();
+            if let Some(s) = self.expect_string(
+                "E-SYNTH-PARSE-002",
+                "expected a quoted value after the field keyword",
+            ) {
+                properties.insert(key, s);
             }
+            return true;
         }
         if matches!(self.peek_kind(), TokenKind::KwDnp) {
             self.bump(); // consume `dnp`
@@ -942,7 +1038,7 @@ impl Parser {
         let mut additional = Vec::new();
         while matches!(self.peek_kind(), TokenKind::Comma) {
             self.bump(); // consume `,`
-                         // Allow a trailing comma before `as` / `class` / EOL.
+            // Allow a trailing comma before `as` / `class` / EOL.
             if matches!(
                 self.peek_kind(),
                 TokenKind::KwAs | TokenKind::KwClass | TokenKind::RBrace | TokenKind::Eof
@@ -1119,7 +1215,7 @@ impl Parser {
         while !self.at_eof() {
             match self.peek_kind() {
                 TokenKind::RBrace | TokenKind::Comma | TokenKind::KwClass | TokenKind::Ident(_) => {
-                    return
+                    return;
                 }
                 _ => {
                     self.bump();
@@ -1222,7 +1318,7 @@ impl Parser {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::KwDnp => {
                     self.bump(); // consume `dnp`
-                                 // One or more refdes until the body closes.
+                    // One or more refdes until the body closes.
                     while let TokenKind::Ident(_) = self.peek_kind() {
                         if let Some(refdes) =
                             self.expect_ident("E-SYNTH-PARSE-010", "expected component refdes")
@@ -1292,9 +1388,9 @@ impl Parser {
     fn parse_diff_pair(&mut self) -> Option<DiffPairStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `diff_pair`
-                     // Legs reference named nets, so accept both bare idents
-                     // (`diff_pair USB_DP USB_DN`) and quoted names
-                     // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
+        // Legs reference named nets, so accept both bare idents
+        // (`diff_pair USB_DP USB_DN`) and quoted names
+        // (`diff_pair "USB_DP" "USB_DN"`) for rails like `+3V3`.
         let pos = self.expect_net_ref("expected positive net identifier")?;
         let neg = self.expect_net_ref("expected negative net identifier")?;
         if !matches!(self.peek_kind(), TokenKind::LBrace) {
@@ -2045,6 +2141,39 @@ impl Parser {
         })
     }
 
+    fn parse_no_connect(&mut self) -> NoConnectStmt {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `no_connect`
+        let mut pins = Vec::new();
+        loop {
+            let Some(pin) = self.parse_endpoint(false) else {
+                self.synchronize();
+                break;
+            };
+            pins.push(pin);
+            if matches!(self.peek_kind(), TokenKind::Comma) {
+                self.bump();
+            } else {
+                break;
+            }
+        }
+        if pins.is_empty() {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-044",
+                "`no_connect` names no pin",
+                "one or more `REFDES.PIN` endpoints",
+                self.describe_current(),
+                None,
+            );
+        }
+        let end = self.last_offset();
+        NoConnectStmt {
+            pins,
+            span: Span::new(start, end),
+        }
+    }
+
     fn parse_keepout(&mut self) -> Option<KeepoutStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `keepout`
@@ -2072,12 +2201,50 @@ impl Parser {
                         attrs.push(KeepoutAttr::Radius(v));
                     }
                 }
+                TokenKind::Ident(name) if name == "anchor" => {
+                    let span = self.peek().span;
+                    self.bump();
+                    if let Some(component) = self.expect_string(
+                        "E-SYNTH-PARSE-043",
+                        "expected a component refdes after `anchor`",
+                    ) {
+                        attrs.push(KeepoutAttr::Anchor { component, span });
+                    }
+                }
+                TokenKind::Ident(name) if name == "at" => {
+                    self.bump();
+                    let Some(x) = self.expect_value() else {
+                        continue;
+                    };
+                    let Some(y) = self.expect_value() else {
+                        continue;
+                    };
+                    attrs.push(KeepoutAttr::At { x, y });
+                }
+                TokenKind::KwLayers => {
+                    self.bump();
+                    let mut layers = Vec::new();
+                    while let Some(layer) = self.expect_string_optional() {
+                        layers.push(layer);
+                        if matches!(self.peek_kind(), TokenKind::Comma) {
+                            self.bump();
+                        } else {
+                            break;
+                        }
+                    }
+                    attrs.push(KeepoutAttr::Layers(layers));
+                }
+                TokenKind::Ident(word) if word == "allow" => {
+                    if let Some(attr) = self.parse_keepout_allow() {
+                        attrs.push(attr);
+                    }
+                }
                 _ => {
                     self.emit(
                         self.peek().span,
                         "E-SYNTH-PARSE-020",
                         "unexpected attribute inside keepout",
-                        "`radius <value><unit>`",
+                        "`radius <value><unit>`, `anchor \"REFDES\"`, `allow \"NET\", …`",
                         self.describe_current(),
                         None,
                     );
@@ -2094,6 +2261,36 @@ impl Parser {
             attrs,
             span: Span::new(start, end),
         })
+    }
+
+    /// `anchor "U1"` — the component the keepout is centred on.
+    /// `allow "TMDS_D2+", "TMDS_D2-"` — the nets the keepout must let
+    /// through. One or more quoted net names, comma-separated like a
+    /// netclass `layers` list.
+    fn parse_keepout_allow(&mut self) -> Option<KeepoutAttr> {
+        let word = self.peek().span;
+        self.bump(); // consume `allow`
+        let mut nets = Vec::new();
+        while let TokenKind::StringLit(_) = self.peek_kind() {
+            if let Some(net) = self.expect_string("E-SYNTH-PARSE-002", "expected a net name") {
+                nets.push(net);
+            }
+            if matches!(self.peek_kind(), TokenKind::Comma) {
+                self.bump();
+            }
+        }
+        if nets.is_empty() {
+            self.emit(
+                word,
+                "E-SYNTH-PARSE-045",
+                "keepout allow names no net",
+                "`allow \"<net>\", …`",
+                "no quoted net name followed `allow`".to_string(),
+                None,
+            );
+            return None;
+        }
+        Some(KeepoutAttr::Allow { nets, span: word })
     }
 
     /// `module "N" (port: type, …) { param …; <statement>* }`.
@@ -2601,6 +2798,17 @@ impl Parser {
         }
     }
 
+    fn expect_string_optional(&mut self) -> Option<String> {
+        if let TokenKind::StringLit(_) = self.peek_kind() {
+            let TokenKind::StringLit(s) = self.bump().kind.clone() else {
+                unreachable!()
+            };
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     fn expect_value(&mut self) -> Option<ValueWithUnit> {
         let tok_span = self.peek().span;
         if let TokenKind::Value { literal, unit } = self.peek_kind() {
@@ -2633,12 +2841,14 @@ impl Parser {
             match self.peek_kind() {
                 TokenKind::RBrace
                 | TokenKind::KwLayers
+                | TokenKind::KwOutline
                 | TokenKind::KwManufacturer
                 | TokenKind::KwComponent
                 | TokenKind::KwConnect
                 | TokenKind::KwNet
                 | TokenKind::KwPower
                 | TokenKind::KwNotes
+                | TokenKind::KwLabels
                 | TokenKind::KwModule
                 | TokenKind::KwInterface
                 | TokenKind::KwBus
@@ -2676,6 +2886,7 @@ impl Parser {
             TokenKind::KwBoard => "`board`".to_string(),
             TokenKind::KwImport => "`import`".to_string(),
             TokenKind::KwLayers => "`layers`".to_string(),
+            TokenKind::KwOutline => "`outline`".to_string(),
             TokenKind::KwManufacturer => "`manufacturer`".to_string(),
             TokenKind::KwRevision => "`revision`".to_string(),
             TokenKind::KwCompany => "`company`".to_string(),
@@ -2683,6 +2894,7 @@ impl Parser {
             TokenKind::KwStackup => "`stackup`".to_string(),
             TokenKind::KwRequires => "`requires`".to_string(),
             TokenKind::KwLegends => "`legends`".to_string(),
+            TokenKind::KwLabels => "`labels`".to_string(),
             TokenKind::KwComponent => "`component`".to_string(),
             TokenKind::KwConnect => "`connect`".to_string(),
             TokenKind::KwNet => "`net`".to_string(),
@@ -3232,10 +3444,72 @@ mod tests {
             .as_ref()
             .expect("named hint attached");
         assert!(hint.component.is_none());
-        assert!(hint
-            .attrs
-            .iter()
-            .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right")));
+        assert!(
+            hint.attrs
+                .iter()
+                .any(|attr| matches!(attr, PlacementHintAttr::Edge(edge, _) if edge == "right"))
+        );
+    }
+
+    #[test]
+    fn parse_outline_statement() {
+        let res = parse(
+            lex(r#"board "b" { outline 60mm x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(res.diagnostics.is_empty(), "{:?}", res.diagnostics);
+        let ast = res.ast.expect("outline parses");
+        let StatementAst::Outline(outline) = &ast.board.statements[0] else {
+            panic!("expected an outline statement")
+        };
+        assert_eq!(outline.width.literal, "60");
+        assert_eq!(outline.width.unit, synth_ast::Unit::Mm);
+        assert_eq!(outline.height.literal, "30");
+    }
+
+    #[test]
+    fn outline_requires_an_x_between_the_dimensions() {
+        let res = parse(
+            lex(r#"board "b" { outline 60mm 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-041"),
+            "{:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn outline_dimensions_need_a_unit() {
+        let res = parse(
+            lex(r#"board "b" { outline 60 x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-026"),
+            "{:?}",
+            res.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_zero_outline_dimension_is_rejected() {
+        let res = parse(
+            lex(r#"board "b" { outline 0mm x 30mm }"#),
+            "test.synth".into(),
+        );
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-042"),
+            "{:?}",
+            res.diagnostics
+        );
     }
 
     #[test]
@@ -3420,6 +3694,41 @@ mod tests {
             };
             assert_eq!(l.enabled, enabled);
         }
+    }
+
+    #[test]
+    fn parse_labels_on_and_off() {
+        for (word, enabled) in [("on", true), ("off", false)] {
+            let src = format!("board \"b\" {{\n labels {word}\n}}");
+            let tokens = lex(&src);
+            let res = parse(tokens, "test.synth".into());
+            assert!(
+                res.diagnostics.is_empty(),
+                "Diagnostics should be empty: {:?}",
+                res.diagnostics
+            );
+            let ast = res.ast.unwrap();
+            let StatementAst::Labels(l) = &ast.board.statements[0] else {
+                panic!("Expected labels statement");
+            };
+            assert_eq!(l.enabled, enabled);
+        }
+    }
+
+    #[test]
+    fn parse_labels_rejects_other_words() {
+        let src = r#"board "b" {
+            labels maybe
+        }"#;
+        let tokens = lex(src);
+        let res = parse(tokens, "test.synth".into());
+        assert!(
+            res.diagnostics
+                .iter()
+                .any(|d| d.code == "E-SYNTH-PARSE-033"),
+            "expected E-SYNTH-PARSE-033, got {:?}",
+            res.diagnostics
+        );
     }
 
     #[test]

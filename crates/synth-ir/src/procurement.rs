@@ -180,9 +180,8 @@ pub fn lock_board_with_dispositions(
     dispositions: &BTreeMap<String, AssemblyDisposition>,
 ) -> Result<ProcurementLock, ProcurementError> {
     let variant_name = variant.map_or_else(|| "default".to_string(), |v| v.name.clone());
-    let variant_dnp: BTreeSet<&str> = variant
-        .map(|v| v.dnp.iter().map(String::as_str).collect())
-        .unwrap_or_default();
+    let variant_dnp: BTreeSet<&str> =
+        variant.map_or_default(|v| v.dnp.iter().map(String::as_str).collect());
     let mut assignments = Vec::with_capacity(board.components.len());
     for component in &board.components {
         let disposition = if component.dnp || variant_dnp.contains(component.refdes.as_str()) {

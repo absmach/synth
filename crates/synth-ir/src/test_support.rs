@@ -36,6 +36,9 @@ pub fn pin_with(
         voltage_max_v: None,
         voltage_min_v: None,
         voltage_nominal_v: None,
+        drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -62,6 +65,7 @@ pub fn part(kind: &str, pins: Vec<Pin>) -> Part {
         kicad_footprint: None,
         footprint_dimensions: None,
         operating_conditions: None,
+        spice: None,
     }
 }
 
@@ -77,6 +81,7 @@ pub fn part_with_decoupling(kind: &str, pins: Vec<Pin>, rules: &[(&str, u32)]) -
             max_distance_mm: None,
             to: None,
             through: None,
+            when_supply_over_v: None,
         })
         .collect();
     p
@@ -138,8 +143,11 @@ pub fn board(
         diff_pairs,
         notes: Vec::new(),
         legends: false,
+        labels: true,
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
+        outline: None,
         netclasses: Vec::new(),
         buses: Vec::new(),
         modules: Vec::new(),

@@ -23,9 +23,9 @@ use std::collections::{HashMap, HashSet};
 use synth_ir::{Board, ComponentId, PinId};
 
 use crate::route::{
-    net_label_plan, pin_terminal_xy, LabelPlan, FLAG_CHAR_MM, FLAG_H_MM, FLAG_PAD_MM, LABEL_STUB_MM,
+    FLAG_CHAR_MM, FLAG_H_MM, FLAG_PAD_MM, LABEL_STUB_MM, LabelPlan, net_label_plan, pin_terminal_xy,
 };
-use crate::{body_size_for_part, ComponentPlacement, LabelSpot, Layout, NetLabel, Rotation};
+use crate::{ComponentPlacement, LabelSpot, Layout, NetLabel, Rotation, body_size_for_part};
 
 type Rect = (f64, f64, f64, f64);
 

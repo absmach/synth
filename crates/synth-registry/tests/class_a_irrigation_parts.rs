@@ -29,7 +29,7 @@ fn part(id: &str) -> synth_registry::Part {
 
 #[test]
 fn every_irrigation_part_has_a_reviewer_a_date_a_datasheet_and_qualifies_without_findings() {
-    use synth_registry::qualify::{qualify_part, NoFacts};
+    use synth_registry::qualify::{NoFacts, qualify_part};
     for id in IDS {
         let p = part(id);
         let prov = p
@@ -237,10 +237,11 @@ fn the_canonical_mp2307_is_an_exact_part_with_its_power_network_constraints() {
     let ep = p.pins.iter().find(|x| x.number.0 == "9").expect("a pin 9");
     assert_eq!(ep.name, "ep");
     assert!(ep.required, "the exposed pad is connected, to GND");
-    assert!(p
-        .kicad_footprint
-        .as_deref()
-        .is_some_and(|f| f.contains("EP2.41x3.3")));
+    assert!(
+        p.kicad_footprint
+            .as_deref()
+            .is_some_and(|f| f.contains("EP2.41x3.3"))
+    );
     let wants = |net: &str, to: Option<&str>, through: Option<&str>, value: &str, count: u32| {
         p.required_decoupling.iter().any(|d| {
             d.net == net

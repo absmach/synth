@@ -34,10 +34,13 @@
 //! Collapsing any two of them — most dangerously treating an unavailable
 //! router as a pass — is the failure mode this crate exists to prevent.
 //!
-//! Selection is explicit. If the chosen engine is missing, the run fails
-//! with [`RouterFailureReason`] naming what to install; it never silently
-//! falls back to another engine, and there is no built-in router to fall
-//! back to.
+//! Selection is explicit. If the chosen external engine is missing, the run
+//! fails with [`RouterFailureReason`] naming what to install; it never
+//! silently falls back to another external engine. The workspace's own
+//! deterministic router ([`RouterEngine::Internal`]) is the one fallback a
+//! run may take, and only when the compiling surface decides no external
+//! engine is configured or available: the fallback routes, it never promotes
+//! itself into an engine's name.
 //!
 //! [`RouteRequest::baseline`]: RouteRequest::baseline_path
 
@@ -54,8 +57,10 @@ pub mod kicad_routing_tools;
 pub mod label_vias;
 pub mod outcomes;
 pub mod process;
+pub mod quality;
 pub mod result;
 pub mod search_budget;
+pub mod tools;
 pub mod validate;
 pub mod zone_fill;
 
@@ -63,20 +68,22 @@ use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
-pub use capability::{discover, RouterCapability};
+pub use capability::{RouterCapability, discover};
 pub use contract::{
-    FabricationPolicy, FreeroutingOptions, KiCadRoutingToolsOptions, KrtEscalation, NetLayers,
-    RouteRequest, RouterEngine, RouterLimits,
+    FabricationPolicy, FastrouteOptions, FreeroutingOptions, KiCadRoutingToolsOptions,
+    KrtEscalation, NetLayers, RouteRequest, RouterEngine, RouterLimits,
 };
 pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
+pub use quality::RouteQuality;
 pub use result::{
     PortfolioRank, RouteReport, RouteState, RouteStatistics, RouterProvenance, ValidationSummary,
 };
+pub use tools::ToolPaths;
 // The `.kicad_pcb` reader lives in `synth-drc`; this keeps the
 // `synth_router::pcb_read` path working for existing callers.
 pub use synth_drc::pcb_read;
 pub use validate::{
-    validate_candidate, ConnectivityReport, FabricationVerdict, OpenConnection, TopologyReport,
+    ConnectivityReport, FabricationVerdict, OpenConnection, TopologyReport, validate_candidate,
 };
 
 /// Schema version stamped into every [`RouteReport`] this crate writes.
@@ -146,6 +153,31 @@ fn ordering_retries() -> usize {
 }
 
 fn route_once(request: &RouteRequest) -> RouteReport {
+    // The internal router is not driven through the request-only contract:
+    // it needs the compiled board, which only the compiling surface has. A
+    // caller that asks for it here would otherwise be told the engine ran
+    // and failed, so refuse before anything starts.
+    if request.engine == RouterEngine::Internal {
+        let mut report = RouteReport::failed(
+            request,
+            &None,
+            failure::RouterFailure::for_stage(
+                request.engine,
+                RouterStage::Route,
+                RouterFailureReason::Unsupported,
+                "the internal router routes the compiled board, which a \
+                 RouteRequest does not carry",
+            )
+            .with_remediation(
+                "route with the workspace's router through `synth drc` or `synth route`, \
+                 which compile the board first; an external engine is selected with \
+                 --router",
+            ),
+        );
+        write_report(&mut report, request);
+        return report;
+    }
+
     // The duplicate-run guard is taken first. Reporting "router
     // unavailable" while a run is already writing this candidate would name
     // the wrong problem, and the operator would go looking for a missing
@@ -153,7 +185,7 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     let _guard = match process::RunGuard::acquire(request.candidate_path().display().to_string()) {
         Ok(guard) => guard,
         Err(detail) => {
-            let report = RouteReport::failed(
+            let mut report = RouteReport::failed(
                 request,
                 &None,
                 failure::RouterFailure::for_stage(
@@ -163,7 +195,7 @@ fn route_once(request: &RouteRequest) -> RouteReport {
                     detail,
                 ),
             );
-            write_report(&report, request);
+            write_report(&mut report, request);
             return report;
         }
     };
@@ -174,7 +206,19 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     if let Err(failure) = request.preserve_baseline() {
         let mut report = RouteReport::failed(request, &None, failure);
         report.escape = escape::analyse_baseline(request);
-        write_report(&report, request);
+        write_report(&mut report, request);
+        return report;
+    }
+
+    // A board with nothing to route — no nets, or no net on more than one
+    // pad — routes trivially. There is no copper to produce and no engine to
+    // run, so the result is an empty-but-validated route, not an unavailable
+    // router: "the board needed no router" and "the router is missing" are
+    // different answers and only one of them is a gate failure.
+    if nothing_to_route(request) {
+        let mut report = route_trivially(request);
+        report.escape = escape::analyse_baseline(request);
+        write_report(&mut report, request);
         return report;
     }
 
@@ -182,24 +226,92 @@ fn route_once(request: &RouteRequest) -> RouteReport {
     if let Some(failure) = capability.failure() {
         let mut report = RouteReport::unavailable(request, &Some(capability.clone()), failure);
         report.escape = escape::analyse_baseline(request);
-        write_report(&report, request);
+        write_report(&mut report, request);
         return report;
     }
 
     let run = match request.engine {
         RouterEngine::Freerouting => freerouting::route(request),
         RouterEngine::KiCadRoutingTools => kicad_routing_tools::route(request),
+        RouterEngine::Fastroute => freerouting::route_engine(request, RouterEngine::Fastroute),
+        RouterEngine::Internal => unreachable!("handled above, before the guard"),
     };
 
     let mut report = match run {
-        Ok(candidate) => finalize(request, Some(&capability), candidate),
+        Ok(candidate) => finalize_candidate(request, Some(&capability), candidate),
         Err(failure) => RouteReport::failed(request, &Some(capability), failure),
     };
     // A property of the design and the process, not of the attempt, so it is
     // reported whatever the run did — including when the engine was missing.
     report.escape = escape::analyse_baseline(request);
-    write_report(&report, request);
+    write_report(&mut report, request);
     report
+}
+
+/// Whether the board carries nothing a router could route.
+///
+/// A net needs routing when it puts two or more bound pads on the board;
+/// one pad has nothing to reach. A board whose every net is single-pad —
+/// including one with no pads at all, like the empty `hello` fixture — has
+/// no ratsnest, so no engine is needed and none may be reported missing.
+fn nothing_to_route(request: &RouteRequest) -> bool {
+    let Ok(text) = std::fs::read_to_string(request.baseline_path()) else {
+        return false;
+    };
+    let Ok(board) = pcb_read::PcbBoard::parse(&text) else {
+        return false;
+    };
+    let mut pads_per_net: std::collections::BTreeMap<u32, usize> =
+        std::collections::BTreeMap::new();
+    for pad in board.pads() {
+        if let Some(net) = pad.net.filter(|net| *net != 0) {
+            *pads_per_net.entry(net).or_default() += 1;
+        }
+    }
+    pads_per_net.into_values().all(|count| count < 2)
+}
+
+/// Route a board that needs no copper: validate the empty route honestly.
+///
+/// The baseline is copied to the candidate path and run through the same
+/// mandatory repair and validation pipeline an engine's candidate gets, so
+/// the verdict — and the `kicad-cli pcb drc` counts it reports — are the
+/// real ones for the delivered board. A DRC that could not run leaves the
+/// run in review, never in `Routed`.
+fn route_trivially(request: &RouteRequest) -> RouteReport {
+    if let Err(detail) = std::fs::copy(request.baseline_path(), request.candidate_path()) {
+        return RouteReport::failed(
+            request,
+            &None,
+            failure::RouterFailure::io(
+                request.engine,
+                format!(
+                    "could not stage the empty route at {}: {detail}",
+                    request.candidate_path().display()
+                ),
+            ),
+        );
+    }
+    let candidate = freerouting::Candidate {
+        candidate_path: request.candidate_path(),
+        artifacts: crate::result::RouteArtifacts {
+            baseline: request.baseline_path(),
+            candidate: Some(request.candidate_path()),
+            delivered: Some(request.board_path.clone()),
+            ..crate::result::RouteArtifacts::default()
+        }
+        .resolved(),
+        provenance: crate::result::RouterProvenance {
+            engine: request.engine.as_str().to_string(),
+            engine_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            profile: request.profile_name.clone(),
+            input_hash: request.input_hash.clone(),
+            source_revision: request.source_revision.clone(),
+            ..crate::result::RouterProvenance::default()
+        },
+        statistics: crate::result::RouteStatistics::empty(),
+    };
+    finalize_candidate(request, None, candidate)
 }
 
 /// Run every engine over the board and keep the best attempt.
@@ -220,11 +332,28 @@ fn route_once(request: &RouteRequest) -> RouteReport {
 /// engines that are present instead of failing.
 #[must_use]
 pub fn route_best_of(base: &RouteRequest, engines: &[RouterEngine]) -> Portfolio {
+    // Preserve the exported board once, before any engine can overwrite the
+    // delivery path. Each attempt below copies from this stable source. Doing
+    // it per engine from `board_path` made the second engine route the first
+    // engine's installed copper: a portfolio then compared different boards
+    // and the Specctra import failed on nets the winner had renamed.
+    let stable_board = base.baseline_path();
+    if !stable_board.is_file()
+        && let Err(failure) = base.preserve_baseline()
+    {
+        let report = RouteReport::failed(base, &None, failure);
+        return Portfolio {
+            winner: base.engine,
+            attempts: vec![report],
+        };
+    }
+
     let mut attempts = Vec::with_capacity(engines.len());
     for engine in engines {
         let mut request = base.clone();
         request.engine = *engine;
         request.out_dir = base.out_dir.join(engine.artifact_tag());
+        request.board_path.clone_from(&stable_board);
         attempts.push(route(&request));
     }
 
@@ -295,7 +424,20 @@ pub fn sanitize_stem(name: &str) -> String {
 /// different outcome: the caller still gets the in-memory verdict, and the
 /// problem surfaces as a warning. Losing the verdict would be the worse
 /// failure.
-fn write_report(report: &RouteReport, request: &RouteRequest) {
+fn write_report(report: &mut RouteReport, request: &RouteRequest) {
+    // The quality verdict is derived from the independent validation, not
+    // from the engine, so it is written from the same report the run record
+    // describes. Write it before the run record so the record can point at
+    // the artifact that actually landed.
+    let quality_path = request.quality_report_path();
+    let quality = crate::quality::RouteQuality::from_report(report);
+    match crate::write_artifact(&quality_path, &quality) {
+        Ok(()) => report.artifacts.quality_report = Some(quality_path),
+        Err(error) => warn!(
+            "route quality report could not be written to {}: {error}",
+            quality_path.display()
+        ),
+    }
     if let Err(error) = report.write_to(&request.report_path()) {
         warn!(
             "routing run record could not be written to {}: {error}",
@@ -325,8 +467,25 @@ fn with_repair_findings(
     verdict
 }
 
-/// Say what the post-routing silkscreen pass did, when it did anything.
-fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
+/// The verdict with a declared pair outside its skew budget marked blocking.
+/// The finding names the pair and its budget; the candidate is not
+/// fabrication-ready, the same way a return-via blocker holds it.
+fn with_diff_pair_findings(
+    mut verdict: validate::FabricationVerdict,
+    findings: Vec<String>,
+) -> validate::FabricationVerdict {
+    if !findings.is_empty() {
+        verdict.fabrication_ready = false;
+        verdict.blocking_reasons.extend(findings);
+    }
+    verdict
+}
+
+/// Say what the post-routing silkscreen pass did, and return the findings that
+/// must reach the verdict. A hidden designator is a blocking finding: a board
+/// with an unreadable reference is not fabrication-ready. A pass that could not
+/// run is an unavailable check, which yields `ReviewRequired`, not a pass.
+fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) -> Vec<String> {
     match result {
         Ok(label_vias::LabelMoves {
             moved: 0,
@@ -335,7 +494,7 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             widened: 0,
             dropped: 0,
             relocated: 0,
-        }) => {}
+        }) => Vec::new(),
         Ok(label_vias::LabelMoves {
             moved,
             hidden,
@@ -343,26 +502,48 @@ fn report_silkscreen_pass(result: Result<label_vias::LabelMoves, String>) {
             widened,
             dropped,
             relocated,
-        }) => info!(
-            "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
-        ),
-        Err(detail) => warn!("reference labels were not checked: {detail}"),
+        }) => {
+            info!(
+                "moved {moved} reference label(s) off vias and pads; {hidden} hidden because no clear spot was within reach; {trimmed} outline line(s) cut back from vias and pads; {relocated} silkscreen polygon(s) and circle(s) moved clear of copper; {dropped} silkscreen circle(s) and polygon(s) dropped; {widened} silkscreen stroke(s) widened to 0.18 mm"
+            );
+            if hidden == 0 {
+                Vec::new()
+            } else {
+                vec![format!(
+                    "{hidden} reference designator(s) could not be kept clear of copper and were hidden"
+                )]
+            }
+        }
+        Err(detail) => {
+            warn!("reference labels were not checked: {detail}");
+            Vec::new()
+        }
     }
 }
 
 /// A sliver of track that ends in nothing carries nothing and only trips KiCad's
 /// unconnected-end check; it goes before the candidate is judged. A prune that
 /// did not run leaves such a sliver in the board, so it is an unavailable check.
-fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
+fn repair_dropped_stubs(candidate: &Path) -> (Vec<String>, Vec<String>) {
     match island_vias::drop_dangling_stubs(candidate) {
-        Ok(0) => Vec::new(),
-        Ok(dropped) => {
-            debug!("dropped {dropped} track stub(s) that ended in nothing");
-            Vec::new()
+        Ok(outcome) if outcome.dropped == 0 && outcome.remaining.is_empty() => {
+            (Vec::new(), Vec::new())
+        }
+        Ok(outcome) => {
+            if outcome.dropped > 0 {
+                debug!(
+                    "dropped {} track stub(s) that ended in nothing",
+                    outcome.dropped
+                );
+            }
+            (outcome.remaining, Vec::new())
         }
         Err(detail) => {
             warn!("track stubs were not pruned: {detail}");
-            vec![format!("track stub prune did not run: {detail}")]
+            (
+                Vec::new(),
+                vec![format!("track stub prune did not run: {detail}")],
+            )
         }
     }
 }
@@ -376,7 +557,7 @@ fn repair_dropped_stubs(candidate: &Path) -> Vec<String> {
 /// fails validation is still retained on disk as review material — it is
 /// just never installed over the baseline.
 #[allow(clippy::too_many_lines)]
-fn finalize(
+pub fn finalize_candidate(
     request: &RouteRequest,
     capability: Option<&RouterCapability>,
     candidate: freerouting::Candidate,
@@ -409,7 +590,9 @@ fn finalize(
             repair_unavailable.push(format!("edge track prune did not run: {detail}"));
         }
     }
-    repair_unavailable.extend(repair_dropped_stubs(&candidate.candidate_path));
+    let (stub_blocking, stub_unavailable) = repair_dropped_stubs(&candidate.candidate_path);
+    repair_blocking.extend(stub_blocking);
+    repair_unavailable.extend(stub_unavailable);
     let mut repair_advisory: Vec<String> = Vec::new();
     let mut ground = island_vias::Ground::new(&request.ground_nets)
         .with_fine_pitch_advisory(request.fine_pitch_return_via_advisory);
@@ -425,7 +608,8 @@ fn finalize(
         let drill = request.policy.min_drill_diameter_nm;
         ground = ground.with_in_pad_via(drill + request.policy.via_in_pad_land_extra_nm, drill);
     }
-    match island_vias::tie_islands_for(&candidate.candidate_path, &ground) {
+    let kicad_cli = request.tools.kicad_cli_binary();
+    match island_vias::tie_islands_for(&candidate.candidate_path, &ground, &kicad_cli) {
         Ok(outcome) => {
             repair_blocking = outcome.unresolved;
             repair_advisory = outcome.advisory;
@@ -441,8 +625,9 @@ fn finalize(
     // The labels were placed before the router put its vias down; move any that
     // now sit on a via or a pad. Silkscreen only, and before the candidate is
     // judged, so the board that is delivered is the one that was validated.
-    let silkscreen = label_vias::keep_labels_off_copper(&candidate.candidate_path);
-    report_silkscreen_pass(silkscreen.clone());
+    let silkscreen =
+        label_vias::keep_labels_off_copper_preserving_footprints(&candidate.candidate_path);
+    repair_blocking.extend(report_silkscreen_pass(silkscreen.clone()));
     if let Err(detail) = &silkscreen {
         repair_unavailable.push(format!("silkscreen repair did not run: {detail}"));
     }
@@ -457,6 +642,15 @@ fn finalize(
         repair_unavailable,
         repair_advisory,
     );
+    // A declared pair the copper does not length-match to its budget blocks
+    // the release here, in the same verdict the return-via blockers do: a
+    // board that releases with 9.9 mm of skew on a `max_skew 0.15mm` pair is
+    // the failure #447 shipped, and it stops being silent.
+    let skew_findings = match &delivered_board {
+        Some(board) => validate::check_diff_pair_skew(board, &request.diff_pairs),
+        None => Vec::new(),
+    };
+    let verdict = with_diff_pair_findings(verdict, skew_findings);
 
     let state = RouteReport::state_for_verdict(&verdict);
 
@@ -468,7 +662,9 @@ fn finalize(
         // Deliver the zones filled so KiCad opens the board with the
         // connectivity it was validated with. A refill that fails leaves
         // the routed, unfilled board in place.
-        if let Err(detail) = zone_fill::refill_zones(&candidate.candidate_path) {
+        if let Err(detail) =
+            zone_fill::refill_zones(&candidate.candidate_path, &request.tools.kicad_cli_binary())
+        {
             warn!(
                 "zones were not filled in {}: {detail}; KiCad will show \
                  plane-connected pads as unrouted until zones are filled (press B)",
@@ -651,10 +847,10 @@ pub(crate) fn repo_root() -> Option<PathBuf> {
         if path.join("tools").is_dir() {
             return Some(path);
         }
-        if let Some(up) = path.parent().and_then(Path::parent) {
-            if up.join("tools").is_dir() {
-                return Some(up.to_path_buf());
-            }
+        if let Some(up) = path.parent().and_then(Path::parent)
+            && up.join("tools").is_dir()
+        {
+            return Some(up.to_path_buf());
         }
     }
     std::env::current_dir()
@@ -743,6 +939,44 @@ mod repair_tests {
     }
 
     #[test]
+    fn a_hidden_reference_label_holds_the_board_back() {
+        let moves = label_vias::LabelMoves {
+            hidden: 2,
+            ..label_vias::LabelMoves::default()
+        };
+        let blocking = report_silkscreen_pass(Ok(moves));
+        assert_eq!(blocking.len(), 1);
+        assert!(blocking[0].contains("2 reference designator"));
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            blocking,
+            Vec::new(),
+            Vec::new(),
+        );
+        assert!(!verdict.fabrication_ready);
+        assert_eq!(
+            RouteReport::state_for_verdict(&verdict),
+            RouteState::ValidationFailed
+        );
+    }
+
+    #[test]
+    fn a_silkscreen_pass_that_did_not_run_is_review_required() {
+        let detail = "board could not be read".to_string();
+        assert!(report_silkscreen_pass(Err(detail.clone())).is_empty());
+        let verdict = with_repair_findings(
+            FabricationVerdict::ready(),
+            Vec::new(),
+            vec![format!("silkscreen repair did not run: {detail}")],
+            Vec::new(),
+        );
+        assert_eq!(
+            RouteReport::state_for_verdict(&verdict),
+            RouteState::ReviewRequired
+        );
+    }
+
+    #[test]
     fn a_clean_repair_leaves_the_verdict_as_it_was() {
         let verdict = with_repair_findings(
             FabricationVerdict::ready(),
@@ -768,6 +1002,33 @@ mod repair_tests {
         assert!(verdict.fabrication_ready);
         assert!(!verdict.has_blocking_findings());
         assert_eq!(verdict.advisories, vec![advisory.to_string()]);
+        assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
+    }
+
+    /// A declared pair outside its skew budget blocks the candidate in the
+    /// same verdict the return-via blockers do: the finding names the pair,
+    /// the board lands in validation-failed, and the release gate keeps it
+    /// (absmach/synth#447).
+    #[test]
+    fn a_declared_pair_outside_its_skew_budget_blocks_the_verdict() {
+        let finding = "pair `USB_DP`/`USB_DN` is length-matched to 9.900 mm, longer than \
+             the 0.150 mm maximum skew (E-SYNTH-DRC-014)";
+        let verdict =
+            with_diff_pair_findings(FabricationVerdict::ready(), vec![finding.to_string()]);
+        assert!(!verdict.fabrication_ready);
+        assert_eq!(verdict.blocking_reasons, vec![finding.to_string()]);
+        assert_eq!(
+            RouteReport::state_for_verdict(&verdict),
+            RouteState::ValidationFailed
+        );
+    }
+
+    /// A board with no declared pair — or with every pair inside its budget —
+    /// leaves the verdict as validation found it.
+    #[test]
+    fn a_clean_or_undeclared_pair_verdict_is_unchanged() {
+        let verdict = with_diff_pair_findings(FabricationVerdict::ready(), Vec::new());
+        assert!(verdict.fabrication_ready);
         assert_eq!(RouteReport::state_for_verdict(&verdict), RouteState::Routed);
     }
 }

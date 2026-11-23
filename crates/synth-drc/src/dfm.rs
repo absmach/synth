@@ -16,11 +16,11 @@
 
 use std::collections::BTreeMap;
 
+use crate::ManufacturerProfile;
 use crate::pcb_read::NM_PER_MM;
 use crate::pcb_read::{
-    entry_is_copper, layer_covers, Hole, Pad, PcbBoard, PcbParseError, Point, Via,
+    Hole, Pad, PcbBoard, PcbParseError, Point, Via, entry_is_copper, layer_covers,
 };
-use crate::ManufacturerProfile;
 
 /// How a fab's DFM tool would grade a finding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]

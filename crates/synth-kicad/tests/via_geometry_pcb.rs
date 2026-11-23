@@ -151,8 +151,8 @@ fn the_ground_stitching_vias_follow_a_declared_default_drill() {
 "#,
     );
     assert!(
-        vias.len() >= 4,
-        "a four-layer ground pour is stitched at the four corners: {vias:?}"
+        vias.len() >= 2,
+        "a four-layer ground pour is stitched at the top and bottom edge midpoints: {vias:?}"
     );
     assert!(
         vias.iter()
@@ -164,7 +164,7 @@ fn the_ground_stitching_vias_follow_a_declared_default_drill() {
 #[test]
 fn the_ground_stitching_vias_keep_the_default_when_nothing_is_declared() {
     let vias = ground_vias("");
-    assert!(vias.len() >= 4, "{vias:?}");
+    assert!(vias.len() >= 2, "{vias:?}");
     assert!(
         vias.iter()
             .all(|(size, drill)| size == "0.6" && drill == "0.3"),
@@ -235,13 +235,13 @@ fn fabricated_vias(label: &str, extra: &str) -> Option<(Vec<String>, Vec<String>
     let mut pads = Vec::new();
     let mut lines = front.lines();
     while let Some(line) = lines.next() {
-        if line.contains("AperFunction,ViaPad") {
-            if let Some(aperture) = lines.next() {
-                let (_, diameter) = aperture
-                    .split_once("C,")
-                    .unwrap_or_else(|| panic!("a round via pad: {aperture}"));
-                pads.push(diameter.trim_end_matches("*%").to_string());
-            }
+        if line.contains("AperFunction,ViaPad")
+            && let Some(aperture) = lines.next()
+        {
+            let (_, diameter) = aperture
+                .split_once("C,")
+                .unwrap_or_else(|| panic!("a round via pad: {aperture}"));
+            pads.push(diameter.trim_end_matches("*%").to_string());
         }
     }
     let _ = fs::remove_dir_all(&tmp);

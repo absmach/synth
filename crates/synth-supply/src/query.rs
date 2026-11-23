@@ -6,7 +6,7 @@ use crate::cache::SupplyCache;
 use crate::distributor::Distributor;
 use crate::lcsc::LcscDistributor;
 use crate::nexar::NexarDistributor;
-use crate::types::{normalize_part_number, BomQueryEntry, SupplyError, SupplyStatus};
+use crate::types::{BomQueryEntry, SupplyError, SupplyStatus, normalize_part_number};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -82,10 +82,10 @@ impl SupplyEngine {
             }
         }
 
-        if results.is_empty() {
-            if let Some(error) = first_error {
-                return Err(error);
-            }
+        if results.is_empty()
+            && let Some(error) = first_error
+        {
+            return Err(error);
         }
         Ok(results)
     }

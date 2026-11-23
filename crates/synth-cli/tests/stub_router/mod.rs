@@ -15,19 +15,19 @@
 #![cfg(unix)]
 #![allow(dead_code)]
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-/// Environment this helper installs.
+/// A stub router, described as the environment a `synth` run needs to use it.
 ///
-/// Restored on drop. The adapters read `PATH` to find the interpreter that
-/// runs the routing helper, and the router environment variables to find
-/// the engine, so a stub has to reach the process environment rather than a
-/// struct.
+/// The adapters read `PATH` to find the interpreter that runs the routing
+/// helper, and the router environment variables to find the engine. Those go
+/// on each `synth` command through [`StubRouter::envs`], never into this test
+/// process, so tests holding different stubs can run side by side.
 pub struct StubRouter {
     bin_dir: PathBuf,
-    previous_path: Option<std::ffi::OsString>,
-    previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
+    envs: Vec<(&'static str, OsString)>,
 }
 
 /// Install the stub router for the duration of one test.
@@ -80,47 +80,41 @@ pub fn install(out_dir: &Path) -> StubRouter {
     std::fs::create_dir_all(krt_repo.join("py_router")).expect("krt checkout dir");
     std::fs::write(krt_repo.join("py_router").join("route.py"), b"# stub\n")
         .expect("write krt entrypoint");
+    // Capability discovery asks KRT's own manifest for the flags the helper
+    // drives. The stub interpreter delegates this probe to the real Python,
+    // so an empty manifest is a truthful "this checkout supports everything"
+    // for the purposes of a test that supplies its own router.
+    std::fs::write(krt_repo.join("krt_capabilities.py"), b"# stub\n")
+        .expect("write krt capability manifest");
 
-    let previous_path = std::env::var_os("PATH");
-    let joined = match &previous_path {
-        Some(existing) => {
-            use std::os::unix::ffi::OsStrExt as _;
-            format!(
-                "{}:{}",
-                bin_dir.display(),
-                existing.as_bytes().escape_ascii()
-            )
-        }
-        None => bin_dir.display().to_string(),
-    };
-    std::env::set_var("PATH", joined);
+    // The stub's directory goes first on the child's PATH, ahead of this
+    // process's own PATH.
+    let path = std::env::join_paths(
+        std::iter::once(bin_dir.clone()).chain(
+            std::env::var_os("PATH")
+                .map_or_default(|existing| std::env::split_paths(&existing).collect::<Vec<_>>()),
+        ),
+    )
+    .expect("PATH entries contain no separator");
 
-    let mut previous = Vec::new();
-    for (key, value) in [
+    let envs = vec![
+        ("PATH", path),
         ("SYNTH_FREEROUTING_JAR", jar.into_os_string()),
         ("SYNTH_FREEROUTING_JAVA", java.into_os_string()),
         // Keep the KiCadRoutingTools checkout the run path resolves equal to
         // the one capability discovery reports, so the default engine is the
         // stub whichever surface is asked.
         ("KICAD_ROUTING_TOOLS_REPO", krt_repo.into_os_string()),
-        ("SYNTH_KRT_PYTHON", interpreter.clone().into_os_string()),
-    ] {
-        let saved = std::env::var_os(key);
-        std::env::set_var(key, value);
-        previous.push((key, saved));
-    }
+        ("SYNTH_KRT_PYTHON", interpreter.into_os_string()),
+    ];
 
-    StubRouter {
-        bin_dir,
-        previous_path,
-        previous,
-    }
+    StubRouter { bin_dir, envs }
 }
 
 /// Locate a real Python interpreter, ignoring this helper's own directory.
 ///
-/// Called before the stub bin directory is prepended to `PATH`, so the first
-/// hit is never the stub itself.
+/// Searches this process's `PATH`, which never holds the stub's directory, so
+/// the hit is never the stub itself.
 fn real_interpreter() -> PathBuf {
     for name in ["python3", "python"] {
         let found = Command::new("sh")
@@ -150,32 +144,12 @@ impl StubRouter {
     pub fn bin_dir(&self) -> &Path {
         &self.bin_dir
     }
-}
 
-impl Drop for StubRouter {
-    fn drop(&mut self) {
-        for (key, value) in &self.previous {
-            match value {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
-            }
-        }
-        match &self.previous_path {
-            Some(value) => std::env::set_var("PATH", value),
-            None => std::env::remove_var("PATH"),
-        }
+    /// The environment a `synth` command needs to route with this stub:
+    /// `command.envs(router.envs())`.
+    pub fn envs(&self) -> impl Iterator<Item = (&'static str, &OsString)> + '_ {
+        self.envs.iter().map(|(key, value)| (*key, value))
     }
-}
-
-/// Serialises the tests that mutate the process environment.
-///
-/// Cargo runs tests on parallel threads in one process, so without this two
-/// tests would fight over `PATH` and each would see the other's stub.
-pub fn serialised() -> std::sync::MutexGuard<'static, ()> {
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    ENV_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Run `synth` with the stub router installed.
@@ -183,7 +157,10 @@ pub fn serialised() -> std::sync::MutexGuard<'static, ()> {
 /// Convenience for the many gate tests whose only difference is the stub
 /// `kicad-cli` they need.
 pub fn synth_with_stub_router(synth: &str, scratch: &Path, args: &[&str]) -> std::process::Output {
-    let _lock = serialised();
-    let _router = install(scratch);
-    Command::new(synth).args(args).output().expect("run synth")
+    let router = install(scratch);
+    Command::new(synth)
+        .args(args)
+        .envs(router.envs())
+        .output()
+        .expect("run synth")
 }
