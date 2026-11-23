@@ -6,6 +6,7 @@
 board "ice40_hdmi_node" {
   layers 6
   manufacturer "jlc-advanced"
+  requires via_in_pad
 
   // JLCPCB's six-layer stackup JLC06161H-3313 (https://jlcpcb.com/impedance): prepreg 3313 4.1,
   // prepreg 2116 4.16, core 4.6; outer copper 0.035 mm, inner copper 0.0152 mm.
@@ -24,15 +25,16 @@ board "ice40_hdmi_node" {
   }
 
   // Differential 100 ohm on the outer layer over 0.0994 mm of 3313 prepreg (er 4.1, copper 35 um):
-  //   Z0 = 87/sqrt(er+1.41) x ln(5.98 h / (0.8 w + t)) = 87/2.347 x ln(0.5944/0.123) = 58.4 ohm at w = 0.11 mm,
-  //   Zdiff = 2 Z0 (1 - 0.48 exp(-0.96 s / h)) = 100.3 ohm at the pair gap s = 0.127 mm (the class clearance).
+  //   Z0 = 87/sqrt(er+1.41) x ln(5.98 h / (0.8 w + t)) = 87/2.347 x ln(0.5944/0.1366) = 54.5 ohm at w = 0.127 mm,
+  //   Zdiff = 2 Z0 (1 - 0.48 exp(-0.96 s / h)) = 96.7 ohm at the pair gap s = 0.15 mm (the class clearance).
+  //   0.127 mm is the board's minimum track width.
   netclass "TMDS" {
     // Driven only by the iCE40 through a 270 ohm series resistor: Lattice's IBIS model (ice40.ibs rev 2.5) gives
     // 20-80 % rise and fall times of at least 0.976 ns (banks 0-2) and 0.728 ns (bank 3) at the fast corner,
     // so no edge here is faster than 0.3 ns: `medium`. The sink (the HDMI connector) drives nothing.
     edge_rate medium
-    trace_width 0.11mm
-    clearance 0.127mm
+    trace_width 0.127mm
+    clearance 0.15mm
     via_diameter 0.46mm
     via_drill 0.2mm
     color "#d55e00"

@@ -56,29 +56,11 @@
         "line_style": 0,
         "microvia_diameter": 0.3,
         "microvia_drill": 0.1,
-        "name": "TMDS_SRC",
-        "pcb_color": "rgba(230, 159, 0, 1.000)",
+        "name": "SIG",
+        "pcb_color": "rgba(0, 114, 178, 1.000)",
         "priority": 1,
-        "schematic_color": "rgba(230, 159, 0, 1.000)",
-        "track_width": 0.13,
-        "via_diameter": 0.46,
-        "via_drill": 0.2,
-        "wire_width": 6
-      },
-      {
-        "bus_width": 12,
-        "clearance": 0.127,
-        "diff_pair_gap": 0.127,
-        "diff_pair_via_gap": 0.25,
-        "diff_pair_width": 0.11,
-        "line_style": 0,
-        "microvia_diameter": 0.3,
-        "microvia_drill": 0.1,
-        "name": "TMDS",
-        "pcb_color": "rgba(213, 94, 0, 1.000)",
-        "priority": 2,
-        "schematic_color": "rgba(213, 94, 0, 1.000)",
-        "track_width": 0.11,
+        "schematic_color": "rgba(0, 114, 178, 1.000)",
+        "track_width": 0.127,
         "via_diameter": 0.46,
         "via_drill": 0.2,
         "wire_width": 6
@@ -92,10 +74,28 @@
         "line_style": 0,
         "microvia_diameter": 0.3,
         "microvia_drill": 0.1,
-        "name": "SIG",
-        "pcb_color": "rgba(0, 114, 178, 1.000)",
+        "name": "TMDS_SRC",
+        "pcb_color": "rgba(230, 159, 0, 1.000)",
+        "priority": 2,
+        "schematic_color": "rgba(230, 159, 0, 1.000)",
+        "track_width": 0.13,
+        "via_diameter": 0.46,
+        "via_drill": 0.2,
+        "wire_width": 6
+      },
+      {
+        "bus_width": 12,
+        "clearance": 0.15,
+        "diff_pair_gap": 0.15,
+        "diff_pair_via_gap": 0.25,
+        "diff_pair_width": 0.127,
+        "line_style": 0,
+        "microvia_diameter": 0.3,
+        "microvia_drill": 0.1,
+        "name": "TMDS",
+        "pcb_color": "rgba(213, 94, 0, 1.000)",
         "priority": 3,
-        "schematic_color": "rgba(0, 114, 178, 1.000)",
+        "schematic_color": "rgba(213, 94, 0, 1.000)",
         "track_width": 0.127,
         "via_diameter": 0.46,
         "via_drill": 0.2,
@@ -150,6 +150,7 @@
       "+5V": "PWR",
       "+5V_HDMI": "PWR",
       "+5V_IN": "PWR",
+      "+5V_REG": "PWR",
       "/CLK25": "CLK",
       "/CRESET_B": "SIG",
       "/HDMI_CK_N": "TMDS",
@@ -163,6 +164,7 @@
       "/HDMI_HPD": "SIG",
       "/HDMI_SCL": "SIG",
       "/HDMI_SDA": "SIG",
+      "/Q3_GATE": "SIG",
       "CDONE": "SIG",
       "CK_N_SRC": "TMDS_SRC",
       "CK_P_SRC": "TMDS_SRC",
@@ -192,9 +194,11 @@
       "LED1_A": "SIG",
       "LED2_A": "SIG",
       "LED_DONE": "SIG",
+      "LED_DONE_K": "SIG",
       "LED_PWR": "SIG",
       "LED_USER1": "SIG",
       "LED_USER2": "SIG",
+      "Q3_GATE": "SIG",
       "SCL_FPGA": "SIG",
       "SDA_FPGA": "SIG",
       "SPI_MISO": "SIG",
@@ -204,6 +208,10 @@
       "VIN_FUSED": "PWR"
     },
     "netclass_patterns": [
+      {
+        "netclass": "SIG",
+        "pattern": "/*/Q3_GATE"
+      },
       {
         "netclass": "TMDS",
         "pattern": "/*/HDMI_D0_P"
@@ -267,10 +275,6 @@
     [
       "0b6b772c-53f9-53b0-897f-51ccbff10026",
       ""
-    ],
-    [
-      "afdcfb41-fab4-5a31-b6c0-309ea3544dcb",
-      "ice40_hdmi_node_POWER_ENTRY.kicad_sch"
     ],
     [
       "92079840-f2b7-5aa3-97b6-73a5abb38a60",
