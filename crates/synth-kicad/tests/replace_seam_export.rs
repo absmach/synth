@@ -176,6 +176,18 @@ fn replace_zero_is_byte_identical_to_unset() {
         None,
         &[],
     );
+    let default = {
+        let dir = work_dir("default");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("work dir");
+        let bytes = export_default_pcb(&board(), &dir, None);
+        let _ = std::fs::remove_dir_all(&dir);
+        bytes
+    };
+    assert_eq!(
+        unset, default,
+        "the seam off must export the default placement's PCB"
+    );
     assert_eq!(
         unset, zero,
         "SYNTH_PLACE_REPLACE=0 changed the exported PCB"
