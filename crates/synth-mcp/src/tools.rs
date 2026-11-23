@@ -5392,14 +5392,9 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
             item,
             "a human_drag override of equal or higher priority takes precedence",
         );
-        let outcome = outcome.finish();
-        return Ok(serde_json::json!({
-            "status": "refused",
-            "saved_path": path.display().to_string(),
-            "updated_refdes": Value::Null,
-            "effective_override": sidecar.components.get(&refdes),
-            "outcome": outcome.to_value()
-        }));
+        return Err(format!(
+            "refused: a human_drag override of equal or higher priority takes precedence for {refdes}"
+        ));
     }
     outcome.apply(item);
     write_sidecar_verified(&mut outcome, path, &sidecar, &[(refdes.clone(), placement)])?;
@@ -8047,6 +8042,24 @@ mod gate_outcome_tests {
     }
 
     #[test]
+    fn a_human_override_refusal_is_an_error_not_a_successful_outcome() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        sidecar_with_human_drag(&sidecar, "R1");
+        let err = call_tool(
+            "synth_write_layout_override",
+            &json!({
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "refdes": "R1", "x_mm": 9.0, "y_mm": 9.0,
+                "source": "agent", "priority": "hard"
+            }),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("human_drag"), "{err}");
+    }
+
+    #[test]
     fn write_layout_override_refusals_leave_the_sidecar_byte_identical() {
         let dir = tempfile::tempdir().unwrap();
         let sidecar = dir.path().join("led.placement.layout.toml");
@@ -8073,8 +8086,10 @@ mod gate_outcome_tests {
             assert_eq!(snapshot(dir.path()), before, "{field} refusal wrote");
         }
 
-        // A human drag outranks the agent: nothing written, reported as such.
-        let v = call_tool(
+        // A human drag outranks the agent: nothing written, and the call is
+        // an error so an agent keying on `isError` does not read it as a
+        // success.
+        let err = call_tool(
             "synth_write_layout_override",
             &json!({
                 "layout_file_path": sidecar.to_str().unwrap(),
@@ -8082,9 +8097,8 @@ mod gate_outcome_tests {
             }),
             None,
         )
-        .unwrap();
-        assert_eq!(v["outcome"]["kind"], "refused", "{v:#}");
-        assert_eq!(v["outcome"]["failed"][0]["item"], json!({ "refdes": "R1" }));
+        .unwrap_err();
+        assert!(err.contains("human_drag"), "{err}");
         assert_eq!(snapshot(dir.path()), before);
     }
 

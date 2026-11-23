@@ -1815,6 +1815,7 @@ fn check(
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
     let validate_pass =
         !validate_timed_out && validate_output.status.success() && validate_parse_ok;
+    let source_status = source_stage_status(validate_timed_out, validate_pass);
 
     let mut simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass);
     if let Ok(bytes) = std::fs::read(synth_sim::sidecar_path(input)) {
@@ -1844,7 +1845,14 @@ fn check(
         )
     } else {
         (
-            serde_json::json!({"status": "unknown", "reason": "source gate failed"}),
+            serde_json::json!({
+                "status": "unknown",
+                "reason": if validate_timed_out {
+                    "source stage timed out"
+                } else {
+                    "source gate failed"
+                },
+            }),
             PreFabDrc::Unknown,
             false,
         )
@@ -1854,7 +1862,7 @@ fn check(
     stages.insert(
         "source".into(),
         serde_json::json!({
-            "status": if validate_pass { "pass" } else { "fail" },
+            "status": source_status,
             "result": validate_json,
         }),
     );
@@ -2542,6 +2550,19 @@ fn read_capped(pipe: &mut impl std::io::Read, cap: usize) -> (Vec<u8>, bool) {
 /// budget with `SYNTH_CHECK_STAGE_BUDGET_SECS` without editing the command.
 /// An unparsable or non-positive value keeps the default, exactly like the
 /// other `SYNTH_*` budgets.
+/// The source stage's status. A stage that timed out did not fail the design:
+/// it did not run, so it is `unknown` and the gate folds to Incomplete (exit
+/// 3), as the documented exit table says, not ValidationErrors (exit 1).
+fn source_stage_status(timed_out: bool, passed: bool) -> &'static str {
+    if timed_out {
+        "unknown"
+    } else if passed {
+        "pass"
+    } else {
+        "fail"
+    }
+}
+
 fn check_stage_budget_secs() -> u64 {
     std::env::var("SYNTH_CHECK_STAGE_BUDGET_SECS")
         .ok()
@@ -5922,11 +5943,27 @@ fn write_export_evidence(
     let report = synth_diagnostics::GateReport::new(gates);
     let evidence = synth_mcp::evidence::Evidence::new(&hash, &report);
     let path = out_dir.join(synth_mcp::evidence::EVIDENCE_FILE);
-    match serde_json::to_vec_pretty(&evidence).map(|bytes| std::fs::write(&path, bytes)) {
-        Ok(Ok(())) => info!("wrote {} (verdict {})", path.display(), report.verdict),
-        Ok(Err(e)) => warn!("evidence.json not written: {e}"),
+    match serde_json::to_vec_pretty(&evidence) {
+        Ok(bytes) => match replace_evidence(&path, &bytes) {
+            Ok(()) => info!("wrote {} (verdict {})", path.display(), report.verdict),
+            Err(e) => warn!("evidence.json not written: {e}"),
+        },
         Err(e) => warn!("evidence.json not written: {e}"),
     }
+}
+
+/// Replace a previously written `evidence.json`.
+///
+/// A stale verdict must not survive a failed export: remove the old file
+/// before writing, and write atomically so an interrupted export cannot leave
+/// a half-written one.
+fn replace_evidence(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    synth_mcp::outcome::atomic_write(path, bytes)
 }
 
 fn write_verification_report(
@@ -7729,6 +7766,23 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn a_timed_out_source_stage_is_unknown_not_failed() {
+        assert_eq!(source_stage_status(true, false), "unknown");
+        assert_eq!(source_stage_status(false, true), "pass");
+        assert_eq!(source_stage_status(false, false), "fail");
+    }
+
+    #[test]
+    fn replacing_evidence_removes_the_stale_verdict() {
+        let dir =
+            std::env::temp_dir().join(format!("synth-evidence-replace-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join(synth_mcp::evidence::EVIDENCE_FILE);
+        std::fs::write(&path, b"stale").expect("seed");
+        replace_evidence(&path, b"fresh").expect("replace");
+        assert_eq!(std::fs::read(&path).expect("read"), b"fresh");
+        let _ = std::fs::remove_dir_all(&dir);
     fn simulation_scratch(label: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "synth_simulation_stage_{label}_{}",

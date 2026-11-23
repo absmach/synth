@@ -135,12 +135,19 @@ impl synth_ir::ImportLoader for RecordingLoader<'_> {
 }
 
 /// The key a file on disk is recorded under: relative to the design's
-/// directory when it lies inside it, else its file name.
+/// directory when it lies inside it, else its full path.
+///
+/// Two sidecars outside the design directory can share a file name
+/// (`a/x.toml`, `b/x.toml`); keying by the name alone made them one entry, so
+/// editing one left the design hash unchanged.
 fn relative_key(design_dir: &Path, path: &Path) -> String {
-    path.strip_prefix(design_dir)
-        .ok()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new(path.file_name().unwrap_or(path.as_os_str())))
+    if let Ok(relative) = path.strip_prefix(design_dir)
+        && !relative.as_os_str().is_empty()
+    {
+        return relative.to_string_lossy().replace('\\', "/");
+    }
+    std::path::absolute(path)
+        .unwrap_or_else(|_| path.to_path_buf())
         .to_string_lossy()
         .replace('\\', "/")
 }
@@ -245,19 +252,27 @@ pub fn design_hash_of(
         args["registry_path"] = serde_json::json!(dir.display().to_string());
     }
     let report = crate::tools::call_tool("synth_validate", &args, None)?;
-    let hash = DesignHash {
-        sha256: report["design_hash"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string(),
-        files: serde_json::from_value(report["design_hash_files"].clone()).unwrap_or_default(),
-    };
+    let hash = design_hash_from_report(&report)?;
     let empty = report["gates"]
         .as_array()
         .into_iter()
         .flatten()
         .any(|g| g["name"] == "design" && g["status"] == "empty");
     Ok((hash, empty))
+}
+
+/// Read the design hash out of a `synth_validate` report. A missing or empty
+/// hash is an error: treating it as the empty string would make every report
+/// that also recorded nothing compare as not stale.
+fn design_hash_from_report(report: &serde_json::Value) -> Result<DesignHash, String> {
+    let sha256 = report["design_hash"]
+        .as_str()
+        .filter(|hash| !hash.is_empty())
+        .ok_or_else(|| "synth_validate returned no design hash".to_string())?
+        .to_string();
+    let files = serde_json::from_value(report["design_hash_files"].clone())
+        .map_err(|e| format!("synth_validate returned an invalid design hash file list: {e}"))?;
+    Ok(DesignHash { sha256, files })
 }
 
 /// How recorded evidence relates to the design as it is now.
@@ -403,6 +418,15 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_design_hash_is_an_error() {
+        let report = serde_json::json!({
+            "design_hash": "",
+            "design_hash_files": [],
+        });
+        assert!(design_hash_from_report(&report).is_err());
+    }
+
+    #[test]
     fn windows_separators_are_normalised() {
         let a = hash_entries([("sub\\m.synth".into(), b"m".to_vec())]);
         let b = hash_entries([("sub/m.synth".into(), b"m".to_vec())]);
@@ -439,6 +463,38 @@ mod tests {
         let staleness = compare(&first.sha256, &first.files, &second);
         assert!(staleness.stale);
         assert_eq!(staleness.changed, vec!["demo.placement.layout.toml"]);
+    }
+
+    #[test]
+    fn sidecars_outside_the_design_dir_do_not_collide_by_file_name() {
+        let design_dir = tempfile::tempdir().unwrap();
+        let design = design_dir.path().join("demo.synth");
+        std::fs::write(&design, DESIGN).unwrap();
+        let a_dir = tempfile::tempdir().unwrap();
+        let b_dir = tempfile::tempdir().unwrap();
+        let a = a_dir.path().join("x.toml");
+        let b = b_dir.path().join("x.toml");
+        std::fs::write(&a, "schema_version = 1\n# a\n").unwrap();
+        std::fs::write(&b, "schema_version = 1\n# b\n").unwrap();
+        let name = design.display().to_string();
+        let sidecars = vec![a.clone(), b.clone()];
+
+        let first = design_hash(&name, DESIGN, None, &sidecars);
+        let paths: Vec<&str> = first.files.iter().map(|f| f.path.as_str()).collect();
+        assert_ne!(
+            paths.iter().filter(|p| p.ends_with("x.toml")).count(),
+            1,
+            "{paths:?}"
+        );
+        assert_eq!(
+            paths.iter().filter(|p| p.ends_with("x.toml")).count(),
+            2,
+            "both sidecars are kept: {paths:?}"
+        );
+
+        std::fs::write(&a, "schema_version = 1\n# moved\n").unwrap();
+        let second = design_hash(&name, DESIGN, None, &sidecars);
+        assert_ne!(second.sha256, first.sha256);
     }
 
     #[test]

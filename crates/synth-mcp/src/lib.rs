@@ -13,7 +13,7 @@ pub mod call_log;
 pub mod cloud_endpoint;
 pub mod evidence;
 mod findings;
-mod outcome;
+pub mod outcome;
 pub mod server;
 pub mod tools;
 

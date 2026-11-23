@@ -206,23 +206,54 @@ fn atomic_write_with(
     bytes: &[u8],
     before_rename: impl FnOnce() -> std::io::Result<()>,
 ) -> std::io::Result<()> {
-    let dir = path
+    // Writing through a symlink must update its target, not replace the link.
+    let target = resolve_write_target(path);
+    let dir = target
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(dir)?;
+    let permissions = std::fs::metadata(&target)
+        .ok()
+        .map(|metadata| metadata.permissions());
     let mut tmp = tempfile::Builder::new()
         .prefix(".synth-write-")
         .tempfile_in(dir)?;
     tmp.write_all(bytes)?;
+    if let Some(permissions) = permissions {
+        tmp.as_file().set_permissions(permissions)?;
+    }
     tmp.as_file().sync_all()?;
     before_rename()?;
-    tmp.persist(path).map_err(|e| e.error)?;
+    tmp.persist(&target).map_err(|e| e.error)?;
     #[cfg(unix)]
     if let Ok(d) = std::fs::File::open(dir) {
         let _ = d.sync_all();
     }
     Ok(())
+}
+
+/// Resolve a chain of symlinks so the write lands on the real file. A broken
+/// link is left for the caller's `create`/`persist` to report.
+fn resolve_write_target(path: &Path) -> std::path::PathBuf {
+    let mut target = path.to_path_buf();
+    for _ in 0..40 {
+        let Ok(metadata) = std::fs::symlink_metadata(&target) else {
+            break;
+        };
+        if !metadata.file_type().is_symlink() {
+            break;
+        }
+        let Ok(link) = std::fs::read_link(&target) else {
+            break;
+        };
+        target = if link.is_absolute() {
+            link
+        } else {
+            target.parent().unwrap_or_else(|| Path::new(".")).join(link)
+        };
+    }
+    target
 }
 
 /// Read a written file back and confirm it holds `expected`.
@@ -316,6 +347,38 @@ mod tests {
         assert_eq!(outcome.kind, OutcomeKind::Complete);
         assert!(outcome.verified);
         assert_eq!(outcome.written_paths[0].sha256, sha256_hex(b"id = \"x\"\n"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_keeps_the_old_file_permissions() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("part.placement.layout.toml");
+        std::fs::write(&target, b"old").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
+        atomic_write(&target, b"new").unwrap();
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o640);
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_follows_a_symlink_instead_of_replacing_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("real.toml");
+        let link = dir.path().join("link.toml");
+        std::fs::write(&target, b"old").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        atomic_write(&link, b"new").unwrap();
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), b"new");
     }
 
     #[test]
