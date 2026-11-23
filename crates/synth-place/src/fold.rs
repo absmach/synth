@@ -1784,25 +1784,29 @@ impl Rows {
 }
 
 /// The acceptance rule: smaller, and no measured row worse than the input.
-fn judged_better(before: &Rows, after: &Rows) -> bool {
-    after.area < before.area - 1e-6 && metrics_not_worse(before, after)
+fn judged_better(before: &Rows, after: &Rows, allow_usb_move: bool) -> bool {
+    after.area < before.area - 1e-6 && metrics_not_worse(before, after, allow_usb_move)
 }
 
 /// No measured row is worse, and there is no overlap. The one exception is a
-/// limited row that still passes while the fold also seats a connector, see
-/// ADR 0002.
-fn metrics_not_worse(before: &Rows, after: &Rows) -> bool {
+/// limited row that still passes while the fold also seats a connector, and
+/// only when the caller allows it (the RePlAce seam), see ADR 0002.
+fn metrics_not_worse(before: &Rows, after: &Rows, allow_usb_move: bool) -> bool {
     // A row with a pass/fail limit may move while it still passes, but only
     // when the fold also seats a connector the input left off its wall:
     // rejecting the rtd pack because the USB moved 0.435 mm inside its 0.5 mm
     // limit kept two docking failures and six group-gap failures.
-    let usb_ok = match (after.usb, after.usb_limit) {
-        (Some(usb_after), Some(limit))
-            if usb_after <= limit && after.dock_failures < before.dock_failures =>
-        {
-            true
+    let usb_ok = if allow_usb_move {
+        match (after.usb, after.usb_limit) {
+            (Some(usb_after), Some(limit))
+                if usb_after <= limit && after.dock_failures < before.dock_failures =>
+            {
+                true
+            }
+            _ => !went_up(after.usb, before.usb),
         }
-        _ => !went_up(after.usb, before.usb),
+    } else {
+        !went_up(after.usb, before.usb)
     };
     usb_ok
         && !went_down(after.dock, before.dock)
@@ -1839,11 +1843,15 @@ fn went_up(after: Option<f64>, before: Option<f64>) -> bool {
 ///
 /// Both sides are fitted at the same rim, so the comparison is the outline
 /// each would export, not the stale outline the stage started from.
+///
+/// `allow_usb_move` is the RePlAce seam's within-limit exception; the default
+/// placement paths pass `false` and keep the strict row (ADR 0002).
 pub(crate) fn fold_is_better(
     board: &Board,
     before: &Placement,
     after: &mut Placement,
     rim: i64,
+    allow_usb_move: bool,
 ) -> bool {
     let mut before = before.clone();
     crate::fit_outline_docked(board, &mut before, rim);
@@ -1854,7 +1862,7 @@ pub(crate) fn fold_is_better(
     let judge_start = std::time::Instant::now();
     let before_rows = Rows::of(&judge(board, &before));
     let after_rows = Rows::of(&judge(board, after));
-    let better = judged_better(&before_rows, &after_rows);
+    let better = judged_better(&before_rows, &after_rows, allow_usb_move);
     crate::stage_trace::record_time("fold_judge", judge_start.elapsed());
     better
 }
@@ -2315,29 +2323,46 @@ mod tests {
             group_failures: 0,
             overlaps: 0,
         };
-        assert!(judged_better(&before, &after));
+        assert!(judged_better(&before, &after, true));
         after.ring = Some(0.8);
-        assert!(!judged_better(&before, &after), "a lower ring must reject");
+        assert!(
+            !judged_better(&before, &after, true),
+            "a lower ring must reject"
+        );
         after.ring = Some(0.9);
         after.area = 4_000.0;
-        assert!(!judged_better(&before, &after), "equal area must reject");
+        assert!(
+            !judged_better(&before, &after, true),
+            "equal area must reject"
+        );
         after.area = 3_000.0;
         after.overlaps = 1;
-        assert!(!judged_better(&before, &after), "an overlap must reject");
+        assert!(
+            !judged_better(&before, &after, true),
+            "an overlap must reject"
+        );
         after.overlaps = 0;
         after.usb = Some(0.45);
         assert!(
-            !judged_better(&before, &after),
+            !judged_better(&before, &after, false),
+            "a USB offset that moved must reject on the default path"
+        );
+        assert!(
+            !judged_better(&before, &after, true),
             "a USB offset that moved must reject when the fold fixes no docking"
         );
         before.dock_failures = 1;
         assert!(
-            judged_better(&before, &after),
-            "a USB offset inside its limit may move when the fold seats a connector"
+            !judged_better(&before, &after, false),
+            "the default path keeps the strict USB row when the fold seats a connector"
+        );
+        assert!(
+            judged_better(&before, &after, true),
+            "the RePlAce seam may move the USB inside its limit when it seats a connector"
         );
         after.usb = Some(0.6);
         assert!(
-            !judged_better(&before, &after),
+            !judged_better(&before, &after, true),
             "a USB offset past its limit must reject"
         );
     }

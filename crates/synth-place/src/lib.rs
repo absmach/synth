@@ -1992,7 +1992,7 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
         // production tail closes the edges after the rules.
         if !has_sidecar {
             let edges_start = std::time::Instant::now();
-            default_rules::close_edges(board, &mut placement);
+            default_rules::close_edges(board, &mut placement, false);
             crate::stage_trace::record_time("close_edges_total", edges_start.elapsed());
         }
     }
@@ -2016,7 +2016,7 @@ pub fn finish_default_placement(board: &Board, placement: &mut Placement, has_si
     crate::stage_trace::record_time("apply_rules", rules_start.elapsed());
     if !has_sidecar {
         let edges_start = std::time::Instant::now();
-        default_rules::close_edges(board, placement);
+        default_rules::close_edges(board, placement, false);
         crate::stage_trace::record_time("close_edges_total", edges_start.elapsed());
     }
 }
@@ -2480,7 +2480,9 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
         break;
     }
     let stage_start = std::time::Instant::now();
-    default_rules::close_edges(board, &mut placement);
+    // Only the RePlAce seam may trade a within-limit USB move for a seated
+    // connector; the default placement paths keep the strict row.
+    default_rules::close_edges(board, &mut placement, true);
     stage_trace::record("close_edges", board, &placement, stage_start.elapsed());
     if keepout_overlaps(board, &placement) > keepout_overlaps(board, &baseline) {
         replace_note(format_args!(
@@ -2526,7 +2528,7 @@ fn place_with_default_tuning(
         if with_groups {
             // The ungrouped run is only the RePlAce baseline; leave it as it was.
             let edges_start = std::time::Instant::now();
-            default_rules::close_edges(board, &mut placement);
+            default_rules::close_edges(board, &mut placement, false);
             crate::stage_trace::record_time("close_edges_total", edges_start.elapsed());
         }
     }
@@ -2633,7 +2635,7 @@ fn place_with_export_winner(
     if board.outline.is_none() {
         default_rules::apply(board, &mut best, with_groups);
         if with_groups {
-            default_rules::close_edges(board, &mut best);
+            default_rules::close_edges(board, &mut best, false);
         }
     }
     Ok(best)

@@ -541,7 +541,10 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
 /// kept only when the judged result is smaller and no measured row got worse.
 /// Otherwise the settle runs on the input, which is what this stage did
 /// before the fold existed.
-pub(crate) fn close_edges(board: &Board, placement: &mut Placement) {
+///
+/// `allow_usb_move` carries the RePlAce seam's within-limit USB exception
+/// (ADR 0002) into the judge; the default placement paths pass `false`.
+pub(crate) fn close_edges(board: &Board, placement: &mut Placement, allow_usb_move: bool) {
     let input = placement.clone();
     let fold_start = std::time::Instant::now();
     let folded = crate::fold::fold_groups_pack(board, placement);
@@ -563,7 +566,7 @@ pub(crate) fn close_edges(board: &Board, placement: &mut Placement) {
         candidate_start.elapsed(),
     );
     let rim = rim_nm(board, &candidate.components, true);
-    if crate::fold::fold_is_better(board, &input, &mut candidate, rim) {
+    if crate::fold::fold_is_better(board, &input, &mut candidate, rim, allow_usb_move) {
         *placement = candidate;
     } else {
         *placement = input;
