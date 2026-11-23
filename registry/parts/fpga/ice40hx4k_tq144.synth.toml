@@ -12,7 +12,7 @@ kicad_footprint = "Package_QFP:TQFP-144_20x20mm_P0.5mm"
 reviewed_at = "2026-11-11"
 reviewed_by = "JeffMboya"
 lcsc_pn = "C1521989"
-datasheet_url = "https://www.latticesemi.com/~/media/latticesemi/documents/datasheets/ice/ice40lphxfamilydatasheet.pdf"
+datasheet_url = "https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
 
 [footprint_dimensions]
 width_mm = 23.3

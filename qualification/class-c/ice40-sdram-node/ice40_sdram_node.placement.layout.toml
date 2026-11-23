@@ -740,9 +740,18 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-[components.D5]
+[components.D6]
 x = 9.0
-y = 55.0
+y = 53.5
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D7]
+x = 9.0
+y = 56.5
 rotation = 0
 source = "agent"
 priority = "hard"

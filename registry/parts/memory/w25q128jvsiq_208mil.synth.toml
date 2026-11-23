@@ -79,5 +79,6 @@ courtyard_margin_mm = 0.25
 [provenance]
 source = "authored"
 generator = "synth_author_part"
+datasheet_url = "https://www.winbond.com/resource-files/W25Q128JV%20RevI%2008232021%20Plus.pdf"
 reviewed_by = "JeffMboya"
 reviewed_at = "2026-11-11"

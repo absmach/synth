@@ -18,10 +18,18 @@ Jeff Mboya is the author of this pull request and has self-reviewed it. The inde
 | FPGA | `U3` Lattice iCE40HX4K-TQ144, supply decoupling 100 nF `C10` to `C24`; `X1`, 25 MHz oscillator on global buffer input `GBIN1` (`iot_197_gbin1`) with `C41`, since the iCE40HX has no internal oscillator; `CBSEL0` and `CBSEL1` pulled down by `RCB1` and `RCB2` |
 | SDRAM | `U4` ISSI IS42S16400J-7TLI (64 Mbit, 143 MHz, 3.0 to 3.6 V), decoupling `C30` to `C37`, six 22 ohm series resistors `RS1` to `RS6` at the FPGA end of the command, clock and control lines |
 | Configuration | `U5` Winbond W25Q128JVSIQ, SOIC-8 208 mil, master SPI; `R10` and `R11` pull `CRESET_B` and `CDONE` up, `R12` the chip select, `R13` and `R14` the write-protect and hold pins; `J2` 1x6 programming header (SS_B, SCK, SDI, SDO, CRESET_B, GND) |
-| Indicators and test points | `D5` PRTR5V0U2X ESD array on the CC lines at the receptacle, `D2` red (3.3 V present), `D3` green (CDONE, buffered by the N-MOSFET `Q2` AO3400A because CDONE is open-drain), `D4` green user LED; test points `TP1` to `TP7`; two M2.5 mounting holes at opposite corners |
+| Indicators and test points | `D6` and `D7` TPD1E10B06 bidirectional TVS diodes, one on each CC line at the receptacle, with no rail connection, `D2` red (3.3 V present), `D3` green (CDONE, buffered by the N-MOSFET `Q2` AO3400A because CDONE is open-drain), `D4` green user LED; test points `TP1` to `TP7`; two M2.5 mounting holes at opposite corners |
 
 The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040). The part model in [`registry/parts/fpga/ice40hx4k_tq144.synth.toml`](../../../registry/parts/fpga/ice40hx4k_tq144.synth.toml) is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet.
 
 The memory pins sit on the FPGA's left side facing the SDRAM, in the order of the SDRAM's near pin row, so the data bus runs straight across with no crossings.
 
 See [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. See [`PROVENANCE.md`](PROVENANCE.md) for how the board was made.
+
+## Not verified by Synth
+
+- **Interface timing:** no controller or bitstream has run on the board, so setup, hold and 143 MHz operation are not claimed.
+- **Return paths:** some vias on the fast clock nets are farther from a ground via than the fast-net window.
+- **3.3 V budget:** the oscillator's supply current and the FPGA's dynamic current are not counted.
+- **Surge:** a sustained over-voltage is held off the regulator only until `F1` opens.
+- **Review:** the board has a self-review only. The independent PCB expert sign-off required by #40 is open.

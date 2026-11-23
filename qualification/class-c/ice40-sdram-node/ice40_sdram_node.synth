@@ -35,8 +35,7 @@ board "ice40_sdram_node" {
   netclass "PLLSUP" { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#f0e442" }
   netclass "GNDC"   { trace_width 0.3mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#444444" }
   netclass "LOWSPD" { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#009e73" }
-  // SDDATA skew budget, same window as SDADDR below (7 ns cycle less 1.5 ns setup and 0.8 ns hold leaves 4.7 ns): 25 mm is 0.175 ns at 7.0 ps/mm, 4 % of it.
-  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm max_skew 25mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
+  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
   // SDADDR is driven only by the FPGA, so its edge is the iCE40's: Lattice's IBIS model (ice40.ibs rev 2.5,
   // lvc330io for banks 0-2, lvc330_b3io for bank 3) gives dV/dt_r and dV/dt_f 20-80 % times of at least 0.976 ns
   // (banks 0-2) and 0.728 ns (bank 3) at the fast corner, so no edge here is faster than 0.3 ns: `medium`.
@@ -56,7 +55,8 @@ board "ice40_sdram_node" {
     component R3: resistor "r_generic_0603" value "5.1k"
     component F1: fuse "polyfuse_1r1a"
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1.p2" priority: hard } }
-    component D5: diode "prtr5v0u2x" { placement_hint { near: "J1" priority: hard } }
+    component D6: diode "tpd1e10b06" { placement_hint { near: "J1" priority: hard } }
+    component D7: diode "tpd1e10b06" { placement_hint { near: "J1" priority: hard } }
     component RPD1: resistor "r_generic_0603" value "10k"
     component RCB1: resistor "r_generic_0402" value "10k"
     component RCB2: resistor "r_generic_0402" value "10k"
@@ -198,7 +198,7 @@ board "ice40_sdram_node" {
   power "GND" 0v class "GNDC" {
     J1.gnd J1.gnd_b12 J1.gnd_a12 J1.gnd_b1 J1.shld R2.p2 R3.p2
     D1.anode C1.p2 RPD1.p2 RPD2.p2 RPD3.p2 RPD4.p2 RPD5.p2 RPD6.p2 RPD7.p2 RPD8.p2
-    U1.gnd C2.p2 C3.p2 C4.p2 C5.p2 D5.gnd
+    U1.gnd C2.p2 C3.p2 C4.p2 C5.p2 D6.p2 D7.p2
     U2.gnd C6.p2 C7.p2
     U3.gnd U3.gnd_2 U3.gnd_3 U3.gnd_4 U3.gnd_5 U3.gnd_6 U3.gnd_7 U3.gnd_8 U3.gnd_9 U3.gndpll0 U3.gndpll1
     RCB1.p2 RCB2.p2
@@ -212,9 +212,9 @@ board "ice40_sdram_node" {
 
   net "VIN_RAW" class "PWR5" { J1.vbus J1.vbus_b4 J1.vbus_a9 J1.vbus_b9 F1.p1 }
   // USB-C is a 5 V power sink only: 5.1 k pull-downs on CC1/CC2, D+/D-/SBU left open.
-  net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 D5.io1 }
-  net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 D5.io2 }
-  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode D5.vcc C1.p1 R_SURGE.p1 TP1.p1 }
+  net "USB_CC1" class "LOWSPD" { J1.cc1 R2.p1 D6.p1 }
+  net "USB_CC2" class "LOWSPD" { J1.cc2 R3.p1 D7.p1 }
+  power "+5V" 5v class "PWR5" { F1.p2 D1.cathode C1.p1 R_SURGE.p1 TP1.p1 }
   power "+5V_REG" 5v class "PWR5" { R_SURGE.p2 U1.vin C2.p1 C3.p1 }
 
   power "+3V3" 3.3v class "PWR33" {
