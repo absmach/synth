@@ -144,6 +144,21 @@ With a 5.00 V input pin 18 sits at 4.86 V, inside the 4.8 V minimum. With a 4.75
 
 With the board unpowered and a powered sink attached, the sink's 50 ohm pull-ups to 3.3 V reach the FPGA's I/O banks through the 270 ohm source resistors and can back-power them. The board has no isolation switch for this; do not connect a powered sink to an unpowered board.
 
+## Input range and vias in pads
+
+Input range:
+
+- `J1` supports 5.0 to 5.25 V. HDMI pin 18 needs at least 4.94 V at `J1`.
+- The protection is designed for a 5.5 V maximum input: the TVS standoff and the regulator check use it.
+- 4.75 V (5 V less 5 %) is a low-end check that shows why 5.0 V is the minimum.
+
+Vias in pads:
+
+- The source declares `requires via_in_pad`. It lets the router place a filled, capped via inside an SMD pad.
+- The board has a few such vias. None is under a dense package, and the TQFP-144 does not need it.
+- The declaration was not tested against an export without it.
+- Whether a via in the pads of `TP2` or `TP5` affects probing is not assessed.
+
 ## Layout and fill
 
 The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_node.placement.layout.toml): the HDMI receptacle on the left edge, the eight source resistors in one column beside the FPGA's left pins, the power entry on the right edge. The placement is the original one scaled by 1.11 about its centroid, to leave room for the routing.
