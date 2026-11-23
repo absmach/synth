@@ -19,7 +19,22 @@ const VERSION_PROBE_TIMEOUT_SECS: u64 = 30;
 pub const PIPE_DRAIN_GRACE: Duration = Duration::from_secs(5);
 
 pub fn binary() -> String {
-    std::env::var("KICAD_CLI").unwrap_or_else(|_| "kicad-cli".to_string())
+    if let Ok(val) = std::env::var("KICAD_CLI") {
+        return val;
+    }
+    for candidate in [
+        "D:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe",
+        "C:\\Program Files\\KiCad\\9.0\\bin\\kicad-cli.exe",
+        "C:\\Program Files\\KiCad\\8.0\\bin\\kicad-cli.exe",
+        "D:\\Program Files\\KiCad\\9.0\\bin\\kicad-cli.exe",
+        "D:\\Program Files\\KiCad\\8.0\\bin\\kicad-cli.exe",
+    ] {
+        if Path::new(candidate).is_file() {
+            return candidate.to_string();
+        }
+    }
+    "kicad-cli".to_string()
 }
 
 pub fn timeout() -> Duration {

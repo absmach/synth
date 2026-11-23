@@ -477,11 +477,27 @@ pub(crate) fn resolve_krt_repo(tools: &ToolPaths) -> Option<PathBuf> {
     if let Some(configured) = &tools.krt_repo {
         return configured.is_dir().then(|| configured.clone());
     }
+    if let Some(root) = crate::repo_root() {
+        let in_repo = root.join("tools").join("KiCadRoutingTools");
+        if in_repo.is_dir() {
+            return Some(in_repo);
+        }
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        let local_tools = cwd.join("tools").join("KiCadRoutingTools");
+        if local_tools.is_dir() {
+            return Some(local_tools);
+        }
+    }
     let conventional = tools
         .data_dir
-        .as_ref()?
-        .join("synth")
-        .join("kicad-routing-tools");
+        .as_ref()
+        .map(|d| d.join("synth").join("kicad-routing-tools"))
+        .or_else(|| {
+            std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .map(|d| d.join("synth").join("kicad-routing-tools"))
+        })?;
     conventional.is_dir().then_some(conventional)
 }
 
@@ -505,6 +521,17 @@ pub(crate) fn resolve_python(tools: &ToolPaths) -> Option<PathBuf> {
     let mut absolute: Vec<PathBuf> = Vec::new();
     if let Some(repo) = resolve_krt_repo(tools) {
         absolute.push(repo.join(".venv").join("bin").join("python"));
+        absolute.push(repo.join(".venv").join("Scripts").join("python.exe"));
+    }
+    for win_py in [
+        "D:\\Program Files\\KiCad\\10.0\\bin\\python.exe",
+        "C:\\Program Files\\KiCad\\10.0\\bin\\python.exe",
+        "C:\\Program Files\\KiCad\\9.0\\bin\\python.exe",
+        "C:\\Program Files\\KiCad\\8.0\\bin\\python.exe",
+        "D:\\Program Files\\KiCad\\9.0\\bin\\python.exe",
+        "D:\\Program Files\\KiCad\\8.0\\bin\\python.exe",
+    ] {
+        absolute.push(PathBuf::from(win_py));
     }
     absolute.push(PathBuf::from("/usr/bin/python3"));
     absolute.push(PathBuf::from("/usr/local/bin/python3"));

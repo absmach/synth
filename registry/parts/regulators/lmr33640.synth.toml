@@ -38,6 +38,7 @@ electrical_type = "input"
 name = "pg"
 number = "4"
 electrical_type = "open_drain_low"
+voltage_max_v = 16.0
 
 [[pins]]
 name = "fb"

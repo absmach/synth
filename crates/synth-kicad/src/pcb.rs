@@ -1999,16 +1999,17 @@ fn build_net_assignments(board: &Board) -> (Vec<(u32, String)>, PadNetLookup) {
             let Some(pin) = part.pins.get(endpoint.pin.0 as usize) else {
                 continue;
             };
-            let pin_raw = pin.number.0.clone();
-            lookup.insert(
-                (component.id, pin_raw.clone()),
-                (pcb_net_id, net_name.clone()),
-            );
-            let pin_norm = pin_raw
-                .trim_start_matches(['p', 'P', 'i', 'N', 'I', 'N'])
-                .to_string();
-            if !pin_norm.is_empty() && pin_norm != pin_raw {
-                lookup.insert((component.id, pin_norm), (pcb_net_id, net_name.clone()));
+            for pad_raw in pin.pad_numbers() {
+                lookup.insert(
+                    (component.id, pad_raw.clone()),
+                    (pcb_net_id, net_name.clone()),
+                );
+                let pad_norm = pad_raw
+                    .trim_start_matches(['p', 'P', 'i', 'N', 'I', 'N'])
+                    .to_string();
+                if !pad_norm.is_empty() && pad_norm != pad_raw {
+                    lookup.insert((component.id, pad_norm), (pcb_net_id, net_name.clone()));
+                }
             }
         }
     }
@@ -3948,6 +3949,7 @@ mod tests {
                     capabilities: vec![],
                     required: true,
                     footprint_only: false,
+                    physical_pads: Vec::new(),
                     unit: None,
                     voltage_max_v: None,
                     voltage_min_v: None,
@@ -3963,6 +3965,7 @@ mod tests {
                     capabilities: vec![],
                     required: true,
                     footprint_only: false,
+                    physical_pads: Vec::new(),
                     unit: None,
                     voltage_max_v: None,
                     voltage_min_v: None,
