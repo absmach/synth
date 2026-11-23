@@ -23,3 +23,11 @@ class = "B"
 status = "experimental"
 skip_reason = "the source gate rejects the board with E-SYNTH-POWER-010 (the LP5907 LDO feeding VIO is counted against a load envelope the committed evidence predates). The row stays here, unrun, until the board or the rule decides the mismatch."
 rationale = "USB-C dual CH342F UART plus a THVD1450 RS-485 transceiver, with the protection parts the registry has. The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision."
+
+[[board]]
+id = "multirail-compute-node"
+path = "qualification/class-c/multirail-compute-node/multirail_compute_node.synth"
+class = "C"
+status = "experimental"
+skip_reason = "not run by this job: the route takes longer than the CI budget, so no verdict is asserted here. The committed package comes from the author's own export."
+rationale = "Multi-rail compute node (STM32F103C8, USB-C, a 4 A buck and three linear rails, four layers). Its package comes from the author's `synth export-kicad` run; the route takes longer than the CI budget, so the matrix does not run it. See its QUALIFICATION.md for what is and is not claimed."

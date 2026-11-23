@@ -36,3 +36,11 @@ The processor was picked from the registry's MCUs (ATmega328P, ESP32-C3 and WROO
 - The regulator is the DDC package that LCSC lists.
 
 The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).
+
+## Not verified by Synth
+
+- **Junction temperature of `U1`:** it is not estimated, because the efficiency curve of the buck was not read.
+- **Thermal array:** the six vias (2 x 3) are below the 4 x 3 TI recommends.
+- **Courtyard fill:** it is 20.5 %, below the Class C target of 30 %.
+- **Unused rails:** the 1.8 V and 1.2 V rails carry no load on the board.
+- **Review:** the board has a self-review only. The independent PCB expert sign-off required by #40 is open.
