@@ -837,12 +837,15 @@ fn place_for_export(
     if allow_replace && synth_place::replace_enabled() && sidecar.is_none_or(|path| !path.exists())
     {
         match synth_place::place_with_replace(board) {
-            Ok(mut placement) => {
+            Ok((mut placement, false)) => {
                 // Match the export candidate set: fit the tight rim before the
                 // PCB is serialized, or the score compares different outlines.
                 synth_place::finish_outline(board, &mut placement);
                 return Ok(placement);
             }
+            // The solver already named its reason; its sweep is not the
+            // export's default placement, so take that path below.
+            Ok((_, true)) => {}
             Err(error) => {
                 eprintln!("REPLACE fallback: {error}; using the default export placement");
             }

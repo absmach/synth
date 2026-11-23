@@ -35,7 +35,7 @@ fn replace_placement_report() {
     ] {
         let board = load_board(design);
         let default = synth_place::place(&board).expect("default");
-        let replace = synth_place::place_with_replace(&board).expect("replace");
+        let replace = synth_place::place_with_replace(&board).expect("replace").0;
         let describe = |label: &str, placement: &synth_place::Placement| {
             let score = synth_place::score::score_placement(&board, placement);
             let review = synth_place::describe_placement(&board, placement).visual_review;

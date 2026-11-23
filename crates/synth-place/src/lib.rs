@@ -2232,13 +2232,19 @@ const MAX_REPLACE_COMPONENTS: usize = 200;
 /// with Nesterov) owns the continuous geometry; the displacement-minimising
 /// legalizer makes it a valid PCB placement. This is an opt-in experiment,
 /// not the production default.
-pub fn place_with_replace(board: &Board) -> Result<Placement, PlaceError> {
-    let mut placement = place_with_replace_unspaced(board)?;
-    default_rules::enforce_spacing(board, &mut placement);
-    Ok(placement)
+///
+/// The flag reports a guard, veto or keepout rejection. When it is set the
+/// placement is only the sweep the solve started from: the caller must use
+/// its own default export placement instead of finishing this one.
+pub fn place_with_replace(board: &Board) -> Result<(Placement, bool), PlaceError> {
+    let (mut placement, fell_back) = place_with_replace_unspaced(board)?;
+    if !fell_back {
+        default_rules::enforce_spacing(board, &mut placement);
+    }
+    Ok((placement, fell_back))
 }
 
-fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
+fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), PlaceError> {
     use synth_layout::pcb_courtyard_geometry_for_part;
 
     // Off: filling pockets walks the free passives off the rows they were laid
@@ -2258,7 +2264,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
             "REPLACE fallback: {} components is above the {MAX_REPLACE_COMPONENTS}-component guard",
             board.components.len()
         ));
-        return Ok(fallback);
+        return Ok((fallback, true));
     }
     if board.components.iter().any(|component| {
         component.placement_hint.as_ref().is_some_and(|hint| {
@@ -2268,10 +2274,10 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
         replace_note(format_args!(
             "REPLACE fallback: hard near hint is anchored by the default path"
         ));
-        return Ok(fallback);
+        return Ok((fallback, true));
     }
     if !board.nets.iter().any(|net| net.endpoints.len() >= 2) {
-        return Ok(fallback);
+        return Ok((fallback, true));
     }
     let outline = baseline.board_outline;
     let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
@@ -2335,7 +2341,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
             "REPLACE fallback: legalizer failed ({:?})",
             legalized.err()
         ));
-        return Ok(fallback);
+        return Ok((fallback, true));
     };
     // The density force never fires on a board this sparse, so the legalised
     // arrangement still holds the seed's spread; the fitted envelope it leaves
@@ -2475,7 +2481,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
                 synth_geometry::nm_to_mm(placement_hpwl),
                 synth_geometry::nm_to_mm(baseline_hpwl)
             ));
-            return Ok(fallback);
+            return Ok((fallback, true));
         }
         break;
     }
@@ -2490,10 +2496,10 @@ fn place_with_replace_unspaced(board: &Board) -> Result<Placement, PlaceError> {
             keepout_overlaps(board, &baseline),
             keepout_overlaps(board, &placement)
         ));
-        return Ok(fallback);
+        return Ok((fallback, true));
     }
     replace_note(format_args!("REPLACE used"));
-    Ok(placement)
+    Ok((placement, false))
 }
 
 #[allow(clippy::too_many_lines)]

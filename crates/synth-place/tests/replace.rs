@@ -95,7 +95,7 @@ fn replace_places_real_boards_legally() {
     ] {
         let board = load_board(fixture);
         let default = synth_place::place(&board).expect("default");
-        let replaced = synth_place::place_with_replace(&board).expect("replace");
+        let (replaced, _) = synth_place::place_with_replace(&board).expect("replace");
         assert_legal(&board, &replaced, fixture);
         let default_parts: std::collections::BTreeSet<_> = default
             .components
@@ -114,10 +114,23 @@ fn replace_places_real_boards_legally() {
 #[test]
 fn replace_is_deterministic() {
     let board = load_board("fixtures/designs/secure_tracker.synth");
-    let first = synth_place::place_with_replace(&board).expect("first");
-    let second = synth_place::place_with_replace(&board).expect("second");
+    let (first, _) = synth_place::place_with_replace(&board).expect("first");
+    let (second, _) = synth_place::place_with_replace(&board).expect("second");
     assert_eq!(
         first, second,
         "repeated RePlAce placement must be identical"
+    );
+}
+
+/// A guard rejection must be reported, so the export can take its own default
+/// placement instead of finishing the sweep the solve started from.
+#[test]
+fn a_guard_fallback_is_reported() {
+    let mut board = load_board("fixtures/designs/secure_tracker.synth");
+    board.nets.clear();
+    let (_, fell_back) = synth_place::place_with_replace(&board).expect("replace");
+    assert!(
+        fell_back,
+        "a board with no two-pin net must report the fallback"
     );
 }

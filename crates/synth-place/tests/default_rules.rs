@@ -508,7 +508,7 @@ fn default_path_does_not_stretch_the_board() {
 #[ignore = "R4c routes clean (0 open, 633 mm) at 2825 mm2; 2750 mm2 needs a tighter rim, which fails routing (R4d)"]
 fn replace_path_stays_within_the_measured_area() {
     let board = rtd_afe();
-    let (w, h) = outline_mm(&synth_place::place_with_replace(&board).expect("place"));
+    let (w, h) = outline_mm(&synth_place::place_with_replace(&board).expect("place").0);
     assert!(w * h <= 2750.0, "{:.0} mm2", w * h);
     assert!((1.0..=1.8).contains(&(w / h)), "aspect {:.2}", w / h);
 }
@@ -519,7 +519,10 @@ fn replace_path_stays_within_the_measured_area() {
 #[test]
 fn replace_export_sizes_the_outline_round_the_packed_groups() {
     let board = rtd_afe();
-    let placement = exported(&board, synth_place::place_with_replace(&board));
+    let placement = exported(
+        &board,
+        synth_place::place_with_replace(&board).map(|(placement, _)| placement),
+    );
     let (w, h) = outline_mm(&placement);
     eprintln!("round-14 export: {w:.2}x{h:.2}={:.1} mm2", w * h);
     assert!(
@@ -532,7 +535,7 @@ fn replace_export_sizes_the_outline_round_the_packed_groups() {
 #[test]
 fn replace_path_applies_all_three_rules() {
     let board = rtd_afe();
-    let placement = synth_place::place_with_replace(&board).expect("place");
+    let placement = synth_place::place_with_replace(&board).expect("place").0;
     check_holes(&board, &placement);
     check_usb(&board, &placement);
     check_groups(&board, &placement);
@@ -755,7 +758,10 @@ fn docking_leaves_no_blocked_escape_corridor() {
     let board = rtd_afe();
     for (label, placed) in [
         ("default", synth_place::place(&board)),
-        ("replace", synth_place::place_with_replace(&board)),
+        (
+            "replace",
+            synth_place::place_with_replace(&board).map(|(placement, _)| placement),
+        ),
     ] {
         let placement = exported(&board, placed);
         let findings = synth_place::describe_placement(&board, &placement)
@@ -823,7 +829,7 @@ fn default_path_centres_the_big_chips() {
 #[test]
 fn replace_path_centres_the_big_chips() {
     let board = rtd_afe_with_parts();
-    let placement = synth_place::place_with_replace(&board).expect("place");
+    let placement = synth_place::place_with_replace(&board).expect("place").0;
     // The replace board is 58x33 mm, so its chips cannot sit as near the middle.
     // With the ADC part loaded that path keeps no group gap (0.65 mm, as before
     // this rule), so groups are not checked here.
@@ -928,7 +934,7 @@ fn default_path_balances_the_board() {
 #[test]
 fn replace_path_balances_the_board() {
     let board = rtd_afe_with_parts();
-    let placement = synth_place::place_with_replace(&board).expect("place");
+    let placement = synth_place::place_with_replace(&board).expect("place").0;
     check_balance("replace", &board, &placement);
     let (w, h) = outline_mm(&exported(&board, Ok(placement)));
     assert!(
@@ -986,7 +992,7 @@ fn default_path_keeps_the_outline_with_edge_connectors_flush() {
 #[test]
 fn replace_path_keeps_the_outline_with_edge_connectors_flush() {
     let board = rtd_afe();
-    let placement = synth_place::place_with_replace(&board).expect("place");
+    let placement = synth_place::place_with_replace(&board).expect("place").0;
     check_edge_rows("replace", &board, &placement, 3007.0);
 }
 
@@ -1017,7 +1023,10 @@ fn centre_mm(r: &Rect) -> (f64, f64) {
 #[test]
 fn usb_centring_keeps_the_passives_frame() {
     let board = rtd_afe_with_parts();
-    let placement = exported(&board, synth_place::place_with_replace(&board));
+    let placement = exported(
+        &board,
+        synth_place::place_with_replace(&board).map(|(placement, _)| placement),
+    );
     let parts = courtyards(&board, &placement);
     let usb = rect_of(&parts, "J1");
     let (ux, uy) = centre_mm(usb);
@@ -1069,7 +1078,10 @@ fn usb_centring_keeps_the_passives_frame() {
 #[test]
 fn docked_connector_keeps_a_hugging_cap_offset() {
     let board = rtd_afe_with_parts();
-    let placement = exported(&board, synth_place::place_with_replace(&board));
+    let placement = exported(
+        &board,
+        synth_place::place_with_replace(&board).map(|(placement, _)| placement),
+    );
     let parts = courtyards(&board, &placement);
     let j2 = rect_of(&parts, "J2");
     let (gap, _) = edge_gap_mm(&placement, j2);
@@ -1595,7 +1607,9 @@ fn compression_leaves_a_tight_board_unchanged() {
 fn compression_keeps_the_usb_centred() {
     let _guard = lock_compress_env();
     let board = rtd_afe_with_parts();
-    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let raw = synth_place::place_with_replace(&board)
+        .expect("replace places")
+        .0;
     let mut placement = head_outline(&board, &raw);
     placement.board_outline.min.x_nm -= mm_to_nm(6.0);
 
@@ -1620,7 +1634,9 @@ fn compression_keeps_the_usb_centred() {
 fn compression_keeps_holes_three_point_five_mm_from_the_corners() {
     let _guard = lock_compress_env();
     let board = rtd_afe_with_parts();
-    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let raw = synth_place::place_with_replace(&board)
+        .expect("replace places")
+        .0;
     let mut placement = head_outline(&board, &raw);
     placement.board_outline.max.y_nm += mm_to_nm(6.0);
 
@@ -1701,7 +1717,9 @@ fn compression_keeps_a_grouped_holes_corner_gate() {
             component.group = Some("MCU".into());
         }
     }
-    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let raw = synth_place::place_with_replace(&board)
+        .expect("replace places")
+        .0;
     let mut placement = head_outline(&board, &raw);
     placement.board_outline.min.x_nm -= mm_to_nm(10.0);
     placement.board_outline.min.y_nm -= mm_to_nm(10.0);
@@ -1778,7 +1796,9 @@ fn compression_flag_off_matches_the_head_outline() {
         return;
     }
     let board = rtd_afe_with_parts();
-    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let raw = synth_place::place_with_replace(&board)
+        .expect("replace places")
+        .0;
     let baseline = head_outline(&board, &raw);
 
     let _guard = lock_compress_env();
@@ -1829,7 +1849,9 @@ fn compression_adds_no_visual_review_finding() {
         ),
     ];
     for (label, board) in boards {
-        let raw = synth_place::place_with_replace(&board).expect("replace places");
+        let raw = synth_place::place_with_replace(&board)
+            .expect("replace places")
+            .0;
         let head = head_outline(&board, &raw);
         let mut compressed = head.clone();
         synth_place::compress_outline(&board, &mut compressed);
@@ -2198,7 +2220,9 @@ fn refine_flag_off_matches_round_21() {
     }
     let _guard = lock_compress_env();
     let board = rtd_afe_with_parts();
-    let raw = synth_place::place_with_replace(&board).expect("replace places");
+    let raw = synth_place::place_with_replace(&board)
+        .expect("replace places")
+        .0;
     let mut expected = head_outline(&board, &raw);
     synth_place::compress_outline(&board, &mut expected);
 

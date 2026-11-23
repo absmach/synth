@@ -217,7 +217,7 @@ fn default_path_keeps_every_pair_at_5_0_mm() {
 /// default path.
 fn check_replace_spacing(mm: f64) {
     let board = with_spacing_mm(mm);
-    let placement = synth_place::place_with_replace(&board).expect("place");
+    let placement = synth_place::place_with_replace(&board).expect("place").0;
     check_spacing("replace", &board, &placement, mm, true);
 }
 
