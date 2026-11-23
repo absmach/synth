@@ -51,6 +51,7 @@ pub trait ErcRule {
 pub mod anomaly;
 pub mod config;
 pub mod deep_erc;
+pub mod divider_tolerance;
 pub use anomaly::{BoardFeatureVec, GraphAnomalyDetectorRule, extract_features};
 pub use config::{ErcConfig, PinConflictTable};
 
@@ -196,6 +197,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::PinFunctionSupportRule),
         Box::new(deep_erc::CeramicDcBiasDeratingRule::new(config)),
         Box::new(RegulatorFeedbackOnSwitchNodeRule),
+        Box::new(divider_tolerance::FeedbackDividerToleranceRule),
     ]
 }
 
