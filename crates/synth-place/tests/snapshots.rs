@@ -106,9 +106,10 @@ fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     );
 }
 
-/// `secure_tracker`'s outline before the 25 MHz oscillator's courtyard was
-/// corrected from 5.0 x 5.0 to its real 6.0 x 4.32 mm: 64.90 x 63.85 mm.
-const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85: f64 = 64.90 * 63.85;
+/// `secure_tracker`'s outline after the placement rules (64.90 x 61.36 ->
+/// 63.40 x 59.30 mm): 3503.8 mm2, an intended 15.4% improvement over the
+/// 4143.9 mm2 the #158 guard was written against.
+const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 3503.8;
 
 /// A 1 mm part correction must not move the board 44%.
 ///
@@ -133,7 +134,7 @@ fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
     let placement = synth_place::place(&board).expect("place");
     let area = nm_to_mm(placement.board_outline.width_nm())
         * nm_to_mm(placement.board_outline.height_nm());
-    let baseline = SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2_64_90_X_63_85;
+    let baseline = SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2;
     assert!(
         (area - baseline).abs() <= baseline * OUTLINE_AREA_TOLERANCE,
         "outline area {area:.1} mm2 deviates more than 10% from baseline \

@@ -183,6 +183,10 @@ enum Command {
         /// Force export even if Synth ERC validation produces error diagnostics.
         #[arg(long)]
         force: bool,
+        /// Least courtyard-to-courtyard gap between any two parts, in mm
+        /// (1.0 to 5.0). Overrides `placement { spacing }` in the board file.
+        #[arg(long, value_name = "MM", value_parser = parse_spacing_mm)]
+        spacing: Option<f64>,
         /// Release mode: refuse to accept any override flag. Suitable for CI
         /// and release gates, where a package that needed an override is not
         /// a package anyone should be able to produce by accident.
@@ -1078,6 +1082,7 @@ fn main() -> ExitCode {
             validate_erc,
             verification_report,
             force,
+            spacing,
             safe,
             allow_unverified_parts,
             user_registry,
@@ -1116,6 +1121,7 @@ fn main() -> ExitCode {
             validate_erc,
             verification_report.as_deref(),
             force,
+            spacing,
             safe,
             allow_unverified_parts,
             autoroute,
@@ -1480,6 +1486,19 @@ fn manufacturer_profile_entry(name: &str, layers: &[u32]) -> serde_json::Value {
     entry
 }
 
+/// A finite spacing in the range the placer is tuned for.
+fn parse_spacing_mm(value: &str) -> Result<f64, String> {
+    let mm: f64 = value
+        .parse()
+        .map_err(|_| format!("`{value}` is not a number"))?;
+    if !mm.is_finite() || mm <= 0.0 {
+        return Err(format!(
+            "spacing must be a positive finite number, got `{value}`"
+        ));
+    }
+    Ok(mm)
+}
+
 fn capability_descriptor() -> serde_json::Value {
     let board_families = synth_place::board_family::PROFILES
         .iter()
@@ -1496,7 +1515,7 @@ fn capability_descriptor() -> serde_json::Value {
         .collect::<Vec<_>>();
 
     serde_json::json!({
-        "schema_version": "1.2",
+        "schema_version": "1.3",
         "compiler": {
             "name": "synth",
             "version": env!("CARGO_PKG_VERSION")
@@ -1521,8 +1540,8 @@ fn capability_descriptor() -> serde_json::Value {
         ],
         "language": {
             "syntax_version": "1.0",
-            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant"],
-            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn"],
+            "statements": ["board", "import", "layers", "manufacturer", "revision", "schematic", "component", "connect", "net", "power", "module", "interface", "bus", "use", "bind", "netclass", "keepout", "stackup", "requires", "group", "sheet", "variant", "placement"],
+            "attributes": ["company", "legends", "notes", "dnp", "prefix", "param", "as", "class", "diff_pair", "impedance", "trace_width", "clearance", "radius", "copper", "insulator", "er", "material", "value", "tolerance", "voltage", "power_rating", "dielectric", "description", "lcsc_pn", "mpn", "spacing"],
             "endpoint_forms": ["component.pin", "named_net", "bus.member"]
         },
         "geometry_and_constraints": {
@@ -1532,6 +1551,17 @@ fn capability_descriptor() -> serde_json::Value {
                 "height": {"option": "--height", "unit": "mm", "paired_with": "width"}
             },
             "layer_count": {"statement": "layers", "type": "integer", "min": 1, "max": 64},
+            "placement_spacing": {
+                "statement": "placement",
+                "body": "placement { spacing = 2.0mm }",
+                "setting": "spacing",
+                "type": "number",
+                "unit": "mm",
+                "min": 1.0,
+                "max": 5.0,
+                "option": "--spacing",
+                "notes": "least courtyard-to-courtyard gap between any two parts; the export margin sweep uses it as a floor"
+            },
             "schematic_page": {
                 "statement": "schematic",
                 "body": "schematic { paper = \"A4\" }",
@@ -3897,6 +3927,13 @@ fn dump_place(
             if family_dimensions.is_some() && (width.is_some() || height.is_some()) {
                 anyhow::bail!("--board-family cannot be combined with --width/--height")
             }
+            if let Some(board) = lowered.board.as_ref()
+                && let Some(mm) = synth_validate::placement_spacing_out_of_range(board)
+            {
+                anyhow::bail!(
+                    "placement spacing {mm} mm is outside the supported 1.0 mm to 5.0 mm range"
+                );
+            }
             let requested_dimensions = match (width, height, family_dimensions) {
                 (Some(w), Some(h), None) => Some((w, h)),
                 (None, None, family) => family,
@@ -4034,6 +4071,9 @@ fn route_design(
         .board
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("lowering produced no IR; nothing to route"))?;
+    if let Some(mm) = synth_validate::placement_spacing_out_of_range(board) {
+        anyhow::bail!("placement spacing {mm} mm is outside the supported 1.0 mm to 5.0 mm range");
+    }
 
     let out_dir = std::env::temp_dir().join(format!(
         "synth-route-{}-{}",
@@ -4404,6 +4444,7 @@ fn export_kicad(
     validate_erc: bool,
     verification_report: Option<&Path>,
     force: bool,
+    spacing_mm: Option<f64>,
     safe: bool,
     allow_unverified_parts: bool,
     autoroute: bool,
@@ -4508,6 +4549,19 @@ fn export_kicad(
         .board
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("lowering produced no IR; not exporting"))?;
+    // `--spacing` wins over the board file. The range is checked by the ERC
+    // rule below, so a typed value outside it is a blocking diagnostic that
+    // `--force` lets through, never a silent clamp.
+    let spaced_board;
+    let board = match spacing_mm {
+        Some(mm) => {
+            let mut copy = board.clone();
+            copy.placement_spacing_nm = Some((mm * 1e6).round() as i64);
+            spaced_board = copy;
+            &spaced_board
+        }
+        None => board,
+    };
 
     let mut overrides: Vec<release::OverrideRecord> = Vec::new();
 
@@ -4538,6 +4592,12 @@ fn export_kicad(
             Vec::new(),
             format!("{blocking} blocking ERC diagnostic(s) suppressed by --force"),
         ));
+        if erc_diags.iter().any(|d| d.code == "E-SYNTH-PLACE-005") {
+            eprintln!(
+                "warning: [E-SYNTH-PLACE-005] the typed placement spacing is outside the \
+                 supported 1.0 mm to 5.0 mm range; using it because of --force"
+            );
+        }
     }
 
     // R15.9 footprint guarantee: every part on the board must resolve to a
@@ -4620,7 +4680,7 @@ fn export_kicad(
     // nothing to gain or the engine is unavailable.
     let mut search_budget =
         synth_router::search_budget::SearchBudget::start(place_route_budget_secs);
-    let (chosen_placement, chosen_order) = if place_route_iterate {
+    let (mut chosen_placement, chosen_order) = if place_route_iterate {
         select_placement_for_routing(
             board,
             &sidecars,
@@ -4635,7 +4695,7 @@ fn export_kicad(
     } else {
         (None, Vec::new())
     };
-    let result = match &chosen_placement {
+    let mut result = match &chosen_placement {
         Some(placement) => synth_kicad::export_with_placement(board, out_dir, &sidecars, placement),
         None => synth_kicad::export_with_sidecars(board, out_dir, &sidecars),
     }
@@ -4663,7 +4723,7 @@ fn export_kicad(
     // Copper is generated by the external router, never by Synth. The
     // export above is the un-routed baseline; this run reads it, routes it,
     // and installs the result only if it passes independent validation.
-    let routing = route_externally(
+    let mut routing = route_externally(
         board,
         &result,
         input,
@@ -4672,6 +4732,48 @@ fn export_kicad(
         best_of,
         &chosen_order,
     )?;
+
+    // The RePlAce seam is opt-in, but a placement the router cannot finish
+    // must not ship. Judge the placement by its own routed export: if that
+    // route is not clean, re-export the default placement and route it as the
+    // production path would. This is the same board `upstream/main` produces.
+    let sidecar_layout = sidecars
+        .placement
+        .as_ref()
+        .is_some_and(|path| path.exists());
+    if chosen_placement.is_none() && synth_place::replace_enabled() && !sidecar_layout {
+        let unavailable = routing.state == synth_router::RouteState::RouterUnavailable;
+        match replace_gate_action(unavailable, replace_route_is_clean(&routing)) {
+            GateAction::Keep => {}
+            GateAction::RetryDefault => {
+                eprintln!(
+                    "REPLACE fallback: the tuned placement did not route clean; \
+                     retrying the default placement"
+                );
+                chosen_placement = None;
+                discard_routed_artifacts(&routing.artifacts);
+                result = synth_kicad::export_with_sidecars_default(board, out_dir, &sidecars)
+                    .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+                routing = route_externally(board, &result, input, router, &options, best_of, &[])?;
+            }
+            GateAction::DefaultUnrouted => {
+                match &routing.failure {
+                    Some(failure) => eprintln!(
+                        "REPLACE fallback: the router is unavailable ({}); \
+                         exporting the default placement. {}",
+                        failure.detail, failure.remediation
+                    ),
+                    None => eprintln!(
+                        "REPLACE fallback: the router is unavailable; \
+                         exporting the default placement"
+                    ),
+                }
+                chosen_placement = None;
+                result = synth_kicad::export_with_sidecars_default(board, out_dir, &sidecars)
+                    .map_err(|e| anyhow::anyhow!("kicad export failed: {e}"))?;
+            }
+        }
+    }
 
     // Signal integrity and power integrity on the routed copper. The rules
     // need the routed board, not the placement, so they run here on the file
@@ -5721,6 +5823,66 @@ fn select_placement_for_routing(
         );
     }
     Ok(best.map(|(_, placement, order)| (placement, order)))
+}
+
+/// Delete the files a rejected route left behind, so the fallback's output
+/// directory never holds a route that was not shipped. The baseline is the
+/// un-routed export the fallback overwrites, so it stays.
+fn discard_routed_artifacts(artifacts: &synth_router::result::RouteArtifacts) {
+    let routed = [
+        &artifacts.candidate,
+        &artifacts.delivered,
+        &artifacts.session_log,
+        &artifacts.ses,
+        &artifacts.router_report,
+        &artifacts.connectivity_report,
+        &artifacts.drc_report,
+    ];
+    for path in routed.into_iter().flatten() {
+        if *path != artifacts.baseline {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum GateAction {
+    Keep,
+    RetryDefault,
+    DefaultUnrouted,
+}
+
+fn replace_gate_action(router_unavailable: bool, clean: bool) -> GateAction {
+    if router_unavailable {
+        GateAction::DefaultUnrouted
+    } else if clean {
+        GateAction::Keep
+    } else {
+        GateAction::RetryDefault
+    }
+}
+
+/// The experiment's routing gate: the router delivered copper, no net is open
+/// and KiCad's DRC found no error and no unconnected pad.
+///
+/// The Synth return-via rule is advisory here: the default placement carries
+/// the same finding on these boards, and the experiment's META gate is the
+/// KiCad DRC counts, not the release gate. A missing DRC result fails closed.
+fn replace_route_is_clean(report: &synth_router::RouteReport) -> bool {
+    matches!(
+        report.state,
+        synth_router::RouteState::Routed | synth_router::RouteState::ReviewRequired
+    ) && route_counts_are_clean(
+        report.statistics.open_nets,
+        report
+            .validation
+            .as_ref()
+            .and_then(|validation| validation.kicad_drc.as_ref()),
+    )
+}
+
+fn route_counts_are_clean(open_nets: usize, drc: Option<&synth_router::result::DrcCounts>) -> bool {
+    open_nets == 0 && drc.is_some_and(|drc| drc.errors == 0 && drc.unconnected == 0)
 }
 
 /// How one candidate's routing ended, with the report the caller prints from.
@@ -7085,5 +7247,77 @@ mod tests {
         assert!(!validate_stdout_passed(
             br#"{"diagnostics": [], "parse_error": true}"#
         ));
+    }
+}
+
+#[cfg(test)]
+mod gate_tests {
+    use super::{
+        GateAction, discard_routed_artifacts, replace_gate_action, route_counts_are_clean,
+    };
+    use synth_router::result::{DrcCounts, RouteArtifacts};
+
+    fn drc(errors: usize, unconnected: usize) -> DrcCounts {
+        DrcCounts {
+            errors,
+            unconnected,
+            warnings: 15,
+        }
+    }
+
+    #[test]
+    fn a_route_is_clean_only_with_no_open_nets_and_no_kicad_blockers() {
+        assert!(route_counts_are_clean(0, Some(&drc(0, 0))));
+        assert!(!route_counts_are_clean(0, Some(&drc(1, 0))));
+        assert!(!route_counts_are_clean(0, Some(&drc(0, 2))));
+        assert!(!route_counts_are_clean(1, Some(&drc(0, 0))));
+        assert!(!route_counts_are_clean(0, None));
+    }
+
+    #[test]
+    fn the_gate_never_ships_a_tuned_placement_it_could_not_judge() {
+        assert_eq!(replace_gate_action(false, true), GateAction::Keep);
+        assert_eq!(replace_gate_action(false, false), GateAction::RetryDefault);
+        // No router: nothing can judge the tuned board, and the default would
+        // not route either, so export the default without a second attempt.
+        assert_eq!(
+            replace_gate_action(true, false),
+            GateAction::DefaultUnrouted
+        );
+        assert_eq!(replace_gate_action(true, true), GateAction::DefaultUnrouted);
+    }
+
+    #[test]
+    fn discarding_a_rejected_route_removes_its_files_and_keeps_the_baseline() {
+        let dir = std::env::temp_dir().join(format!("synth-discard-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let engine = dir.join("freerouting");
+        std::fs::create_dir_all(&engine).unwrap();
+        let touch = |p: &std::path::Path| {
+            std::fs::write(p, "x").unwrap();
+            p.to_path_buf()
+        };
+        let baseline = touch(&dir.join("b.kicad_pcb"));
+        let candidate = touch(&engine.join("b.routed.kicad_pcb"));
+        let drc = touch(&engine.join("b.drc.json"));
+        let artifacts = RouteArtifacts {
+            baseline: baseline.clone(),
+            candidate: Some(candidate.clone()),
+            delivered: Some(candidate.clone()),
+            session_log: None,
+            ses: None,
+            router_report: None,
+            connectivity_report: None,
+            quality_report: None,
+            drc_report: Some(drc.clone()),
+        };
+
+        discard_routed_artifacts(&artifacts);
+        discard_routed_artifacts(&artifacts); // already gone is fine
+
+        assert!(baseline.exists());
+        assert!(!candidate.exists());
+        assert!(!drc.exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

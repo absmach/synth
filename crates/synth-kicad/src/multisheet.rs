@@ -463,6 +463,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

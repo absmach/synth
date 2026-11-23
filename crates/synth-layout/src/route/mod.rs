@@ -2315,6 +2315,7 @@ mod cleanup_tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -2851,6 +2852,7 @@ mod channel_router_tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -3029,6 +3031,7 @@ mod drc_tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -3222,6 +3225,7 @@ mod net_termination_tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,

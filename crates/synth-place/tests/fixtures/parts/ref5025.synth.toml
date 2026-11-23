@@ -1,0 +1,77 @@
+id = "ref5025"
+kind = "ic"
+version = 0
+lifecycle = "active"
+description = "TI REF5025ID 2.5 V low-noise, low-drift precision voltage reference, 10 mA, SOIC-8"
+mpn = "REF5025AIDR"
+kicad_symbol = "Reference_Voltage:REF5025ID"
+kicad_footprint = "Package_SO:SOIC-8_3.9x4.9mm_P1.27mm"
+
+[footprint_dimensions]
+width_mm = 3.9
+height_mm = 4.9
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.7
+max_voltage_v = 18.0
+
+[[pins]]
+name = "dnc_1"
+number = "1"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "vin"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "temp"
+number = "3"
+electrical_type = "analog"
+
+[[pins]]
+name = "gnd"
+number = "4"
+electrical_type = "ground_reference"
+required = true
+
+[[pins]]
+name = "trim_nr"
+number = "5"
+electrical_type = "passive"
+
+[[pins]]
+name = "vout"
+number = "6"
+electrical_type = "power_output"
+required = true
+
+[[pins]]
+name = "nc"
+number = "7"
+electrical_type = "do_not_connect"
+
+[[pins]]
+name = "dnc_8"
+number = "8"
+electrical_type = "do_not_connect"
+
+[[required_decoupling]]
+net = "vin"
+value = "1uf"
+count = 1
+
+[[required_decoupling]]
+net = "vout"
+value = "1uf"
+count = 1
+
+[provenance]
+source = "imported"
+generator = "synth-part-import-kicad 0.1"
+datasheet_url = "https://www.ti.com/lit/ds/gpn/ref5025"
+reviewed_by = "Steve Munene"
+reviewed_at = "2026-10-27"
