@@ -23,3 +23,11 @@ class = "B"
 status = "experimental"
 skip_reason = "the source gate rejects the board with E-SYNTH-POWER-010 (the LP5907 LDO feeding VIO is counted against a load envelope the committed evidence predates). The row stays here, unrun, until the board or the rule decides the mismatch."
 rationale = "USB-C dual CH342F UART plus a THVD1450 RS-485 transceiver, with the protection parts the registry has. The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision."
+
+[[board]]
+id = "ice40-bga-node"
+path = "qualification/class-c/ice40-bga-node/ice40_bga_node.synth"
+class = "C"
+status = "experimental"
+skip_reason = "not run by this job: the route takes longer than the CI budget, so no verdict is asserted here. The committed package comes from the author's own export."
+rationale = "iCE40HX4K in a 121-ball BGA with a USB-C input and an STM32F103 (six layers, via-in-pad escape). Its package comes from the author's `synth mcp` export. See its QUALIFICATION.md for what is and is not claimed."
