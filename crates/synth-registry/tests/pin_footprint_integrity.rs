@@ -324,6 +324,8 @@ fn an_rf_part_with_more_pins_than_its_two_pin_footprint_blocks() {
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     });
     let q = qualify_part(&part, &rf_pads(), &rf_symbol());
     assert!(codes(&q).contains(&"E-SYNTH-QUAL-001"), "{:#?}", q.checks);
@@ -352,6 +354,8 @@ fn a_header_declaring_one_more_pin_than_its_pads_blocks() {
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     });
     let q = qualify_part(&part, &header_pads(), &header_symbol());
     assert!(codes(&q).contains(&"E-SYNTH-QUAL-001"), "{:#?}", q.checks);

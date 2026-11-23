@@ -51,6 +51,7 @@ pub enum StatementAst {
     Revision(RevisionStmt),
     Company(CompanyStmt),
     Legends(LegendsStmt),
+    Labels(LabelsStmt),
     Component(ComponentDeclAst),
     Variant(VariantDeclStmt),
     Connection(ConnectionAst),
@@ -70,6 +71,7 @@ pub enum StatementAst {
     Schematic(SchematicStmt),
     Stackup(StackupStmt),
     Requires(RequiresStmt),
+    NoConnect(NoConnectStmt),
 }
 
 impl StatementAst {
@@ -81,6 +83,7 @@ impl StatementAst {
             StatementAst::Revision(s) => s.span,
             StatementAst::Company(s) => s.span,
             StatementAst::Legends(s) => s.span,
+            StatementAst::Labels(s) => s.span,
             StatementAst::Component(s) => s.span,
             StatementAst::Variant(s) => s.span,
             StatementAst::Connection(s) => s.span,
@@ -100,6 +103,7 @@ impl StatementAst {
             StatementAst::Schematic(s) => s.span,
             StatementAst::Stackup(s) => s.span,
             StatementAst::Requires(s) => s.span,
+            StatementAst::NoConnect(s) => s.span,
         }
     }
 }
@@ -324,6 +328,16 @@ pub struct CompanyStmt {
 /// note instead of a pin dump.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LegendsStmt {
+    pub enabled: bool,
+    pub span: Span,
+}
+
+/// Board-level silkscreen/fab label control (`labels on|off`, default on).
+/// When off, the PCB exporter suppresses the reference-designator and value
+/// text *it* adds to footprints; text owned by the library footprint itself
+/// (silk lines, court lines) is untouched (absmach/synth#374).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelsStmt {
     pub enabled: bool,
     pub span: Span,
 }
@@ -738,6 +752,15 @@ pub enum NetclassAttr {
     Layers {
         layers: Vec<String>,
     },
+}
+
+/// `no_connect U1.L9, U1.J10`: pins that are intentionally unused. The
+/// exporter already draws a cross on every unreached pin; this statement is
+/// how the design says the cross is intended rather than an omission.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NoConnectStmt {
+    pub pins: Vec<EndpointAst>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -219,6 +219,7 @@ pub fn build_pcb(
             project,
             &pad_net_lookup,
             labels[&component.id],
+            board.labels,
         ));
     }
 
@@ -583,6 +584,7 @@ pub fn build_pcb(
     // The land of a via filled and capped in a pad, where the process offers one
     // and a component declares the under-pad escape that makes it legal.
     let pad_via = PlaneVia::for_via_in_pad(&process);
+    let filled_via = PlaneVia::for_filled_in_pad(&process);
     // One rail per layer. Pouring every plane net on every power layer puts
     // two rails at the same priority on the same copper, which is the
     // starvation described above with ground swapped out for a second rail:
@@ -613,7 +615,7 @@ pub fn build_pcb(
     let mut plane_stub_index = 0usize;
     if !power_layers.is_empty() {
         for (rail_index, (pcb_net, net)) in rails.iter().copied().enumerate() {
-            let layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
+            let rail_layers: Vec<&'static str> = if rails.len() >= power_layers.len() {
                 vec![power_layers[rail_index % power_layers.len()]]
             } else {
                 power_layers
@@ -623,7 +625,10 @@ pub fn build_pcb(
                     .copied()
                     .collect()
             };
-            for layer in layers {
+            // A microvia can reach one plane layer. A rail that owns more than
+            // one layer keeps the through via so every layer it pours is tied.
+            let rail_microvia_layer = (rail_layers.len() == 1).then_some(rail_layers[0]);
+            for &layer in &rail_layers {
                 let zone_key = format!("plane/{}/{layer}", net.name);
                 children.push(build_zone(
                     placement,
@@ -637,7 +642,7 @@ pub fn build_pcb(
                 ));
             }
             for target in plane_pad_targets(board, placement, net) {
-                let (pad, layer) = (target.centre, target.layer);
+                let (pad, pad_layer) = (target.centre, target.layer);
                 let beside = plane_via_offset(
                     pad,
                     target.origin,
@@ -682,7 +687,7 @@ pub fn build_pcb(
                             detail: plane_via_refusal(
                                 &refusal,
                                 pad,
-                                layer,
+                                pad_layer,
                                 &ViaAttempt {
                                     via: land,
                                     filled_and_capped: target.underpad && pad_via == Some(land),
@@ -693,12 +698,57 @@ pub fn build_pcb(
                         .into());
                     }
                 };
-                let used = land;
+                // A microvia must land on the rail's own layer. Hard-coding
+                // F.Cu-In1.Cu left a rail on In2 unconnected: the via stopped
+                // one dielectric short. Span from the ball's outer layer to the
+                // layer this zone is poured on. Only a span to the adjacent
+                // inner layer is a microvia; a deeper rail is a blind via with
+                // the through land, because a 0.10 mm microvia drill is below
+                // the through-via floor and cannot reach it.
+                let outer = match pad_layer {
+                    Layer::Bottom => "B.Cu",
+                    _ => "F.Cu",
+                };
+                let inner_layers = inner_plane_layers(board.layers);
+                let adjacent = if outer == "F.Cu" {
+                    "In1.Cu"
+                } else {
+                    inner_layers.last().copied().unwrap_or("B.Cu")
+                };
+                let span_buf: [&str; 2];
+                let (used, span, kind): (PlaneVia, &[&str], Option<&str>) = if Some(&land)
+                    == pad_via.as_ref()
+                    && process.microvia_drill_nm > 0
+                    && process.microvia_diameter_nm > 0
+                    && board.layers >= 4
+                {
+                    match rail_microvia_layer {
+                        Some(plane_layer) if plane_layer == adjacent => {
+                            span_buf = [outer, plane_layer];
+                            (land, &span_buf, Some("micro"))
+                        }
+                        Some(plane_layer) => {
+                            span_buf = [outer, plane_layer];
+                            match filled_via {
+                                Some(filled) => (filled, &span_buf, Some("blind")),
+                                None => (land, &THROUGH_VIA_LAYERS, None),
+                            }
+                        }
+                        None => match filled_via {
+                            Some(filled) => (filled, &THROUGH_VIA_LAYERS, None),
+                            None => (land, &THROUGH_VIA_LAYERS, None),
+                        },
+                    }
+                } else {
+                    (land, &THROUGH_VIA_LAYERS, None)
+                };
                 placed_vias.push((via, used.pad_radius_nm));
                 children.push(build_plane_via(
                     via.x_nm,
                     via.y_nm,
                     &used,
+                    span,
+                    kind,
                     pcb_net,
                     project,
                     plane_via_index,
@@ -711,7 +761,7 @@ pub fn build_pcb(
                     children.push(build_segment(
                         &Segment {
                             net: net.id,
-                            layer,
+                            layer: pad_layer,
                             start: pad,
                             end: via,
                             width_nm: PLANE_STUB_WIDTH_NM,
@@ -975,6 +1025,22 @@ impl PlaneVia {
     /// it by. `None` where the process offers no such land, so the plane via is
     /// the only via there is.
     fn for_via_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
+        if profile.microvia_diameter_nm > 0 && profile.microvia_drill_nm > 0 {
+            return Some(Self {
+                pad_radius_nm: (profile.microvia_diameter_nm + 1) / 2,
+                drill_nm: profile.microvia_drill_nm,
+            });
+        }
+        profile.via_in_pad_land_nm().map(|land_nm| Self {
+            pad_radius_nm: (land_nm + 1) / 2,
+            drill_nm: profile.min_drill_diameter_nm,
+        })
+    }
+
+    /// The filled and capped land for a *through* via in a pad, on a tier that
+    /// also offers a microvia. The microvia's 0.10 mm drill is below the
+    /// through-via floor, so a deeper rail must use the through land.
+    fn for_filled_in_pad(profile: &synth_drc::ManufacturerProfile) -> Option<Self> {
         profile.via_in_pad_land_nm().map(|land_nm| Self {
             pad_radius_nm: (land_nm + 1) / 2,
             drill_nm: profile.min_drill_diameter_nm,
@@ -1336,27 +1402,38 @@ fn plane_via_in_pad(
 
 /// A through via beside a power pad, joining the outer pad (through the fanout
 /// stub) to the inner power plane.
+#[allow(clippy::too_many_arguments)] // x, y, land, span kind, net, project and index are all separate facts
 fn build_plane_via(
     x_nm: i64,
     y_nm: i64,
     via: &PlaneVia,
+    layers: &[&str],
+    kind: Option<&str>,
     pcb_net: u32,
     project: &Uuid,
     idx: usize,
 ) -> Sexp {
     let via_uuid = derive_entity_uuid(project, "plane-via", &idx.to_string());
-    Sexp::list(
-        "via",
-        vec![
-            Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
-            Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
-            Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
-            Sexp::list("layers", vec![Sexp::str("F.Cu"), Sexp::str("B.Cu")]),
-            Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
-            str_pair("uuid", via_uuid.to_string()),
-        ],
-    )
+    let mut children = Vec::new();
+    if let Some(kind) = kind {
+        children.push(Sexp::atom(kind));
+    }
+    children.extend([
+        Sexp::list("at", vec![num(nm_to_mm(x_nm)), num(nm_to_mm(y_nm))]),
+        Sexp::list("size", vec![num(nm_to_mm(2 * via.pad_radius_nm))]),
+        Sexp::list("drill", vec![num(nm_to_mm(via.drill_nm))]),
+        Sexp::list(
+            "layers",
+            layers.iter().map(|layer| Sexp::str(*layer)).collect(),
+        ),
+        Sexp::list("net", vec![Sexp::atom(pcb_net.to_string())]),
+        str_pair("uuid", via_uuid.to_string()),
+    ]);
+    Sexp::list("via", children)
 }
+
+/// The copper span of a through via: the two outer layers.
+const THROUGH_VIA_LAYERS: [&str; 2] = ["F.Cu", "B.Cu"];
 
 /// How far a via keeps from a mounting hole's edge, in mm. A screw head and its
 /// washer sit over the copper round the hole, so a via closer than this is
@@ -2679,6 +2756,7 @@ fn label_override(entry: &synth_layout::sidecar::SidecarLabel) -> silk_labels::L
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_footprint_instance(
     component: &synth_ir::Component,
     part: &synth_registry::Part,
@@ -2687,6 +2765,7 @@ fn build_footprint_instance(
     project: &Uuid,
     pad_net_lookup: &PadNetLookup,
     ref_label: silk_labels::LabelPos,
+    labels_on: bool,
 ) -> Sexp {
     // Route the origin through the same helper the external placement
     // contract uses (`synth_place::to_external`), so the exported `(at x y)`
@@ -2850,8 +2929,15 @@ fn build_footprint_instance(
         Sexp::list("layer", vec![Sexp::str(layer_name)]),
         str_pair("uuid", fp_uuid.to_string()),
         Sexp::list("at", at_args),
-        Sexp::list("property", reference_property),
-        Sexp::list(
+    ];
+    // Board-level `labels off` (absmach/synth#374): the exporter's own
+    // reference and value text is suppressed. Text the library footprint
+    // itself owns — silk lines, courtyard outlines, everything the inline
+    // body below carries — is untouched, so a library footprint's silk stays
+    // byte-identical whatever the board says.
+    if labels_on {
+        children.push(Sexp::list("property", reference_property));
+        children.push(Sexp::list(
             "property",
             vec![
                 Sexp::str("Value"),
@@ -2880,28 +2966,28 @@ fn build_footprint_instance(
                     )],
                 ),
             ],
-        ),
-        doc_property("Datasheet", &datasheet_prop_uuid),
-        doc_property("Description", &description_prop_uuid),
-        assignment_property(
-            "MPN",
-            component
-                .part
-                .as_ref()
-                .and_then(|part| part.mpn.as_deref())
-                .unwrap_or(""),
-            &mpn_prop_uuid,
-        ),
-        assignment_property(
-            "LCSC",
-            component
-                .part
-                .as_ref()
-                .and_then(|part| part.lcsc_pn.as_deref())
-                .unwrap_or(""),
-            &lcsc_prop_uuid,
-        ),
-    ];
+        ));
+    }
+    children.push(doc_property("Datasheet", &datasheet_prop_uuid));
+    children.push(doc_property("Description", &description_prop_uuid));
+    children.push(assignment_property(
+        "MPN",
+        component
+            .part
+            .as_ref()
+            .and_then(|part| part.mpn.as_deref())
+            .unwrap_or(""),
+        &mpn_prop_uuid,
+    ));
+    children.push(assignment_property(
+        "LCSC",
+        component
+            .part
+            .as_ref()
+            .and_then(|part| part.lcsc_pn.as_deref())
+            .unwrap_or(""),
+        &lcsc_prop_uuid,
+    ));
 
     let has_model = if let Some(body) = inlined_body.as_deref() {
         // Strip the outer `(footprint "name" ...)` head so the geometry is
@@ -3867,6 +3953,8 @@ mod tests {
                     voltage_min_v: None,
                     voltage_nominal_v: None,
                     drive: None,
+                    gate: None,
+                    pwm: None,
                 },
                 Pin {
                     name: "gnd".into(),
@@ -3880,6 +3968,8 @@ mod tests {
                     voltage_min_v: None,
                     voltage_nominal_v: None,
                     drive: None,
+                    gate: None,
+                    pwm: None,
                 },
             ],
             required_decoupling: vec![],
@@ -3998,6 +4088,7 @@ mod tests {
                 angle_deg: 0.0,
                 hidden: false,
             },
+            true,
         )
         .to_string_pretty();
         let pad_ats: Vec<&str> = instance
@@ -4050,6 +4141,7 @@ mod tests {
                 angle_deg: 0.0,
                 hidden: false,
             },
+            true,
         )
         .to_string_pretty();
         assert!(rendered.contains("MPN") && rendered.contains("MFG-123"));
@@ -4113,6 +4205,7 @@ mod tests {
                 angle_deg: 0.0,
                 hidden: false,
             },
+            true,
         );
         let instance_text = instance.to_string_pretty();
 
@@ -4282,6 +4375,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test_netclass".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4325,6 +4419,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4415,6 +4510,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test_declared_netclass".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4442,6 +4538,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![synth_ir::NetClass {
                 name: "PWR".to_string(),
@@ -4500,6 +4597,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "via_geometry".to_string(),
             layers: 2,
             manufacturer: None,
@@ -4510,6 +4608,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4646,6 +4745,8 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
+            no_connects: Vec::new(),
             name: "revision_board".to_string(),
             layers: 2,
             outline: None,
@@ -4698,6 +4799,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "test_roundtrip".to_string(),
             layers: 4,
             manufacturer: Some("jlcpcb".to_string()),
@@ -4708,6 +4810,7 @@ mod tests {
             diff_pairs: vec![],
             notes: vec![],
             keepouts: vec![],
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -4884,8 +4987,8 @@ mod plane_via_in_pad_tests {
         let rects = ring(pad.centre, 350_000);
         let tier = synth_drc::ManufacturerProfile::jlc_advanced();
         let in_pad = PlaneVia::for_via_in_pad(&tier).expect("a via-in-pad land");
-        assert_eq!(in_pad.drill_nm, 200_000);
-        assert_eq!(2 * in_pad.pad_radius_nm, 350_000);
+        assert_eq!(in_pad.drill_nm, 100_000);
+        assert_eq!(2 * in_pad.pad_radius_nm, 250_000);
         assert_eq!(
             plane_via_in_pad(&pad, &in_pad, &rules(&rects, &[])),
             Ok(pad.centre)
@@ -4919,6 +5022,8 @@ mod plane_via_in_pad_tests {
     fn a_process_with_no_in_pad_land_has_no_filled_and_capped_via() {
         let mut tier = synth_drc::ManufacturerProfile::jlc_advanced();
         tier.via_in_pad_land_extra_nm = 0;
+        tier.microvia_drill_nm = 0;
+        tier.microvia_diameter_nm = 0;
         assert_eq!(PlaneVia::for_via_in_pad(&tier), None);
     }
 

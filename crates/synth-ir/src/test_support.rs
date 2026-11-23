@@ -37,6 +37,8 @@ pub fn pin_with(
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -141,7 +143,9 @@ pub fn board(
         diff_pairs,
         notes: Vec::new(),
         legends: false,
+        labels: true,
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         outline: None,
         netclasses: Vec::new(),

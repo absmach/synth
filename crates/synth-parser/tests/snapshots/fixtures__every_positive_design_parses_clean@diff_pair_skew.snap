@@ -1,0 +1,124 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "diff_pair_skew",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 2,
+        "span": {
+          "byte_start": 159,
+          "byte_end": 167
+        }
+      },
+      {
+        "stmt": "manufacturer",
+        "name": "jlcpcb",
+        "span": {
+          "byte_start": 170,
+          "byte_end": 191
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J1",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 195,
+          "byte_end": 234
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 237,
+          "byte_end": 276
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 288,
+            "byte_end": 293
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "p1",
+          "span": {
+            "byte_start": 297,
+            "byte_end": 302
+          }
+        },
+        "net_name": "USB_DP",
+        "span": {
+          "byte_start": 280,
+          "byte_end": 314
+        }
+      },
+      {
+        "stmt": "connection",
+        "from": {
+          "component": "J1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 325,
+            "byte_end": 330
+          }
+        },
+        "to": {
+          "component": "U1",
+          "pin": "p2",
+          "span": {
+            "byte_start": 334,
+            "byte_end": 339
+          }
+        },
+        "net_name": "USB_DN",
+        "span": {
+          "byte_start": 317,
+          "byte_end": 351
+        }
+      },
+      {
+        "stmt": "diff_pair",
+        "pos": "USB_DP",
+        "neg": "USB_DN",
+        "attrs": [
+          {
+            "kind": "max_skew",
+            "literal": "0.15",
+            "unit": "mm",
+            "span": {
+              "byte_start": 394,
+              "byte_end": 400
+            }
+          }
+        ],
+        "span": {
+          "byte_start": 355,
+          "byte_end": 404
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 132,
+      "byte_end": 406
+    }
+  },
+  "span": {
+    "byte_start": 132,
+    "byte_end": 406
+  }
+}

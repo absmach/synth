@@ -2233,3 +2233,402 @@ fn a_suggested_led_testbench_fails_a_reversed_led() {
 
     assert_out_of_limit(&report, "iled", "below min");
 }
+
+/// A GPIO with drive and PWM data drives the LED by switching it.
+fn fixture_pwm(pwm: Option<synth_registry::PinPwm>) -> impl FnOnce(&mut synth_registry::Registry) {
+    move |registry: &mut synth_registry::Registry| {
+        fixture_led(registry);
+        let mut mcu = registry.lookup("rp2350").expect("rp2350").clone();
+        let pin = mcu
+            .pins
+            .iter_mut()
+            .find(|pin| pin.name == "gp5")
+            .expect("gp5");
+        pin.name = "gpio5".to_string();
+        pin.drive = Some(fixture_drive());
+        pin.pwm = pwm;
+        registry.insert(mcu);
+    }
+}
+
+/// A unique scratch directory for a registry model file, removed on drop.
+struct Scratch(std::path::PathBuf);
+
+impl Scratch {
+    fn new(label: &str) -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let nonce = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "synth_suggest_{label}_{}_{}",
+            std::process::id(),
+            nonce
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("scratch dir");
+        Self(path)
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+const PWM_LED_BOARD: &str = r#"
+board "pwm-led" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  net "VCC" { U1.gpio5, R1.p1 }
+  net "GND" { U1.gnd, LED1.cathode }
+  connect R1.p2 -> LED1.anode as "MID"
+}
+"#;
+
+fn fixture_pin_pwm(hz: f64) -> synth_registry::PinPwm {
+    synth_registry::PinPwm {
+        pwm_max_hz: hz,
+        datasheet_ref: "Table 5-2".to_string(),
+    }
+}
+
+#[test]
+fn a_pwm_led_drafts_an_average_current_check() {
+    let board = board_with_registry(PWM_LED_BOARD, fixture_pwm(Some(fixture_pin_pwm(1000.0))));
+
+    let (toml, not_covered) = suggestion(&board);
+
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    assert!(toml.contains("pin = \"U1.gpio5\""), "{toml}");
+    assert!(toml.contains("kind = \"pulse\""), "{toml}");
+    assert!(toml.contains("period = \"1ms\""), "{toml}");
+    assert!(toml.contains("duty = 0.5"), "{toml}");
+    assert!(toml.contains("rise = \"1us\""), "{toml}");
+    assert!(toml.contains("[analysis.tran]"), "{toml}");
+    assert!(toml.contains("stop = \"8ms\""), "{toml}");
+    assert!(toml.contains("step = \"200ns\""), "{toml}");
+    assert!(toml.contains("kind = \"average\""), "{toml}");
+    assert!(toml.contains("element = \"R1\""), "{toml}");
+    assert!(toml.contains("window_start = \"2ms\""), "{toml}");
+    assert!(toml.contains("window_end = \"6ms\""), "{toml}");
+    assert!(toml.contains("pwm_max_hz = 1000"), "{toml}");
+    assert!(toml.contains("Table 5-2"), "{toml}");
+    assert!(toml.contains("ignore = [\"U1\"]"), "{toml}");
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    let source = &testbench.source[0];
+    assert_eq!(source.kind, synth_sim::SourceKind::Pulse);
+    assert_eq!(source.pin.as_deref(), Some("U1.gpio5"));
+    assert_eq!(source.level, None);
+    assert_eq!(source.low, None);
+    assert_eq!(source.period, Some(1.0e-3));
+    let average = measure(&testbench, "iavg");
+    assert_eq!(average.kind, synth_sim::MeasureKind::Average);
+    assert_eq!(average.element.as_deref(), Some("R1"));
+    assert_eq!(average.window_start, Some(2.0e-3));
+}
+
+#[test]
+fn a_pwm_led_testbench_passes_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(PWM_LED_BOARD, fixture_pwm(Some(fixture_pin_pwm(1000.0))));
+
+    let (toml, not_covered) = suggestion(&board);
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let iavg = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "iavg")
+        .expect("iavg");
+    // duty * I_on, with I_on near (3.3 - 2.9) / 355 ohms.
+    assert!(
+        (0.0004..0.0008).contains(&iavg.value),
+        "average current {} should be about 0.5 * 1.1 mA",
+        iavg.value
+    );
+}
+
+const PWM_RC_BOARD: &str = r#"
+board "pwm-rc" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "1k"
+  component C1: capacitor "c_generic_0805" value "1u"
+  net "IN" { U1.gpio5, R1.p1 }
+  net "GND" { U1.gnd, C1.p2 }
+  connect R1.p2 -> C1.p1 as "OUT"
+}
+"#;
+
+#[test]
+fn a_pwm_rc_drafts_ripple_and_average() {
+    let board = board_with_registry(PWM_RC_BOARD, fixture_pwm(Some(fixture_pin_pwm(1000.0))));
+
+    let (toml, not_covered) = suggestion(&board);
+
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    assert!(toml.contains("kind = \"peak_to_peak\""), "{toml}");
+    assert!(toml.contains("kind = \"average\""), "{toml}");
+    assert!(toml.contains("window_start = \"5ms\""), "{toml}");
+    assert!(toml.contains("window_end = \"9ms\""), "{toml}");
+    assert!(toml.contains("stop = \"11ms\""), "{toml}");
+    assert!(toml.contains("step = \"5us\""), "{toml}");
+    assert!(toml.contains("exp(-period/tau)"), "{toml}");
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    let ripple = measure(&testbench, "vripple");
+    assert_eq!(ripple.kind, synth_sim::MeasureKind::PeakToPeak);
+    assert_eq!(ripple.node.as_deref(), Some("OUT"));
+    // k = exp(-1): the steady ripple is about 0.808 V within ±25%.
+    assert_eq!(ripple.min, Some(0.606));
+    assert_eq!(ripple.max, Some(1.01));
+    let average = measure(&testbench, "vavg");
+    assert_eq!(average.min, Some(1.57));
+    assert_eq!(average.max, Some(1.73));
+}
+
+#[test]
+fn a_pwm_rc_testbench_passes_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board_with_registry(PWM_RC_BOARD, fixture_pwm(Some(fixture_pin_pwm(1000.0))));
+
+    let (toml, not_covered) = suggestion(&board);
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+
+    let report = simulate_suggested(&board, &testbench, &ngspice);
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    for measure in &report.measures {
+        assert!(
+            matches!(measure.name.as_str(), "vripple" | "vavg"),
+            "{measure:?}"
+        );
+    }
+}
+
+const GATE_DRIVE_BOARD: &str = r#"
+board "gate-drive" {
+  layers 2
+  component U1: mcu "rp2350"
+  component Q1: transistor "ao3400a_nmos"
+  component R1: resistor "r_generic_0805" value "1k"
+  net "PWM" { U1.gpio5, Q1.g }
+  net "GND" { U1.gnd, Q1.s }
+  net "SW" { Q1.d, R1.p1 }
+  net "VDD" { R1.p2 }
+  power "VDD" 12v
+}
+"#;
+
+fn fixture_mosfet(registry: &mut synth_registry::Registry, spice_file: &str) {
+    let mut mosfet = registry
+        .lookup("ao3400a_nmos")
+        .expect("ao3400a_nmos")
+        .clone();
+    let pin = mosfet
+        .pins
+        .iter_mut()
+        .find(|pin| pin.name == "g")
+        .expect("g");
+    pin.gate = Some(synth_registry::PinGate {
+        input_capacitance_pf: 650.0,
+        datasheet_ref: "Table 1".to_string(),
+    });
+    mosfet.spice = Some(synth_registry::SpiceModel {
+        file: spice_file.to_string(),
+        subckt: "nmos_ao3400".to_string(),
+        pin_order: vec!["g".to_string(), "s".to_string(), "d".to_string()],
+        params: std::collections::BTreeMap::default(),
+        dialect: None,
+    });
+    registry.insert(mosfet);
+}
+
+#[test]
+fn a_gate_drive_drafts_rise_time_and_overshoot() {
+    let board = board_with_registry(
+        GATE_DRIVE_BOARD,
+        fixture_pwm_with_mosfet(Some(fixture_pin_pwm(1000.0)), "nmos_g.lib".to_string()),
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+    eprintln!("gate not_covered: {:?}", suggestion.not_covered);
+    let (toml, not_covered) = match suggestion.toml {
+        Some(toml) => (toml, suggestion.not_covered),
+        None => panic!("no testbench: {:?}", suggestion.not_covered),
+    };
+
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    assert!(toml.contains("kind = \"rise_time\""), "{toml}");
+    assert!(toml.contains("kind = \"overshoot\""), "{toml}");
+    assert!(toml.contains("node = \"PWM\""), "{toml}");
+    assert!(toml.contains("low_threshold = 0.33"), "{toml}");
+    assert!(toml.contains("high_threshold = 2.97"), "{toml}");
+    assert!(toml.contains("input_capacitance_pf = 650"), "{toml}");
+    assert!(toml.contains("Table 1"), "{toml}");
+    assert!(toml.contains("net = \"VDD\""), "{toml}");
+    assert!(toml.contains("dc = 12.0"), "{toml}");
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    let rise = measure(&testbench, "gate_rise");
+    assert_eq!(rise.kind, synth_sim::MeasureKind::RiseTime);
+    assert_eq!(rise.min, None);
+    assert_eq!(rise.max, None);
+    assert_eq!(rise.window_start, Some(0.0));
+}
+
+fn fixture_pwm_with_mosfet(
+    pwm: Option<synth_registry::PinPwm>,
+    spice_file: String,
+) -> impl FnOnce(&mut synth_registry::Registry) {
+    move |registry: &mut synth_registry::Registry| {
+        (fixture_pwm(pwm))(registry);
+        fixture_mosfet(registry, &spice_file);
+    }
+}
+
+#[test]
+fn a_gate_drive_testbench_passes_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let scratch = Scratch::new("gate-drive-model");
+    std::fs::write(
+        scratch.path().join("nmos_g.lib"),
+        ".subckt nmos_ao3400 g s d\n\
+         M1 d g s s NMOSAO\n\
+         .model NMOSAO NMOS(VTO=1.5 KP=10)\n\
+         Cgs g s 650p\n\
+         .ends\n",
+    )
+    .expect("write model file");
+    let board = board_with_registry(
+        GATE_DRIVE_BOARD,
+        fixture_pwm_with_mosfet(Some(fixture_pin_pwm(1000.0)), "nmos_g.lib".to_string()),
+    );
+
+    let (toml, not_covered) = suggestion(&board);
+    assert!(not_covered.is_empty(), "{not_covered:?}");
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+
+    let report = synth_sim::simulate(
+        &board,
+        &testbench,
+        &synth_sim::SimOptions {
+            ngspice: Some(ngspice.clone()),
+            design_path: Some(PathBuf::from("suggested.synth")),
+            testbench_path: Some(PathBuf::from("suggested.sim.toml")),
+            registry_dirs: vec![scratch.path().to_path_buf()],
+        },
+    );
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let rise = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "gate_rise")
+        .expect("gate_rise");
+    // tau = 25 ohms * 650 pF = 16.25 ns, so the 10-90% rise is about 36 ns.
+    assert!(
+        (25.0e-9..50.0e-9).contains(&rise.value),
+        "gate rise {} should be about 36 ns",
+        rise.value
+    );
+    let overshoot = report
+        .measures
+        .iter()
+        .find(|measure| measure.name == "gate_overshoot")
+        .expect("gate_overshoot");
+    assert!(
+        overshoot.value.abs() < 1.0,
+        "an RC gate does not overshoot: {}",
+        overshoot.value
+    );
+}
+
+#[test]
+fn two_tran_shapes_cannot_share_one_timing() {
+    // The PWM LED claims one timing; the RC filter needs a different one.
+    let board = board_with_registry(
+        r#"
+board "two-tran" {
+  layers 2
+  component U1: mcu "rp2350"
+  component R1: resistor "r_generic_0805" value "330"
+  component LED1: led "ltst_c190krkt"
+  component R2: resistor "r_generic_0805" value "1k"
+  component C1: capacitor "c_generic_0805" value "1u"
+  net "VCC" { U1.gpio5, R1.p1, R2.p1 }
+  net "GND" { U1.gnd, LED1.cathode, C1.p2 }
+  connect R1.p2 -> LED1.anode as "MID"
+  connect R2.p2 -> C1.p1 as "OUT"
+}
+"#,
+        fixture_pwm(Some(fixture_pin_pwm(1000.0))),
+    );
+
+    let (toml, not_covered) = suggestion(&board);
+
+    let testbench = synth_sim::Testbench::from_toml(&toml).expect("generated sidecar parses");
+    assert!(
+        not_covered
+            .iter()
+            .any(|line| line.contains("cannot share a file with a `tran` measure")),
+        "{not_covered:?}"
+    );
+    assert!(
+        testbench
+            .measure
+            .iter()
+            .all(|measure| measure.kind == synth_sim::MeasureKind::Average),
+        "{toml}"
+    );
+}
+
+#[test]
+fn a_gate_drive_without_a_spice_model_is_not_covered() {
+    let board = board_with_registry(
+        GATE_DRIVE_BOARD,
+        move |registry: &mut synth_registry::Registry| {
+            (fixture_pwm_with_mosfet(Some(fixture_pin_pwm(1000.0)), "nmos_g.lib".to_string()))(
+                registry,
+            );
+            let mut mosfet = registry
+                .lookup("ao3400a_nmos")
+                .expect("ao3400a_nmos")
+                .clone();
+            mosfet.spice = None;
+            registry.insert(mosfet);
+        },
+    );
+
+    let suggestion = synth_sim::suggest_testbench(&board);
+
+    assert!(
+        suggestion
+            .not_covered
+            .iter()
+            .any(|line| line.contains("no `[spice]` model")),
+        "{:?}",
+        suggestion.not_covered
+    );
+}

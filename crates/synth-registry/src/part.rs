@@ -359,6 +359,28 @@ pub struct Pin {
     /// the simulation may drive as a DC source.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drive: Option<PinDrive>,
+
+    /// Datasheet PWM capability of an output pin, for a transient pulse
+    /// source in `synth sim`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pwm: Option<PinPwm>,
+
+    /// Datasheet gate data for a transistor's control pin: the input
+    /// capacitance that sets the gate edge the simulation measures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gate: Option<PinGate>,
+}
+
+/// Datasheet gate data for a transistor control pin. Every field is required
+/// whenever the block is present.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinGate {
+    /// Small-signal input capacitance at the datasheet conditions
+    /// (`Ciss` for a MOSFET), in picofarads.
+    pub input_capacitance_pf: f64,
+    /// Datasheet page or table the value came from.
+    pub datasheet_ref: String,
 }
 
 /// Datasheet output-drive data for an IC pin. Every numeric field is required;
@@ -380,6 +402,19 @@ pub struct PinDrive {
     /// Datasheet page or table the values came from.
     #[serde(default)]
     pub datasheet_ref: Option<String>,
+}
+
+/// Datasheet PWM data for an IC output pin. `synth sim` uses it to decide
+/// that a pin's testbench source is a pulse and to pick a period the design
+/// can actually generate; every field is required whenever the block is
+/// present, like `[pins.drive]`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinPwm {
+    /// Maximum PWM frequency the pin can toggle at, in hertz.
+    pub pwm_max_hz: f64,
+    /// Datasheet page or table the value came from.
+    pub datasheet_ref: String,
 }
 
 impl Pin {
