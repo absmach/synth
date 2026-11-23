@@ -104,6 +104,8 @@ struct Piece {
     mating: Option<MatingFace>,
     /// A connector's edge hint, as a wall id.
     hint: Option<u8>,
+    /// The edge hint is a contract rather than a preference.
+    hint_hard: bool,
     pins: usize,
     group: Option<String>,
 }
@@ -287,6 +289,10 @@ fn build_pieces(board: &Board, placement: &Placement) -> Option<Vec<Piece>> {
                 .and_then(|part| part.footprint_dimensions.as_ref())
                 .and_then(|dimensions| dimensions.mating_face),
             hint,
+            hint_hard: component
+                .placement_hint
+                .as_ref()
+                .is_some_and(|hint| hint.priority == synth_ir::PlacementPriority::Hard),
             pins: component.part.as_ref().map_or(0, |part| part.pins.len()),
             group: component.group.clone(),
         });
@@ -351,7 +357,7 @@ fn make_units(
     outline: Rect,
     options: &BTreeMap<String, char>,
     wall_over: &BTreeMap<String, u8>,
-) -> Vec<Unit> {
+) -> Option<Vec<Unit>> {
     let part_gap = mm_to_nm(PART_GAP_MM);
     let mut units = Vec::new();
     for (name, slots) in groups {
@@ -369,6 +375,12 @@ fn make_units(
             .filter(|piece| is_wall_connector(&piece.kind))
             .collect();
         conns.sort_by_key(|piece| piece.refdes.clone());
+        // One row cannot honour two named edges. Leave the board to the
+        // previous stage rather than put one connector on the other's wall.
+        let hinted_edges: BTreeSet<u8> = conns.iter().filter_map(|piece| piece.hint).collect();
+        if hinted_edges.len() > 1 {
+            return None;
+        }
         // A USB connector must sit on its wall's midpoint, and one row holds
         // only one there. Every USB but the first gets a row of its own.
         let split_rows = conns.iter().filter(|piece| piece.is_usb()).count() > 1;
@@ -421,7 +433,7 @@ fn make_units(
             .as_ref()
             .map_or((0, 0), |folded| (folded.width, folded.height));
         let has_major = rest.iter().any(|piece| piece.pins >= MAJOR_IC_PINS);
-        let hinted = conns.iter().any(|piece| piece.hint.is_some());
+        let hinted = conns.iter().any(|piece| piece.hint_hard);
         let voted = if conns.is_empty() {
             None
         } else {
@@ -555,7 +567,7 @@ fn make_units(
             fixed_wall: hinted || split_rows,
         });
     }
-    units
+    Some(units)
 }
 
 /// A connector row on `wall` with no block: the row docks flush.
@@ -1067,7 +1079,7 @@ fn build_layout(
     options: &BTreeMap<String, char>,
     wall_over: &BTreeMap<String, u8>,
 ) -> Option<(Layout, Vec<Unit>)> {
-    let units = make_units(pieces, groups, outline, options, wall_over);
+    let units = make_units(pieces, groups, outline, options, wall_over)?;
     if units.is_empty() {
         return None;
     }
@@ -1884,6 +1896,7 @@ mod tests {
             quarter: 0,
             mating: None,
             hint: None,
+            hint_hard: false,
             pins: if kind == "mcu" { 24 } else { 2 },
             group: Some("G".to_string()),
         }
@@ -2012,7 +2025,8 @@ mod tests {
                 rect(0.0, 0.0, 60.0, 60.0),
                 &options,
                 &wall_over,
-            );
+            )
+            .expect("one row per wall");
             assert_eq!(units.len(), 1, "wall {wall}");
             let unit = &units[0];
             assert!(
@@ -2065,6 +2079,66 @@ mod tests {
     }
 
     #[test]
+    fn a_group_whose_connectors_name_different_edges_is_left_alone() {
+        // One connector asks for the top edge and one for the left. A single
+        // row cannot honour both, so the stage must not try.
+        let mut top = piece(0, "connector", 20.0, 0.0, 23.54, 11.16);
+        top.part = "header_1x4".to_string();
+        top.pins = 4;
+        top.hint = Some(TOP);
+        top.hint_hard = true;
+        let mut left = piece(1, "connector", 0.0, 20.0, 3.54, 31.16);
+        left.part = "header_1x4".to_string();
+        left.pins = 4;
+        left.hint = Some(LEFT);
+        left.hint_hard = true;
+        let pieces = vec![top, left];
+        let groups = BTreeMap::from([("G".to_string(), vec![0_usize, 1])]);
+        assert!(
+            make_units(
+                &pieces,
+                &groups,
+                rect(0.0, 0.0, 60.0, 60.0),
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+            )
+            .is_none(),
+            "a group with two hinted edges has no single row"
+        );
+    }
+
+    #[test]
+    fn a_soft_edge_hint_leaves_the_wall_to_the_descent() {
+        let mut header = piece(0, "connector", 0.0, 0.0, 3.54, 11.16);
+        header.part = "header_1x4".to_string();
+        header.pins = 4;
+        header.hint = Some(TOP);
+        let groups = BTreeMap::from([("G".to_string(), vec![0_usize])]);
+        let units = make_units(
+            &[header.clone()],
+            &groups,
+            rect(0.0, 0.0, 60.0, 60.0),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+        .expect("units");
+        assert!(
+            !units[0].fixed_wall,
+            "a soft hint is a preference, not a contract"
+        );
+        header.hint_hard = true;
+        let units = make_units(
+            &[header],
+            &groups,
+            rect(0.0, 0.0, 60.0, 60.0),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        )
+        .expect("units");
+        assert!(units[0].fixed_wall, "a hard hint fixes the wall");
+    }
+
+    #[test]
     fn two_usb_connectors_get_a_row_each_and_both_stay_centred() {
         // A group with one USB jack near the top and one near the left edge.
         // One row cannot put both on a wall's midpoint, so each needs a row
@@ -2083,7 +2157,8 @@ mod tests {
             rect(0.0, 0.0, 60.0, 60.0),
             &BTreeMap::new(),
             &BTreeMap::new(),
-        );
+        )
+        .expect("USB jacks have no conflicting hint");
         assert_eq!(units.len(), 2, "each USB connector gets its own row");
         let scene = Scene {
             units: &units,
