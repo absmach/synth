@@ -119,6 +119,63 @@ pub fn check_connector_orientation(
     .collect()
 }
 
+/// Connector mating-plane depth. A receptacle that faces the right way can
+/// still sit so far inside the board edge that no plug reaches it, or so far
+/// past it that the part hangs off the board. Code: `E-SYNTH-DRC-024`.
+#[must_use]
+pub fn check_connector_depth(board: &synth_ir::Board, placement: &Placement) -> Vec<Violation> {
+    use synth_place::floorplan::BoardEdge;
+    synth_place::floorplan::connector_depth_issues(
+        board,
+        placement.board_outline,
+        &placement.components,
+    )
+    .into_iter()
+    .map(|issue| {
+        // Moving the connector by this much puts its courtyard flush with the edge.
+        let move_out_mm = nm_to_mm(issue.offset_nm - issue.flush_nm);
+        let (delta_x_mm, delta_y_mm) = match issue.edge {
+            BoardEdge::Top => (0.0, -move_out_mm),
+            BoardEdge::Bottom => (0.0, move_out_mm),
+            BoardEdge::Left => (-move_out_mm, 0.0),
+            BoardEdge::Right => (move_out_mm, 0.0),
+        };
+        let rotation_deg = placement
+            .components
+            .iter()
+            .find(|c| board.component(c.id).is_some_and(|k| k.refdes == issue.refdes))
+            .map_or(0, |c| u32::try_from(c.rotation.degrees()).unwrap_or(0));
+        let offset_mm = nm_to_mm(issue.offset_nm);
+        let where_ = if offset_mm >= 0.0 {
+            format!("{offset_mm:.2} mm inside")
+        } else {
+            format!("{:.2} mm beyond", -offset_mm)
+        };
+        Violation {
+            code: "E-SYNTH-DRC-024".to_string(),
+            message: format!(
+                "connector {} mating plane is {} the {:?} board edge; it must be within {:.2} mm of flush (courtyard flush is {:.2} mm inside)",
+                issue.refdes,
+                where_,
+                issue.edge,
+                nm_to_mm(issue.tolerance_nm),
+                nm_to_mm(issue.flush_nm),
+            ),
+            witness: Vec::new(),
+            nets: Vec::new(),
+            components: vec![issue.refdes.clone()],
+            pos_mm: None,
+            suggested_override: Some(crate::SuggestedOverride {
+                refdes: issue.refdes,
+                delta_x_mm,
+                delta_y_mm,
+                rotation_deg,
+            }),
+        }
+    })
+    .collect()
+}
+
 /// Minimum trace width — every emitted segment's `width_nm`
 /// must be ≥ profile's `min_trace_width_nm`. Code:
 /// `E-SYNTH-DRC-001`.
@@ -1012,6 +1069,79 @@ mod tests {
             cells_expanded: 0,
             pad_escape_rejections: 0,
         }
+    }
+
+    /// A USB-C receptacle on a 40 mm square board, facing the bottom edge, with
+    /// its courtyard `gap_mm` inside that edge (negative = hanging past it).
+    fn usb_c_at_bottom_edge(gap_mm: f64, rotation: Rotation) -> Vec<Violation> {
+        use synth_place::{ComponentPlacement, Placement};
+        // The USB-C registry part's footprint dimensions, without its KiCad
+        // symbol: loading that checks pins against the installed KiCad library.
+        let part = "id = \"usb_c_like\"\nkind = \"connector\"\n\
+            [footprint_dimensions]\nwidth_mm = 9.64\nheight_mm = 6.62\n\
+            courtyard_margin_mm = 0.25\nmating_face = \"bottom\"\n\
+            [[pins]]\nname = \"vbus\"\nnumber = \"1\"\nelectrical_type = \"power_input\"\n";
+        let registry = synth_registry::load_from_strs(&[("usb_c_like.synth.toml", part)])
+            .expect("test part must load");
+        let source = "board \"b\" {\n  layers 2\n  component J1: connector \"usb_c_like\"\n}\n";
+        let parsed = synth_parser::parse(source, "depth.synth");
+        let board = synth_ir::lower(&parsed.ast.expect("ast"), &registry, "depth.synth")
+            .board
+            .expect("board");
+        let component = board.components.first().expect("J1");
+        let part = component.part.as_ref().expect("part");
+        let (_, (_, courtyard_h)) = synth_layout::pcb_courtyard_geometry_for_part(part);
+        let outline = Rect::new(Point::new(0, 0), Point::new(mm_to_nm(40.0), mm_to_nm(40.0)));
+        // Rotation zero opens toward the bottom edge (+Y), so the courtyard
+        // half-depth is half the courtyard height.
+        let centre_y = mm_to_nm(40.0 - gap_mm - courtyard_h / 2.0);
+        let placement = Placement {
+            board_outline: outline,
+            components: vec![ComponentPlacement {
+                id: component.id,
+                center: Point::new(mm_to_nm(20.0), centre_y),
+                rotation,
+                layer: Layer::Top,
+            }],
+        };
+        check_connector_depth(&board, &placement)
+    }
+
+    #[test]
+    fn a_recessed_connector_is_flagged_with_the_delta_to_flush() {
+        // Courtyard 1.46 + 0.25 mm inside the edge puts the body face 1.71 mm in.
+        let violations = usb_c_at_bottom_edge(1.71, Rotation::Zero);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert_eq!(violations[0].code, "E-SYNTH-DRC-024");
+        assert!(violations[0].message.contains("inside"), "{violations:?}");
+        let fix = violations[0].suggested_override.as_ref().expect("fix");
+        assert!((fix.delta_y_mm - 1.71).abs() < 0.01, "{fix:?}");
+        assert!(fix.delta_x_mm.abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_flush_connector_is_not_flagged() {
+        assert!(usb_c_at_bottom_edge(0.0, Rotation::Zero).is_empty());
+    }
+
+    #[test]
+    fn an_overhang_within_the_margin_is_not_flagged_but_a_larger_one_is() {
+        // The USB-C part declares a 0.25 mm courtyard margin.
+        assert!(usb_c_at_bottom_edge(-0.2, Rotation::Zero).is_empty());
+        let violations = usb_c_at_bottom_edge(-1.0, Rotation::Zero);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert!(violations[0].message.contains("beyond"), "{violations:?}");
+    }
+
+    #[test]
+    fn a_connector_in_the_board_interior_is_not_judged() {
+        // 15 mm from the edge is past the orientation rule's reach.
+        assert!(usb_c_at_bottom_edge(15.0, Rotation::Zero).is_empty());
+    }
+
+    #[test]
+    fn a_connector_facing_inward_is_left_to_the_orientation_rule() {
+        assert!(usb_c_at_bottom_edge(1.71, Rotation::OneEighty).is_empty());
     }
 
     /// The ring exemption belongs to a via in a pad of a component that declares the

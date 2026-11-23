@@ -82,7 +82,102 @@ pub fn connector_orientation_issues(
     outline: Rect,
     placements: &[crate::ComponentPlacement],
 ) -> Vec<ConnectorOrientationIssue> {
+    edge_connectors(board, outline, placements)
+        .into_iter()
+        .filter(|found| found.placement.rotation != found.expected)
+        .map(|found| ConnectorOrientationIssue {
+            refdes: found.refdes,
+            edge: found.edge,
+            expected: found.expected,
+            actual: found.placement.rotation,
+        })
+        .collect()
+}
+
+/// A connector whose mating plane sits off the board edge it opens through by
+/// more than its footprint allows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectorDepthIssue {
+    pub refdes: String,
+    pub edge: BoardEdge,
+    /// Signed distance from the board edge to the mating plane, in nm.
+    /// Positive means the plane sits inside the board (recessed); negative
+    /// means it overhangs the edge.
+    pub offset_nm: i64,
+    /// Largest distance from the flush position the footprint allows, in nm.
+    pub tolerance_nm: i64,
+    /// Offset that puts the connector's courtyard flush with the edge, in nm.
+    pub flush_nm: i64,
+}
+
+/// Smallest depth tolerance, in mm. It only absorbs grid rounding for a part
+/// that declares no courtyard margin.
+pub const MIN_DEPTH_TOLERANCE_MM: f64 = 0.05;
+
+/// Check that an edge-mounted connector's mating plane meets the board edge.
+///
+/// The plane is the connector body's face on its mating side. The courtyard is
+/// centred on the placement and the part's `courtyard_margin_mm` is the rim it
+/// adds around the body, so the plane sits one margin inside the courtyard
+/// edge. A connector whose courtyard is flush with the edge therefore has its
+/// plane one margin inside the board. The check allows the plane to be off
+/// that flush position by one margin either way, and by
+/// [`MIN_DEPTH_TOLERANCE_MM`] at least.
+///
+/// Only connectors that already face the right way are judged here. A
+/// connector that faces inward is reported by [`connector_orientation_issues`].
+#[must_use]
+pub fn connector_depth_issues(
+    board: &Board,
+    outline: Rect,
+    placements: &[crate::ComponentPlacement],
+) -> Vec<ConnectorDepthIssue> {
     let mut issues = Vec::new();
+    for found in edge_connectors(board, outline, placements) {
+        if found.placement.rotation != found.expected {
+            continue;
+        }
+        let margin_nm = synth_geometry::mm_to_nm(found.margin_mm);
+        let tolerance_nm = margin_nm.max(synth_geometry::mm_to_nm(MIN_DEPTH_TOLERANCE_MM));
+        let (distance, half_depth) = match found.edge {
+            BoardEdge::Top => (found.placement.center.y_nm - outline.min.y_nm, found.half.1),
+            BoardEdge::Bottom => (outline.max.y_nm - found.placement.center.y_nm, found.half.1),
+            BoardEdge::Left => (found.placement.center.x_nm - outline.min.x_nm, found.half.0),
+            BoardEdge::Right => (outline.max.x_nm - found.placement.center.x_nm, found.half.0),
+        };
+        let offset_nm = distance - (half_depth - margin_nm);
+        if (offset_nm - margin_nm).abs() > tolerance_nm {
+            issues.push(ConnectorDepthIssue {
+                refdes: found.refdes,
+                edge: found.edge,
+                offset_nm,
+                tolerance_nm,
+                flush_nm: margin_nm,
+            });
+        }
+    }
+    issues
+}
+
+/// An edge-mounted connector with the edge it opens through resolved.
+struct EdgeConnector<'a> {
+    refdes: String,
+    placement: &'a crate::ComponentPlacement,
+    edge: BoardEdge,
+    expected: Rotation,
+    /// Rotation-aware courtyard half extents `(x, y)`, in nm.
+    half: (i64, i64),
+    margin_mm: f64,
+}
+
+/// Every connector that declares a mating face and counts as edge-mounted,
+/// with the edge it is judged against.
+fn edge_connectors<'a>(
+    board: &Board,
+    outline: Rect,
+    placements: &'a [crate::ComponentPlacement],
+) -> Vec<EdgeConnector<'a>> {
+    let mut found = Vec::new();
     let edge_slack = synth_geometry::mm_to_nm(6.0);
     for placement in placements {
         let Some(component) = board.component(placement.id) else {
@@ -151,17 +246,21 @@ pub fn connector_orientation_issues(
             }
             edge
         };
-        let expected = rotation_for_mating_edge(face, edge);
-        if placement.rotation != expected {
-            issues.push(ConnectorOrientationIssue {
-                refdes: component.refdes.clone(),
-                edge,
-                expected,
-                actual: placement.rotation,
-            });
-        }
+        found.push(EdgeConnector {
+            refdes: component.refdes.clone(),
+            placement,
+            edge,
+            expected: rotation_for_mating_edge(face, edge),
+            half: (half_x, half_y),
+            margin_mm: component
+                .part
+                .as_ref()
+                .and_then(|part| part.footprint_dimensions.as_ref())
+                .and_then(|dimensions| dimensions.courtyard_margin_mm)
+                .unwrap_or(0.0),
+        });
     }
-    issues
+    found
 }
 
 /// The edge a connector's hard `edge:` hint names, if it has one.
