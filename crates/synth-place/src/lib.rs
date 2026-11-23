@@ -1147,6 +1147,58 @@ fn connector_reach(real: Rect, copper: Rect) -> Rect {
     )
 }
 
+/// The sides a flush connector's reach bounds, and the reach value on each.
+///
+/// A connector sits where the solver or a sidecar put it, which need not be
+/// the edge its hint names. Trust the hint unless the connector is clearly
+/// nowhere near that edge; then use the side it sticks out of most. Taking
+/// the hinted side blindly let a connector hinted "bottom" but sitting on
+/// the left keep its margin on the left and push the whole left edge out,
+/// undoing its neighbours' flush edge.
+fn flush_sides_and_reach(
+    board: &Board,
+    component: &synth_ir::Component,
+    placed: &ComponentPlacement,
+    body: Option<Rect>,
+    margin_nm: i64,
+    side_from_hint: bool,
+) -> Option<(Vec<usize>, [i64; 4])> {
+    if !is_edge_flush_connector(component) {
+        return None;
+    }
+    let real = sidecar_courtyard_rect(board, component, placed);
+    let copper = exported_pad_bounds(component, placed).unwrap_or(real);
+    let flush = connector_reach(real, copper);
+    let flush = [
+        flush.min.x_nm,
+        flush.min.y_nm,
+        flush.max.x_nm,
+        flush.max.y_nm,
+    ];
+    let hinted = component
+        .placement_hint
+        .as_ref()
+        .and_then(|hint| hint.edge.as_ref())
+        .map(edge_index);
+    let sides: Vec<usize> = match body {
+        Some(body) => {
+            let reaches = [
+                body.min.x_nm - real.min.x_nm,
+                body.min.y_nm - real.min.y_nm,
+                real.max.x_nm - body.max.x_nm,
+                real.max.y_nm - body.max.y_nm,
+            ];
+            let geometric = (0..4).max_by_key(|&side| reaches[side]);
+            match hinted {
+                Some(side) if side_from_hint && reaches[side] >= -margin_nm => vec![side],
+                _ => geometric.into_iter().collect(),
+            }
+        }
+        None => hinted.into_iter().collect(),
+    };
+    Some((sides, flush))
+}
+
 fn outline_with_flush_connectors(
     board: &Board,
     placements: &[ComponentPlacement],
@@ -1177,6 +1229,27 @@ fn outline_with_flush_connectors(
                 Point::new(a.max.x_nm.max(b.max.x_nm), a.max.y_nm.max(b.max.y_nm)),
             )
         });
+    // The flush line each hard-hinted connector fixes on its edge, merged
+    // across the connectors that share one: edges 0/1 keep the smallest
+    // (furthest out) minimum, edges 2/3 the largest maximum. Every other
+    // part's rim is capped at this line, so a mounting hole's 2.2 mm
+    // board-feature rim — or any passive rim — cannot push Edge.Cuts past
+    // the connector a hard hint docked there.
+    let mut flush_bounds: [Option<i64>; 4] = [None; 4];
+    for (component, placed, _, _) in &parts {
+        if let Some((sides, flush)) =
+            flush_sides_and_reach(board, component, placed, body, margin_nm, side_from_hint)
+        {
+            for side in sides {
+                let value = flush[side];
+                flush_bounds[side] = Some(match flush_bounds[side] {
+                    Some(current) if side < 2 => current.min(value),
+                    Some(current) => current.max(value),
+                    None => value,
+                });
+            }
+        }
+    }
     let mut outline = [i64::MAX, i64::MAX, i64::MIN, i64::MIN];
     for (component, placed, rect, copper) in &parts {
         // A board feature placed in a corner needs a wider rim than the tight
@@ -1199,57 +1272,66 @@ fn outline_with_flush_connectors(
             rect.max.x_nm + margin_nm,
             rect.max.y_nm + margin_nm,
         ];
-        if is_edge_flush_connector(component) {
-            let real = sidecar_courtyard_rect(board, component, placed);
-            let copper = exported_pad_bounds(component, placed).unwrap_or(real);
-            let flush = connector_reach(real, copper);
-            let flush = [
-                flush.min.x_nm,
-                flush.min.y_nm,
-                flush.max.x_nm,
-                flush.max.y_nm,
-            ];
-            // A connector sits where the solver or a sidecar put it, which need
-            // not be the edge its hint names. Trust the hint unless the
-            // connector is clearly nowhere near that edge; then use the side
-            // it sticks out of most. Taking the hinted side blindly let a
-            // connector hinted "bottom" but sitting on the left keep its
-            // margin on the left and push the whole left edge out, undoing
-            // its neighbours' flush edge.
-            let hinted = component
-                .placement_hint
-                .as_ref()
-                .and_then(|hint| hint.edge.as_ref())
-                .map(edge_index);
-            let sides: Vec<usize> = match body {
-                Some(body) => {
-                    let reaches = [
-                        body.min.x_nm - real.min.x_nm,
-                        body.min.y_nm - real.min.y_nm,
-                        real.max.x_nm - body.max.x_nm,
-                        real.max.y_nm - body.max.y_nm,
-                    ];
-                    let geometric = (0..4).max_by_key(|&side| reaches[side]);
-                    match hinted {
-                        Some(side) if side_from_hint && reaches[side] >= -margin_nm => {
-                            vec![side]
-                        }
-                        _ => geometric.into_iter().collect(),
-                    }
-                }
-                None => hinted.into_iter().collect(),
-            };
+        if let Some((sides, flush)) =
+            flush_sides_and_reach(board, component, placed, body, margin_nm, side_from_hint)
+        {
             for side in sides {
                 reach[side] = flush[side];
             }
-        } else if let Some(copper) = copper {
-            // A courtyard normally contains its pads, but some stock
-            // footprints anchor far from the body. Union the exported copper
-            // so the outline can never clip a pad below the edge clearance.
-            reach[0] = reach[0].min(copper.min.x_nm - margin_nm);
-            reach[1] = reach[1].min(copper.min.y_nm - margin_nm);
-            reach[2] = reach[2].max(copper.max.x_nm + margin_nm);
-            reach[3] = reach[3].max(copper.max.y_nm + margin_nm);
+        } else {
+            for side in 0..4 {
+                let Some(bound) = flush_bounds[side] else {
+                    continue;
+                };
+                // Cap the rim at the flush line. A board feature's courtyard
+                // may overhang the line (the outline fit below still holds its
+                // drill); any other part keeps at least its own courtyard
+                // inside Edge.Cuts, so the cap gives up the rim before it
+                // clips the part.
+                if side < 2 {
+                    reach[side] = if synth_layout::is_board_feature_kind(&component.kind) {
+                        reach[side].max(bound)
+                    } else {
+                        let court_edge = if side == 0 {
+                            rect.min.x_nm
+                        } else {
+                            rect.min.y_nm
+                        };
+                        reach[side].max(bound.min(court_edge))
+                    };
+                } else {
+                    reach[side] = if synth_layout::is_board_feature_kind(&component.kind) {
+                        reach[side].min(bound)
+                    } else {
+                        let court_edge = if side == 2 {
+                            rect.max.x_nm
+                        } else {
+                            rect.max.y_nm
+                        };
+                        reach[side].min(bound.max(court_edge))
+                    };
+                }
+            }
+            if let Some(copper) = copper {
+                // A courtyard normally contains its pads, but some stock
+                // footprints anchor far from the body. Union the exported copper
+                // so the outline can never clip a pad below the edge clearance.
+                // On a flush edge the rim is capped at the connector's
+                // courtyard, so there the copper keeps only the fab edge
+                // clearance: a mounting hole whose rim was capped may let its
+                // courtyard overhang, but its drill must stay inside Edge.Cuts.
+                let copper_margin = |side: usize| -> i64 {
+                    if flush_bounds[side].is_some() {
+                        mm_to_nm(COPPER_EDGE_CLEARANCE_MM)
+                    } else {
+                        margin_nm
+                    }
+                };
+                reach[0] = reach[0].min(copper.min.x_nm - copper_margin(0));
+                reach[1] = reach[1].min(copper.min.y_nm - copper_margin(1));
+                reach[2] = reach[2].max(copper.max.x_nm + copper_margin(2));
+                reach[3] = reach[3].max(copper.max.y_nm + copper_margin(3));
+            }
         }
         outline = [
             outline[0].min(reach[0]),
@@ -2372,6 +2454,14 @@ fn place_board_features(
 
     let mut claimed: Vec<FeatureSlot> = Vec::with_capacity(features.len());
 
+    // The flush line each hard-hinted connector fixes on its edge. A feature
+    // sharing that edge keeps its 2.2 mm rim nowhere: the fitted outline sits
+    // at the connector's courtyard, the feature's courtyard may overhang it,
+    // and the one thing that may not is its drill — so a candidate slot whose
+    // drill would cross the line is rejected below and the feature takes the
+    // nearest slot that keeps the drill inside Edge.Cuts.
+    let flush_bounds = flush_bounds_of_placements(board, placements);
+
     for id in ordered {
         let (w_mm, h_mm) = courtyard_lookup[&id];
         let half_w = mm_to_nm(w_mm) / 2;
@@ -2402,6 +2492,14 @@ fn place_board_features(
                     .find(|placement| placement.id == pid)
                     .map(rect_of)
             }) {
+                return None;
+            }
+            // The feature is exported with rotation zero, so its pad bounds
+            // come from the anchor directly. A mounting hole's pads are its
+            // NPTH drill: Edge.Cuts may never cross one, and on a flush edge
+            // the fit caps the rim at the connector's courtyard, so the drill
+            // has to clear that line here rather than after the fit.
+            if !pads_clear_flush_bounds(board, id, centre, &flush_bounds) {
                 return None;
             }
             Some(candidate)
@@ -2501,6 +2599,82 @@ fn place_board_features(
             });
         }
     }
+}
+
+/// The flush line each placed hard-hinted connector fixes on its edge.
+///
+/// Edges 0/1 keep the smallest minimum (the line furthest out), edges 2/3 the
+/// largest maximum — the same merge the outline fit does, so a feature slot
+/// judged against these lines is judged against the edge Edge.Cuts will
+/// actually take.
+fn flush_bounds_of_placements(
+    board: &Board,
+    placements: &[ComponentPlacement],
+) -> [Option<i64>; 4] {
+    let mut bounds: [Option<i64>; 4] = [None; 4];
+    for placed in placements {
+        let Some(component) = board.component(placed.id) else {
+            continue;
+        };
+        if !is_edge_flush_connector(component) {
+            continue;
+        }
+        let rect = sidecar_courtyard_rect(board, component, placed);
+        let copper = exported_pad_bounds(component, placed).unwrap_or(rect);
+        let flush = connector_reach(rect, copper);
+        let Some(side) = component
+            .placement_hint
+            .as_ref()
+            .and_then(|hint| hint.edge.as_ref())
+            .map(edge_index)
+        else {
+            continue;
+        };
+        let value = match side {
+            0 => flush.min.x_nm,
+            1 => flush.min.y_nm,
+            2 => flush.max.x_nm,
+            _ => flush.max.y_nm,
+        };
+        bounds[side] = Some(match bounds[side] {
+            Some(current) if side < 2 => current.min(value),
+            Some(current) => current.max(value),
+            None => value,
+        });
+    }
+    bounds
+}
+
+/// Whether a feature exported at `centre` keeps every pad inside the flush
+/// lines, with the fab edge clearance. The feature's NPTH drill counts as a
+/// pad, so a mounting hole whose drill would cross a flush edge is rejected
+/// and the slot search moves to the next candidate.
+fn pads_clear_flush_bounds(
+    board: &Board,
+    id: ComponentId,
+    centre: Point,
+    flush_bounds: &[Option<i64>; 4],
+) -> bool {
+    if flush_bounds.iter().all(Option::is_none) {
+        return true;
+    }
+    let Some(component) = board.component(id) else {
+        return true;
+    };
+    let placement = ComponentPlacement {
+        id,
+        center: centre,
+        rotation: Rotation::Zero,
+        layer: Layer::Top,
+    };
+    let Some(pads) = exported_pad_bounds(component, &placement) else {
+        return true;
+    };
+    let clearance = mm_to_nm(COPPER_EDGE_CLEARANCE_MM);
+    pads.min.x_nm - clearance >= flush_bounds[0].unwrap_or(pads.min.x_nm - clearance)
+        && pads.min.y_nm - clearance >= flush_bounds[1].unwrap_or(pads.min.y_nm - clearance)
+        && pads.max.x_nm + clearance <= flush_bounds[2].unwrap_or(pads.max.x_nm + clearance)
+        && pads.max.y_nm + clearance <= flush_bounds[3].unwrap_or(pads.max.y_nm + clearance)
 }
 
 /// Half-extents of a component's courtyard after applying its rotation.
@@ -4714,6 +4888,14 @@ pub enum HintStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlacementDescription {
     pub board_size_mm: [f64; 2],
+    /// Sum of placed courtyard areas as a percentage of the board area. Sparse
+    /// boards leave large open interior areas; 30 % is the review floor.
+    ///
+    /// `#[serde(default)]`: the field was added after the first placements
+    /// were serialized, so an older saved `PlacementDescription` JSON must
+    /// still deserialize instead of failing on the missing key.
+    #[serde(default)]
+    pub courtyard_fill_pct: f64,
     pub component_regions: Vec<ComponentRegionEntry>,
     pub cluster_summary: String,
     /// `Some(true)`/`Some(false)` only when a DRC run has actually been
@@ -5359,6 +5541,52 @@ struct DistantSupportPart {
     /// `reset button` or `crystal`, as the warning names it.
     what: &'static str,
     action: &'static str,
+}
+
+/// Through-hole and SMD parts sitting closer than the DFM distance, courtyard
+/// to courtyard.
+///
+/// Compaction keeps this pair [`compact_gaps::THT_SMD_GAP_MM`] apart, but a
+/// hard `near` hint the author pinned can hold them closer, and the exporter
+/// will not move a pinned part. The finding is what the fab's own DFM check
+/// reports, so the review says it here — with the pair and the distance —
+/// before the panel gets to say it for real.
+fn tht_smd_clearance_warnings(board: &Board, placement: &Placement) -> Vec<String> {
+    let kinds = compact_gaps::pad_kinds(board, placement);
+    let courtyard = |index: usize| -> Option<Rect> {
+        let placed = placement.components.get(index)?;
+        let component = board.component(placed.id)?;
+        Some(sidecar_courtyard_rect(board, component, placed))
+    };
+    let mut warnings = Vec::new();
+    for a in 0..placement.components.len() {
+        let Some(rect_a) = courtyard(a) else { continue };
+        for b in a + 1..placement.components.len() {
+            if !kinds[a].tht_smd_pair(kinds[b]) {
+                continue;
+            }
+            let Some(rect_b) = courtyard(b) else { continue };
+            let gap = courtyard_gap_mm(rect_a, rect_b);
+            if gap >= compact_gaps::THT_SMD_GAP_MM {
+                continue;
+            }
+            let refdes = |index: usize| {
+                board
+                    .component(placement.components[index].id)
+                    .map_or_else(|| "?".to_string(), |c| c.refdes.clone())
+            };
+            warnings.push(format!(
+                "{} ({}) and {} ({}) sit {:.2} mm apart, under the {:.1} mm through-hole-to-SMD clearance the DFM check grades a Danger; move one of them, or move the hinted pair apart in the placement sidecar",
+                refdes(a),
+                kinds[a].role_against(kinds[b]),
+                refdes(b),
+                kinds[b].role_against(kinds[a]),
+                gap,
+                compact_gaps::THT_SMD_GAP_MM
+            ));
+        }
+    }
+    warnings
 }
 
 /// The gap between two courtyards, in millimetres: zero when they touch or
@@ -7227,6 +7455,14 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         });
     }
 
+    // #380: compaction keeps a through-hole part 2.1 mm from an SMD part, but
+    // a pinned hint can hold them closer than that. The pair the DFM check
+    // grades a Danger is then a fact about the layout, so the review says so
+    // and names the move that clears it.
+    for warning in tht_smd_clearance_warnings(board, placement) {
+        functional_warnings.push(warning);
+    }
+
     let visual_score = 100u8.saturating_sub((visual_findings.len() as u8).saturating_mul(20));
     let visual_review = VisualPlacementReview {
         score: visual_score,
@@ -7235,8 +7471,25 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         recommended_actions,
     };
 
+    let courtyard_area_mm2: f64 = placement
+        .components
+        .iter()
+        .filter_map(|placed| {
+            let component = board.component(placed.id)?;
+            let part = component.part.as_ref()?;
+            let (w, h) = synth_layout::pcb_courtyard_for_part(part);
+            Some(w * h)
+        })
+        .sum();
+    let board_area_mm2 = board_w_mm * board_h_mm;
+    let courtyard_fill_pct = if board_area_mm2 > 0.0 {
+        courtyard_area_mm2 / board_area_mm2 * 100.0
+    } else {
+        0.0
+    };
     PlacementDescription {
         board_size_mm: [board_w_mm, board_h_mm],
+        courtyard_fill_pct,
         component_regions,
         cluster_summary,
         // Placement review runs neither the router nor DRC, so reporting
@@ -9439,6 +9692,75 @@ board "near" {
         assert!(!desc.component_regions.is_empty());
     }
 
+    /// The DFM distance between a through-hole and an SMD part, from #380:
+    /// compaction keeps it, and the review reports the pair when the layout
+    /// sits closer anyway (a pinned hint holds the part where the author
+    /// told it to).
+    #[test]
+    fn a_through_hole_smd_pair_inside_the_dfm_distance_is_reported_with_the_fix() {
+        let board = board_from_source(
+            r#"board "tht_smd" {
+          layers 2
+          component J1: connector "jst_ph_2pin"
+          component R1: resistor "r_generic_0603" value "10k"
+          connect J1.p1 -> R1.p1
+        }"#,
+            "tht_smd.synth",
+        );
+        let mut placement = place(&board).expect("place");
+
+        // A legal layout keeps the distance, so no warning.
+        let clean = describe_placement(&board, &placement);
+        assert!(
+            !clean
+                .functional_warnings
+                .iter()
+                .any(|w| w.contains("through-hole-to-SMD")),
+            "{:?}",
+            clean.functional_warnings
+        );
+
+        // Pin the resistor onto the connector's own centre: the layout is
+        // now inside the DFM distance and the review says so, naming the
+        // pair, the measured gap and the move that clears it.
+        let j1 = centre_of(&board, &placement, "J1");
+        move_part(
+            &mut placement,
+            &board,
+            "R1",
+            synth_geometry::nm_to_mm(j1.x_nm),
+            synth_geometry::nm_to_mm(j1.y_nm),
+        );
+        let warned = describe_placement(&board, &placement);
+        let warning = warned
+            .functional_warnings
+            .iter()
+            .find(|w| w.contains("through-hole-to-SMD"))
+            .expect("the inside-the-distance pair is reported");
+        assert!(
+            warning.contains("J1") && warning.contains("R1"),
+            "the warning names the pair: {warning}"
+        );
+        // Each side carries its own role; the connector is the through-hole
+        // part and the resistor the SMD one, whichever order they were placed
+        // in. A fixed "(through-hole)" then "(SMD)" would mislabel a pair
+        // whose SMD part came first.
+        let j1_is_first = warning.find("J1").unwrap_or(0) < warning.find("R1").unwrap_or(0);
+        let expected = if j1_is_first {
+            "J1 (through-hole) and R1 (SMD)"
+        } else {
+            "R1 (SMD) and J1 (through-hole)"
+        };
+        assert!(
+            warning.contains(expected),
+            "each side is named by its own pad kind: {warning}"
+        );
+        assert!(
+            warning.contains("move one of them"),
+            "the warning names the fix: {warning}"
+        );
+    }
+
     // ----- structural visual review gate -------------------------------
     //
     // The gate is what blocks routing, so it needs its own coverage: a review
@@ -10826,6 +11148,49 @@ board "near" {
         );
     }
 
+    /// The placement review reports how much of the board the courtyards fill,
+    /// so a sparse floorplan can be seen without a PCB export.
+    #[test]
+    fn the_review_reports_courtyard_fill() {
+        let components = r#"component R1: resistor "r_generic_0603" value "10k"
+               component R2: resistor "r_generic_0603" value "10k""#;
+        let (board, mut placement) = row_board(components, &[0.0; 2]);
+        move_part(&mut placement, &board, "R1", 20.0, 20.0);
+        move_part(&mut placement, &board, "R2", 30.0, 20.0);
+        tighten_outline_after_sidecar(&board, &mut placement);
+        let desc = describe_placement(&board, &placement);
+        assert!(
+            desc.courtyard_fill_pct > 0.0 && desc.courtyard_fill_pct < 100.0,
+            "fill {}% on {:?}",
+            desc.courtyard_fill_pct,
+            desc.board_size_mm
+        );
+    }
+
+    /// A `PlacementDescription` saved before `courtyard_fill_pct` existed has
+    /// no such key; the `#[serde(default)]` on the field lets the older JSON
+    /// deserialize instead of failing on the missing key.
+    #[test]
+    fn an_older_placement_json_without_a_fill_field_still_deserializes() {
+        let json = r#"{
+            "board_size_mm": [80.0, 50.0],
+            "component_regions": [],
+            "cluster_summary": "single cluster",
+            "drc_clean": null,
+            "unrouted_nets": null,
+            "dense_regions": [],
+            "functional_warnings": [],
+            "visual_review": {
+                "score": 80,
+                "requires_revision": false,
+                "findings": []
+            }
+        }"#;
+        let desc: PlacementDescription = serde_json::from_str(json).expect("older JSON parses");
+        assert_eq!(desc.courtyard_fill_pct, 0.0);
+        assert_eq!(desc.board_size_mm, [80.0, 50.0]);
+    }
+
     /// An external connector inside the board edge is advised to go flush; a
     /// pin header at the same distance is not, and neither blocks routing.
     #[test]
@@ -11948,6 +12313,134 @@ board "near" {
         assert_eq!(pair.couple, Some(synth_ir::Couple::Tight));
     }
 
+    /// A per-pin decoupling capacitor is placed within the declared distance
+    /// of the pin it decouples (absmach/synth#377), not at the centroid of
+    /// the rail it draws from.
+    #[test]
+    fn a_per_pin_decoupling_capacitor_lands_beside_its_pin() {
+        let board = board_from_source(
+            r#"
+        board "mcu_decoupling" {
+          layers 2
+          component U1: mcu "stm32g030"
+          component C1: capacitor "c_generic_0603" value "100nF"
+          connect U1.vdd -> C1.p1
+          connect U1.vss -> C1.p2
+        }
+        "#,
+            "mcu_decoupling.synth",
+        );
+        let placement = place(&board).expect("place");
+        let cap = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "C1")
+            .expect("cap");
+        let placed_cap = placement
+            .components
+            .iter()
+            .find(|p| p.id == cap.id)
+            .expect("cap placed");
+
+        // The same pad position the placement targets and the review measures.
+        let pad_offsets = build_pad_offset_lookup(&board);
+        let u1 = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "U1")
+            .expect("mcu");
+        let vdd_pin = u1
+            .part
+            .as_ref()
+            .expect("part")
+            .pins
+            .iter()
+            .position(|p| p.name == "vdd")
+            .expect("vdd pin");
+        let placed_u1 = placement
+            .components
+            .iter()
+            .find(|p| p.id == u1.id)
+            .expect("mcu placed");
+        let offset = pad_offsets.lookup(u1.id, vdd_pin).expect("vdd pad offset");
+        let pad = apply_rotation(*placed_u1, offset);
+
+        // The rule the packer applies: the cap's courtyard reaches within the
+        // declared distance of the pad.
+        let (w, h) = match cap.part.as_ref() {
+            Some(part) => synth_layout::pcb_courtyard_geometry_for_part(part).1,
+            None => fallback_courtyard(&cap.kind),
+        };
+        let court = courtyard_rect_for_placement(placed_cap, w, h, None, 0);
+        let dx = (court.min.x_nm - pad.x_nm)
+            .max(pad.x_nm - court.max.x_nm)
+            .max(0);
+        let dy = (court.min.y_nm - pad.y_nm)
+            .max(pad.y_nm - court.max.y_nm)
+            .max(0);
+        let dist_mm = synth_geometry::nm_to_mm(dx).hypot(synth_geometry::nm_to_mm(dy));
+        let limit = outline_packer::PER_PIN_DECOUPLING_DISTANCE_MM;
+        assert!(
+            dist_mm <= limit,
+            "cap courtyard sits {dist_mm:.2} mm from the vdd pad; the per-pin distance is {limit} mm"
+        );
+
+        // And no advisory asks for what the placer just did.
+        let review = describe_placement(&board, &placement);
+        assert!(
+            !review
+                .visual_review
+                .recommended_actions
+                .iter()
+                .any(|action| action.refdes == "C1"),
+            "a cap beside its pin is not advised to move: {:?}",
+            review.visual_review.recommended_actions
+        );
+    }
+
+    /// When nothing within the declared distance of the pin is legal, the
+    /// placement still releases and the existing advisory names the
+    /// capacitor, its pin and the distance it achieved (absmach/synth#377).
+    #[test]
+    fn a_per_pin_decoupling_capacitor_that_cannot_get_close_releases_with_the_advisory() {
+        let board = board_from_source(
+            r#"
+        board "decoupling_blocked" {
+          layers 2
+          component U1: mcu "stm32g030"
+          component C1: capacitor "c_generic_0603" value "100nF"
+          keepout U1 { radius 14mm }
+          connect U1.vdd -> C1.p1
+          connect U1.vss -> C1.p2
+        }
+        "#,
+            "decoupling_blocked.synth",
+        );
+        let placement = place(&board).expect("a blocked cap still releases");
+        let review = describe_placement(&board, &placement);
+        let advisory = review
+            .visual_review
+            .recommended_actions
+            .iter()
+            .find(|action| action.refdes == "C1")
+            .expect("the far cap is advised");
+        assert_eq!(advisory.action, "place_support_part_near");
+        assert!(
+            advisory.rationale.contains("U1.vdd"),
+            "the advisory names the pin it serves: {}",
+            advisory.rationale
+        );
+        let warning = review
+            .functional_warnings
+            .iter()
+            .find(|warning| warning.contains("C1") && warning.contains("vdd"))
+            .expect("the warning names the capacitor and its pin");
+        assert!(
+            warning.contains("mm from U1 pin vdd"),
+            "the warning states the achieved distance: {warning}"
+        );
+    }
+
     #[test]
     fn a_pin_qualified_near_hint_steers_placement_to_that_pin() {
         // `near: U1.dvdd` must parse as a component *and* a pin, and the
@@ -12362,13 +12855,30 @@ board "near" {
     ) {
         assert_connector_flush(board, placement, refdes, edge);
         let side = EDGES.iter().position(|e| *e == edge).expect("edge");
+        // Every edge a hard hint docks a connector to is a flush edge: the fit
+        // caps every other part's rim at the connector's courtyard, so a
+        // neighbour may sit closer than its usual margin there — it only has
+        // to stay inside Edge.Cuts. Non-flush edges keep the full rim.
+        let mut flush_edges = [false; 4];
+        for component in &board.components {
+            if crate::is_edge_flush_connector(component)
+                && let Some(hint) = component.placement_hint.as_ref()
+                && let Some(edge) = hint.edge.as_ref()
+            {
+                flush_edges[crate::edge_index(edge)] = true;
+            }
+        }
         for component in &board.components {
             let gaps = courtyard_gaps(board, placement, &component.refdes);
             for (index, gap) in gaps.iter().enumerate() {
+                let minimum = if flush_edges[index] {
+                    0
+                } else {
+                    mm_to_nm(SPARSE_EDGE_MARGIN_MM)
+                };
                 assert!(
-                    (component.refdes == refdes && index == side)
-                        || *gap >= mm_to_nm(SPARSE_EDGE_MARGIN_MM),
-                    "{} must keep its normal margin on {}, gap {gap} nm",
+                    (component.refdes == refdes && index == side) || *gap >= minimum - 1_000,
+                    "{} must keep its margin on {}, gap {gap} nm",
                     component.refdes,
                     EDGES[index]
                 );

@@ -35,6 +35,8 @@ fn pin(name: &str) -> Pin {
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -92,6 +94,7 @@ fn board() -> Board {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "head_on".to_string(),
         layers: 2,
         manufacturer: None,
@@ -124,6 +127,7 @@ fn board() -> Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

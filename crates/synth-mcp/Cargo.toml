@@ -19,6 +19,8 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+# Stream trait for the SSE response body; already in the tree via axum.
+futures-core = "0.3"
 schemars = { workspace = true }
 axum = { workspace = true }
 synth-diagnostics = { workspace = true }

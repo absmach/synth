@@ -34,6 +34,8 @@ fn pin(name: &str, caps: &[PinCapability]) -> RegPin {
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -101,6 +103,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "test".to_string(),
         layers: 2,
         manufacturer: None,
@@ -111,6 +114,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

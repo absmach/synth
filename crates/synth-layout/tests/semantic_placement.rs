@@ -37,6 +37,8 @@ fn pin(name: &str, et: ElectricalType) -> Pin {
         voltage_min_v: None,
         voltage_nominal_v: None,
         drive: None,
+        gate: None,
+        pwm: None,
     }
 }
 
@@ -105,6 +107,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         schematic_paper: None,
         groups: Vec::new(),
         legends: false,
+        labels: true,
         name: "semantic".to_string(),
         layers: 2,
         manufacturer: None,
@@ -115,6 +118,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         diff_pairs: Vec::new(),
         notes: vec![],
         keepouts: Vec::new(),
+        no_connects: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

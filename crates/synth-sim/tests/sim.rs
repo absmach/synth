@@ -4007,3 +4007,839 @@ fn a_plot_through_a_symlink_out_of_the_sidecar_dir_is_refused() {
     std::os::unix::fs::symlink(outside.path(), scratch.path().join("link")).expect("symlink");
     assert_plot_refused("link/made/wave.dat", &scratch, &outside.path().join("made"));
 }
+
+/// An RC low-pass that a PWM source drives; the classic ripple/average shape.
+const PWM_RC: &str = r#"
+board "pwm-rc" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "1k"
+  component C1: capacitor "c_generic_0805" value "1u"
+  net "IN" { R1.p1 }
+  net "GND" { C1.p2 }
+  connect R1.p2 -> C1.p1 as "OUT"
+}
+"#;
+
+/// The pulse timing the PWM-RC tests share: period 100 us, duty 0.5, so the
+/// steady output sits at 1.65 V with the RC ripple around it.
+const PWM_RC_TB: &str = r#"
+ground = "GND"
+
+[[source]]
+net = "IN"
+kind = "pulse"
+low = 0.0
+high = 3.3
+period = "100us"
+duty = 0.5
+rise = "100ns"
+fall = "100ns"
+
+[analysis.tran]
+stop = "5.8ms"
+step = "500ns"
+
+[[measure]]
+name = "vavg"
+kind = "average"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+
+[[measure]]
+name = "ripple"
+kind = "peak_to_peak"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+"#;
+
+#[allow(clippy::result_large_err)]
+fn tran_testbench(source: &str) -> Result<synth_sim::Testbench, synth_diagnostics::Diagnostic> {
+    synth_sim::Testbench::from_toml(source)
+}
+
+/// The steady-state RC-PWM output: the average is `duty * Vhigh` and the
+/// peak-to-peak ripple is `Vhigh * (1 - k^duty) * (1 - k^(1-duty))`-shaped,
+/// with `k = exp(-period/tau)`.
+fn rc_pwm_expected(high: f64, tau: f64, period: f64, duty: f64) -> (f64, f64) {
+    let k = (-period / tau).exp();
+    let low = high * k.powf(1.0 - duty) * (1.0 - k.powf(duty)) / (1.0 - k);
+    let high_point = high * (1.0 - k.powf(duty)) + low * k.powf(duty);
+    (f64::midpoint(low, high_point), high_point - low)
+}
+
+#[test]
+fn a_tran_sidecar_parses_its_durations_and_windows() {
+    let testbench = tran_testbench(PWM_RC_TB).expect("parses");
+
+    let tran = testbench.analysis.tran.expect("tran analysis");
+    assert_eq!(tran.stop, 5.8e-3);
+    assert_eq!(tran.step, 5.0e-7);
+
+    let source = &testbench.source[0];
+    assert_eq!(source.kind, synth_sim::SourceKind::Pulse);
+    assert_eq!(source.low, Some(0.0));
+    assert_eq!(source.high, Some(3.3));
+    assert_eq!(source.period, Some(1.0e-4));
+    assert_eq!(source.duty, Some(0.5));
+    assert_eq!(source.rise, Some(1.0e-7));
+    assert_eq!(source.fall, Some(1.0e-7));
+
+    let average = &testbench.measure[0];
+    assert_eq!(average.kind, synth_sim::MeasureKind::Average);
+    assert_eq!(average.window_start, Some(5.0e-3));
+    assert_eq!(average.window_end, Some(5.4e-3));
+    assert_eq!(measure_unit_of(average), "V");
+}
+
+fn measure_unit_of(measure: &synth_sim::Measure) -> &'static str {
+    // The unit is decided inside the crate; a `MeasureResult` carries it.
+    match measure.kind {
+        synth_sim::MeasureKind::SettlingTime | synth_sim::MeasureKind::RiseTime => "s",
+        synth_sim::MeasureKind::Overshoot => "%",
+        _ => "V",
+    }
+}
+
+#[test]
+fn a_net_pulse_source_emits_the_pulse_syntax() {
+    let board = board(PWM_RC);
+    let testbench = tran_testbench(PWM_RC_TB).expect("parses");
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    assert!(
+        deck.contains("V1 n_IN 0 PULSE(0e0 3.3e0 0 1e-7 1e-7 5e-5 1e-4)"),
+        "deck:\n{deck}"
+    );
+    assert!(deck.contains("tran 5e-7 5.8e-3"), "deck:\n{deck}");
+    assert!(
+        deck.contains("wrdata 'meas_0.dat' v(n_OUT)"),
+        "deck:\n{deck}"
+    );
+    assert!(
+        deck.contains("wrdata 'meas_1.dat' v(n_OUT)"),
+        "deck:\n{deck}"
+    );
+}
+
+#[test]
+fn a_pin_pulse_source_uses_the_drive_levels() {
+    let board = gpio_led_board(Some(fixture_drive()));
+    let testbench = tran_testbench(
+        r#"
+ground = "GND"
+ignore = ["U1"]
+
+[[source]]
+pin = "U1.gpio5"
+kind = "pulse"
+period = "100us"
+duty = 0.5
+rise = "100ns"
+fall = "100ns"
+
+[analysis.tran]
+stop = "600us"
+step = "200ns"
+
+[[measure]]
+name = "iripple"
+kind = "peak_to_peak"
+element = "R1"
+window_start = "200us"
+window_end = "600us"
+"#,
+    )
+    .expect("parses");
+
+    let deck = synth_sim::emit_netlist(&board, &testbench).expect("deck emits");
+
+    // The pulse levels are the pin's `[pins.drive]` low_v and high_v, and the
+    // output resistance stays in series.
+    assert!(
+        deck.contains("V1 vpin_1 0 PULSE(0e0 3.3e0 0 1e-7 1e-7 5e-5 1e-4)"),
+        "deck:\n{deck}"
+    );
+    assert!(deck.contains("Rpin1 n_VCC vpin_1 2.5e1"), "deck:\n{deck}");
+    assert!(deck.contains("save all @RR1[i]"), "deck:\n{deck}");
+    assert!(deck.contains("let icur0 = @RR1[i]"), "deck:\n{deck}");
+    assert!(deck.contains("wrdata 'meas_0.dat' icur0"), "deck:\n{deck}");
+}
+
+#[test]
+fn tran_sidecars_reject_absurd_values() {
+    let cases: [(&str, String, &str); 6] = [
+        (
+            "zero stop",
+            PWM_RC_TB.replace("stop = \"5.8ms\"", "stop = \"0s\""),
+            "`[analysis.tran] stop` must be a positive finite time",
+        ),
+        (
+            "zero step",
+            PWM_RC_TB.replace("step = \"500ns\"", "step = \"0s\""),
+            "`[analysis.tran] step` must be a positive finite time",
+        ),
+        (
+            "step at stop",
+            PWM_RC_TB.replace("step = \"500ns\"", "step = \"5.8ms\""),
+            "step` must be less than stop",
+        ),
+        (
+            "too many points",
+            PWM_RC_TB.replace("stop = \"5.8ms\"", "stop = \"1s\""),
+            "the cap is 100000",
+        ),
+        (
+            "bare milli suffix",
+            PWM_RC_TB.replace("step = \"500ns\"", "step = \"5m\""),
+            "is not a duration",
+        ),
+        (
+            "two analyses",
+            format!("{PWM_RC_TB}\n[analysis.ac]\nstart = 1.0\nstop = 10.0\n"),
+            "must select exactly one analysis",
+        ),
+    ];
+    for (label, toml, needle) in cases {
+        let error = tran_testbench(&toml).expect_err(&format!("{label} must fail"));
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        assert!(
+            error
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains(needle)),
+            "{label}: {:?}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn pulse_sources_reject_bad_fields() {
+    let pulse_fields = "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"";
+    let with_source = |source: &str| PWM_RC_TB.replacen(pulse_fields, source, 1);
+    let cases: [(&str, String, &str); 9] = [
+        (
+            "duty above one",
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 1.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
+            "a `duty` that must be greater than 0 and at most 1",
+        ),
+        (
+            "zero duty",
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.0\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
+            "a `duty` that must be greater than 0 and at most 1",
+        ),
+        (
+            "missing low",
+            with_source(
+                "kind = \"pulse\"\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
+            "has no `low`",
+        ),
+        (
+            "inverted levels",
+            with_source(
+                "kind = \"pulse\"\nlow = 3.3\nhigh = 0.0\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
+            "not less than `high`",
+        ),
+        (
+            "edges over the period",
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"60us\"\nfall = \"60us\"",
+            ),
+            "`rise` + `fall` greater than `period`",
+        ),
+        (
+            "dc value with pulse",
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"\ndc = 1.0",
+            ),
+            "must not have a `dc` or `ac` value",
+        ),
+        (
+            "pulse fields on a dc source",
+            with_source("kind = \"dc\"\ndc = 3.3\nperiod = \"100us\""),
+            "the pulse fields need `kind = \"pulse\"`",
+        ),
+        (
+            "incomplete pulse timing",
+            with_source("kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"100us\""),
+            "no complete pulse timing",
+        ),
+        (
+            "zero period",
+            with_source(
+                "kind = \"pulse\"\nlow = 0.0\nhigh = 3.3\nperiod = \"0s\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"",
+            ),
+            "a `period` that must be a positive finite time",
+        ),
+    ];
+    for (label, toml, needle) in cases {
+        let error = tran_testbench(&toml).expect_err(&format!("{label} must fail"));
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        assert!(
+            error
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains(needle)),
+            "{label}: {:?}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn pulse_pin_sources_reject_their_own_levels() {
+    let cases: [(&str, &str, &str); 3] = [
+        (
+            "sidecar levels",
+            "low = 0.0\nhigh = 3.3\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"\n",
+            "must not have a `low` or `high`",
+        ),
+        (
+            "level",
+            "level = \"high\"\nperiod = \"100us\"\nduty = 0.5\nrise = \"100ns\"\nfall = \"100ns\"\n",
+            "uses both of the pin's",
+        ),
+        (
+            "incomplete timing",
+            "period = \"100us\"\nduty = 0.5\nrise = \"100ns\"\n",
+            "no complete pulse timing",
+        ),
+    ];
+    for (label, extra, needle) in cases {
+        let toml = format!(
+            r#"
+ground = "GND"
+ignore = ["U1"]
+
+[[source]]
+pin = "U1.gpio5"
+kind = "pulse"
+{extra}
+
+[analysis.tran]
+stop = "600us"
+step = "200ns"
+
+[[measure]]
+name = "iavg"
+kind = "average"
+element = "R1"
+"#
+        );
+        let error = tran_testbench(&toml).expect_err(&format!("{label} must fail"));
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        assert!(
+            error
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains(needle)),
+            "{label}: {:?}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn tran_measures_reject_the_wrong_fields() {
+    let measure_block = |kind: &str, fields: &str| {
+        format!(
+            r#"
+[[measure]]
+name = "m"
+kind = "{kind}"
+node = "OUT"
+{fields}
+"#
+        )
+    };
+    let cases: [(&str, String, &str); 6] = [
+        (
+            "tolerance on average",
+            measure_block(
+                "average",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\ntolerance = 0.1\n",
+            ),
+            "must not have `tolerance`",
+        ),
+        (
+            "thresholds on peak_to_peak",
+            measure_block(
+                "peak_to_peak",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\nlow_threshold = 0.1\nhigh_threshold = 3.0\n",
+            ),
+            "must not have `low_threshold`",
+        ),
+        (
+            "at_frequency",
+            measure_block(
+                "average",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\nat_frequency = 1000.0\n",
+            ),
+            "must not have `at_frequency`",
+        ),
+        (
+            "pin",
+            measure_block(
+                "average",
+                "window_start = \"1ms\"\nwindow_end = \"2ms\"\npin = \"U1.gpio5\"\n",
+            ),
+            "must not have `pin`",
+        ),
+        (
+            "window past the stop",
+            measure_block("average", "window_start = \"5ms\"\nwindow_end = \"9ms\"\n"),
+            "past the tran stop",
+        ),
+        (
+            "window end at start",
+            measure_block("average", "window_start = \"1ms\"\nwindow_end = \"1ms\"\n"),
+            "not greater than its `window_start`",
+        ),
+    ];
+    for (label, block, needle) in cases {
+        let toml = PWM_RC_TB.replace(
+            r#"
+[[measure]]
+name = "vavg"
+kind = "average"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+
+[[measure]]
+name = "ripple"
+kind = "peak_to_peak"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+"#,
+            &block,
+        );
+        let error = tran_testbench(&toml).expect_err(&format!("{label} must fail"));
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        assert!(
+            error
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains(needle)),
+            "{label}: {:?}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn settling_and_rise_measures_demand_their_band_fields() {
+    let cases: [(&str, &str, &str, &str); 4] = [
+        (
+            "settling without tolerance",
+            "settling_time",
+            "",
+            "needs a positive finite `tolerance`",
+        ),
+        (
+            "settling with a zero tolerance",
+            "settling_time",
+            "tolerance = 0.0\n",
+            "needs a positive finite `tolerance`",
+        ),
+        (
+            "rise without thresholds",
+            "rise_time",
+            "",
+            "needs a `low_threshold` below a finite `high_threshold`",
+        ),
+        (
+            "rise with reversed thresholds",
+            "rise_time",
+            "low_threshold = 3.0\nhigh_threshold = 0.33\n",
+            "needs a `low_threshold` below a finite `high_threshold`",
+        ),
+    ];
+    for (label, kind, band, needle) in cases {
+        let measure = format!(
+            "[[measure]]\nname = \"m\"\nkind = \"{kind}\"\nnode = \"OUT\"\n\
+             window_start = \"1ms\"\nwindow_end = \"2ms\"\n{band}"
+        );
+        let toml = PWM_RC_TB.replace(
+            r#"
+[[measure]]
+name = "vavg"
+kind = "average"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+
+[[measure]]
+name = "ripple"
+kind = "peak_to_peak"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+"#,
+            &measure,
+        );
+        let error = tran_testbench(&toml).expect_err(&format!("{label} must fail"));
+        assert_eq!(error.code, synth_sim::E_SYNTH_SIM_007, "{label}");
+        assert!(
+            error
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains(needle)),
+            "{label}: {:?}",
+            error.message
+        );
+    }
+}
+
+#[test]
+fn a_tran_measure_needs_the_tran_analysis() {
+    let measure = r#"
+[[measure]]
+name = "m"
+kind = "average"
+node = "OUT"
+window_start = "1ms"
+window_end = "2ms"
+"#;
+    let toml = PWM_RC_TB.replace(
+        r#"
+[[measure]]
+name = "vavg"
+kind = "average"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+
+[[measure]]
+name = "ripple"
+kind = "peak_to_peak"
+node = "OUT"
+window_start = "5ms"
+window_end = "5.4ms"
+"#,
+        measure,
+    );
+    let toml = toml.replace(
+        "[analysis.tran]\nstop = \"5.8ms\"\nstep = \"500ns\"",
+        "[analysis]\nop = true",
+    );
+    let error = tran_testbench(&toml).expect_err("an average measure needs the tran analysis");
+    assert!(
+        error
+            .message
+            .as_deref()
+            .is_some_and(|message| message.contains("requires the `tran` analysis")),
+        "{:?}",
+        error.message
+    );
+}
+
+/// The PWM-RC shape on the real engine: the average is `duty * Vhigh` and the
+/// ripple matches the RC charge/discharge arithmetic within its band.
+#[test]
+fn the_pwm_rc_shape_measures_average_and_ripple_on_real_ngspice() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(PWM_RC);
+    let testbench = tran_testbench(PWM_RC_TB).expect("parses");
+    let (average, ripple) = rc_pwm_expected(3.3, 1.0e-3, 1.0e-4, 0.5);
+    let mut testbench = testbench;
+    testbench.measure[0].min = Some(round_to_band(average, 0.95));
+    testbench.measure[0].max = Some(round_to_band(average, 1.05));
+    testbench.measure[1].min = Some(round_to_band(ripple, 0.75));
+    testbench.measure[1].max = Some(round_to_band(ripple, 1.25));
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let average = &report.measures[0];
+    assert!(
+        (average.value - 1.65).abs() < 0.02,
+        "average {} should be about 1.65 V",
+        average.value
+    );
+    let ripple = &report.measures[1];
+    assert!(
+        (0.06..0.11).contains(&ripple.value),
+        "ripple {} should be about 0.083 V",
+        ripple.value
+    );
+}
+
+/// Round into a band the way the suggest engine does: three significant
+/// digits, so the printed limits match the printed values.
+fn round_to_band(value: f64, factor: f64) -> f64 {
+    format!("{:.3e}", value * factor)
+        .parse::<f64>()
+        .expect("band")
+}
+
+#[test]
+fn the_pwm_led_average_current_matches_duty_times_the_dc_current() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(LED);
+    let testbench = tran_testbench(
+        r#"
+ground = "GND"
+
+[[source]]
+net = "VCC"
+kind = "pulse"
+low = 0.0
+high = 5.0
+period = "100us"
+duty = 0.5
+rise = "1us"
+fall = "1us"
+
+[analysis.tran]
+stop = "800us"
+step = "200ns"
+
+[[measure]]
+name = "iavg"
+kind = "average"
+element = "R1"
+window_start = "200us"
+window_end = "600us"
+min = 0.0095
+max = 0.0105
+"#,
+    )
+    .expect("parses");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let value = report.measures[0].value;
+    assert!(
+        (value - 0.01).abs() < 0.0005,
+        "average current {value} should be about half of 20 mA"
+    );
+}
+
+#[test]
+fn rise_settling_and_overshoot_read_a_second_order_step() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    // Series RLC with zeta = 0.316 (R 20, L 100u, C 100n): the step
+    // overshoots by about 35%, rings at 30 krad/s and is settled to 0.1 V
+    // within 35 us.
+    let board = board(
+        r#"
+board "rlc" {
+  layers 2
+  component R1: resistor "r_generic_0805" value "20"
+  component L1: inductor "l_generic_0805" value "100u"
+  component C1: capacitor "c_generic_0805" value "100n"
+  net "IN" { R1.p1 }
+  net "GND" { C1.p2 }
+  connect R1.p2 -> L1.p1 as "MID"
+  connect L1.p2 -> C1.p1 as "OUT"
+}
+"#,
+    );
+    let testbench = tran_testbench(
+        r#"
+ground = "GND"
+
+[[source]]
+net = "IN"
+kind = "pulse"
+low = 0.0
+high = 3.3
+period = "100us"
+duty = 0.9
+rise = "0s"
+fall = "0s"
+
+[analysis.tran]
+stop = "120us"
+step = "50ns"
+
+[[measure]]
+name = "overshoot"
+kind = "overshoot"
+node = "OUT"
+window_start = "2us"
+window_end = "80us"
+min = 32.0
+max = 38.0
+
+[[measure]]
+name = "settling"
+kind = "settling_time"
+node = "OUT"
+window_start = "2us"
+window_end = "80us"
+tolerance = 0.1
+max = 0.00004
+
+[[measure]]
+name = "rise"
+kind = "rise_time"
+node = "OUT"
+window_start = "0s"
+window_end = "80us"
+low_threshold = 0.33
+high_threshold = 2.97
+min = 0.0000040
+max = 0.0000045
+"#,
+    )
+    .expect("parses");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let overshoot = &report.measures[0];
+    assert!(
+        (32.0..38.0).contains(&overshoot.value),
+        "overshoot {} should be about 35%",
+        overshoot.value
+    );
+    let settling = &report.measures[1];
+    assert!(
+        (2.0e-5..4.0e-5).contains(&settling.value),
+        "settling {} should be about 32 us",
+        settling.value
+    );
+    let rise = &report.measures[2];
+    assert!(
+        (4.0e-6..4.5e-6).contains(&rise.value),
+        "rise {} should be about 4.25 us",
+        rise.value
+    );
+}
+
+#[test]
+fn the_rc_step_rise_time_lands_on_two_point_two_tau() {
+    let Some(ngspice) = real_ngspice() else {
+        eprintln!("{}", real_ngspice_support::SKIP_MESSAGE);
+        return;
+    };
+    let board = board(PWM_RC);
+    // A 1 ms RC dominates the output edge; its 10-90% rise is 2.197 tau, and
+    // the source must stay high that long, so the duty is 1 and the period
+    // long.
+    let testbench = tran_testbench(
+        r#"
+ground = "GND"
+
+[[source]]
+net = "IN"
+kind = "pulse"
+low = 0.0
+high = 3.3
+period = "10ms"
+duty = 1.0
+rise = "100ns"
+fall = "100ns"
+
+[analysis.tran]
+stop = "4ms"
+step = "5us"
+
+[[measure]]
+name = "rise"
+kind = "rise_time"
+node = "OUT"
+low_threshold = 0.33
+high_threshold = 2.97
+min = 0.00219
+max = 0.00221
+"#,
+    )
+    .expect("parses");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&ngspice));
+
+    assert!(report.passed(), "diagnostics: {:?}", report.diagnostics);
+    let rise = &report.measures[0];
+    assert!(
+        (0.00219..0.00221).contains(&rise.value),
+        "rise {} should be 2.197 * 1 ms",
+        rise.value
+    );
+}
+
+#[test]
+fn a_failed_transient_reports_003_with_the_ngspice_reason() {
+    let (stub, _dir) = stub_ngspice("tran-fail");
+    let board = board(PWM_RC);
+    let testbench = tran_testbench(PWM_RC_TB).expect("parses");
+
+    let report = synth_sim::simulate(&board, &testbench, &options(&stub));
+
+    assert!(!report.passed(), "{:?}", report.diagnostics);
+    let diagnostic = report
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code == synth_sim::E_SYNTH_SIM_003)
+        .expect("a -003 for the aborted run");
+    let message = diagnostic.message.as_deref().unwrap_or_default();
+    assert!(message.contains("SYNTH_DONE"), "{message}");
+    assert!(message.contains("Timestep too small"), "{message}");
+}
+
+#[test]
+fn a_transient_run_that_never_prints_a_measure_fails() {
+    // A tran measure whose node has no simulated part is refused before the
+    // run, like a node_voltage measure.
+    let board = board(PWM_RC);
+    let testbench = tran_testbench(
+        r#"
+ground = "GND"
+
+[[source]]
+net = "IN"
+kind = "pulse"
+low = 0.0
+high = 3.3
+period = "100us"
+duty = 0.5
+rise = "100ns"
+fall = "100ns"
+
+[analysis.tran]
+stop = "600us"
+step = "200ns"
+
+[[measure]]
+name = "nowhere"
+kind = "average"
+node = "MISSING"
+"#,
+    )
+    .expect("parses");
+
+    let diagnostics = synth_sim::emit_netlist(&board, &testbench).expect_err("unknown node");
+
+    assert!(
+        diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == synth_sim::E_SYNTH_SIM_007
+                && diagnostic
+                    .message
+                    .as_deref()
+                    .is_some_and(|message| message.contains("not found in design"))
+        }),
+        "{diagnostics:?}"
+    );
+}

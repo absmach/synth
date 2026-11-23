@@ -667,6 +667,7 @@ fn place_sheet_notes(
     let scoped = Board {
         groups: Vec::new(),
         legends: board.legends,
+        labels: board.labels,
         schematic_paper: board.schematic_paper,
         schematic_overflow: board.schematic_overflow,
         name: board.name.clone(),
@@ -685,6 +686,7 @@ fn place_sheet_notes(
             .map(|(note, _)| note.clone())
             .collect(),
         keepouts: board.keepouts.clone(),
+        no_connects: Vec::new(),
         stackup: board.stackup.clone(),
         outline: board.outline,
         netclasses: board.netclasses.clone(),
@@ -735,6 +737,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         }
     }
 
@@ -808,6 +812,7 @@ mod tests {
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
+            labels: true,
             name: "b".to_string(),
             layers: 2,
             manufacturer: None,
@@ -818,6 +823,7 @@ mod tests {
             diff_pairs: Vec::new(),
             notes: Vec::new(),
             keepouts: Vec::new(),
+            no_connects: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -1889,6 +1895,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         };
         let b = board(
             vec![
@@ -1927,6 +1935,8 @@ mod tests {
             voltage_min_v: None,
             voltage_nominal_v: None,
             drive: None,
+            gate: None,
+            pwm: None,
         };
         let b = board(
             vec![
