@@ -2876,7 +2876,13 @@ fn build_footprint_instance(
     // footprint's own orientation; keep the instance and the body in the
     // same (top-bottom) mirror representation.
     let pad_angle = if bottom { -angle } else { angle };
-    let instance_angle = normalize_angle(if bottom { -angle } else { angle });
+    // Keep the top-side angle exactly as the placer gave it (270 stays 270);
+    // only a flipped footprint needs its orientation negated and normalised.
+    let instance_angle = if bottom {
+        normalize_angle(-angle)
+    } else {
+        angle
+    };
     let fp_uuid = derive_entity_uuid(project, "footprint", &component.refdes);
 
     // Resolve the bundled/user footprint body up front so we can decide whether

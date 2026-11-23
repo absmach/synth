@@ -16,12 +16,12 @@
     "distinct_texts": 192
   },
   "ref_ldo_sensor": {
-    "sha256": "ea9b96ba8fe30f5e96583443942e342a6f229dc1faac0a63bbbced405452f622",
+    "sha256": "bbe09651c58307d2ff610872e74f548993522057e58f856a0c74c7776d8615e0",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 4019,
-    "texts": 115,
-    "distinct_texts": 94
+    "paths": 3945,
+    "texts": 113,
+    "distinct_texts": 92
   },
   "ref_led_driver": {
     "sha256": "cf0d9d1cff2d22acd883882e4af8ce7a6525d71fdf8d44b9425ce4bdc5fe98ff",
@@ -40,12 +40,12 @@
     "distinct_texts": 202
   },
   "ref_spi_flash": {
-    "sha256": "8e647d6e5e8d2c5f8eae6d849867960eb820436d97253d64a79bb5dda1329bd7",
+    "sha256": "8cec0b8354235cc57e2f4e9de801a4e5fe8f8ff6a9a960f347f63801fae1ad1d",
     "width": "297.0022mm",
     "height": "210.0072mm",
-    "paths": 9252,
-    "texts": 229,
-    "distinct_texts": 204
+    "paths": 9216,
+    "texts": 228,
+    "distinct_texts": 203
   },
   "ref_uart_bridge": {
     "sha256": "7e9e488de654ce53498141ccc80ecd744943e0a611635899dba8ba0b20ac2f62",
@@ -64,14 +64,15 @@
     "distinct_texts": 240
   },
   "secure_tracker": {
-    "sha256": "340e0aefddb7e8b7765bdfdfb4ea1eb7cb3eceac7ea9923975528e0268411a94",
+    "sha256": "1b94552135fc70228d85d717fea7034dbb306dd85a380172b3a471f2041181ec",
     "width": "419.9890mm",
     "height": "297.0022mm",
-    "paths": 26232,
-    "texts": 700,
-    "distinct_texts": 461
+    "paths": 26214,
+    "texts": 699,
+    "distinct_texts": 460
   },
   "sensor_logger": {
+<<<<<<< HEAD
     "sha256": "bb2fda381e2bcd683f515b12dd0b95bb74bbc7077932dee3e950634e91a926d7",
     "width": "297.0022mm",
     "height": "210.0072mm",
