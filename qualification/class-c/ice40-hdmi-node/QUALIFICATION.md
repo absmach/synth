@@ -5,7 +5,7 @@
 - The exported KiCad files, the fabrication package and the STEP model are committed in [`kicad/`](kicad/), [`fab/`](fab/) and [`models/`](models/).
 - The router's report, the pair measurements and the layout metrics in this document come from the author's run of the export this package was built from. No report or measurement file is committed.
 - The delivered pairs stay within the declared 25 mm intra-pair skew budget. See the TMDS pair measurements table.
-- The pairs are not a coupled differential interface. The router routes P and N as independent nets on different layers, and the gap between the legs is 1 to 3.5 mm against the 0.15 mm class clearance.
+- The pairs are not a coupled differential interface. The router routes P and N as independent nets on different layers, and the median gap between the legs is 1.40 to 2.05 mm against the 0.15 mm class clearance.
 - Spacing, coupling and differential impedance are not met. No HDMI compliance is claimed.
 
 ## What was measured
@@ -19,7 +19,7 @@ All figures come from the files of the export this package was built from (KiCad
 | Routing | 49 of 49 nets, 822 segments, 148 vias (0.46/0.2 mm: 53, 0.6/0.3 mm: 95), 1898.0 mm of track, measured on the delivered board; the router's report (from the author's run, not committed in this package) agrees |
 | Warnings | 86 `kicad-cli` warnings in the export's DRC report (not committed): 83 `lib_footprint_issues` (silkscreen cut back from vias and pads by the exporter, #425, since closed; the footprint comparison shows no difference in pads, courtyard or fabrication layers) and 3 `track_dangling` |
 | ERC with the library tables | 0 errors, 4 warnings (from the author's run; the ERC report is not committed): 2 `lib_symbol_mismatch` on `IRLML6244` (`Q1`, `Q2`; the exported symbol differs from KiCad's `Transistor_FET` copy, #428, since closed) and 2 `pin_to_pin` on the configuration-select pins `CBSEL0` and `CBSEL1`, tied to ground on purpose |
-| Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy, which rejects any track or via narrower than the size its net class declares. The engine's counters record 123 vias claimed and 66 of them in pads (`claimed_via_in_pad`), and "rules below board floor: none reported"; the delivered board's own counts, 148 vias in all, are the ones this README uses |
+| Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy, which rejects any track or via narrower than the size its net class declares. The engine's counters record 123 vias claimed and 66 of them in pads (`claimed_via_in_pad`), and "rules below board floor: none reported"; the delivered board's own counts, 148 vias in all, are the ones this document uses |
 
 ### TMDS pair measurements (not a coupled differential interface)
 
@@ -32,6 +32,8 @@ Each TMDS lane is two nets per leg: the FPGA pin to the 270 ohm source resistor 
 | `D2` | 11.9 + 22.6 = 34.5 mm | 7.5 + 27.8 = 35.3 mm | 0.83 mm | 25 mm | 4 / 4 | 0.07 / 1.40 mm |
 | `CK` | 7.5 + 39.1 = 46.6 mm | 6.9 + 43.4 = 50.2 mm | 3.64 mm | 25 mm | 4 / 5 | 0.04 / 2.05 mm |
 
+The gap is the plan-view distance between the P and N tracks, measured regardless of layer. The minimum gaps of 0.04 to 0.09 mm are below the 0.127 mm track width, so the legs cross or overlap in plan view on different layers. They are not a copper spacing.
+
 - **Inter-pair mismatch:** the mean pair lengths are 44.7 (`D0`), 42.9 (`D1`), 34.9 (`D2`) and 48.4 mm (`CK`), a mismatch of 13.54 mm; no inter-pair budget is declared in the source.
 - **Skew budget.**
   - Every `diff_pair` declares `max_skew 25mm`.
@@ -41,7 +43,7 @@ Each TMDS lane is two nets per leg: the FPGA pin to the 270 ohm source resistor 
   - The export reports no blocking signal-integrity finding (`signal_integrity_blocking` is 0).
   - The sums of segments are the delivered pair measure this document uses. The DRC's length-matching figures are not committed and are not quoted.
   - The router wrapper never calls the KiCadRoutingTools pair router, so P and N are routed as independent nets ([#447](https://github.com/absmach/synth/issues/447)). The export gate did not carry the class skew budgets through in the revision used ([#147](https://github.com/absmach/synth/issues/147), since closed).
-  - The pairs are therefore not coupled. The gap between the two legs is 1 to 2 mm at the median, not the 0.15 mm class clearance.
+  - The pairs are therefore not coupled. The median gap between the two legs is 1.40 to 2.05 mm, not the 0.15 mm class clearance.
 - **Width and impedance.**
   - The class declares 0.127 mm tracks (the board's minimum track width) and a 0.15 mm clearance.
   - The closed-form microstrip estimate gives 96.7 ohm differential on the declared stackup. It is an estimate, not a field solve.
@@ -197,7 +199,7 @@ The parts this board adds to the registry are in `registry/parts/` of the reposi
 
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, on the package in `fab/`. The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review. The independent PCB expert sign-off required by #40 is open, and no JLCPCB DFM or BOM-matching run is recorded for this Gerber hash. No item below is signed off yet: the table is the checklist for the review, and its cells stay blank until each item is verified and approved.
+PCB review sign-off required by #40: JeffMboya, on the package in `fab/`. The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review. The independent PCB expert sign-off required by #40 is open, and no JLCPCB DFM or BOM-matching run is recorded for the package in `fab/`. No item below is signed off yet: the table is the checklist for the review, and its cells stay blank until each item is verified and approved.
 
 | Item | Signed off |
 |---|---|
