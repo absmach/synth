@@ -27,6 +27,11 @@ use tracing::{debug, error, info, warn};
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
 const EXIT_USAGE: u8 = 2;
+/// `synth check`: a gate could not be evaluated (verdict `INCOMPLETE`), or
+/// `--evidence` no longer matches the design. Distinct from a failed gate.
+const EXIT_INCOMPLETE: u8 = 3;
+/// `synth check`: there is nothing to evaluate (verdict `EMPTY`).
+const EXIT_EMPTY: u8 = 4;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -536,6 +541,11 @@ enum Command {
         /// `--json`.
         #[arg(long)]
         json: bool,
+        /// Refuse to run when this `evidence.json` (written by `synth_export`)
+        /// was recorded for a different revision of the design. A stale file
+        /// exits 3 and lists the inputs that changed.
+        #[arg(long, value_name = "FILE")]
+        evidence: Option<PathBuf>,
     },
 
     /// Start the Synth Model Context Protocol (MCP) Server for native AI tool integration.
@@ -1272,6 +1282,7 @@ fn main() -> ExitCode {
             override_exception,
             authorized_by,
             json,
+            evidence,
         } => match (authorized_by.as_deref(), override_exception.as_deref()) {
             (Some(who), Some(why)) => match release::Exception::new(who, why) {
                 Ok(exception) => check(
@@ -1281,6 +1292,7 @@ fn main() -> ExitCode {
                     allow_unverified_parts,
                     Some(&exception),
                     json,
+                    evidence.as_deref(),
                 ),
                 Err(e) => Err(anyhow::anyhow!("{e}")),
             },
@@ -1291,6 +1303,7 @@ fn main() -> ExitCode {
                 allow_unverified_parts,
                 None,
                 json,
+                evidence.as_deref(),
             ),
         },
         Command::Mcp {
@@ -1717,12 +1730,63 @@ fn check(
     allow_unverified_parts: bool,
     exception: Option<&release::Exception>,
     json: bool,
+    evidence: Option<&Path>,
 ) -> anyhow::Result<u8> {
+    #![allow(clippy::too_many_lines)]
     if !input.is_file() {
         anyhow::bail!("input file {} does not exist", input.display());
     }
     let source = std::fs::read(input)?;
     let source_hash = sha256_hex(&source);
+    // One identity for the revision every gate below evaluates.
+    let (design_hash, design_empty) =
+        synth_mcp::evidence::design_hash_of(input, registry).map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    // Evidence recorded for another revision is refused before any stage runs.
+    let evidence_status = match evidence {
+        Some(path) => {
+            let recorded =
+                synth_mcp::evidence::Evidence::read(path).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let staleness = recorded.staleness(&design_hash);
+            if staleness.stale {
+                let report = serde_json::json!({
+                    "schema_version": "synth.check.v1",
+                    "status": "stale_evidence",
+                    "verdict": "INCOMPLETE",
+                    "input": input.display().to_string(),
+                    "design_hash": design_hash.sha256,
+                    "evidence": {
+                        "path": path.display().to_string(),
+                        "recorded_verdict": recorded.verdict,
+                        "staleness": staleness,
+                    },
+                });
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                } else {
+                    println!("STALE EVIDENCE {}", path.display());
+                    println!("  recorded for: {}", staleness.recorded_hash);
+                    println!("  design is now: {}", staleness.current_hash);
+                    for (label, paths) in [
+                        ("changed", &staleness.changed),
+                        ("added", &staleness.added),
+                        ("removed", &staleness.removed),
+                    ] {
+                        for p in paths {
+                            println!("  {label}: {p}");
+                        }
+                    }
+                }
+                return Ok(EXIT_INCOMPLETE);
+            }
+            Some(serde_json::json!({
+                "path": path.display().to_string(),
+                "stale": false,
+                "recorded_verdict": recorded.verdict,
+            }))
+        }
+        None => None,
+    };
     let exe = std::env::current_exe()?;
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1920,9 +1984,20 @@ fn check(
 
     let pass = validate_pass && sim_pass && drc_pass && (!fab || fab_pass);
     let unverified = unverified_claims(&source, input, registry);
-    let report = serde_json::json!({
+    let gates = check_gates(design_empty, &stages, &drc_json);
+    let gate_report = synth_diagnostics::GateReport::new(gates);
+    let mut report = serde_json::json!({
         "schema_version": "synth.check.v1",
         "status": if pass { "pass" } else { "fail" },
+        "verdict": gate_report.verdict,
+        "verdict_detail": {
+            "failing_gates": gate_report.failing_gates,
+            "blocked_gates": gate_report.blocked_gates,
+            "summary": gate_report.summary,
+        },
+        "gates": gate_report.gates,
+        "design_hash": design_hash.sha256,
+        "design_hash_files": design_hash.files,
         "input": input.display().to_string(),
         "source_sha256": source_hash,
         "network": "not_used",
@@ -1932,12 +2007,18 @@ fn check(
         },
         "stages": stages,
     });
+    if let Some(evidence) = evidence_status {
+        report["evidence"] = evidence;
+    }
     let _ = std::fs::remove_dir_all(&work);
 
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        println!("{} {}", if pass { "PASS" } else { "FAIL" }, input.display());
+        println!("{} {}", gate_report.verdict, input.display());
+        if gate_report.verdict != synth_diagnostics::Verdict::Ready {
+            println!("  {}", gate_report.summary);
+        }
         let manufacturing = &report["stages"]["manufacturing"];
         for name in ["source", "simulation", "drc", "manufacturing"] {
             let Some(stage) = report["stages"].get(name) else {
@@ -1987,11 +2068,71 @@ fn check(
             }
         }
     }
-    Ok(if pass {
-        EXIT_SUCCESS
-    } else {
-        EXIT_VALIDATION_ERRORS
+    Ok(match gate_report.verdict {
+        // The legacy pass flag must agree: READY never exits 0 on a failed stage.
+        synth_diagnostics::Verdict::Ready if pass => EXIT_SUCCESS,
+        synth_diagnostics::Verdict::Ready | synth_diagnostics::Verdict::NotReady => {
+            EXIT_VALIDATION_ERRORS
+        }
+        synth_diagnostics::Verdict::Incomplete => EXIT_INCOMPLETE,
+        synth_diagnostics::Verdict::Empty => EXIT_EMPTY,
     })
+}
+
+/// The `synth check` stages as gates.
+///
+/// A stage reported `unknown` — timed out, a tool missing, or skipped
+/// because an earlier stage failed — is `blocked`, never a pass.
+fn check_gates(
+    design_empty: bool,
+    stages: &serde_json::Map<String, serde_json::Value>,
+    drc_json: &serde_json::Value,
+) -> Vec<synth_diagnostics::Gate> {
+    use synth_diagnostics::Gate;
+    let mut gates: Vec<Gate> = Vec::new();
+    if design_empty {
+        gates.push(Gate::empty(
+            "design",
+            "the design has no components or nets",
+        ));
+    }
+    let source_failed = stages.get("source").is_some_and(|s| s["status"] == "fail");
+    for (name, stage) in stages {
+        let status = stage["status"].as_str().unwrap_or("unknown");
+        // A stage skipped because the source gate failed sits behind that
+        // failure; one that could not run for want of a tool is blocked.
+        if name != "source" && source_failed && status == "unknown" {
+            gates.push(
+                Gate::after_failure(name.as_str(), "source")
+                    .with_evidence(format!("stages.{name}")),
+            );
+            continue;
+        }
+        let reason = || -> String {
+            if let Some(r) = stage["reason"]
+                .as_str()
+                .or_else(|| stage["result"]["reason"].as_str())
+            {
+                return r.to_string();
+            }
+            if name == "drc" && drc_json["state"] == "router_unavailable" {
+                return format!(
+                    "router '{}' is unavailable",
+                    drc_json["engine"].as_str().unwrap_or("?")
+                );
+            }
+            format!("the {name} stage could not be evaluated")
+        };
+        gates.push(
+            match status {
+                "pass" => Gate::pass(name.as_str()),
+                "fail" => Gate::fail(name.as_str(), format!("the {name} stage failed")),
+                _ => Gate::blocked(name.as_str(), reason()),
+            }
+            .with_evidence(format!("stages.{name}")),
+        );
+    }
+    gates
 }
 
 /// What the pre-fab `synth drc` run established, before the export runs.
@@ -5379,6 +5520,14 @@ fn export_kicad(
         .write_to(out_dir)
         .map_err(|e| anyhow::anyhow!("could not write the release manifest: {e}"))?;
     info!("wrote {}", manifest_path.display());
+    write_export_evidence(
+        input,
+        registry_dir,
+        out_dir,
+        &routing,
+        &synth_violations,
+        &native,
+    );
     for note in manifest
         .routing
         .iter()
@@ -5721,6 +5870,62 @@ fn dfm_stage(
             }
             (evidence, Some(report))
         }
+    }
+}
+
+/// Write `evidence.json` beside an export: the design-state hash, the tool
+/// version, and the gates this run established, so `synth check --evidence`
+/// can tell later whether the export still describes the design.
+///
+/// Best effort: an export is not failed because its evidence could not be
+/// recorded, but it says so.
+fn write_export_evidence(
+    input: &Path,
+    registry: Option<&Path>,
+    out_dir: &Path,
+    routing: &synth_router::RouteReport,
+    signal_integrity: &[synth_drc::Violation],
+    native: &[NativeCheckEvidence],
+) {
+    use synth_diagnostics::Gate;
+    let (hash, empty) = match synth_mcp::evidence::design_hash_of(input, registry) {
+        Ok(found) => found,
+        Err(e) => {
+            warn!("evidence.json not written: {e}");
+            return;
+        }
+    };
+    let mut gates = Vec::new();
+    if empty {
+        gates.push(Gate::empty(
+            "design",
+            "the design has no components or nets",
+        ));
+    }
+    gates.extend(synth_mcp::tools::route_gates(
+        routing,
+        Some(signal_integrity),
+    ));
+    for evidence in native {
+        let name = format!("native.{}", evidence.stage);
+        let detail = evidence
+            .detail
+            .clone()
+            .unwrap_or_else(|| format!("{} via {}", evidence.stage, evidence.tool));
+        gates.push(match (evidence.status, evidence.advisory) {
+            (NativeCheckStatus::Pass, _) => Gate::pass(name),
+            (_, true) => Gate::warn(name, format!("advisory: {detail}")),
+            (NativeCheckStatus::Fail, false) => Gate::fail(name, detail),
+            (NativeCheckStatus::Unknown, false) => Gate::blocked(name, detail),
+        });
+    }
+    let report = synth_diagnostics::GateReport::new(gates);
+    let evidence = synth_mcp::evidence::Evidence::new(&hash, &report);
+    let path = out_dir.join(synth_mcp::evidence::EVIDENCE_FILE);
+    match serde_json::to_vec_pretty(&evidence).map(|bytes| std::fs::write(&path, bytes)) {
+        Ok(Ok(())) => info!("wrote {} (verdict {})", path.display(), report.verdict),
+        Ok(Err(e)) => warn!("evidence.json not written: {e}"),
+        Err(e) => warn!("evidence.json not written: {e}"),
     }
 }
 

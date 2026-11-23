@@ -7,7 +7,10 @@ use serde_json::Value;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
+use synth_diagnostics::{Gate, GateReport};
 use synth_supply::Distributor;
+
+use crate::outcome::{Outcome, refusal, write_verified};
 
 thread_local! {
     /// Test-only override for the ngspice binary. The MCP schema deliberately
@@ -1197,7 +1200,28 @@ fn execute_language_reference(_args: &Value) -> Value {
                 "source": include_str!("../../../examples/placement_and_diff_pair/placement_and_diff_pair.synth")
             }
         ],
-        "workflow_tip": "1) synth_search_registry to find real (kind, part_id) pairs and exact pin names. 2) Draft the .synth source using the grammar above. Put every component inside a `group` and give each group a `notes` block - grouping is what makes the generated sheet readable, and an ungrouped board lays out as one flat band. Give every generic passive a `value` (a missing one is an error, E-SYNTH-VALUE-001). 3) synth_validate it: this returns electrical ERC *and* the readability rules (E-SYNTH-SCHEM-*). 4) synth_fix in a loop over diagnostics with suggested_fixes until clean. 5) synth_preview_schematic to inspect group_boxes/annotations before exporting. 6) synth_export."
+        "workflow_tip": "1) synth_search_registry to find real (kind, part_id) pairs and exact pin names. 2) Draft the .synth source using the grammar above. Put every component inside a `group` and give each group a `notes` block - grouping is what makes the generated sheet readable, and an ungrouped board lays out as one flat band. Give every generic passive a `value` (a missing one is an error, E-SYNTH-VALUE-001). 3) synth_validate it: this returns electrical ERC *and* the readability rules (E-SYNTH-SCHEM-*). 4) synth_fix in a loop over diagnostics with suggested_fixes until clean. 5) synth_preview_schematic to inspect group_boxes/annotations before exporting. 6) synth_export.",
+        "report_contract": {
+            "gates": {
+                "fields": "synth_validate, synth_erc_report, synth_drc_report, synth_route, synth_route_with_constraints, synth_place_with_hints, synth_describe_placement, synth_schematic_baseline (compare) and synth_export return `verdict`, `verdict_detail` {failing_gates, blocked_gates, summary} and `gates` [{name, status, reason, evidence_ref, coverage, blocked_by}].",
+                "statuses": "pass | warn | fail | blocked | empty. `blocked` means the check was skipped, a prerequisite (router, kicad-cli, stackup, ngspice) is missing, or its evidence is incomplete. `empty` means the design has no components or no nets.",
+                "fold": "Precedence empty > blocked > fail > warn > pass: a check that did not run can never read as a pass, and outranks a failure. Exception: a gate whose `blocked_by` names a gate that failed in the same report folds in behind that failure, so a design whose compile gate fails is NOT_READY rather than INCOMPLETE.",
+                "verdicts": "READY (every gate passed; warnings allowed), NOT_READY (a gate failed), INCOMPLETE (a gate could not be evaluated; see blocked_gates), EMPTY (nothing to evaluate). Only READY is a pass. Partial coverage (`coverage.checked < coverage.total`) is blocked, never a pass.",
+                "cli": "`synth check` exits 0 READY, 1 NOT_READY, 3 INCOMPLETE (or stale --evidence), 4 EMPTY."
+            },
+            "design_hash": {
+                "fields": "Every gate-producing report carries `design_hash` (SHA-256) and `design_hash_files` [{path, sha256}] naming what it covers: the .synth source and imported modules, both layout sidecars, every registry part the design uses (registry/<id>.synth.toml), and the manufacturer profile and stackup (fabrication.json).",
+                "portability": "Text is normalised to LF; entries are hashed in sorted relative-path order, each framed as path, NUL, content, NUL. Output directories, evidence.json and .synth/ state are never inputs, so recording evidence does not change the hash.",
+                "evidence": "synth_export (and `synth export-kicad`) write evidence.json beside the artefacts: design hash, covered files, tool version, verdict and gates. `synth check --evidence evidence.json` refuses (exit 3) when the design has changed since, listing the changed, added and removed inputs."
+            },
+            "outcome": {
+                "tools": "synth_apply_patch, synth_fix, synth_mutate_layout, synth_write_layout_override, synth_place_with_hints, synth_author_part, synth_import_part and synth_export return `outcome` {kind, applied, failed[{item, reason}], unattempted, written_paths[{path, sha256}], verified, refused_field}.",
+                "kinds": "complete (every item applied, every write verified) | partial (some applied; the rest are in failed/unattempted) | refused (nothing written; refused_field names the offending input) | uncertain (a write may have happened but readback could not confirm it).",
+                "retry_contract": "Retry only the items in `failed` and `unattempted`, never the whole request: an applied patch applied twice is a second edit. After `uncertain`, re-read the files in written_paths (or the target) before retrying. A refusal is returned as a tool error whose message is a JSON document with `status: refused`, `field` and `outcome`; it guarantees no file was touched.",
+                "writes": "Sidecar and registry writes are atomic (temp file, fsync, rename) and verified by re-parsing the written file. A sidecar that exists but does not parse is refused, never silently reset."
+            },
+            "deprecated_fields": "Kept for one release, superseded by `verdict`/`gates`: `status` on synth_validate (ok/error), `erc_clean`, `drc_clean`/`drc_performed`, `routing_status`/`drc_status` (not_run), `status: placement_requires_revision`, the baseline `status` (pass/drift/no_baseline) and synth_export's `release_ready`. Superseded by `outcome`: `applied_count`/`skipped_count`/`total_patches` and per-item `status: applied|skipped`. `synth check`'s top-level `status` (pass/fail) is superseded by `verdict`."
+        }
     })
 }
 
@@ -1228,6 +1252,10 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
 
     let parse = synth_parser::parse(&source, file_name.to_string());
     let mut diagnostics = parse.diagnostics;
+    // Each stage's findings are graded as their own gate; a stage that never
+    // ran is `blocked`, not silently absent.
+    let mut gates: Vec<Gate> = Vec::new();
+    let mut board_for_hash: Option<synth_ir::Board> = None;
 
     if let Some(ast) = parse.ast.as_ref() {
         let import_root = Path::new(file_name)
@@ -1240,8 +1268,13 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
         if let Ok(registry) = load_registry_tiered(args, default_registry) {
             let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
             diagnostics.extend(lowered.diagnostics);
+            let compile = diagnostics_gate("compile", &diagnostics);
+            gates.push(compile.clone());
             if let Some(board) = lowered.board.as_ref() {
-                diagnostics.extend(synth_validate::run_erc(board, file_name));
+                gates.push(design_gate(board));
+                let erc = synth_validate::run_erc(board, file_name);
+                gates.push(diagnostics_gate("erc", &erc));
+                diagnostics.extend(erc);
                 // Readability rules (E-SYNTH-SCHEM-*) alongside the
                 // electrical ones, matching what `synth validate` does
                 // on the CLI. Without these an agent iterating on
@@ -1251,8 +1284,16 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
                 let sheets = synth_layout::sheets::layout_sheets(board, global, None);
                 let mut schem = synth_kicad::check_schem_erc_sheets(board, &sheets);
                 synth_kicad::attach_schem_erc_locations(&mut schem, board, file_name);
+                gates.push(diagnostics_gate("schematic_readability", &schem));
                 diagnostics.extend(schem);
+            } else {
+                gates.extend(after_compile_gates(
+                    &compile,
+                    &["erc", "schematic_readability"],
+                    "compilation produced no board",
+                ));
             }
+            board_for_hash = lowered.board;
         } else {
             let registry_dir = resolve_registry(args, default_registry);
             diagnostics.push(
@@ -1266,16 +1307,38 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
                 )
                 .build(),
             );
+            gates.push(Gate::blocked(
+                "registry",
+                format!(
+                    "component registry not found at '{}'",
+                    registry_dir.display()
+                ),
+            ));
+            gates.extend(not_run_gates(
+                &["compile", "erc", "schematic_readability"],
+                "no component registry",
+            ));
         }
+    } else {
+        let compile = diagnostics_gate("compile", &diagnostics);
+        gates.extend(after_compile_gates(
+            &compile,
+            &["erc", "schematic_readability"],
+            "the source did not parse",
+        ));
+        gates.insert(0, compile);
     }
 
     let is_clean = !diagnostics.iter().any(|d| d.severity.is_blocking());
-    Ok(serde_json::json!({
+    let mut payload = serde_json::json!({
         "status": if is_clean { "ok" } else { "error" },
         "diagnostics": diagnostics,
         "error_count": diagnostics.iter().filter(|d| d.severity.is_blocking()).count(),
         "warning_count": diagnostics.iter().filter(|d| d.severity == synth_diagnostics::Severity::Warning).count()
-    }))
+    });
+    let hash = design_hash_for(args, file_name, &source, board_for_hash.as_ref());
+    attach_gates(&mut payload, gates, &hash);
+    Ok(payload)
 }
 
 fn execute_erc_report(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
@@ -1284,12 +1347,21 @@ fn execute_erc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
 
     let parse = synth_parser::parse(&source, file_name.to_string());
     if parse.has_errors() {
-        return Ok(serde_json::json!({
+        let mut payload = serde_json::json!({
             "erc_clean": false,
             "error": "Parse phase produced blocking errors",
             "violations": parse.diagnostics,
             "diagnostics": parse.diagnostics.clone()
-        }));
+        });
+        let compile = diagnostics_gate("compile", &parse.diagnostics);
+        let mut gates = after_compile_gates(&compile, &["erc"], "the source did not parse");
+        gates.insert(0, compile);
+        attach_gates(
+            &mut payload,
+            gates,
+            &design_hash_for(args, file_name, &source, None),
+        );
+        return Ok(payload);
     }
 
     let ast = parse.ast.ok_or("No AST produced")?;
@@ -1306,14 +1378,24 @@ fn execute_erc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
     let mut diagnostics = resolved.diagnostics;
     diagnostics.extend(lowered.diagnostics);
     if diagnostics.iter().any(|d| d.severity.is_blocking()) {
-        return Ok(serde_json::json!({
+        let mut payload = serde_json::json!({
             "erc_clean": false,
             "error": "Compilation produced blocking diagnostics; ERC was not run",
             "violations": diagnostics,
             "diagnostics": diagnostics.clone()
-        }));
+        });
+        let compile = diagnostics_gate("compile", &diagnostics);
+        let mut gates = after_compile_gates(&compile, &["erc"], "compilation failed");
+        gates.insert(0, compile);
+        attach_gates(
+            &mut payload,
+            gates,
+            &design_hash_for(args, file_name, &source, lowered.board.as_ref()),
+        );
+        return Ok(payload);
     }
     let board = lowered.board.ok_or("Lowering failed")?;
+    let compile_gate = diagnostics_gate("compile", &diagnostics);
 
     let erc_diagnostics = synth_validate::run_erc(&board, file_name);
     let erc_clean = !erc_diagnostics.iter().any(|d| d.severity.is_blocking());
@@ -1326,13 +1408,24 @@ fn execute_erc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
         .iter()
         .filter(|d| d.severity == synth_diagnostics::Severity::Warning)
         .count();
-    Ok(serde_json::json!({
+    let mut payload = serde_json::json!({
         "erc_clean": erc_clean,
         "violations": erc_diagnostics,
         "diagnostics": erc_diagnostics.clone(),
         "error_count": error_count,
         "warning_count": warning_count
-    }))
+    });
+    let gates = vec![
+        compile_gate,
+        design_gate(&board),
+        diagnostics_gate("erc", &erc_diagnostics),
+    ];
+    attach_gates(
+        &mut payload,
+        gates,
+        &design_hash_for(args, file_name, &source, Some(&board)),
+    );
+    Ok(payload)
 }
 
 /// `synth_query_knowledge` — serve the circuit-design knowledge
@@ -1546,18 +1639,297 @@ fn grant_processes(
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// Gates, verdicts and design identity (#475, #476).
+// ---------------------------------------------------------------------------
+
+/// Every sidecar a design's identity covers, resolved the way the tools
+/// resolve them: explicit arguments first, then the canonical and legacy
+/// files beside the design. Missing files are dropped by the hash.
+fn hash_sidecars(args: &Value, file_name: &str) -> Vec<PathBuf> {
+    use synth_layout::sidecar::SidecarKind;
+    let mut paths: Vec<PathBuf> = ["layout_file_path", "schematic_layout_file_path"]
+        .iter()
+        .filter_map(|key| args.get(*key).and_then(Value::as_str))
+        .map(PathBuf::from)
+        .collect();
+    for kind in [SidecarKind::Schematic, SidecarKind::Placement] {
+        paths.extend(kind.canonical_path_str(file_name));
+        paths.extend(kind.resolve_str(file_name));
+    }
+    paths
+}
+
+/// The design-state hash for a tool call.
+fn design_hash_for(
+    args: &Value,
+    file_name: &str,
+    source: &str,
+    board: Option<&synth_ir::Board>,
+) -> crate::evidence::DesignHash {
+    crate::evidence::design_hash(file_name, source, board, &hash_sidecars(args, file_name))
+}
+
+/// Whether there is anything to evaluate. A design with no components or no
+/// nets folds every report to `EMPTY` rather than to a vacuous pass.
+fn design_gate(board: &synth_ir::Board) -> Gate {
+    if board.components.is_empty() || board.nets.is_empty() {
+        Gate::empty(
+            "design",
+            format!(
+                "the design has {} component(s) and {} net(s)",
+                board.components.len(),
+                board.nets.len()
+            ),
+        )
+    } else {
+        Gate::pass("design")
+    }
+}
+
+/// Grade a diagnostic set: any blocking one fails, warnings warn.
+fn diagnostics_gate(name: &str, diagnostics: &[synth_diagnostics::Diagnostic]) -> Gate {
+    let blocking: Vec<&str> = diagnostics
+        .iter()
+        .filter(|d| d.severity.is_blocking())
+        .map(|d| d.code.as_str())
+        .collect();
+    let warnings = diagnostics
+        .iter()
+        .filter(|d| d.severity == synth_diagnostics::Severity::Warning)
+        .count();
+    let gate = if blocking.is_empty() {
+        if warnings == 0 {
+            Gate::pass(name)
+        } else {
+            Gate::warn(name, format!("{warnings} warning(s)"))
+        }
+    } else {
+        let mut codes = blocking.clone();
+        codes.sort_unstable();
+        codes.dedup();
+        Gate::fail(
+            name,
+            format!(
+                "{} blocking diagnostic(s): {}",
+                blocking.len(),
+                codes.join(", ")
+            ),
+        )
+    };
+    gate.with_evidence("diagnostics")
+}
+
+/// Stamp a report with its gates, the verdict they fold to, and the
+/// design-state hash it evaluated.
+fn attach_gates(
+    payload: &mut Value,
+    gates: Vec<Gate>,
+    hash: &crate::evidence::DesignHash,
+) -> GateReport {
+    let report = GateReport::new(gates);
+    if payload.is_object() {
+        payload["verdict"] = serde_json::json!(report.verdict);
+        payload["verdict_detail"] = serde_json::json!({
+            "failing_gates": report.failing_gates,
+            "blocked_gates": report.blocked_gates,
+            "summary": report.summary,
+        });
+        payload["gates"] = serde_json::json!(report.gates);
+        payload["design_hash"] = serde_json::json!(hash.sha256);
+        payload["design_hash_files"] = serde_json::json!(hash.files);
+    }
+    report
+}
+
+/// The routing, DRC and signal-integrity gates of a routing run record.
+///
+/// Shared with the CLI so `export-kicad` grades a run exactly as `synth_export` does.
+///
+/// A router that is not installed leaves every downstream check `blocked`,
+/// with the engine named, so "DRC never ran" can never read as "DRC found
+/// nothing".
+pub fn route_gates(
+    report: &synth_router::RouteReport,
+    si: Option<&[synth_drc::Violation]>,
+) -> Vec<Gate> {
+    use synth_router::RouteState;
+    let engine = report.engine.as_str();
+    let validation = report.validation.as_ref();
+    let unavailable_checks = validation
+        .map(|v| v.unavailable_checks.join(", "))
+        .filter(|s| !s.is_empty());
+
+    let routing = match report.state {
+        RouteState::Routed => Gate::pass("routing"),
+        RouteState::RouterUnavailable => Gate::blocked(
+            "routing",
+            report.failure.as_ref().map_or_else(
+                || format!("router '{engine}' is not installed"),
+                |f| {
+                    format!(
+                        "router '{engine}' is unavailable: {} ({})",
+                        f.detail, f.remediation
+                    )
+                },
+            ),
+        ),
+        RouteState::ReviewRequired => Gate::blocked(
+            "routing",
+            format!(
+                "copper from '{engine}' exists but required checks could not run: {}",
+                unavailable_checks.as_deref().unwrap_or("see validation")
+            ),
+        ),
+        RouteState::ValidationFailed => Gate::fail(
+            "routing",
+            validation
+                .map(|v| v.blocking_reasons.join("; "))
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "independent validation rejected the routed board".into()),
+        ),
+    }
+    .with_evidence("state");
+    let routing = match validation {
+        Some(v) => {
+            let c = &v.connectivity;
+            routing.with_coverage(c.connected_nets, c.connected_nets + c.open_nets)
+        }
+        None => routing,
+    };
+
+    let kicad_drc = match validation.and_then(|v| v.kicad_drc) {
+        Some(c) if c.blocking_count() > 0 => Gate::fail(
+            "kicad_drc",
+            format!(
+                "{} error(s), {} unconnected item(s)",
+                c.errors, c.unconnected
+            ),
+        ),
+        Some(c) if c.warnings > 0 => Gate::warn("kicad_drc", format!("{} warning(s)", c.warnings)),
+        Some(_) => Gate::pass("kicad_drc"),
+        None if report.state == RouteState::RouterUnavailable => Gate::blocked(
+            "kicad_drc",
+            format!("not run: there is no routed board because router '{engine}' is unavailable"),
+        ),
+        None => Gate::blocked(
+            "kicad_drc",
+            format!(
+                "not run: `kicad-cli pcb drc` could not be performed{}",
+                unavailable_checks
+                    .as_deref()
+                    .map_or_else(String::new, |c| format!(" ({c})"))
+            ),
+        ),
+    }
+    .with_evidence("validation.kicad_drc");
+
+    let si_blocking = si.map_or(0, |si| si.iter().filter(|v| v.is_blocking()).count());
+    let signal_integrity = if report.state == RouteState::ValidationFailed {
+        Gate::after_failure("signal_integrity", "routing")
+    } else if !matches!(
+        report.state,
+        RouteState::Routed | RouteState::ReviewRequired
+    ) {
+        Gate::blocked(
+            "signal_integrity",
+            format!(
+                "not run: no routed copper (state {})",
+                report.state.as_str()
+            ),
+        )
+    } else if si.is_none() {
+        Gate::blocked("signal_integrity", "not run on this board")
+    } else if si_blocking > 0 {
+        Gate::fail(
+            "signal_integrity",
+            format!("{si_blocking} blocking finding(s)"),
+        )
+    } else if si.is_some_and(<[_]>::is_empty) {
+        Gate::pass("signal_integrity")
+    } else {
+        Gate::warn(
+            "signal_integrity",
+            format!("{} advisory finding(s)", si.map_or(0, <[_]>::len)),
+        )
+    }
+    .with_evidence("signal_integrity");
+
+    vec![routing, kicad_drc, signal_integrity]
+}
+
+/// The placement visual-review gate.
+fn placement_review_gate(review_requires_revision: bool, functional_warnings: usize) -> Gate {
+    if review_requires_revision {
+        Gate::fail(
+            "placement_review",
+            "the placement visual review requires revision",
+        )
+    } else if functional_warnings > 0 {
+        Gate::warn(
+            "placement_review",
+            format!("{functional_warnings} functional warning(s)"),
+        )
+    } else {
+        Gate::pass("placement_review")
+    }
+    .with_evidence("placement_quality.visual_review")
+}
+
+/// Gates for a stage that was deliberately not run.
+fn not_run_gates(names: &[&str], why: &str) -> Vec<Gate> {
+    names
+        .iter()
+        .map(|n| Gate::blocked(*n, format!("not run: {why}")))
+        .collect()
+}
+
+/// Gates that did not run because `upstream` failed.
+fn after_failure_gates(names: &[&str], upstream: &str) -> Vec<Gate> {
+    names
+        .iter()
+        .map(|n| Gate::after_failure(*n, upstream))
+        .collect()
+}
+
+/// Gates that did not run because the compile gate stopped them: behind the
+/// failure when it failed, plainly blocked otherwise.
+fn after_compile_gates(compile: &Gate, names: &[&str], why: &str) -> Vec<Gate> {
+    if compile.status == synth_diagnostics::GateStatus::Fail {
+        after_failure_gates(names, &compile.name)
+    } else {
+        not_run_gates(names, why)
+    }
+}
+
+/// An external routing run and what was established on the way to it.
+struct ExternalRoute {
+    report: synth_router::RouteReport,
+    out_dir: PathBuf,
+    signal_integrity: Vec<synth_drc::Violation>,
+    process_warnings: Vec<String>,
+    /// The gates established before routing: the design and placement review.
+    pre_gates: Vec<Gate>,
+    design_hash: crate::evidence::DesignHash,
+}
+
+impl ExternalRoute {
+    /// The run record as a payload with its gates and verdict.
+    fn payload(&self) -> Value {
+        let mut payload =
+            with_process_warnings(route_report_payload(&self.report), &self.process_warnings);
+        attach_signal_integrity(&mut payload, &self.signal_integrity);
+        let mut gates = self.pre_gates.clone();
+        gates.extend(route_gates(&self.report, Some(&self.signal_integrity)));
+        attach_gates(&mut payload, gates, &self.design_hash);
+        payload
+    }
+}
+
 fn route_design_externally(
     args: &Value,
     default_registry: Option<&Path>,
-) -> Result<
-    (
-        synth_router::RouteReport,
-        PathBuf,
-        Vec<synth_drc::Violation>,
-        Vec<String>,
-    ),
-    String,
-> {
+) -> Result<ExternalRoute, String> {
     route_design_externally_with(args, default_registry, None)
 }
 
@@ -1566,19 +1938,12 @@ fn route_design_externally(
 ///
 /// `synth_route_with_constraints` needs this so it can tighten the
 /// fabrication floor before the run, rather than after.
+#[allow(clippy::too_many_lines)] // one linear validate-then-write pipeline
 fn route_design_externally_with(
     args: &Value,
     default_registry: Option<&Path>,
     prepared: Option<synth_router::RouteRequest>,
-) -> Result<
-    (
-        synth_router::RouteReport,
-        PathBuf,
-        Vec<synth_drc::Violation>,
-        Vec<String>,
-    ),
-    String,
-> {
+) -> Result<ExternalRoute, String> {
     let source = get_source_from_args(args)?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
     let engine = resolve_router(args)?;
@@ -1609,10 +1974,18 @@ fn route_design_externally_with(
     let placement = synth_place::place_with_sidecar(&board, placement_sidecar.as_deref())
         .map_err(|e| format!("Placement failed: {e}"))?;
     let description = synth_place::describe_placement_external(&board, &placement);
+    let design_hash = design_hash_for(args, file_name, &source, Some(&board));
+    let pre_gates = vec![
+        design_gate(&board),
+        placement_review_gate(
+            description.visual_review.requires_revision,
+            description.functional_warnings.len(),
+        ),
+    ];
     if description.visual_review.requires_revision
         && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
     {
-        return Err(serde_json::json!({
+        let mut payload = serde_json::json!({
             "status": "placement_requires_revision",
             "routing_status": "not_run",
             "reason": "Placement visual review requires revision before routing",
@@ -1622,8 +1995,14 @@ fn route_design_externally_with(
                 "dense_regions": description.dense_regions
             },
             "hint": "Revise the placement sidecar or hints, rerun synth_place_with_hints, then retry."
-        })
-        .to_string());
+        });
+        let mut gates = pre_gates;
+        gates.extend(after_failure_gates(
+            &["routing", "kicad_drc", "signal_integrity"],
+            "placement_review",
+        ));
+        attach_gates(&mut payload, gates, &design_hash);
+        return Err(payload.to_string());
     }
 
     let stem = synth_router::sanitize_stem(&board.name);
@@ -1675,7 +2054,14 @@ fn route_design_externally_with(
         .clone()
         .unwrap_or_else(|| request.board_path.clone());
     let signal_integrity = routed_signal_integrity(&board, &delivered);
-    Ok((report, res.out_dir, signal_integrity, process_warnings))
+    Ok(ExternalRoute {
+        report,
+        out_dir: res.out_dir,
+        signal_integrity,
+        process_warnings,
+        pre_gates,
+        design_hash,
+    })
 }
 
 fn sha256_of(path: &Path) -> String {
@@ -1764,10 +2150,9 @@ fn attach_signal_integrity(payload: &mut Value, findings: &[synth_drc::Violation
 /// with zones refilled — so it cannot be satisfied by the router's own
 /// opinion of its work.
 fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
-    let (report, _, signal_integrity, process_warnings) =
-        route_design_externally(args, default_registry)?;
-    let mut payload = with_process_warnings(route_report_payload(&report), &process_warnings);
-    attach_signal_integrity(&mut payload, &signal_integrity);
+    let routed = route_design_externally(args, default_registry)?;
+    let mut payload = routed.payload();
+    let report = &routed.report;
 
     // A structurally poor floorplan never reaches the router at all, so
     // the placement gate keeps its own early return.
@@ -1791,21 +2176,21 @@ fn execute_drc_report(args: &Value, default_registry: Option<&Path>) -> Result<V
 /// to decode: it means the engine is not installed here, and the payload
 /// says what to install.
 fn execute_route(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
-    let (report, out_dir, signal_integrity, process_warnings) =
-        route_design_externally(args, default_registry)?;
-    log_routing_outcome(args, &report);
-    let mut payload = with_process_warnings(route_report_payload(&report), &process_warnings);
-    payload["out_dir"] = serde_json::json!(out_dir);
-    attach_signal_integrity(&mut payload, &signal_integrity);
+    let routed = route_design_externally(args, default_registry)?;
+    log_routing_outcome(args, &routed.report);
+    let mut payload = routed.payload();
+    payload["out_dir"] = serde_json::json!(routed.out_dir);
     Ok(payload)
 }
 
+#[allow(clippy::too_many_lines)] // one linear validate-then-write pipeline
 fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
-    let source = get_source_from_args(args)?;
+    let source = get_source_from_args(args).map_err(|e| refusal(Some("source"), e))?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
     let enable_smt = args["enable_smt"].as_bool().unwrap_or(false);
 
     let parse = synth_parser::parse(&source, file_name.to_string());
+    let original_parses = !parse.has_errors();
     let mut diagnostics = parse.diagnostics;
 
     if let Some(ast) = parse.ast.as_ref() {
@@ -1830,6 +2215,16 @@ fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, S
         .filter(|d| d.severity.is_blocking())
         .filter_map(|d| d.suggested_fixes.first().cloned().map(|p| (d, p)))
         .collect();
+
+    // A blocking diagnostic with no machine-applicable fix is never tried, so
+    // it is `unattempted`, not silently dropped.
+    let mut outcome = Outcome::new();
+    for d in diagnostics
+        .iter()
+        .filter(|d| d.severity.is_blocking() && d.suggested_fixes.is_empty())
+    {
+        outcome.skip(serde_json::json!({ "code": d.code, "reason": "no machine-applicable fix" }));
+    }
 
     let mut current = source;
     let mut applied_count = 0;
@@ -1857,6 +2252,7 @@ fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, S
             Ok(next) => {
                 current = next;
                 applied_count += 1;
+                outcome.apply(serde_json::json!({ "code": diag.code }));
                 report.push(serde_json::json!({
                     "code": diag.code,
                     "status": "applied",
@@ -1865,6 +2261,7 @@ fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, S
             }
             Err(e) => {
                 skipped_count += 1;
+                outcome.fail(serde_json::json!({ "code": diag.code }), e.to_string());
                 report.push(serde_json::json!({
                     "code": diag.code,
                     "status": "skipped",
@@ -1876,6 +2273,7 @@ fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, S
     }
 
     let re_parse = synth_parser::parse(&current, file_name.to_string());
+    let patched_parses = !re_parse.has_errors();
     let mut re_diags = re_parse.diagnostics;
     if let Some(ast) = re_parse.ast.as_ref() {
         let loader = synth_ir::FsImportLoader {
@@ -1892,6 +2290,10 @@ fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, S
         }
     }
     let is_clean = !re_diags.iter().any(|d| d.severity.is_blocking());
+    // Nothing is written: the readback is the re-parse of the patched text.
+    if original_parses && !patched_parses && applied_count > 0 {
+        outcome.unverified();
+    }
 
     Ok(serde_json::json!({
         "patched_source": current,
@@ -1899,34 +2301,43 @@ fn execute_fix(args: &Value, default_registry: Option<&Path>) -> Result<Value, S
         "skipped_count": skipped_count,
         "is_clean": is_clean,
         "remaining_blocking_count": re_diags.iter().filter(|d| d.severity.is_blocking()).count(),
-        "report": report
+        "report": report,
+        "outcome": outcome.finish().to_value()
     }))
 }
 
 fn execute_apply_patch(args: &Value, _default_registry: Option<&Path>) -> Result<Value, String> {
     let mut source = args["source"]
         .as_str()
-        .ok_or_else(|| "Missing required parameter 'source'".to_string())?
+        .ok_or_else(|| refusal(Some("source"), "Missing required parameter 'source'"))?
         .to_string();
 
     let patches_val = args["patches"]
         .as_array()
-        .ok_or_else(|| "Missing required array 'patches'".to_string())?;
+        .ok_or_else(|| refusal(Some("patches"), "Missing required array 'patches'"))?;
 
     let enable_smt = args["enable_smt"].as_bool().unwrap_or(false);
+    let original_parses = !synth_parser::parse(&source, "patched.synth".to_string()).has_errors();
 
+    // Validate the whole batch before touching anything: one malformed patch
+    // refuses the call, naming it, rather than applying the rest.
     let mut patches = Vec::new();
-    for val in patches_val {
-        let p: synth_diagnostics::Patch = serde_json::from_value(val.clone())
-            .map_err(|e| format!("Invalid patch object: {e}"))?;
-        patches.push(p);
+    for (index, val) in patches_val.iter().enumerate() {
+        let p: synth_diagnostics::Patch = serde_json::from_value(val.clone()).map_err(|e| {
+            refusal(
+                Some(&format!("patches[{index}]")),
+                format!("Invalid patch object: {e}"),
+            )
+        })?;
+        patches.push((index, p));
     }
 
     // Sort reverse byte order
-    patches.sort_by_key(|p| std::cmp::Reverse(patch_anchor_offset(p)));
+    patches.sort_by_key(|(_, p)| std::cmp::Reverse(patch_anchor_offset(p)));
 
+    let mut outcome = Outcome::new();
     let mut applied_count = 0;
-    for patch in &patches {
+    for (index, patch) in &patches {
         let res = match &patch.kind {
             synth_diagnostics::PatchKind::SolveSmt { .. } => {
                 if enable_smt {
@@ -1939,16 +2350,31 @@ fn execute_apply_patch(args: &Value, _default_registry: Option<&Path>) -> Result
             }
             _ => patch.apply(&source),
         };
-        if let Ok(next) = res {
-            source = next;
-            applied_count += 1;
+        match res {
+            Ok(next) => {
+                source = next;
+                applied_count += 1;
+                outcome.apply(serde_json::json!({ "index": index }));
+            }
+            Err(e) => outcome.fail(serde_json::json!({ "index": index }), e.to_string()),
         }
+    }
+    // Report items in request order, whatever order they were applied in.
+    let by_index = |v: &Value| v["index"].as_u64().unwrap_or(u64::MAX);
+    outcome.applied.sort_by_key(by_index);
+    outcome.failed.sort_by_key(|f| by_index(&f.item));
+    if applied_count > 0
+        && original_parses
+        && synth_parser::parse(&source, "patched.synth".to_string()).has_errors()
+    {
+        outcome.unverified();
     }
 
     Ok(serde_json::json!({
         "patched_source": source,
         "applied_count": applied_count,
-        "total_patches": patches.len()
+        "total_patches": patches.len(),
+        "outcome": outcome.finish().to_value()
     }))
 }
 
@@ -2062,24 +2488,33 @@ fn normalize_layout_op(args: &Value) -> Value {
 
 fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
     let op_value = normalize_layout_op(args);
-    let op: synth_layout::ops::LayoutOp =
-        serde_json::from_value(op_value).map_err(|e| format!("Invalid 'op': {e}"))?;
+    let op: synth_layout::ops::LayoutOp = serde_json::from_value(op_value.clone())
+        .map_err(|e| refusal(Some("op"), format!("Invalid 'op': {e}")))?;
 
-    let source = get_source_from_args(args)?;
+    let source = get_source_from_args(args).map_err(|e| refusal(Some("source"), e))?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
 
     let parse = synth_parser::parse(&source, file_name.to_string());
-    let ast = parse.ast.ok_or("Parse failed")?;
+    let ast = parse
+        .ast
+        .ok_or_else(|| refusal(Some("source"), "Parse failed"))?;
     let loader = synth_ir::FsImportLoader {
         root: PathBuf::from("."),
     };
     let resolved = synth_ir::resolve_imports(&ast, &loader, file_name);
-    let registry = load_registry_tiered(args, default_registry)
-        .map_err(|e| format!("Could not load registry: {e}"))?;
+    let registry = load_registry_tiered(args, default_registry).map_err(|e| {
+        refusal(
+            Some("registry_path"),
+            format!("Could not load registry: {e}"),
+        )
+    })?;
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
-    let board = lowered
-        .board
-        .ok_or("Could not generate layout: board lowering failed")?;
+    let board = lowered.board.ok_or_else(|| {
+        refusal(
+            Some("source"),
+            "Could not generate layout: board lowering failed",
+        )
+    })?;
 
     // Start from the sheet the caller actually sees — sidecar overrides and
     // a persisted `fit_sheet` included — so op coordinates and the positions
@@ -2090,9 +2525,12 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
     let mut layout = synth_layout::layout_with_sidecar(&board, sidecar_path.as_deref());
     let before = layout.clone();
     synth_layout::ops::apply_op(&mut layout, &board, op.clone())
-        .map_err(|e| format!("Could not apply layout op: {e}"))?;
+        .map_err(|e| refusal(Some("op"), format!("Could not apply layout op: {e}")))?;
 
-    let persisted = persist_layout_op(args, &board, &before, &layout, &op, file_name)?;
+    let mut outcome = Outcome::new();
+    outcome.apply(serde_json::json!({ "op": op_value }));
+    let persisted =
+        persist_layout_op(args, &board, &before, &layout, &op, file_name, &mut outcome)?;
 
     // A page fit is owned by `layout_with_sidecar`; the op's in-place
     // approximation of it can differ by a few millimetres because it ran on
@@ -2106,7 +2544,83 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
 
     let mut response = serde_json::to_value(&layout).map_err(|e| e.to_string())?;
     response["persisted"] = persisted.unwrap_or(Value::Null);
+    response["outcome"] = outcome.finish().to_value();
     Ok(response)
+}
+
+/// A tool error after the write phase began, carrying the outcome so the
+/// caller can tell what changed on disk.
+fn write_phase_error(outcome: Outcome, error: impl Into<String>) -> String {
+    let outcome = outcome.finish();
+    serde_json::json!({
+        "status": outcome.kind,
+        "error": error.into(),
+        "outcome": outcome.to_value(),
+    })
+    .to_string()
+}
+
+/// Load the sidecar a write will merge into.
+///
+/// A file that exists but does not parse is refused rather than replaced
+/// with an empty sidecar: silently resetting it would discard every override
+/// in it.
+fn load_sidecar_for_write(
+    path: &Path,
+    field: &str,
+) -> Result<synth_layout::sidecar::SidecarLayout, String> {
+    if !path.exists() {
+        return Ok(synth_layout::sidecar::SidecarLayout::default());
+    }
+    synth_layout::sidecar::SidecarLayout::load_from_file(path).ok_or_else(|| {
+        refusal(
+            Some(field),
+            format!(
+                "existing sidecar '{}' does not parse; refusing to overwrite it",
+                path.display()
+            ),
+        )
+    })
+}
+
+/// Serialise a sidecar with its keys in sorted order, so the same overrides
+/// always produce the same bytes (and the same design hash).
+fn sidecar_bytes(sidecar: &synth_layout::sidecar::SidecarLayout) -> Result<Vec<u8>, String> {
+    let value = toml::Value::try_from(sidecar).map_err(|e| e.to_string())?;
+    toml::to_string_pretty(&value)
+        .map(String::into_bytes)
+        .map_err(|e| e.to_string())
+}
+
+/// Write a sidecar atomically and confirm, by re-parsing the file, that each
+/// override in `expected` is what it now holds.
+fn write_sidecar_verified(
+    outcome: &mut Outcome,
+    path: &Path,
+    sidecar: &synth_layout::sidecar::SidecarLayout,
+    expected: &[(String, synth_layout::sidecar::SidecarPlacement)],
+) -> Result<(), String> {
+    let bytes = sidecar_bytes(sidecar)
+        .map_err(|e| refusal(None, format!("Failed to serialise sidecar TOML: {e}")))?;
+    if !write_verified(outcome, path, &bytes) {
+        return Err(write_phase_error(
+            std::mem::take(outcome),
+            format!("Failed to save sidecar TOML at '{}'", path.display()),
+        ));
+    }
+    let reread = synth_layout::sidecar::SidecarLayout::load_from_file(path);
+    let confirmed = reread.as_ref().is_some_and(|r| {
+        expected
+            .iter()
+            .all(|(refdes, placement)| r.components.get(refdes) == Some(placement))
+    });
+    if !confirmed {
+        outcome.unconfirmed(
+            path,
+            "re-parsed sidecar does not hold the requested override",
+        );
+    }
+    Ok(())
 }
 
 /// Write a layout op's *effect* through to the sidecar. Returns `None` when
@@ -2115,6 +2629,10 @@ fn execute_mutate_layout(args: &Value, default_registry: Option<&Path>) -> Resul
 /// Component ops persist the resulting absolute x/y/rotation; a
 /// `ReplaceWireWithLabel` op persists the net name. `RerouteNet` has no
 /// persistent form (routing is derived), so it persists nothing.
+///
+/// An override a human drag outranks is reported as `failed`, not as
+/// updated: the sidecar keeps the human position.
+#[allow(clippy::too_many_lines)] // one linear validate-then-write pipeline
 fn persist_layout_op(
     args: &Value,
     board: &synth_ir::Board,
@@ -2122,10 +2640,11 @@ fn persist_layout_op(
     layout: &synth_layout::Layout,
     op: &synth_layout::ops::LayoutOp,
     file_name: &str,
+    outcome: &mut Outcome,
 ) -> Result<Option<Value>, String> {
     use synth_layout::ops::LayoutOp;
     use synth_layout::sidecar::{
-        ForcedNetLabel, OverridePriority, OverrideSource, SidecarLayout, SidecarPlacement,
+        ForcedNetLabel, OverridePriority, OverrideSource, SidecarPlacement,
     };
 
     let explicit = args.get("layout_file_path").and_then(Value::as_str);
@@ -2149,11 +2668,7 @@ fn persist_layout_op(
         },
         PathBuf::from,
     );
-    let mut sidecar = if path.exists() {
-        SidecarLayout::load_from_file(&path).unwrap_or_default()
-    } else {
-        SidecarLayout::default()
-    };
+    let mut sidecar = load_sidecar_for_write(&path, "layout_file_path")?;
     // `Default` yields 0; the sidecar schema version is a real contract,
     // so stamp the current one before writing.
     sidecar.schema_version = synth_layout::sidecar::SIDECAR_SCHEMA_VERSION;
@@ -2187,6 +2702,7 @@ fn persist_layout_op(
 
     let now = chrono::Utc::now().to_rfc3339();
     let mut updated_components: Vec<String> = Vec::new();
+    let mut expected: Vec<(String, SidecarPlacement)> = Vec::new();
     for id in ids {
         let Some(comp) = board.component(id) else {
             continue;
@@ -2194,22 +2710,30 @@ fn persist_layout_op(
         let Some(placement) = layout.components.iter().find(|p| p.id == id) else {
             continue;
         };
-        sidecar.merge_override(
-            comp.refdes.clone(),
-            SidecarPlacement {
-                x: placement.center_mm.0,
-                y: placement.center_mm.1,
-                rotation: rotation_degrees(placement.rotation),
-                sheet: comp.sheet.clone(),
-                source: OverrideSource::Agent,
-                priority: OverridePriority::Soft,
-                timestamp: Some(now.clone()),
-                relative_to: None,
-                dx: 0.0,
-                dy: 0.0,
-            },
-        );
-        updated_components.push(comp.refdes.clone());
+        let intended = SidecarPlacement {
+            x: placement.center_mm.0,
+            y: placement.center_mm.1,
+            rotation: rotation_degrees(placement.rotation),
+            sheet: comp.sheet.clone(),
+            source: OverrideSource::Agent,
+            priority: OverridePriority::Soft,
+            timestamp: Some(now.clone()),
+            relative_to: None,
+            dx: 0.0,
+            dy: 0.0,
+        };
+        sidecar.merge_override(comp.refdes.clone(), intended.clone());
+        let item = serde_json::json!({ "refdes": comp.refdes });
+        if sidecar.components.get(&comp.refdes) == Some(&intended) {
+            outcome.apply(item);
+            updated_components.push(comp.refdes.clone());
+            expected.push((comp.refdes.clone(), intended));
+        } else {
+            outcome.fail(
+                item,
+                "a human_drag override of equal or higher priority takes precedence",
+            );
+        }
     }
 
     let mut forced_net_labels: Vec<String> = Vec::new();
@@ -2223,15 +2747,15 @@ fn persist_layout_op(
             });
         }
         forced_net_labels.push(n.name.clone());
+        outcome.apply(serde_json::json!({ "forced_net_label": n.name }));
     }
 
     if matches!(op, LayoutOp::FitSheet { .. }) {
         sidecar.fit_sheet = true;
+        outcome.apply(serde_json::json!({ "fit_sheet": true }));
     }
 
-    sidecar
-        .save_to_file(&path)
-        .map_err(|e| format!("Failed to save sidecar TOML: {e}"))?;
+    write_sidecar_verified(outcome, &path, &sidecar, &expected)?;
 
     Ok(Some(serde_json::json!({
         "saved_path": path.display().to_string(),
@@ -2660,10 +3184,12 @@ fn compare_baseline(
         "current_renderer": synth_render::RENDERER_ID,
         "renderer_matches": renderer_matches,
         "baseline_layout_fingerprint": meta["layout_fingerprint"].as_str(),
+        "baseline_design_hash": meta["design_hash"].as_str(),
         "baseline_captured_at": meta["captured_at"].as_str(),
     }))
 }
 
+#[allow(clippy::too_many_lines)] // one linear validate-then-write pipeline
 fn execute_schematic_baseline(
     args: &Value,
     default_registry: Option<&Path>,
@@ -2694,6 +3220,7 @@ fn execute_schematic_baseline(
     let sidecar = resolve_schematic_sidecar(args, &compiled.file_name);
     let sheets = render_schematic(&compiled.board, sidecar.as_deref(), width_px, None)?;
     let source = get_source_from_args(args)?;
+    let hash = design_hash_for(args, &compiled.file_name, &source, Some(&compiled.board));
 
     match action {
         "set" => {
@@ -2715,6 +3242,7 @@ fn execute_schematic_baseline(
                 "sheet_count": sheets.len(),
                 "layout_fingerprint": layout_fingerprint(&compiled.board, sidecar.as_deref()),
                 "source_fingerprint": source_fingerprint(&source),
+                "design_hash": hash.sha256,
                 "captured_at": chrono::Utc::now().to_rfc3339(),
             });
             std::fs::write(
@@ -2733,6 +3261,7 @@ fn execute_schematic_baseline(
                 "height_px": first.height_px,
                 "sheet_count": sheets.len(),
                 "warnings": render_warnings(&sheets),
+                "design_hash": hash.sha256,
             });
             if sheets.len() > 1 {
                 response["note"] = serde_json::json!(
@@ -2743,6 +3272,24 @@ fn execute_schematic_baseline(
         }
         "compare" => {
             let mut result = compare_baseline(&sheets, &png_path, &json_path)?;
+            let gate = match result["status"].as_str() {
+                Some("pass") => Gate::pass("schematic_baseline"),
+                Some("drift") => Gate::fail(
+                    "schematic_baseline",
+                    format!(
+                        "{:.2}% of the drawing changed (threshold {BASELINE_DRIFT_PCT}%)",
+                        result["changed_pct_of_content"]
+                            .as_f64()
+                            .unwrap_or(f64::NAN)
+                    ),
+                ),
+                _ => Gate::blocked(
+                    "schematic_baseline",
+                    "no stored baseline to compare against",
+                ),
+            }
+            .with_evidence(json_path.display().to_string());
+            attach_gates(&mut result, vec![design_gate(&compiled.board), gate], &hash);
             if args
                 .get("inline_diff")
                 .and_then(Value::as_bool)
@@ -3254,16 +3801,25 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // pipeline per tool keeps the MCP surface reviewable in one
     // place (same rationale as `list_tools` below).
     #![allow(clippy::too_many_lines)]
-    let source = get_source_from_args(args)?;
+    let source = get_source_from_args(args).map_err(|e| refusal(Some("source"), e))?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
     let out_dir_str = args["out_dir"]
         .as_str()
         .or_else(|| args["out"].as_str())
-        .ok_or_else(|| "Missing required parameter 'out_dir' (or 'out')".to_string())?;
+        .ok_or_else(|| {
+            refusal(
+                Some("out_dir"),
+                "Missing required parameter 'out_dir' (or 'out')",
+            )
+        })?;
     let out_dir = PathBuf::from(out_dir_str);
 
+    // Everything up to the export call is validation: a failure there is a
+    // refusal, and nothing has been written to `out_dir`.
     let parse = synth_parser::parse(&source, file_name.to_string());
-    let ast = parse.ast.ok_or("Parse failed")?;
+    let ast = parse
+        .ast
+        .ok_or_else(|| refusal(Some("source"), "Parse failed"))?;
     let loader = synth_ir::FsImportLoader {
         root: PathBuf::from("."),
     };
@@ -3273,15 +3829,24 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         .iter()
         .any(|d| d.severity.is_blocking())
     {
-        return Err("Compilation failed during import resolution; export aborted".into());
+        return Err(refusal(
+            Some("source"),
+            "Compilation failed during import resolution; export aborted",
+        ));
     }
-    let registry =
-        load_registry_tiered(args, default_registry).map_err(|e| format!("Registry error: {e}"))?;
+    let registry = load_registry_tiered(args, default_registry)
+        .map_err(|e| refusal(Some("registry_path"), format!("Registry error: {e}")))?;
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
     if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
-        return Err("Compilation produced blocking diagnostics; export aborted".into());
+        return Err(refusal(
+            Some("source"),
+            "Compilation produced blocking diagnostics; export aborted",
+        ));
     }
-    let board = lowered.board.ok_or("Lowering failed")?;
+    let board = lowered
+        .board
+        .ok_or_else(|| refusal(Some("source"), "Lowering failed"))?;
+    let design_hash = design_hash_for(args, file_name, &source, Some(&board));
 
     // Copper comes from the external router and is installed only when it
     // passes independent validation. A board that is not fabrication-ready
@@ -3292,8 +3857,17 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // would export with a bounding-box guess for its pads, which is not
     // fabricable. Only an explicit draft may carry one.
     let unfootprinted = synth_layout::kicad_footprint_loader::parts_without_real_footprint(&board);
+    let footprints_gate = if unfootprinted.is_empty() {
+        Gate::pass("footprints")
+    } else {
+        Gate::fail(
+            "footprints",
+            format!("no real KiCad footprint for: {}", unfootprinted.join(", ")),
+        )
+    }
+    .with_evidence("parts_without_real_footprint");
     if !unfootprinted.is_empty() && !allow_incomplete {
-        return Ok(serde_json::json!({
+        let mut payload = serde_json::json!({
             "error_code": "E-SYNTH-EXPORT-001",
             "parts_without_real_footprint": unfootprinted,
             "hint": format!(
@@ -3303,7 +3877,19 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
                  explicitly labelled draft.",
                 unfootprinted.join(", ")
             ),
-        }));
+            "outcome": Outcome::refused(
+                Some("allow_incomplete"),
+                "parts without a real footprint; nothing was written",
+            )
+            .to_value(),
+        });
+        let mut gates = vec![design_gate(&board), footprints_gate];
+        gates.extend(after_failure_gates(
+            &["routing", "kicad_drc", "signal_integrity"],
+            "footprints",
+        ));
+        attach_gates(&mut payload, gates, &design_hash);
+        return Ok(payload);
     }
     // Two sidecars, two coordinate spaces: board millimetres drive the PCB
     // placer, sheet millimetres drive the schematic. Resolving one file for
@@ -3317,20 +3903,22 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         schematic: schematic_sidecar.clone(),
         placement: placement_sidecar.clone(),
     };
-    let engine = resolve_router(args)?;
+    let engine = resolve_router(args).map_err(|e| refusal(Some("router"), e))?;
 
     // Opt-in place→route→re-place: route the candidate placements and keep the
     // one that routes best, then install it for the real export. Falls back to
     // the normal choice when there is one candidate or the engine is down.
     // The budget is checked for a bad value whether or not the search runs, so a
     // typo is not silently ignored; it starts when the search does.
-    let budget_secs = place_route_budget_secs(args)?;
+    let budget_secs =
+        place_route_budget_secs(args).map_err(|e| refusal(Some("place_route_budget_secs"), e))?;
     let mut search_budget = None;
     let mut placement_search = None;
     let chosen = if args["place_route_iterate"].as_bool().unwrap_or(false) {
         let mut budget = synth_router::search_budget::SearchBudget::start(budget_secs);
         let (placement, report) =
-            select_placement_by_route(&board, &sidecars, args, engine, &mut budget)?;
+            select_placement_by_route(&board, &sidecars, args, engine, &mut budget)
+                .map_err(|e| refusal(None, e))?;
         placement_search = Some(report);
         search_budget = Some(budget);
         placement
@@ -3344,7 +3932,18 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         }
         None => synth_kicad::export_with_sidecars(&board, &out_dir, &sidecars),
     }
-    .map_err(|e| format!("Export failed: {e}"))?;
+    .map_err(|e| {
+        // The exporter may have written some files before it failed.
+        let mut outcome = Outcome::new();
+        outcome.unconfirmed(&out_dir, format!("export failed part-way: {e}"));
+        write_phase_error(outcome, format!("Export failed: {e}"))
+    })?;
+
+    // From here on files exist in `out_dir`; every exit reports them.
+    let mut outcome = Outcome::new();
+    record_export_artifacts(&mut outcome, &res);
+    outcome.apply(serde_json::json!({ "item": "kicad_project" }));
+    let mut gates = vec![design_gate(&board), footprints_gate];
 
     let mut request = routing_request(args, engine);
     request.ground_nets = synth_drc::ground_net_names(&board);
@@ -3354,14 +3953,25 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     // is not started when nothing is.
     if let Some(budget) = &search_budget {
         let Some(limit) = budget.final_limit(request.limits.wall_clock) else {
-            return Err(serde_json::json!({
+            let mut payload = serde_json::json!({
                 "status": "placement_search_out_of_budget",
                 "routing_status": "not_run",
                 "reason": "The placement search used the whole place_route_budget_secs, so the final route was not started",
                 "placement_search": placement_search,
                 "hint": "Raise place_route_budget_secs or use fewer candidates, then retry."
-            })
-            .to_string());
+            });
+            gates.extend(not_run_gates(
+                &["routing", "kicad_drc", "signal_integrity"],
+                "the placement search used the whole budget",
+            ));
+            outcome.fail(
+                serde_json::json!({ "item": "routing" }),
+                "not started: the placement search used the whole budget",
+            );
+            outcome.skip(serde_json::json!({ "item": "signal_integrity" }));
+            outcome.skip(serde_json::json!({ "item": "aesthetic_findings" }));
+            finish_export_payload(&mut payload, gates, &design_hash, &out_dir, outcome);
+            return Err(payload.to_string());
         };
         request.limits = request.limits.with_wall_clock(limit.as_secs());
     }
@@ -3396,7 +4006,35 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
              labelled draft. The un-routed baseline is preserved at {}.",
             request.baseline_path().display()
         ));
+        gates.extend(route_gates(&routing, None));
+        outcome.fail(
+            serde_json::json!({ "item": "routing" }),
+            format!(
+                "the route is not fabrication-ready (state {})",
+                routing.state.as_str()
+            ),
+        );
+        outcome.skip(serde_json::json!({ "item": "signal_integrity" }));
+        outcome.skip(serde_json::json!({ "item": "aesthetic_findings" }));
+        finish_export_payload(&mut payload, gates, &design_hash, &out_dir, outcome);
         return Ok(payload);
+    }
+    if route_complete {
+        outcome.apply(serde_json::json!({ "item": "routing" }));
+    } else {
+        outcome.fail(
+            serde_json::json!({ "item": "routing" }),
+            format!(
+                "draft: the route is not fabrication-ready (state {})",
+                routing.state.as_str()
+            ),
+        );
+    }
+    if let Some(delivered) = routing.artifacts.delivered.as_ref()
+        && *delivered != res.pcb_path
+        && let Ok(written) = crate::outcome::hash_written(delivered)
+    {
+        outcome.wrote(written);
     }
 
     // Signal/power integrity on the routed copper: the rules kicad-cli cannot
@@ -3419,8 +4057,16 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
             "The routed board has {si_blocking} blocking signal/power-integrity finding(s). \
              Fix the routing, or set allow_incomplete=true for an explicitly labelled draft."
         ));
+        gates.extend(route_gates(&routing, Some(&signal_integrity)));
+        outcome.fail(
+            serde_json::json!({ "item": "signal_integrity" }),
+            format!("{si_blocking} blocking finding(s)"),
+        );
+        outcome.skip(serde_json::json!({ "item": "aesthetic_findings" }));
+        finish_export_payload(&mut payload, gates, &design_hash, &out_dir, outcome);
         return Ok(payload);
     }
+    outcome.apply(serde_json::json!({ "item": "signal_integrity" }));
 
     // Aesthetic schematic ERC over the same layout the exporter used:
     // surfaced to the agent so it can repair readability regressions
@@ -3454,12 +4100,22 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
         crate::findings::MAX_BYTES,
     );
     let findings_path = out_dir.join("aesthetic_findings.json");
-    let findings_path = std::fs::write(
+    let findings_path = write_verified(
+        &mut outcome,
         &findings_path,
-        serde_json::to_string_pretty(&aesthetic).unwrap_or_default(),
+        serde_json::to_string_pretty(&aesthetic)
+            .unwrap_or_default()
+            .as_bytes(),
     )
-    .is_ok()
     .then(|| findings_path.display().to_string());
+    if findings_path.is_some() {
+        outcome.apply(serde_json::json!({ "item": "aesthetic_findings" }));
+    }
+    gates.extend(route_gates(&routing, Some(&signal_integrity)));
+    gates.push(
+        diagnostics_gate("schematic_readability", &aesthetic)
+            .with_evidence("aesthetic_findings_path"),
+    );
 
     let mut result = serde_json::json!({
         "status": if route_complete { "success" } else { "draft_incomplete" },
@@ -3492,7 +4148,47 @@ fn execute_export(args: &Value, default_registry: Option<&Path>) -> Result<Value
     if let Some(notice) = sidecar_migration_notice(file_name) {
         result["sidecar_migration"] = serde_json::json!(notice);
     }
+    finish_export_payload(&mut result, gates, &design_hash, &out_dir, outcome);
     Ok(with_process_warnings(result, &process_warnings))
+}
+
+/// Hash the four export artefacts by reading them back.
+fn record_export_artifacts(outcome: &mut Outcome, res: &synth_kicad::ExportResult) {
+    for path in [
+        &res.project_path,
+        &res.schematic_path,
+        &res.library_path,
+        &res.pcb_path,
+        &res.bom_path,
+    ] {
+        match crate::outcome::hash_written(path) {
+            Ok(written) => outcome.wrote(written),
+            Err(e) => outcome.unconfirmed(path, e),
+        }
+    }
+}
+
+/// Stamp an export payload with its gates and verdict, write `evidence.json`
+/// beside the artefacts, and attach the outcome.
+///
+/// Evidence is written for every export that produced files, ready or not:
+/// a NOT_READY verdict tied to its revision is evidence too.
+fn finish_export_payload(
+    payload: &mut Value,
+    gates: Vec<Gate>,
+    hash: &crate::evidence::DesignHash,
+    out_dir: &Path,
+    mut outcome: Outcome,
+) {
+    let report = attach_gates(payload, gates, hash);
+    let evidence = crate::evidence::Evidence::new(hash, &report);
+    let path = out_dir.join(crate::evidence::EVIDENCE_FILE);
+    let bytes = serde_json::to_vec_pretty(&evidence).unwrap_or_default();
+    if write_verified(&mut outcome, &path, &bytes) {
+        outcome.apply(serde_json::json!({ "item": "evidence" }));
+        payload["evidence_path"] = serde_json::json!(path.display().to_string());
+    }
+    payload["outcome"] = outcome.finish().to_value();
 }
 
 /// One attempt of the compaction loop, in thousandths of the original scale.
@@ -4091,16 +4787,32 @@ fn execute_place_with_hints(
 ) -> Result<Value, String> {
     // Long by design: see `execute_export`.
     #![allow(clippy::too_many_lines)]
-    let source = get_source_from_args(args)?;
+    let source = get_source_from_args(args).map_err(|e| refusal(Some("source"), e))?;
     let file_name = args["file_path"].as_str().unwrap_or("board.synth");
+
+    // Hints are validated before anything runs: a malformed list used to be
+    // dropped silently, placing the board as if no hints were given.
+    let hints: Vec<synth_place::ExternalHint> = match args.get("hints") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(hints_val) => serde_json::from_value(hints_val.clone())
+            .map_err(|e| refusal(Some("hints"), format!("Invalid 'hints': {e}")))?,
+    };
+    let refused = |field: &str, mut payload: Value| -> Result<Value, String> {
+        let reason = payload["error"].as_str().unwrap_or("refused").to_string();
+        payload["outcome"] = Outcome::refused(Some(field), reason).to_value();
+        Ok(payload)
+    };
 
     let parse = synth_parser::parse(&source, file_name.to_string());
     if parse.has_errors() {
-        return Ok(serde_json::json!({
-            "status": "error",
-            "error": "Parse phase produced blocking errors",
-            "diagnostics": parse.diagnostics
-        }));
+        return refused(
+            "source",
+            serde_json::json!({
+                "status": "error",
+                "error": "Parse phase produced blocking errors",
+                "diagnostics": parse.diagnostics
+            }),
+        );
     }
 
     let ast = parse.ast.ok_or("No AST produced")?;
@@ -4116,11 +4828,7 @@ fn execute_place_with_hints(
     let lowered = synth_ir::lower(&resolved.program, &registry, file_name);
     let board = lowered.board.ok_or("Lowering failed")?;
 
-    let hints: Vec<synth_place::ExternalHint> = if let Some(hints_val) = args.get("hints") {
-        serde_json::from_value(hints_val.clone()).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
+    let design_hash = design_hash_for(args, file_name, &source, Some(&board));
 
     let family_dimensions = match args.get("board_family").and_then(Value::as_str) {
         Some(name) => match synth_place::board_family::get(name) {
@@ -4128,21 +4836,27 @@ fn execute_place_with_hints(
                 Some((profile.width_mm, profile.height_mm))
             }
             Some(profile) => {
-                return Ok(serde_json::json!({
-                    "status": "error",
-                    "error": "board family does not support the source layer count",
-                    "board_family": name,
-                    "board_layers": board.layers,
-                    "supported_layers": profile.layers
-                }));
+                return refused(
+                    "board_family",
+                    serde_json::json!({
+                        "status": "error",
+                        "error": "board family does not support the source layer count",
+                        "board_family": name,
+                        "board_layers": board.layers,
+                        "supported_layers": profile.layers
+                    }),
+                );
             }
             None => {
-                return Ok(serde_json::json!({
-                    "status": "error",
-                    "error": "unsupported board family",
-                    "board_family": name,
-                    "supported_board_families": synth_place::board_family::PROFILES
-                }));
+                return refused(
+                    "board_family",
+                    serde_json::json!({
+                        "status": "error",
+                        "error": "unsupported board family",
+                        "board_family": name,
+                        "supported_board_families": synth_place::board_family::PROFILES
+                    }),
+                );
             }
         },
         None => None,
@@ -4153,18 +4867,28 @@ fn execute_place_with_hints(
     ) {
         (Some(width), Some(height)) => Some((width, height)),
         (None, None) => None,
-        _ => {
-            return Ok(serde_json::json!({
-                "status": "error",
-                "error": "board_width_mm and board_height_mm must be supplied together"
-            }));
+        (width, _) => {
+            return refused(
+                if width.is_some() {
+                    "board_height_mm"
+                } else {
+                    "board_width_mm"
+                },
+                serde_json::json!({
+                    "status": "error",
+                    "error": "board_width_mm and board_height_mm must be supplied together"
+                }),
+            );
         }
     };
     if family_dimensions.is_some() && explicit_dimensions.is_some() {
-        return Ok(serde_json::json!({
-            "status": "error",
-            "error": "board_family cannot be combined with board_width_mm/board_height_mm"
-        }));
+        return refused(
+            "board_family",
+            serde_json::json!({
+                "status": "error",
+                "error": "board_family cannot be combined with board_width_mm/board_height_mm"
+            }),
+        );
     }
     let requested_dimensions = family_dimensions.or(explicit_dimensions);
 
@@ -4188,6 +4912,16 @@ fn execute_place_with_hints(
             }
             let placement_description =
                 synth_place::describe_placement_external(&board, &placement);
+            // Placement writes nothing; its items are the hints.
+            let outcome = hint_outcome(&report).to_value();
+            let mut gates = vec![
+                design_gate(&board),
+                Gate::pass("placement"),
+                placement_review_gate(
+                    placement_description.visual_review.requires_revision,
+                    placement_description.functional_warnings.len(),
+                ),
+            ];
 
             // Placement is an independently useful stage. Routing and DRC
             // can be expensive and are exposed through their own gates; do
@@ -4198,7 +4932,11 @@ fn execute_place_with_hints(
                 let board_w_mm = (placement.board_outline.width_nm() as f64) / 1_000_000.0;
                 #[allow(clippy::cast_precision_loss)]
                 let board_h_mm = (placement.board_outline.height_nm() as f64) / 1_000_000.0;
-                return Ok(serde_json::json!({
+                gates.extend(not_run_gates(
+                    &["routing", "kicad_drc", "signal_integrity"],
+                    "run_routing=false; call synth_route for copper and DRC",
+                ));
+                let mut payload = serde_json::json!({
                     "status": "placed",
                     "board_size_mm": [board_w_mm, board_h_mm],
                     "component_placements": synth_place::to_external(&board, &placement).components,
@@ -4211,8 +4949,11 @@ fn execute_place_with_hints(
                     "routing_status": "not_run",
                     "drc_status": "not_run",
                     "drc_clean": null,
-                    "unrouted_nets": null
-                }));
+                    "unrouted_nets": null,
+                    "outcome": outcome
+                });
+                attach_gates(&mut payload, gates, &design_hash);
+                return Ok(payload);
             }
 
             #[allow(clippy::cast_precision_loss)]
@@ -4223,7 +4964,11 @@ fn execute_place_with_hints(
             if placement_description.visual_review.requires_revision
                 && !args["allow_placement_warnings"].as_bool().unwrap_or(false)
             {
-                return Ok(serde_json::json!({
+                gates.extend(after_failure_gates(
+                    &["routing", "kicad_drc", "signal_integrity"],
+                    "placement_review",
+                ));
+                let mut payload = serde_json::json!({
                     "status": "placement_requires_revision",
                     "board_size_mm": [board_w_mm, board_h_mm],
                     "component_placements": synth_place::to_external(&board, &placement).components,
@@ -4235,8 +4980,11 @@ fn execute_place_with_hints(
                     },
                     "routing_status": "not_run",
                     "drc_status": "not_run",
-                    "reason": "Placement visual review requires revision before combined routing"
-                }));
+                    "reason": "Placement visual review requires revision before combined routing",
+                    "outcome": outcome
+                });
+                attach_gates(&mut payload, gates, &design_hash);
+                return Ok(payload);
             }
 
             // Placement-only DRC: the export path emits no copper, so
@@ -4249,7 +4997,22 @@ fn execute_place_with_hints(
                 &synth_drc::ManufacturerProfile::jlc_standard(),
             );
 
-            Ok(serde_json::json!({
+            gates.push(
+                if drc_report.is_clean() {
+                    Gate::pass("placement_drc")
+                } else {
+                    Gate::fail(
+                        "placement_drc",
+                        format!("{} violation(s)", drc_report.violations.len()),
+                    )
+                }
+                .with_evidence("violations"),
+            );
+            gates.extend(not_run_gates(
+                &["routing", "kicad_drc", "signal_integrity"],
+                "this is a placement-only check; call synth_route for copper and DRC",
+            ));
+            let mut payload = serde_json::json!({
                 "status": "ok",
                 "board_size_mm": [board_w_mm, board_h_mm],
                 "component_placements": synth_place::to_external(&board, &placement).components,
@@ -4263,15 +5026,58 @@ fn execute_place_with_hints(
                 "violations": drc_report.violations,
                 "violation_count": drc_report.violations.len(),
                 "routing_status": "not_run",
-                "hint_after_placement": "Run synth_route to generate copper with the external router and read its run record."
-            }))
+                "hint_after_placement": "Run synth_route to generate copper with the external router and read its run record.",
+                "outcome": outcome
+            });
+            attach_gates(&mut payload, gates, &design_hash);
+            Ok(payload)
         }
-        Err(e) => Ok(serde_json::json!({
-            "status": "error",
-            "error": format!("{e}"),
-            "diagnostics": e.to_diagnostics(&board, file_name)
-        })),
+        Err(e) => {
+            let mut payload = serde_json::json!({
+                "status": "error",
+                "error": format!("{e}"),
+                "diagnostics": e.to_diagnostics(&board, file_name)
+            });
+            let mut gates = vec![design_gate(&board), Gate::fail("placement", e.to_string())];
+            gates.extend(after_failure_gates(
+                &[
+                    "placement_review",
+                    "routing",
+                    "kicad_drc",
+                    "signal_integrity",
+                ],
+                "placement",
+            ));
+            attach_gates(&mut payload, gates, &design_hash);
+            let mut outcome = Outcome::new();
+            for hint in &hints {
+                outcome.skip(serde_json::to_value(hint).unwrap_or(Value::Null));
+            }
+            payload["outcome"] = outcome.finish().to_value();
+            Ok(payload)
+        }
     }
+}
+
+/// The hints of a placement run as an outcome: honoured hints applied, the
+/// rest failed with where the part actually went.
+fn hint_outcome(report: &synth_place::HintSatisfactionReport) -> Outcome {
+    let mut outcome = Outcome::new();
+    for hint in &report.hints {
+        let item = serde_json::json!({ "component": hint.component });
+        match hint.status {
+            synth_place::HintStatus::Honoured => outcome.apply(item),
+            synth_place::HintStatus::RelaxedToSoft => outcome.fail(
+                item,
+                format!("relaxed to a soft hint; placed in {}", hint.actual_region),
+            ),
+            synth_place::HintStatus::FallbackUsed => outcome.fail(
+                item,
+                format!("could not be honoured; fell back to {}", hint.actual_region),
+            ),
+        }
+    }
+    outcome.finish()
 }
 
 /// `synth_resolve_footprints`: report — and optionally apply — corrections
@@ -4437,9 +5243,22 @@ fn execute_describe_placement(
         .map_err(|e| format!("Placement failed: {e}"))?;
 
     let desc = synth_place::describe_placement_external(&board, &placement);
+    let gates = vec![
+        design_gate(&board),
+        placement_review_gate(
+            desc.visual_review.requires_revision,
+            desc.functional_warnings.len(),
+        )
+        .with_evidence("visual_review"),
+    ];
     let mut value = serde_json::to_value(desc).map_err(|e| format!("Serialization error: {e}"))?;
     value["fitness"] = serde_json::to_value(synth_place::fitness(&board, &placement))
         .map_err(|e| format!("Fitness serialization error: {e}"))?;
+    attach_gates(
+        &mut value,
+        gates,
+        &design_hash_for(args, file_name, &source, Some(&board)),
+    );
     Ok(value)
 }
 
@@ -4466,41 +5285,86 @@ fn execute_read_layout_overrides(args: &Value) -> Result<Value, String> {
     }))
 }
 
+#[allow(clippy::too_many_lines)] // one linear validate-then-write pipeline
 fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
-    let file_path_str = args["layout_file_path"]
-        .as_str()
-        .ok_or("Missing required 'layout_file_path'")?;
+    // Every input is validated before the sidecar is touched, and a bad one
+    // is refused by name. Unknown enum values used to fall back to a default
+    // silently, which wrote something the caller did not ask for.
+    let file_path_str = args["layout_file_path"].as_str().ok_or_else(|| {
+        refusal(
+            Some("layout_file_path"),
+            "Missing required 'layout_file_path'",
+        )
+    })?;
     let refdes = args["refdes"]
         .as_str()
-        .ok_or("Missing required 'refdes'")?
+        .filter(|r| !r.is_empty())
+        .ok_or_else(|| refusal(Some("refdes"), "Missing required 'refdes'"))?
         .to_string();
     let relative_to = args["relative_to"].as_str().map(str::to_string);
+    for key in ["x_mm", "y_mm", "dx_mm", "dy_mm"] {
+        if !args[key].is_null() && !args[key].as_f64().is_some_and(f64::is_finite) {
+            return Err(refusal(
+                Some(key),
+                format!("'{key}' must be a finite number of millimetres"),
+            ));
+        }
+    }
     let x_mm = args["x_mm"].as_f64().unwrap_or(0.0);
     let y_mm = args["y_mm"].as_f64().unwrap_or(0.0);
     if relative_to.is_none() && (!args["x_mm"].is_number() || !args["y_mm"].is_number()) {
-        return Err(
-            "Provide x_mm/y_mm for an absolute override, or relative_to for a relative override"
-                .into(),
-        );
+        return Err(refusal(
+            Some(if args["x_mm"].is_number() {
+                "y_mm"
+            } else {
+                "x_mm"
+            }),
+            "Provide x_mm/y_mm for an absolute override, or relative_to for a relative override",
+        ));
     }
-    let rotation = args["rotation"].as_u64().unwrap_or(0) as u32;
+    let rotation = match &args["rotation"] {
+        Value::Null => 0,
+        v => match v.as_u64() {
+            Some(r @ (0 | 90 | 180 | 270)) => r as u32,
+            _ => {
+                return Err(refusal(
+                    Some("rotation"),
+                    format!("'rotation' must be 0, 90, 180 or 270, got {v}"),
+                ));
+            }
+        },
+    };
     let sheet = args["sheet"].as_str().map(str::to_string);
 
-    let source = match args["source"].as_str() {
-        Some("human_drag") => synth_layout::sidecar::OverrideSource::HumanDrag,
-        _ => synth_layout::sidecar::OverrideSource::Agent,
+    let source = match &args["source"] {
+        Value::Null => synth_layout::sidecar::OverrideSource::Agent,
+        v => match v.as_str() {
+            Some("human_drag") => synth_layout::sidecar::OverrideSource::HumanDrag,
+            Some("agent") => synth_layout::sidecar::OverrideSource::Agent,
+            _ => {
+                return Err(refusal(
+                    Some("source"),
+                    format!("'source' must be \"agent\" or \"human_drag\", got {v}"),
+                ));
+            }
+        },
     };
-    let priority = match args["priority"].as_str() {
-        Some("hard") => synth_layout::sidecar::OverridePriority::Hard,
-        _ => synth_layout::sidecar::OverridePriority::Soft,
+    let priority = match &args["priority"] {
+        Value::Null => synth_layout::sidecar::OverridePriority::Soft,
+        v => match v.as_str() {
+            Some("hard") => synth_layout::sidecar::OverridePriority::Hard,
+            Some("soft") => synth_layout::sidecar::OverridePriority::Soft,
+            _ => {
+                return Err(refusal(
+                    Some("priority"),
+                    format!("'priority' must be \"soft\" or \"hard\", got {v}"),
+                ));
+            }
+        },
     };
 
     let path = Path::new(file_path_str);
-    let mut sidecar = if path.exists() {
-        synth_layout::sidecar::SidecarLayout::load_from_file(path).unwrap_or_default()
-    } else {
-        synth_layout::sidecar::SidecarLayout::default()
-    };
+    let mut sidecar = load_sidecar_for_write(path, "layout_file_path")?;
     // `Default` yields schema_version 0; the sidecar schema version is a
     // real contract, so stamp the current one before writing.
     sidecar.schema_version = synth_layout::sidecar::SIDECAR_SCHEMA_VERSION;
@@ -4518,16 +5382,35 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
         dy: args["dy_mm"].as_f64().unwrap_or(0.0),
     };
 
-    sidecar.merge_override(refdes.clone(), placement);
-    sidecar
-        .save_to_file(path)
-        .map_err(|e| format!("Failed to save sidecar TOML: {e}"))?;
+    let mut outcome = Outcome::new();
+    sidecar.merge_override(refdes.clone(), placement.clone());
+    let item = serde_json::json!({ "refdes": refdes });
+    if sidecar.components.get(&refdes) != Some(&placement) {
+        // The merge kept an existing human position. Nothing changes, so
+        // nothing is written.
+        outcome.fail(
+            item,
+            "a human_drag override of equal or higher priority takes precedence",
+        );
+        let outcome = outcome.finish();
+        return Ok(serde_json::json!({
+            "status": "refused",
+            "saved_path": path.display().to_string(),
+            "updated_refdes": Value::Null,
+            "effective_override": sidecar.components.get(&refdes),
+            "outcome": outcome.to_value()
+        }));
+    }
+    outcome.apply(item);
+    write_sidecar_verified(&mut outcome, path, &sidecar, &[(refdes.clone(), placement)])?;
 
+    let outcome = outcome.finish();
     Ok(serde_json::json!({
         "status": "ok",
         "saved_path": path.display().to_string(),
         "updated_refdes": refdes,
-        "effective_override": sidecar.components.get(&refdes)
+        "effective_override": sidecar.components.get(&refdes),
+        "outcome": outcome.to_value()
     }))
 }
 
@@ -4625,11 +5508,9 @@ fn execute_route_with_constraints(
         routed.policy.min_clearance_nm = routed.policy.min_clearance_nm.max(clearance);
     }
 
-    let (report, _, signal_integrity, process_warnings) =
-        route_design_externally_with(args, default_registry, Some(routed))?;
-    log_routing_outcome(args, &report);
-    let mut payload = with_process_warnings(route_report_payload(&report), &process_warnings);
-    attach_signal_integrity(&mut payload, &signal_integrity);
+    let routed = route_design_externally_with(args, default_registry, Some(routed))?;
+    log_routing_outcome(args, &routed.report);
+    let mut payload = routed.payload();
     payload["diagnostics"] = serde_json::json!(diagnostics);
     payload["constraints"] = serde_json::json!({
         "min_track_width_nm": min_width_nm,
@@ -4820,22 +5701,62 @@ fn ensure_footprint_dimensions(part: &mut synth_registry::Part) -> Result<(), St
     Ok(())
 }
 
+/// A file an importer will write: which item it is, where, and its content.
+type PlannedWrite = (&'static str, PathBuf, String);
+
+/// Import a part.
+///
+/// The importers only *plan* their writes, so every input is read, parsed
+/// and measured before anything touches the registry; a failure there is a
+/// refusal with nothing written. The planned files are then written
+/// atomically in order, and a failure part-way reports exactly which landed.
 fn execute_import_part(args: &Value, _default_registry: Option<&Path>) -> Result<Value, String> {
     let source = args["source"].as_str().unwrap_or("lcsc");
-    let user_dir = resolve_user_registry(args)?;
-    std::fs::create_dir_all(&user_dir).map_err(|e| format!("cannot create user registry: {e}"))?;
+    let user_dir = resolve_user_registry(args).map_err(|e| refusal(Some("user_registry"), e))?;
 
-    match source {
-        "lcsc" => import_part_lcsc(args, &user_dir),
-        "kicad" => import_part_kicad(args, &user_dir),
-        "kicad-zip" => import_part_kicad_zip(args, &user_dir),
-        other => Err(format!(
-            "unknown import source '{other}'; expected 'lcsc', 'kicad', or 'kicad-zip'"
-        )),
+    let mut writes: Vec<PlannedWrite> = Vec::new();
+    let response = match source {
+        "lcsc" => import_part_lcsc(args, &user_dir, &mut writes),
+        "kicad" => import_part_kicad(args, &user_dir, &mut writes),
+        "kicad-zip" => import_part_kicad_zip(args, &user_dir, &mut writes),
+        other => {
+            return Err(refusal(
+                Some("source"),
+                format!(
+                    "unknown import source '{other}'; expected 'lcsc', 'kicad', or 'kicad-zip'"
+                ),
+            ));
+        }
     }
+    .map_err(|e| refusal(None, e))?;
+
+    let mut outcome = Outcome::new();
+    let mut planned = writes.iter();
+    while let Some((item, path, content)) = planned.next() {
+        if write_verified(&mut outcome, path, content.as_bytes()) {
+            outcome.apply(serde_json::json!({ "item": item, "path": path.display().to_string() }));
+        } else {
+            for (rest, rest_path, _) in planned {
+                outcome.skip(
+                    serde_json::json!({ "item": rest, "path": rest_path.display().to_string() }),
+                );
+            }
+            return Err(write_phase_error(
+                outcome,
+                format!("import stopped: writing '{}' failed", path.display()),
+            ));
+        }
+    }
+    let mut response = response;
+    response["outcome"] = outcome.finish().to_value();
+    Ok(response)
 }
 
-fn import_part_lcsc(args: &Value, user_dir: &Path) -> Result<Value, String> {
+fn import_part_lcsc(
+    args: &Value,
+    user_dir: &Path,
+    writes: &mut Vec<PlannedWrite>,
+) -> Result<Value, String> {
     let code = args["code"].as_str().ok_or("lcsc import requires 'code'")?;
     let raw = match args["from_file"].as_str() {
         Some(p) => std::fs::read_to_string(p).map_err(|e| format!("from_file read failed: {e}"))?,
@@ -4859,11 +5780,9 @@ fn import_part_lcsc(args: &Value, user_dir: &Path) -> Result<Value, String> {
     let fp_dir = args["footprint_dir"]
         .as_str()
         .map_or_else(|| user_dir.join("footprints"), PathBuf::from);
-    std::fs::create_dir_all(&fp_dir).map_err(|e| e.to_string())?;
     let pretty = fp_dir.join(format!("{id}.pretty"));
-    std::fs::create_dir_all(&pretty).map_err(|e| e.to_string())?;
     let kmod_path = pretty.join(format!("{id}.kicad_mod"));
-    std::fs::write(&kmod_path, &module).map_err(|e| e.to_string())?;
+    writes.push(("footprint", kmod_path.clone(), module));
 
     let mut toml_str = synth_registry::easyeda::generate_part_toml(
         &id,
@@ -4875,7 +5794,7 @@ fn import_part_lcsc(args: &Value, user_dir: &Path) -> Result<Value, String> {
     );
     toml_str.push_str(&dimensions_table(width_mm, height_mm));
     let part_path = user_dir.join(format!("{id}.synth.toml"));
-    std::fs::write(&part_path, toml_str).map_err(|e| e.to_string())?;
+    writes.push(("part", part_path.clone(), toml_str));
 
     let pins_json: Vec<serde_json::Value> = pins
         .iter()
@@ -4899,7 +5818,11 @@ fn import_part_lcsc(args: &Value, user_dir: &Path) -> Result<Value, String> {
     }))
 }
 
-fn import_part_kicad(args: &Value, user_dir: &Path) -> Result<Value, String> {
+fn import_part_kicad(
+    args: &Value,
+    user_dir: &Path,
+    writes: &mut Vec<PlannedWrite>,
+) -> Result<Value, String> {
     use std::fmt::Write as _;
 
     let lib_id = args["lib_id"]
@@ -4969,7 +5892,7 @@ fn import_part_kicad(args: &Value, user_dir: &Path) -> Result<Value, String> {
 
     out.push_str(&dimensions_table(width_mm, height_mm));
     let part_path = user_dir.join(format!("{part_id}.synth.toml"));
-    std::fs::write(&part_path, out).map_err(|e| e.to_string())?;
+    writes.push(("part", part_path.clone(), out));
 
     let pins_json: Vec<serde_json::Value> = pins
         .iter()
@@ -5135,7 +6058,11 @@ fn zip_footprint_dimensions(
     .map_err(|why| dimensions_advice(&format!("the zip's footprint: {why}")))
 }
 
-fn import_part_kicad_zip(args: &Value, user_dir: &Path) -> Result<Value, String> {
+fn import_part_kicad_zip(
+    args: &Value,
+    user_dir: &Path,
+    writes: &mut Vec<PlannedWrite>,
+) -> Result<Value, String> {
     use std::fmt::Write as _;
 
     let zip_path = args["zip_path"]
@@ -5164,9 +6091,8 @@ fn import_part_kicad_zip(args: &Value, user_dir: &Path) -> Result<Value, String>
     if let Some(fp_text) = &import.footprint_text {
         let fp_dir = user_dir.join("footprints");
         let pretty = fp_dir.join(format!("{part_id}.pretty"));
-        std::fs::create_dir_all(&pretty).map_err(|e| e.to_string())?;
         let kmod = pretty.join(format!("{part_id}.kicad_mod"));
-        std::fs::write(&kmod, fp_text).map_err(|e| e.to_string())?;
+        writes.push(("footprint", kmod.clone(), fp_text.clone()));
         let _ = writeln!(out, "kicad_footprint = \"{part_id}:{part_id}\"");
         footprint_path = Some(kmod);
     }
@@ -5214,7 +6140,7 @@ fn import_part_kicad_zip(args: &Value, user_dir: &Path) -> Result<Value, String>
 
     out.push_str(&dimensions_table(width_mm, height_mm));
     let part_path = user_dir.join(format!("{part_id}.synth.toml"));
-    std::fs::write(&part_path, out).map_err(|e| e.to_string())?;
+    writes.push(("part", part_path.clone(), out));
 
     let pins_json: Vec<serde_json::Value> = import
         .pins
@@ -5245,26 +6171,41 @@ fn import_part_kicad_zip(args: &Value, user_dir: &Path) -> Result<Value, String>
 
 /// Persist a human/agent-authored part into the Tier-2 registry after validation.
 fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result<Value, String> {
-    let toml_src = args["part_toml"]
-        .as_str()
-        .ok_or("author_part requires 'part_toml' (TOML string)")?;
-    let mut part: synth_registry::Part =
-        toml::from_str(toml_src).map_err(|e| format!("invalid part TOML: {e}"))?;
+    let toml_src = args["part_toml"].as_str().ok_or_else(|| {
+        refusal(
+            Some("part_toml"),
+            "author_part requires 'part_toml' (TOML string)",
+        )
+    })?;
+    let mut part: synth_registry::Part = toml::from_str(toml_src)
+        .map_err(|e| refusal(Some("part_toml"), format!("invalid part TOML: {e}")))?;
 
     if part.id.as_str().is_empty() {
-        return Err("part TOML must include a non-empty 'id'".into());
+        return Err(refusal(
+            Some("part_toml.id"),
+            "part TOML must include a non-empty 'id'",
+        ));
     }
     if part.pins.is_empty() {
-        return Err("part TOML must declare at least one [[pins]] entry".into());
+        return Err(refusal(
+            Some("part_toml.pins"),
+            "part TOML must declare at least one [[pins]] entry",
+        ));
     }
-    for p in &part.pins {
+    for (index, p) in part.pins.iter().enumerate() {
         if p.name.is_empty() || p.number.0.is_empty() {
-            return Err("each pin must have a non-empty name and number".into());
+            return Err(refusal(
+                Some(&format!("part_toml.pins[{index}]")),
+                "each pin must have a non-empty name and number",
+            ));
         }
     }
     if let Some(provenance) = &part.provenance {
         if provenance.source == synth_registry::ProvenanceSource::Seed {
-            return Err("authored parts cannot claim seed provenance".into());
+            return Err(refusal(
+                Some("part_toml.provenance.source"),
+                "authored parts cannot claim seed provenance",
+            ));
         }
     } else {
         part.provenance = Some(synth_registry::Provenance {
@@ -5276,26 +6217,41 @@ fn execute_author_part(args: &Value, _default_registry: Option<&Path>) -> Result
 
     // The registry requires every part to declare its footprint's size, and an
     // author who names a stock footprint has no reason to measure it.
-    ensure_footprint_dimensions(&mut part)?;
+    ensure_footprint_dimensions(&mut part).map_err(|e| refusal(Some("part_toml"), e))?;
 
-    let serialized = toml::to_string_pretty(&part).map_err(|e| e.to_string())?;
+    let serialized = toml::to_string_pretty(&part).map_err(|e| refusal(None, e.to_string()))?;
     // Reuse the registry loader's post-parse checks so the tool cannot write
     // a part that every later registry load rejects.
     let filename = format!("{}.synth.toml", part.id.as_str());
     synth_registry::load_from_strs(&[(&filename, &serialized)])
-        .map_err(|e| format!("invalid part TOML: {e}"))?;
+        .map_err(|e| refusal(Some("part_toml"), format!("invalid part TOML: {e}")))?;
 
-    let user_dir = resolve_user_registry(args)?;
-    std::fs::create_dir_all(&user_dir).map_err(|e| format!("cannot create user registry: {e}"))?;
+    let user_dir = resolve_user_registry(args).map_err(|e| refusal(Some("user_registry"), e))?;
+    let path = user_dir.join(&filename);
 
-    let path = user_dir.join(filename);
-    std::fs::write(&path, serialized).map_err(|e| e.to_string())?;
+    let mut outcome = Outcome::new();
+    if !write_verified(&mut outcome, &path, serialized.as_bytes()) {
+        return Err(write_phase_error(
+            outcome,
+            format!("writing '{}' failed", path.display()),
+        ));
+    }
+    // Readback: the file must load as a registry part, not merely hold bytes.
+    let reread = std::fs::read_to_string(&path).unwrap_or_default();
+    if synth_registry::load_from_strs(&[(&filename, &reread)]).is_err() {
+        outcome.unconfirmed(
+            &path,
+            "the written part does not load back from the registry",
+        );
+    }
+    outcome.apply(serde_json::json!({ "part_id": part.id.as_str() }));
 
     Ok(serde_json::json!({
         "status": "authored",
         "part_id": part.id.as_str(),
         "path": path.display().to_string(),
-        "pin_count": part.pins.len()
+        "pin_count": part.pins.len(),
+        "outcome": outcome.finish().to_value()
     }))
 }
 
@@ -5882,7 +6838,7 @@ electrical_type = "input"
     /// Build a minimal single-part `.kicad_sym` + `.kicad_mod` zip on
     /// disk, matching the shape SnapEDA/UltraLibrarian document
     /// (symbol at zip root, footprint under a `<lib>.pretty/` dir).
-    fn write_sample_kicad_zip(dir: &Path) -> PathBuf {
+    pub(super) fn write_sample_kicad_zip(dir: &Path) -> PathBuf {
         use std::io::Write as _;
 
         let sym = r#"(kicad_symbol_lib (version 20211014) (generator kicad_symbol_editor)
@@ -6834,5 +7790,477 @@ mod routed_integrity_tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
         assert!(findings[0].is_blocking());
+    }
+}
+
+/// The gate verdict (#475), design hash (#476) and outcome envelope (#477)
+/// as each tool reports them.
+#[cfg(test)]
+mod gate_outcome_tests {
+    use super::*;
+    use serde_json::json;
+
+    const LED: &str = r#"board "led_indicator" {
+  layers 2
+  manufacturer "jlcpcb"
+
+  component J1: connector "jst_ph_2pin"
+  component D1: diode     "led_red_0603"
+  component R1: resistor  "r_generic_0603"
+
+  connect J1.p1      -> R1.p1
+  connect R1.p2       -> D1.anode
+  connect D1.cathode  -> J1.p2
+}
+"#;
+
+    /// A design on disk, so sidecars and evidence have somewhere to live.
+    fn design(dir: &tempfile::TempDir) -> PathBuf {
+        let path = dir.path().join("led.synth");
+        std::fs::write(&path, LED).unwrap();
+        path
+    }
+
+    /// Every file under `dir`, with its bytes: what "byte-identical" compares.
+    fn snapshot(dir: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+        let mut out = std::collections::BTreeMap::new();
+        let mut pending = vec![dir.to_path_buf()];
+        while let Some(d) = pending.pop() {
+            for entry in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    pending.push(p);
+                } else {
+                    out.insert(p.clone(), std::fs::read(&p).unwrap());
+                }
+            }
+        }
+        out
+    }
+
+    fn refusal_of(err: &str) -> Value {
+        serde_json::from_str(err).unwrap_or_else(|_| panic!("not a structured refusal: {err}"))
+    }
+
+    fn missing_router() -> Value {
+        json!({
+            "router": "freerouting",
+            "freerouting_jar": "/nonexistent/synth-test/freerouting.jar",
+            "freerouting_java": "/nonexistent/synth-test/java",
+            "allow_placement_warnings": true,
+        })
+    }
+
+    fn merge(mut base: Value, extra: &Value) -> Value {
+        for (k, v) in extra.as_object().unwrap() {
+            base[k] = v.clone();
+        }
+        base
+    }
+
+    // --- #475: verdicts --------------------------------------------------
+
+    #[test]
+    fn an_empty_board_is_empty() {
+        let v = call_tool(
+            "synth_validate",
+            &json!({ "source": "board \"hello\" {\n  layers 2\n}\n" }),
+            None,
+        )
+        .unwrap();
+        assert_eq!(v["verdict"], "EMPTY", "{v:#}");
+    }
+
+    #[test]
+    fn validate_and_erc_emit_gates_verdict_and_hash() {
+        for tool in ["synth_validate", "synth_erc_report"] {
+            let v = call_tool(tool, &json!({ "source": LED }), None).unwrap();
+            assert!(v["verdict"].is_string(), "{tool}: {v:#}");
+            let gates = v["gates"].as_array().unwrap();
+            assert!(
+                gates.iter().any(|g| g["name"] == "erc"),
+                "{tool}: {gates:?}"
+            );
+            assert_eq!(v["design_hash"].as_str().unwrap().len(), 64, "{tool}");
+        }
+    }
+
+    #[test]
+    fn a_missing_registry_is_blocked_not_failed() {
+        let v = call_tool(
+            "synth_validate",
+            &json!({ "source": LED, "registry_path": "/path/that/does/not/exist" }),
+            None,
+        )
+        .unwrap();
+        assert_eq!(v["verdict"], "INCOMPLETE");
+        assert!(
+            v["verdict_detail"]["blocked_gates"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("registry"))
+        );
+    }
+
+    /// With no router installed, DRC is INCOMPLETE and names the engine — it
+    /// is never "0 violations".
+    #[test]
+    fn drc_without_a_router_is_incomplete_and_names_the_engine() {
+        let v = call_tool(
+            "synth_drc_report",
+            &merge(json!({ "source": LED }), &missing_router()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(v["state"], "router_unavailable", "{v:#}");
+        assert_eq!(v["verdict"], "INCOMPLETE", "{v:#}");
+        let summary = v["verdict_detail"]["summary"].as_str().unwrap();
+        assert!(summary.contains("freerouting"), "{summary}");
+        let blocked = v["verdict_detail"]["blocked_gates"].as_array().unwrap();
+        for gate in ["routing", "kicad_drc", "signal_integrity"] {
+            assert!(blocked.contains(&json!(gate)), "{gate}: {blocked:?}");
+        }
+    }
+
+    #[test]
+    fn placement_only_review_never_reads_ready() {
+        let v = call_tool("synth_place_with_hints", &json!({ "source": LED }), None).unwrap();
+        assert_eq!(v["status"], "placed");
+        assert_eq!(v["verdict"], "INCOMPLETE", "routing was not run: {v:#}");
+        assert_eq!(v["outcome"]["kind"], "complete");
+    }
+
+    // --- #476: design hash and evidence ---------------------------------
+
+    #[test]
+    fn export_without_a_router_writes_stale_detectable_evidence() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = design(&dir);
+        let out = dir.path().join("out");
+        let args = merge(
+            json!({
+                "file_path": path.to_str().unwrap(),
+                "out_dir": out.to_str().unwrap(),
+            }),
+            &missing_router(),
+        );
+        let v = call_tool("synth_export", &args, None).unwrap();
+        assert_eq!(v["verdict"], "INCOMPLETE", "{v:#}");
+        assert!(
+            v["verdict_detail"]["summary"]
+                .as_str()
+                .unwrap()
+                .contains("freerouting")
+        );
+        // Files were written but routing failed: partial, and exactly which.
+        assert_eq!(v["outcome"]["kind"], "partial", "{:#}", v["outcome"]);
+        assert_eq!(v["outcome"]["failed"][0]["item"]["item"], "routing");
+        assert!(!v["outcome"]["written_paths"].as_array().unwrap().is_empty());
+
+        let evidence_path = out.join(crate::evidence::EVIDENCE_FILE);
+        let evidence = crate::evidence::Evidence::read(&evidence_path).unwrap();
+        assert_eq!(evidence.design_hash, v["design_hash"].as_str().unwrap());
+        assert_eq!(evidence.verdict, synth_diagnostics::Verdict::Incomplete);
+
+        // Writing evidence did not change the design's identity.
+        let file_name = path.to_str().unwrap();
+        let fresh = design_hash_for(&args, file_name, LED, None);
+        let board_hash = call_tool("synth_validate", &json!({ "file_path": file_name }), None)
+            .unwrap()["design_hash"]
+            .clone();
+        assert_eq!(board_hash, json!(evidence.design_hash));
+        // Editing a sidecar makes it stale, and names the file.
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        std::fs::write(&sidecar, "schema_version = 1\n").unwrap();
+        let after = call_tool("synth_validate", &json!({ "file_path": file_name }), None).unwrap();
+        let current = crate::evidence::DesignHash {
+            sha256: after["design_hash"].as_str().unwrap().to_string(),
+            files: serde_json::from_value(after["design_hash_files"].clone()).unwrap(),
+        };
+        let staleness = evidence.staleness(&current);
+        assert!(staleness.stale);
+        assert_eq!(staleness.added, vec!["led.placement.layout.toml"]);
+        assert_ne!(fresh.sha256, current.sha256);
+    }
+
+    // --- #477: outcome envelope -------------------------------------------
+
+    #[test]
+    fn apply_patch_reports_exactly_which_patches_applied() {
+        let v = call_tool(
+            "synth_apply_patch",
+            &json!({
+                "source": "board \"a\" {}",
+                "patches": [
+                    { "confidence": 1.0, "kind": "insert_at", "at": 11, "text": "\n  layers 4\n" },
+                    { "confidence": 1.0, "kind": "insert_at", "at": 9999, "text": "x" }
+                ]
+            }),
+            None,
+        )
+        .unwrap();
+        let outcome = &v["outcome"];
+        assert_eq!(outcome["kind"], "partial", "{outcome:#}");
+        assert_eq!(outcome["applied"], json!([{ "index": 0 }]));
+        assert_eq!(outcome["failed"][0]["item"], json!({ "index": 1 }));
+        assert!(outcome["written_paths"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn apply_patch_refuses_a_malformed_patch_by_name() {
+        let err = call_tool(
+            "synth_apply_patch",
+            &json!({
+                "source": "board \"a\" {}",
+                "patches": [
+                    { "confidence": 1.0, "kind": "insert_at", "at": 11, "text": "x" },
+                    { "kind": "no_such_kind" }
+                ]
+            }),
+            None,
+        )
+        .unwrap_err();
+        let r = refusal_of(&err);
+        assert_eq!(r["outcome"]["kind"], "refused");
+        assert_eq!(r["field"], "patches[1]");
+    }
+
+    #[test]
+    fn fix_reports_an_outcome_and_refuses_without_source() {
+        let v = call_tool("synth_fix", &json!({ "source": LED }), None).unwrap();
+        assert!(v["outcome"]["kind"].is_string(), "{v:#}");
+        let err = call_tool("synth_fix", &json!({}), None).unwrap_err();
+        assert_eq!(refusal_of(&err)["field"], "source");
+    }
+
+    fn sidecar_with_human_drag(path: &Path, refdes: &str) {
+        call_tool(
+            "synth_write_layout_override",
+            &json!({
+                "layout_file_path": path.to_str().unwrap(),
+                "refdes": refdes, "x_mm": 1.0, "y_mm": 2.0,
+                "source": "human_drag", "priority": "hard"
+            }),
+            None,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn write_layout_override_refusals_leave_the_sidecar_byte_identical() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        sidecar_with_human_drag(&sidecar, "R1");
+        let before = snapshot(dir.path());
+
+        for (bad, field) in [
+            (
+                json!({ "rotation": 45, "x_mm": 0.0, "y_mm": 0.0 }),
+                "rotation",
+            ),
+            (
+                json!({ "priority": "urgent", "x_mm": 0.0, "y_mm": 0.0 }),
+                "priority",
+            ),
+            (json!({ "x_mm": 0.0 }), "y_mm"),
+        ] {
+            let args = merge(
+                json!({ "layout_file_path": sidecar.to_str().unwrap(), "refdes": "D1" }),
+                &bad,
+            );
+            let err = call_tool("synth_write_layout_override", &args, None).unwrap_err();
+            assert_eq!(refusal_of(&err)["field"], field, "{err}");
+            assert_eq!(snapshot(dir.path()), before, "{field} refusal wrote");
+        }
+
+        // A human drag outranks the agent: nothing written, reported as such.
+        let v = call_tool(
+            "synth_write_layout_override",
+            &json!({
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "refdes": "R1", "x_mm": 9.0, "y_mm": 9.0
+            }),
+            None,
+        )
+        .unwrap();
+        assert_eq!(v["outcome"]["kind"], "refused", "{v:#}");
+        assert_eq!(v["outcome"]["failed"][0]["item"], json!({ "refdes": "R1" }));
+        assert_eq!(snapshot(dir.path()), before);
+    }
+
+    #[test]
+    fn a_sidecar_that_does_not_parse_is_refused_not_reset() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        std::fs::write(&sidecar, "this is [not toml").unwrap();
+        let before = snapshot(dir.path());
+        let err = call_tool(
+            "synth_write_layout_override",
+            &json!({
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "refdes": "R1", "x_mm": 1.0, "y_mm": 1.0
+            }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["field"], "layout_file_path");
+        assert_eq!(snapshot(dir.path()), before);
+    }
+
+    #[test]
+    fn write_layout_override_verifies_by_readback() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        let v = call_tool(
+            "synth_write_layout_override",
+            &json!({
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "refdes": "R1", "x_mm": 1.5, "y_mm": 2.5, "rotation": 90
+            }),
+            None,
+        )
+        .unwrap();
+        let outcome = &v["outcome"];
+        assert_eq!(outcome["kind"], "complete");
+        assert_eq!(outcome["verified"], true);
+        let bytes = std::fs::read(&sidecar).unwrap();
+        assert_eq!(
+            outcome["written_paths"][0]["sha256"],
+            crate::outcome::sha256_hex(&bytes)
+        );
+    }
+
+    #[test]
+    fn mutate_layout_reports_a_human_override_it_could_not_replace() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = design(&dir);
+        let sidecar = dir.path().join("led.schematic.layout.toml");
+        // Component 0 is J1.
+        sidecar_with_human_drag(&sidecar, "J1");
+        let before = snapshot(dir.path());
+
+        let err = call_tool(
+            "synth_mutate_layout",
+            &json!({
+                "file_path": path.to_str().unwrap(),
+                "persist": true,
+                "op": { "kind": "no_such_op" }
+            }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["field"], "op");
+        assert_eq!(snapshot(dir.path()), before);
+
+        let v = call_tool(
+            "synth_mutate_layout",
+            &json!({
+                "file_path": path.to_str().unwrap(),
+                "persist": true,
+                "op": { "kind": "move_component", "id": 0, "x_mm": 99.06, "y_mm": 50.8 }
+            }),
+            None,
+        )
+        .unwrap();
+        let outcome = &v["outcome"];
+        assert_eq!(outcome["kind"], "partial", "{outcome:#}");
+        assert_eq!(outcome["failed"][0]["item"], json!({ "refdes": "J1" }));
+        assert_eq!(v["persisted"]["updated_components"], json!([]));
+    }
+
+    #[test]
+    fn author_part_refuses_without_writing_and_verifies_what_it_writes() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": "id = \"\"", "user_registry": dir.path().to_str().unwrap() }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["outcome"]["kind"], "refused");
+        assert!(snapshot(dir.path()).is_empty());
+
+        let toml_src = "id = \"auth_ok\"\nkind = \"transistor\"\n\n[footprint_dimensions]\nwidth_mm = 2.0\nheight_mm = 1.0\n\n[[pins]]\nname = \"g\"\nnumber = \"1\"\nelectrical_type = \"input\"\n";
+        let v = call_tool(
+            "synth_author_part",
+            &json!({ "part_toml": toml_src, "user_registry": dir.path().to_str().unwrap() }),
+            None,
+        )
+        .unwrap();
+        assert_eq!(v["outcome"]["kind"], "complete", "{v:#}");
+        assert_eq!(v["outcome"]["verified"], true);
+    }
+
+    #[test]
+    fn import_part_reports_the_files_that_landed_when_one_write_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = super::import_tool_tests::write_sample_kicad_zip(dir.path());
+        let registry = dir.path().join("reg");
+        // A directory where the part file should go makes that write fail
+        // after the footprint has been written.
+        std::fs::create_dir_all(registry.join("testpart.synth.toml")).unwrap();
+        let err = call_tool(
+            "synth_import_part",
+            &json!({
+                "source": "kicad-zip",
+                "zip_path": zip_path.to_str().unwrap(),
+                "user_registry": registry.to_str().unwrap()
+            }),
+            None,
+        )
+        .unwrap_err();
+        let r: Value = serde_json::from_str(&err).unwrap();
+        let outcome = &r["outcome"];
+        assert_eq!(outcome["kind"], "partial", "{outcome:#}");
+        assert_eq!(outcome["applied"][0]["item"], "footprint");
+        assert_eq!(outcome["written_paths"].as_array().unwrap().len(), 1);
+        assert_eq!(outcome["failed"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn import_part_refusal_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = dir.path().join("reg");
+        let err = call_tool(
+            "synth_import_part",
+            &json!({ "source": "kicad-zip", "user_registry": registry.to_str().unwrap() }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["outcome"]["kind"], "refused");
+        assert!(
+            !registry.exists(),
+            "a refusal must not even create the registry"
+        );
+    }
+
+    #[test]
+    fn place_with_hints_refuses_malformed_hints() {
+        let err = call_tool(
+            "synth_place_with_hints",
+            &json!({ "source": LED, "hints": [42] }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["field"], "hints");
+    }
+
+    #[test]
+    fn export_refusal_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = design(&dir);
+        let out = dir.path().join("out");
+        let err = call_tool(
+            "synth_export",
+            &json!({
+                "file_path": path.to_str().unwrap(),
+                "out_dir": out.to_str().unwrap(),
+                "router": "no-such-router"
+            }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["field"], "router");
+        assert!(!out.exists());
     }
 }
