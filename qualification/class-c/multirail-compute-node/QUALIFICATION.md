@@ -112,7 +112,7 @@ The part pages were read in 2026-11 and the stock is not firm.
 
 ## Fabrication package
 
-[`fab/`](fab/): `gerbers.zip` (the Gerbers and drill file: 14 files, namely four copper layers, two mask, two paste, two silkscreen, one Edge.Cuts, one drill file, one drill map PDF and one job file), `bom.csv` (the orderable BOM) and `cpl.csv` (the placement file); the STEP model is in [`models/`](models/); every file is listed in [`SHA256SUMS`](SHA256SUMS). Models the KiCad library lacks are written from datasheet dimensions (the test points as 1 oz copper discs, the 1812 fuses as the Bourns datasheet's mid-range block).
+[`fab/`](fab/): `gerbers.zip` (16 files: four copper layers, two mask, two paste, two silkscreen, one Edge.Cuts, two drill files, two drill map PDFs and one job file), `bom.csv` (the orderable BOM) and `cpl.csv` (the placement file); the STEP model is in [`models/`](models/); every file is listed in [`SHA256SUMS`](SHA256SUMS). Models the KiCad library lacks are written from datasheet dimensions (the test points as 1 oz copper discs, the 1812 fuses as the Bourns datasheet's mid-range block).
 
 ## Reproducibility
 
