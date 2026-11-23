@@ -217,27 +217,33 @@ fn run_rounds(
         &declared,
     );
     let mut unresolved = plan.unresolved;
-    unresolved.extend(plan.vias.iter().enumerate().map(|(i, via)| {
+    let mut advisory = plan.advisory;
+    for (i, via) in plan.vias.iter().enumerate() {
+        let (x, y) = (via.at.x_mm(), via.at.y_mm());
         if i < islands {
-            format!(
-                "a ground island on net {} near ({:.2}, {:.2}) mm is still untied after {MAX_ROUNDS} rounds",
-                via.net,
-                via.at.x_mm(),
-                via.at.y_mm()
-            )
+            unresolved.push(format!(
+                "a ground island on net {} near ({x:.2}, {y:.2}) mm is still untied after {MAX_ROUNDS} rounds",
+                via.net
+            ));
+        } else if let Some(m) = plan.medium_returns.iter().find(|m| m.index == i) {
+            advisory.push(format!(
+                "net {} changes layers at ({:.2}, {:.2}) mm and its return via on net {} was not placed within {MAX_ROUNDS} rounds; the net declares a medium edge, so the loop is left as an advisory",
+                m.signal_net,
+                nm_to_mm(m.at_nm.0),
+                nm_to_mm(m.at_nm.1),
+                via.net
+            ));
         } else {
-            format!(
-                "a signal via still wants a ground return via on net {} near ({:.2}, {:.2}) mm after {MAX_ROUNDS} rounds",
-                via.net,
-                via.at.x_mm(),
-                via.at.y_mm()
-            )
+            unresolved.push(format!(
+                "a signal via still wants a ground return via on net {} near ({x:.2}, {y:.2}) mm after {MAX_ROUNDS} rounds",
+                via.net
+            ));
         }
-    }));
+    }
     Ok(TieOutcome {
         added,
         unresolved,
-        advisory: plan.advisory,
+        advisory,
     })
 }
 
@@ -428,6 +434,18 @@ pub struct TiePlan {
     /// Signal vias in a fine-pitch pad breakout with no room for a return via,
     /// where the design opted in: advisories.
     pub advisory: Vec<String>,
+    /// The return vias a medium net asked for.
+    pub medium_returns: Vec<MediumReturn>,
+}
+
+/// A return via a medium net asked for: its place in `TiePlan::vias`, and the
+/// signal net and layer change it was planned for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MediumReturn {
+    pub index: usize,
+    pub signal_net: String,
+    /// The layer change, in nanometres.
+    pub at_nm: (i64, i64),
 }
 
 /// The vias that would tie each unjoined, copper-bearing island of every
@@ -685,6 +703,12 @@ pub fn plan_all_with(
 ) -> TiePlan {
     let mut plan = plan_ties_and_pads(board, ground, declared);
     let stitched = stitch(board, reach_mm, &plan.vias, ground, declared);
+    let first = plan.vias.len();
+    plan.medium_returns
+        .extend(stitched.medium.into_iter().map(|m| MediumReturn {
+            index: first + m.index,
+            ..m
+        }));
     plan.vias.extend(stitched.vias);
     plan.unresolved.extend(stitched.unresolved);
     plan.advisory.extend(stitched.advisory);
@@ -713,6 +737,7 @@ pub struct Ground {
     underpad: BTreeSet<String>,
     /// The nets that declare a medium edge: they keep the return-via requirement
     /// but look for the via in the wider window of `synth_drc::MEDIUM_EDGE_WINDOW_NM`.
+    /// A medium net with no spot for one is an advisory, not blocking.
     medium: BTreeSet<String>,
     /// Opt-in: a missing fast-edge return via in a fine-pitch pad breakout is
     /// an advisory, not blocking. Needs SI-review sign-off; off by default.
@@ -797,6 +822,8 @@ struct Stitched {
     vias: Vec<TieVia>,
     unresolved: Vec<String>,
     advisory: Vec<String>,
+    /// The return vias a medium net asked for.
+    medium: Vec<MediumReturn>,
 }
 
 /// A pad's copper as a rectangle turned to the pad's own angle.
@@ -1766,6 +1793,7 @@ fn stitch(
         vias: Vec::new(),
         unresolved: Vec::new(),
         advisory: Vec::new(),
+        medium: Vec::new(),
     };
     let pours = pours(board);
     let Some((net, regions)) = pours
@@ -1868,6 +1896,7 @@ fn stitch(
     let mut out = Vec::new();
     let mut offsets_by_window: HashMap<u64, Vec<(f64, f64)>> = HashMap::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
+    let mut medium = Vec::new();
     for &(vx, vy, ref signal_net) in &signals {
         // A net the design declares slow has no fast edge to return, so it is not
         // given a via, and the DRC pass still lists its layer change as
@@ -1929,7 +1958,18 @@ fn stitch(
         let spot = usual.or_else(in_pad_spot).or_else(compact);
         if let Some((p, size, drill)) = spot {
             ground.push(p);
+            if ground_nets.medium.contains(signal_net) {
+                medium.push(MediumReturn {
+                    index: out.len(),
+                    signal_net: signal_net.clone(),
+                    at_nm: (mm_to_nm(vx), mm_to_nm(vy)),
+                });
+            }
             out.push(tie_via_at(net, p, size, drill));
+        } else if ground_nets.medium.contains(signal_net) {
+            advisory.push(format!(
+                "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the net declares a medium edge, so the loop is left as an advisory"
+            ));
         } else if ground_nets.fine_pitch_advisory && in_fine_pitch_breakout(&fine_pads, vx, vy) {
             advisory.push(format!(
                 "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm in a fine-pitch pad breakout with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review"
@@ -1942,6 +1982,7 @@ fn stitch(
         vias: out,
         unresolved,
         advisory,
+        medium,
     }
 }
 
@@ -3789,6 +3830,37 @@ mod tests {
         assert_eq!(stitch_vias(&board, REACH, &[]).len(), 1);
     }
 
+    /// A medium edge is the design's declared claim, so a medium net with no
+    /// spot for a return via is an advisory, and a fast net is still blocking.
+    #[test]
+    fn a_medium_net_with_no_room_for_a_return_via_is_an_advisory() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND") (net 2 "SIG")
+          (via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 2))
+          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 3 0) (xy 3 3) (xy 0 3)))
+            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 3 0) (xy 3 3) (xy 0 3)))))"#;
+        let board = PcbBoard::parse(text).expect("parses");
+        let medium = Ground::default().with_medium(&["SIG".to_string()]);
+        let plan = stitch(&board, REACH, &[], &medium, &ViaDeclarations::new());
+        assert!(plan.unresolved.is_empty(), "{:?}", plan.unresolved);
+        assert_eq!(plan.advisory.len(), 1, "{:?}", plan.advisory);
+        assert!(
+            plan.advisory[0].contains("medium edge"),
+            "{:?}",
+            plan.advisory
+        );
+        let fast = stitch(
+            &board,
+            REACH,
+            &[],
+            &Ground::default(),
+            &ViaDeclarations::new(),
+        );
+        assert_eq!(fast.unresolved.len(), 1, "{:?}", fast.unresolved);
+    }
+
     /// With no free spot in reach, a ground pad within reach takes the return via
     /// in the pad where the process fills and caps one, and is left alone where
     /// it does not.
@@ -4302,6 +4374,32 @@ mod tests {
                 .iter()
                 .any(|u| u.contains("no ground return via")),
             "the unresolved return path was dropped: {outcome:?}"
+        );
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// A medium net's return via that the rounds did not place is an advisory,
+    /// where a fast net's is blocking.
+    #[test]
+    fn a_medium_return_via_left_after_the_rounds_is_an_advisory() {
+        let text = stitched_text(r#"(0 "F.Cu" signal) (2 "B.Cu" signal)"#, "");
+        let path = scratch_file("medium_spent", &text);
+        let run = |ground: &Ground| {
+            tie_islands_with(&path, ground, &mut |_| Ok(Some(text.clone())))
+                .expect("the repair runs")
+        };
+        let medium = run(&Ground::default().with_medium(&["SIG".to_string()]));
+        assert!(medium.unresolved.is_empty(), "{medium:?}");
+        assert!(
+            medium.advisory.iter().any(|a| a
+                .contains("net SIG changes layers at (10.00, 10.00) mm")
+                && a.contains("was not placed within")),
+            "{medium:?}"
+        );
+        let fast = run(&Ground::default());
+        assert!(
+            fast.unresolved.iter().any(|u| u.contains("still wants")),
+            "{fast:?}"
         );
         let _ = std::fs::remove_file(&path);
     }
