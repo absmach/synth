@@ -6,7 +6,7 @@
 - One part of the claim is not met. Synth has no statement for a thermal-via array, so the array is written as hand-placed vias in the placement sidecar, as described below.
 - The thermal array is six vias (2 x 3) against the 4 x 3 TI recommends, because the exposed pad cannot hold 12 vias at 1.2 mm pitch.
 - The junction temperature of `U1` is not estimated. Its efficiency curve was not read.
-- The board is a multi-rail contribution, not a pass of case 4 on keepout or thermal.
+- The board is a multi-rail contribution, not a pass of case 4. The 1.8 V and 1.2 V rails carry no load on the board, and the thermal array is below the recommendation.
 
 ## What was measured
 
@@ -20,13 +20,12 @@ All figures come from the committed export (KiCad 10.0.8).
 | Routing | 42 of 42 nets, 434 segments, 90 vias (0.46/0.2 mm: 23, 0.6/0.3 mm: 67), 1285.9 mm of track |
 | Copper | `GND` is poured on all four layers (a zone on each); the rails are routed as tracks, not planes |
 | DRC with the library tables | 0 errors, 0 unconnected, 89 warnings: 85 `lib_footprint_mismatch` (silkscreen cut back from vias and pads by the exporter, #425; the footprint comparison shows no difference in pads, courtyard or fabrication layers) and 4 `silk_over_copper` |
-| Synth validation | exits 0 with 48 warnings in the author's `synth validate` run; 19 are schematic-layout findings (see the notes below the table) |
+| Synth validation | exits 0 with 40 warnings in a `synth validate` run on this source; 17 are schematic-layout findings (see the notes below the table) |
 
 Notes on the `synth validate` row:
 
-- The 19 schematic-layout findings are 9 `E-SYNTH-SCHEM-003` (decoupling capacitors in another schematic sheet group than their IC, up to 455 mm apart on the sheet), 7 `E-SYNTH-SCHEM-001` (a power flag drawn pointing down), 2 `E-SYNTH-SCHEM-004` (a wire longer than 100 mm) and 1 `E-SYNTH-SCHEM-005` (a node with 4 wire lines).
+- The 17 schematic-layout findings are 9 `E-SYNTH-SCHEM-003` (decoupling capacitors in another schematic sheet group than their IC, up to 455 mm apart on the sheet), 7 `E-SYNTH-SCHEM-001` (a power flag drawn pointing down) and 1 `E-SYNTH-SCHEM-004` (a wire longer than 100 mm).
 - They concern the drawing of the generated schematic, not the netlist or the board. They are accepted as a group, not itemised, and no per-finding record is committed. The counts are from that run.
-- `E-SYNTH-CONNECT-009` is explained under "Power good".
 
 ## Thermal
 
@@ -64,6 +63,7 @@ The board has no load of its own on the 1.8 V and 1.2 V rails; they are exposed 
 - It is a 5 mm ring centred on `U1`. The anchor is supported by `main` since [#449](https://github.com/absmach/synth/issues/449) closed.
 - The nets of the buck itself are allowed through, so its own routing is not refused.
 - An export of this source carries a `hot_buck keepout` rule area around `U1`, and the two mounting-hole screw-head zones (`H1 screw head`, `H2 screw head`, 2.75 mm radius).
+- The `allow` list includes `GND` and `V3V6`, which run across the whole board. Inside the ring the keepout excludes only the other nets, so it is not a copper-free ring.
 - `synth validate` no longer reports `E-SYNTH-KEEPOUT-003`.
 
 ## Assembly access and DFM
@@ -92,7 +92,7 @@ The net classes set the widths (all declare `edge_rate slow` except `BUCK_SW`, `
 - Synth's rule treats a differential pin as fast. The Synth commit named in [`PROVENANCE.md`](PROVENANCE.md) lets a declared `medium` replace that inference.
 - No `diff_pair` is declared for the pair.
 
-**Power good.** `U1`'s `PG` pin (open drain) is the net `PG_3V6`, which goes to `PA0` of `U6` and is pulled up by `R1`, 10 k, to the `V3V3` rail: 3.3 V / 10 k = 0.33 mA when `PG` pulls low. The validator warning `E-SYNTH-CONNECT-009` (open-drain net without a pull-up) names this net because the source declares `V3V3` with `net`, not `power`, and the rule counts only a resistor to a declared power net as a pull-up; the resistor is on the board.
+**Power good.** `U1`'s `PG` pin (open drain) is the net `PG_3V6`, which goes to `PA0` of `U6` and is pulled up by `R1`, 10 k, to the `V3V3` rail: 3.3 V / 10 k = 0.33 mA when `PG` pulls low.
 
 ## Sourcing
 
