@@ -166,8 +166,9 @@ struct Unit {
     /// A group with a connector choice (arrangement A or B).
     has_choice: bool,
     ab: Option<char>,
-    /// Some connector has an edge hint, so its wall is not the descent's.
-    hinted: bool,
+    /// The wall is fixed — by a hard hint, or because the group's connectors
+    /// need several rows — so the descent may not move this unit's wall.
+    fixed_wall: bool,
 }
 
 /// A mounting hole and the input corner it held.
@@ -368,6 +369,31 @@ fn make_units(
             .filter(|piece| is_wall_connector(&piece.kind))
             .collect();
         conns.sort_by_key(|piece| piece.refdes.clone());
+        // A USB connector must sit on its wall's midpoint, and one row holds
+        // only one there. Every USB but the first gets a row of its own.
+        let split_rows = conns.iter().filter(|piece| piece.is_usb()).count() > 1;
+        if split_rows {
+            let mut kept_usb = false;
+            let mut extras = Vec::new();
+            conns.retain(|piece| {
+                if !piece.is_usb() {
+                    return true;
+                }
+                if kept_usb {
+                    extras.push(*piece);
+                    return false;
+                }
+                kept_usb = true;
+                true
+            });
+            for extra in extras {
+                let wall = extra
+                    .hint
+                    .unwrap_or_else(|| connector_wall(&[extra], outline));
+                let wall = wall_over.get(name).copied().unwrap_or(wall);
+                units.push(wall_row(name, &[extra], wall, true));
+            }
+        }
         let rest: Vec<&Piece> = members
             .iter()
             .copied()
@@ -440,26 +466,7 @@ fn make_units(
             // The judge leaves these connectors out of the group box, so the
             // row docks on the wall and the block packs freely.
             if let Some(wall) = wall {
-                let mut local = Vec::with_capacity(conns.len());
-                let mut x = 0;
-                for ((piece, &(along, inward)), &turn) in
-                    conns.iter().zip(&conn_extents).zip(&conn_turns)
-                {
-                    local.push((piece.slot, x + along / 2, row_d - inward / 2, turn));
-                    x += along + part_gap;
-                }
-                units.push(Unit {
-                    name: name.clone(),
-                    wall: Some(wall),
-                    u: row_w,
-                    v: row_d,
-                    local,
-                    usb_conns: usb_conns.clone(),
-                    centre_along,
-                    has_choice: false,
-                    ab: None,
-                    hinted,
-                });
+                units.push(wall_row(name, &conns, wall, hinted || split_rows));
             }
             if let Some(block) = block {
                 units.push(Unit {
@@ -475,7 +482,7 @@ fn make_units(
                     centre_along: 0,
                     has_choice: false,
                     ab: None,
-                    hinted,
+                    fixed_wall: false,
                 });
             }
             continue;
@@ -496,7 +503,7 @@ fn make_units(
                     centre_along: 0,
                     has_choice: false,
                     ab: None,
-                    hinted,
+                    fixed_wall: false,
                 });
             }
             continue;
@@ -545,10 +552,49 @@ fn make_units(
             centre_along,
             has_choice: true,
             ab: Some(if use_a { 'A' } else { 'B' }),
-            hinted,
+            fixed_wall: hinted || split_rows,
         });
     }
     units
+}
+
+/// A connector row on `wall` with no block: the row docks flush.
+fn wall_row(name: &str, conns: &[&Piece], wall: u8, fixed_wall: bool) -> Unit {
+    let part_gap = mm_to_nm(PART_GAP_MM);
+    let turns: Vec<u8> = conns
+        .iter()
+        .map(|piece| connector_turn(piece, wall))
+        .collect();
+    let extents: Vec<(i64, i64)> = conns
+        .iter()
+        .zip(&turns)
+        .map(|(piece, &turn)| turned_extent(piece, wall, turn))
+        .collect();
+    let u = extents.iter().map(|&(along, _)| along).sum::<i64>()
+        + part_gap * (conns.len() as i64 - 1).max(0);
+    let v = extents.iter().map(|&(_, inward)| inward).max().unwrap_or(0);
+    let mut local = Vec::with_capacity(conns.len());
+    let mut x = 0;
+    for ((piece, &(along, inward)), &turn) in conns.iter().zip(&extents).zip(&turns) {
+        local.push((piece.slot, x + along / 2, v - inward / 2, turn));
+        x += along + part_gap;
+    }
+    Unit {
+        name: name.to_string(),
+        wall: Some(wall),
+        u,
+        v,
+        local,
+        usb_conns: conns
+            .iter()
+            .filter(|piece| piece.is_usb())
+            .map(|piece| piece.slot)
+            .collect(),
+        centre_along: row_centre_along(conns, wall),
+        has_choice: false,
+        ab: None,
+        fixed_wall,
+    }
 }
 
 /// The wall most of the group's connectors sit nearest.
@@ -966,7 +1012,7 @@ fn best_layout(
                 .iter()
                 .filter_map(|unit| {
                     let wall = unit.wall?;
-                    (!unit.hinted).then(|| (unit.name.clone(), wall))
+                    (!unit.fixed_wall).then(|| (unit.name.clone(), wall))
                 })
                 .collect();
             walled.dedup_by(|a, b| a.0 == b.0);
@@ -1854,7 +1900,7 @@ mod tests {
             centre_along: 0,
             has_choice: false,
             ab: None,
-            hinted: false,
+            fixed_wall: false,
         }
     }
 
@@ -2016,6 +2062,45 @@ mod tests {
             };
             assert_eq!(gap, 0, "wall {wall}: header is {gap} nm off the edge");
         }
+    }
+
+    #[test]
+    fn two_usb_connectors_get_a_row_each_and_both_stay_centred() {
+        // A group with one USB jack near the top and one near the left edge.
+        // One row cannot put both on a wall's midpoint, so each needs a row
+        // of its own; the wall layout then rejects either one that is off.
+        let mut top = piece(0, "connector", 26.0, 0.0, 32.0, 6.0);
+        top.part = "usb_c_jack".to_string();
+        top.pins = 16;
+        let mut left = piece(1, "connector", 0.0, 26.0, 6.0, 32.0);
+        left.part = "usb_c_jack".to_string();
+        left.pins = 16;
+        let pieces = vec![top, left];
+        let groups = BTreeMap::from([("G".to_string(), vec![0_usize, 1])]);
+        let units = make_units(
+            &pieces,
+            &groups,
+            rect(0.0, 0.0, 60.0, 60.0),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
+        assert_eq!(units.len(), 2, "each USB connector gets its own row");
+        let scene = Scene {
+            units: &units,
+            holes: &[],
+            margins: Margins::default(),
+            block_gap: mm_to_nm(BLOCK_GAP_MM),
+            export_margin: mm_to_nm(1.25),
+        };
+        let board = mm_to_nm(60.0);
+        let rows = scene
+            .wall_layout(board, board)
+            .expect("both USB rows land on a wall midpoint");
+        assert_eq!(rows.len(), 2);
+        assert_ne!(
+            units[rows[0].0].wall, units[rows[1].0].wall,
+            "the two USB jacks cannot share one wall"
+        );
     }
 
     #[test]
