@@ -156,7 +156,13 @@ The placement is pinned in [`ice40_hdmi_node.placement.layout.toml`](ice40_hdmi_
 
 ## Reproducibility
 
-The source and sidecar in this directory were exported through the Synth MCP server (`synth mcp --stdio`, the `synth_export` tool, the call an agent makes) into an empty directory, router included (KiCadRoutingTools `9399bfb2`, KiCad 10.0.8): 49 of 49 nets, 822 segments, 148 vias, 1898.0 mm of track. Everything committed comes from that export. How the board was made is described in [`PROVENANCE.md`](PROVENANCE.md).
+Export the source and sidecar in this directory through the Synth MCP server to reproduce the board.
+
+1. Start the server with `synth mcp --stdio`.
+2. Call the `synth_export` tool on `ice40_hdmi_node.synth` and its placement sidecar, with an empty output directory and the router included.
+3. Compare the result with the committed files.
+
+The committed export used KiCadRoutingTools `9399bfb2` and KiCad 10.0.8. It gave 49 of 49 nets, 822 segments, 148 vias and 1898.0 mm of track. Everything committed comes from that export. [`PROVENANCE.md`](PROVENANCE.md) describes how the board was made.
 
 ## Images
 
@@ -164,15 +170,28 @@ The source and sidecar in this directory were exported through the Synth MCP ser
 
 ## How to check
 
-From this directory, with the KiCad 10 footprint and symbol library tables configured:
+Follow these steps from this directory.
 
-```bash
-sha256sum -c SHA256SUMS
-kicad-cli pcb drc --severity-error kicad/ice40_hdmi_node.kicad_pcb
-synth validate ice40_hdmi_node.synth
-```
+1. Install KiCad 10 and configure its footprint and symbol library tables.
+2. Verify every file listed in `SHA256SUMS`:
 
-The first command verifies every file below `SHA256SUMS`; the sign-off table names the package in `fab/`. The parts this board adds to the registry are in `registry/parts/` of the repository.
+   ```bash
+   sha256sum -c SHA256SUMS
+   ```
+
+3. Run the DRC on the exported board:
+
+   ```bash
+   kicad-cli pcb drc --severity-error kicad/ice40_hdmi_node.kicad_pcb
+   ```
+
+4. Validate the source:
+
+   ```bash
+   synth validate ice40_hdmi_node.synth
+   ```
+
+The parts this board adds to the registry are in `registry/parts/` of the repository.
 
 ## Human review
 
