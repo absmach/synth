@@ -731,8 +731,9 @@ pub struct Ground {
     /// but look for the via in the wider window of `synth_drc::MEDIUM_EDGE_WINDOW_NM`.
     /// A medium net with no spot for one is an advisory, not blocking.
     medium: BTreeSet<String>,
-    /// Opt-in: a missing fast-edge return via in a fine-pitch pad breakout is
-    /// an advisory, not blocking. Needs SI-review sign-off; off by default.
+    /// Opt-in: a missing return via in a fine-pitch pad breakout is listed with
+    /// the breakout wording. Every missing return via is an advisory, so this
+    /// selects the wording only and does not change the verdict.
     fine_pitch_advisory: bool,
 }
 
@@ -3611,10 +3612,10 @@ mod tests {
     }
 
     /// A slow net is not given a return via and the router reports nothing for
-    /// it: the DRC pass lists its layer change as `W-SYNTH-DRC-016`. A net that
-    /// rides a fast edge with no room for one still holds the board back.
+    /// it: the DRC pass lists its layer change as `W-SYNTH-DRC-016`. A critical
+    /// net with no room for one is listed for the review.
     #[test]
-    fn a_slow_net_with_no_room_for_a_return_via_is_not_reported_and_a_critical_net_is() {
+    fn a_slow_net_with_no_room_for_a_return_via_is_not_reported_and_a_critical_net_is_listed() {
         let blocker = r#"(footprint "R" (at 0 0) (layer "F.Cu")
             (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3)))"#;
         let board = stitched_board(blocker);
