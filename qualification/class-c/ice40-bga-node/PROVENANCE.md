@@ -8,7 +8,9 @@ The board is the output of agents driving `synth mcp` from prompts, followed by 
 | Agent sessions | Fifteen session logs (not kept in the repository), each a `claude -p` run with only the Synth MCP and file tools; sessions 8, 13 and 14 are described below the table. The early ones did not release. | not kept in the repository |
 | Part packages | Two parts were corrected against their manufacturer listings: the flash's footprint to the 208 mil outline (registry part `w25q128jvsiq_208mil`) and the regulator to the DDC package (registry part `tlv70012_ddc`); the header was reduced to the 1x12 the board uses. The crystal is the JYJE 3TJ480000FYLBC, in the registry part `xtal_8mhz_3225_jyje_4p`, because JLCPCB listed the NDK part as out of stock. | `registry/parts/` |
 | Placement | The orchestrator pinned the placement in the sidecar through probe exports: the series resistors `R25` and `R26` next to the MCU's USB pins, the MCU's decoupling column, the USB-C receptacle at rotation 270 flush on the left edge, the 12-pin header `J3` on the top edge and the mounting holes at opposite corners. Scale-mode compaction (`synth_compact_layout`) ran on an earlier pose of this layout; its steps below 1000 failed on return-via and plane-via findings, so the pose was kept. | [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml) |
-| Final exports | Three fresh-directory exports through `synth mcp`, `synth_export`. | not kept in the repository |
+| Final export | One fresh-directory export through `synth mcp`, `synth_export`. | not kept in the repository |
+
+The released source differs from the agent's source in two declarations: the `XTAL` net class (0.15 mm tracks, locked to `F.Cu`, `edge_rate slow`) holds `HSE_IN` and `HSE_OUT`, and the `USB` class is locked to `F.Cu`.
 
 Agent session notes:
 
@@ -18,9 +20,9 @@ Agent session notes:
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440 (the return-via, via-in-pad, plane-via, multi-unit symbol and `edge_rate medium` changes this board needed are all in it). `synth --version` prints `synth 0.1.1`; `synth mcp --stdio` is the same binary |
+| Synth, final export | the `synth mcp --stdio` build used for the final export. The return-via, via-in-pad, plane-via, multi-unit symbol and `edge_rate medium` changes this board needed are in it |
 | KiCadRoutingTools | `9399bfb2` |
-| KiCad | 10.0.6 |
+| KiCad | 10.0.8 |
 | Registry inputs | `registry/parts/` of the repository: `ice40hx4k_bg121` (`VPP_FAST` not required), `stm32f103c8` (USB and SPI capability tags), `tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p` |
 
 Synth findings from this board: #424 (report counts), #425 (silkscreen), #426, #428, #429 (the annular ring floor and the via-in-pad land), #430 (plane rails take every inner layer), #431 (no-connect declarations and the multi-unit symbol).
@@ -31,13 +33,13 @@ Follow these steps to run one export.
 
 1. Set `KICAD_ROUTING_TOOLS_REPO` and `SYNTH_KRT_PYTHON` to KiCadRoutingTools `9399bfb2` and the Python of its virtual environment. The defaults in the file are the author's earlier machine.
 2. Set `SYNTH_USER_REGISTRY_DIR` to the workspace's `user-registry/`.
-3. Set `SYNTH_SOURCE_REVISION` to `fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9`, which the routing record carries as `source_revision`.
+3. Set `SYNTH_SOURCE_REVISION` to the commit of the Synth build, which the routing record carries as `source_revision`.
 
    ```bash
    export KICAD_ROUTING_TOOLS_REPO=<path to KiCadRoutingTools at 9399bfb2>
    export SYNTH_KRT_PYTHON=<python of its virtual environment>
    export SYNTH_USER_REGISTRY_DIR=<workspace>/user-registry
-   export SYNTH_SOURCE_REVISION=fbfd8d60239391d17cdd81b9337fc0ee4ee22cd9
+   export SYNTH_SOURCE_REVISION=<commit of the Synth build>
    ```
 
 4. Make sure the workspace holds a `registry/parts` link to the build's registry.

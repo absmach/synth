@@ -34,7 +34,8 @@ board "ice40_bga_node" {
   netclass "CONFIG"   { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
   netclass "PWR_MCU"  { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
   netclass "MCU_IO"  { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
-  netclass "USB"      { trace_width 0.12mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast layers "F.Cu", "B.Cu" }
+  netclass "XTAL"     { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow layers "F.Cu" }
+  netclass "USB"      { trace_width 0.12mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast layers "F.Cu" }
 
   // ---- Power entry ---------------------------------------------------------
   group "POWER ENTRY" color "#b91c1c" {
@@ -268,8 +269,8 @@ board "ice40_bga_node" {
   net "BOOT0" class "MCU_IO" { U5.boot0 R22.p1 }
   net "SWDIO" class "MCU_IO" { U5.pa13 J4.p2 }
   net "SWCLK" class "MCU_IO" { U5.pa14 J4.p3 }
-  net "HSE_IN" class "MCU_IO" { U5.pd0 Y1.xtal_a C34.p1 }
-  net "HSE_OUT" class "MCU_IO" { U5.pd1 Y1.xtal_b C35.p1 }
+  net "HSE_IN" class "XTAL" { U5.pd0 Y1.xtal_a C34.p1 }
+  net "HSE_OUT" class "XTAL" { U5.pd1 Y1.xtal_b C35.p1 }
 
   // ---- Configuration -------------------------------------------------------
   net "CRESET_B" class "CONFIG" { U1.creset R5.p1 TP4.p1 U5.pb0 }

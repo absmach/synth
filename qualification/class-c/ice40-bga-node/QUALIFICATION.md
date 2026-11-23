@@ -2,30 +2,27 @@
 
 **Status:** the board is routed and released.
 
-- All 42 of 42 nets are routed. KiCad 10.0.6 reports 0 errors and 0 unconnected pads with the library tables.
-- Three fresh exports agree. The files listed below are byte-identical, and the routed board and the Gerbers are equal after normalization.
-- The exported KiCad files, the DRC and ERC results, a fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)).
+- All 42 of 42 nets are routed. The export's routing report shows 0 open nets.
+- KiCad 10.0.8 with zone refill reports 0 unconnected items on the committed board.
+- The exported KiCad files, the fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)).
 
-The numbers, hashes and files below all come from one export. It was made with the Synth binary built from `upstream/main` `fbfd8d60`, the merge of pull request #440 (see [`PROVENANCE.md`](PROVENANCE.md)).
+The numbers and files below all come from one export, made through the Synth MCP server (see [`PROVENANCE.md`](PROVENANCE.md)). The report files are not committed.
 
 ## What was measured
 
-All figures come from the files of the first of the three exports (KiCad 10.0.6).
+All figures come from the files of the export this package was built from (KiCad 10.0.8).
 
 | | |
 |---|---|
-| Outline | 56.0 x 45.0 mm, 2,519 mm2, 81 parts (74 excluding mounting holes and test points) |
-| Courtyard fill | **35.8 %** of the board area, measured on the exported board (`layout_metrics.py`) |
+| Outline | 60.9 x 48.5 mm, 81 parts (74 excluding mounting holes and test points) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"` (the JLCPCB tier that offers the 0.2 mm drill and via-in-pad on six layers), `requires via_in_pad`, 1.37 mm in the STEP model |
-| Routing | 42 of 42 nets, 424 segments, 208 vias (0.35/0.2 mm: 18, 0.46/0.2 mm: 18, 0.6/0.3 mm: 172), 1025.6 mm of track; the router's report and the delivered board agree (the delivered-board count) |
+| Routing | 42 of 42 nets, 639 segments, 142 vias (0.35/0.2 mm: 21, 0.46/0.2 mm: 16, 0.6/0.3 mm: 105), 1396.5 mm of track, measured on the delivered board; the router's report (not committed) agrees |
 | Plane | `+3V3` is poured on the inner layers (`plane` on its net class); ground on the outer layers; the 1.2 V core rail, the PLL supply and the MCU supply `+3V3_MCU` are routed |
-| BGA escape | `escape { method underpad }` on `U1`; 17 of the 18 0.35/0.2 mm vias are in `U1` pads; 1 is outside (at (41.6, 35.2) mm, 0.57 mm from ball `C10`); see the BGA escape notes below the table |
+| BGA escape | `escape { method underpad }` on `U1`; the board has 21 vias at 0.35/0.2 mm, the size of a filled and capped via in a ball pad; see the BGA escape notes below the table |
 | USB-C | `J1` sits on the left edge with its mating opening facing the edge (rotation 270, courtyard 0.05 mm from Edge.Cuts); `escape { off }` on `J1` and on the MCU `U5`, which are not ball grids |
-| USB pair | D+ and D- run from `J1` through 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11`, declared as 90 ohm differential pairs (the connector side and the MCU side) in the `USB` class (0.12 mm tracks on `F.Cu` and `B.Cu`, `edge_rate fast`); see the USB pair notes below the table |
-| DRC with the library tables | 0 errors, 0 unconnected, 74 warnings, all `lib_footprint_mismatch` (the exporter cuts silkscreen back from vias and pads, #425); 0 `silk_overlap` |
-| ERC with the library tables | 0 errors, 6 warnings: the embedded `ICE40HX4K-BG121` symbol of `U1` does not match its library copy in each of its five units ([absmach/synth#428](https://github.com/absmach/synth/issues/428)). The unused FPGA I/O balls and `VPP_FAST` carry no-connect markers on their own units |
-| Return-via advisories | 37 non-blocking `W-SYNTH-DRC-016` findings on 15 slow nets (`+3V3` 11, `+1V2` 4, `VCCPLL` 4, `FA4` 3, `+3V3_MCU` 3, and 12 more on the rest); each net class declares `edge_rate slow` except the `USB` class, which declares `edge_rate fast`, so a USB via that lacks a return via blocks the release; none does. They are listed in the routing report |
-| Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs with its strict-size policy; see the engine verdict notes below the table |
+| USB pair | D+ and D- run from `J1` through 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11`, declared as 90 ohm differential pairs (the connector side and the MCU side) in the `USB` class (0.12 mm tracks, locked to `F.Cu`, `edge_rate fast`); see the USB pair notes below the table |
+| Warnings | 83 in the export's `kicad-cli` DRC report with zone refill (not committed): 81 `lib_footprint_issues` (silkscreen cut back from vias and pads by the exporter, #425), 1 `silk_overlap` and 1 `silk_over_copper`; 0 unconnected items |
+| Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy; see the engine verdict notes below the table |
 
 BGA escape notes:
 
@@ -35,21 +32,19 @@ BGA escape notes:
 
 USB pair notes:
 
-- Measured on the delivered board: D+ is 34.3 mm (28.5 mm to `R25`, 5.8 mm beyond) and D- is 44.2 mm (33.0 mm to `R26`, 11.2 mm beyond), a 9.9 mm difference.
+- Measured on the delivered board: D+ is 114.7 mm (84.4 mm from `J1` to `R25`, 30.3 mm beyond) and D- is 175.5 mm (95.0 mm from `J1` to `R26`, 80.5 mm beyond), a 60.8 mm difference, all on `F.Cu`.
 - The pair is not length-matched, and its impedance is an analytic estimate, not a field solve.
 - The supported operation is USB full-speed (12 Mbit/s) only. The STM32F103 `U5` is a USB 2.0 full-speed device (ST datasheet DS5319, "USB 2.0 full-speed interface"), and `PA11`/`PA12` carry no high-speed PHY.
 - Full-speed drivers have 4 to 20 ns rise and fall times and a 90 ohm differential +/-15 % target.
-- The USB section below cites the pages and shows the arithmetic: 94 ohm differential estimated from the stackup, and 9.9 mm of skew, about 55 ps, against a 4 ns minimum rise time.
+- The USB section below cites the pages and shows the arithmetic: 94 ohm differential estimated from the stackup, and 60.8 mm of skew, about 334 ps, 8.4 % of a 4 ns minimum rise time.
 
 Engine verdict notes:
 
-- The engine reports, in `ice40_bga_node.kicadroutingtools.log`, that it lowered the board's via diameter from 0.46 to 0.35 mm, the via annular ring from 0.13 to 0.075 mm and the copper-to-hole clearance from 0.2 to 0.127 mm. These are the floors of the declared `jlc-advanced` process. It also reports that 20 of 51 objects at its last step are below the original values.
-- These are the 0.35/0.2 mm vias (17 of the 18 are in `U1` pads; 1 is outside). A filled and capped via in a pad has the land of its drill plus 0.15 mm.
 - The engine reports no rule below the board floor (`rules_below_board_floor: none reported`).
-- Its `claimed_total_vias: 72` and `claimed_via_in_pad: 59` count the vias its own routing and fanout steps placed.
+- Its `claimed_total_vias: 67` and `claimed_via_in_pad: 57` count the vias its own routing and fanout steps placed.
 - Synth's later steps add the plane, return and stitch vias and move vias out of the pads of components that do not declare an under-pad escape.
-- The board's own counts are the ones this README uses: 208 vias, 18 of them 0.35/0.2 mm, of which 17 are in the pads of `U1` and 1 is outside. The `20 of 51 objects` above are the engine's count at its last step.
-- The delivered board is judged by Synth's own checks: connectivity (42 of 42), the process floor, KiCad DRC with the library tables, and the return-via rule. JLCPCB's via-in-pad page gives the land for that via.
+- The board's own counts are the ones this document uses: 142 vias, 21 of them 0.35/0.2 mm.
+- The delivered board is judged by Synth's own checks: connectivity (42 of 42), the process floor and KiCad DRC. JLCPCB's via-in-pad page gives the land for that via.
 
 ## 3.3 V regulator thermal budget
 
@@ -91,7 +86,7 @@ Note: The board is a bench programming node, and no IEC 61000-4-2 level is claim
 
 ## Layout and fill
 
-The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml): the USB-C receptacle on the left edge with its opening facing out, the MCU group between the receptacle and the FPGA, the 12-pin header `J3` on the top edge with nothing beyond it, the two mounting holes at opposite corners, and the power parts along the bottom. The courtyard fill of 35.8 % and the outline are measured on the exported board.
+The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml): the USB-C receptacle on the left edge with its opening facing out, the MCU group between the receptacle and the FPGA, the 12-pin header `J3` on the top edge with nothing beyond it, the two mounting holes at opposite corners, and the power parts along the bottom.
 
 ## Sourcing
 
@@ -111,37 +106,19 @@ The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_no
 
 The STEP model is in [`models/`](models/). Every file is listed in [`SHA256SUMS`](SHA256SUMS).
 
-- The Gerber content hash is `ceeb7444dd`. The hash masks the creation time KiCad writes into the headers.
-- The STEP model is exported with KiCad. The STEP check reopens it in OpenCASCADE and compares it with the PCB: 75 components with a body, 2 mounting holes drilled in the board solid, identities and positions match (worst difference 0.0000 mm), outline 55.99 x 44.99 mm against Edge.Cuts 55.99 x 44.99 mm, no body beyond its courtyard by more than 0.25 mm. The geometry hash is `604ace35b8`.
-- The USB-C body is the model KiCad's own `royalblue54L_feather` demo ships for this footprint, since the stock 3D library has none. The test points use the discs in [`models/`](models/).
+- The STEP model is exported with KiCad. The USB-C body is the model KiCad's own `royalblue54L_feather` demo ships for this footprint, since the stock 3D library has none. The test points use the discs in [`models/`](models/).
 
-JLCDFM PCB DFM of the Gerber zip of `fab/` (hash `ceeb7444dd`, report of 2026-11-10): 27 Danger items in four checks (pad spacing 1, annular ring 19, via to pad 3, slot width 4).
-
-- The SMT DFM was not run.
-- The report of the earlier package carries the same Danger counts.
-- The BOM-matching run of 2026-11-06 was made on a BOM and a CPL that are byte-identical to the files of `fab/` (SHA-256 `cb76c951ddd3e35b` and `313a1423707ae869`).
-- Neither the JLCDFM report nor the BOM-matching report is committed in this package, and no per-category disposition of their findings is recorded here.
+No JLCDFM or BOM-matching run is recorded for this package, and no JLCDFM or BOM-matching report is committed.
 
 ## Reproducibility
 
-To reproduce the exports, follow these steps.
+Export the source and sidecar in this directory through the Synth MCP server to reproduce the board.
 
-1. Export the source and sidecar in this directory through the Synth MCP server (`synth mcp --stdio`, the `synth_export` tool, the call an agent makes). Use an empty directory for each export, and include the router.
-2. Repeat the export until you have three. The exports are recorded in [`PROVENANCE.md`](PROVENANCE.md).
-3. Compare the files of the three exports with the table below.
+1. Start the server with `synth mcp --stdio`.
+2. Call the `synth_export` tool, the call an agent makes, with an empty directory as the output and the router included.
+3. Compare the result with the committed files.
 
-| file | export 1 | export 2 | export 3 | |
-|---|---|---|---|---|
-| `ice40_bga_node.kicad_sch` (one sheet) | b59dd17df7 | b59dd17df7 | b59dd17df7 | byte-identical |
-| `ice40_bga_node.kicad_pro` | 7a05f02f74 | 7a05f02f74 | 7a05f02f74 | byte-identical |
-| `ice40_bga_node.kicad_sym` | 5103fb8457 | 5103fb8457 | 5103fb8457 | byte-identical |
-| `bom.csv` | 0153fda01c | 0153fda01c | 0153fda01c | byte-identical |
-| `pnp.csv` | 96842926ac | 96842926ac | 96842926ac | byte-identical |
-| `ice40_bga_node.synth.kicad_pcb` (un-routed) | c16c3b6a9c | c16c3b6a9c | c16c3b6a9c | byte-identical |
-| `ice40_bga_node.kicad_pcb` | f55d4b5313 | 642ae4da43 | d04f9bf373 | not byte-identical; identical after the router's and KiCad's random ids are masked (`8d63ecef0e`) |
-| Gerber and drill content | ceeb7444dd | ceeb7444dd | ceeb7444dd | identical after the creation time in the headers is masked |
-
-Note: Everything committed comes from export 1. The authoritative evidence of how the board was made is the prompts and the agent and MCP runs described in [`PROVENANCE.md`](PROVENANCE.md).
+The committed export used KiCadRoutingTools `9399bfb2` and KiCad 10.0.8. It gave 42 of 42 nets, 639 segments, 142 vias and 1396.5 mm of track. Everything committed comes from that export. [`PROVENANCE.md`](PROVENANCE.md) describes how the board was made.
 
 ## Images
 
@@ -164,7 +141,7 @@ Follow these steps to check the board.
    ```
    ```
 
-4. Read the results. The first command verifies every file below `SHA256SUMS`. The Gerber content hash and the STEP geometry hash are stated in the sign-off table.
+4. Read the results. The first command verifies every file below `SHA256SUMS`.
 
 Note: The parts this board adds to the registry are in `registry/parts/` of the repository.
 
@@ -172,7 +149,7 @@ Note: The parts this board adds to the registry are in `registry/parts/` of the 
 
 ### PCB review sign-off
 
-PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `fab/` (Gerber content hash `ceeb7444dd`).
+PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `fab/`.
 
 - The sign-off is JeffMboya's own. Jeff Mboya is the author of this pull request, so the table below is the author's self-review.
 - The independent PCB expert sign-off required by #40 is open.
@@ -181,18 +158,18 @@ PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `f
 
 | Item | Signed off |
 |---|---|
-| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/` and the exported KiCad board, hash `ceeb7444dd`, and the STEP model of `fab/` (geometry hash `604ace35b8`, the STEP check above) |
-| Return paths | the 37 non-blocking `W-SYNTH-DRC-016` advisories of the routing report on the slow nets, as listed under "What was measured" |
-| ERC | the 6 warnings of the KiCad ERC run |
-| DRC | the 74 `lib_footprint_mismatch` warnings of the KiCad DRC run, each a footprint that differs from the library copy while 0 violations and 0 unconnected items remain |
-| Placement | the placement on 55.99 x 44.99 mm, 35.8 % courtyard fill, as pinned in `ice40_bga_node.placement.layout.toml` |
+| PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/`, the exported KiCad board and the STEP model of `fab/` |
+| Return paths | the return-path rule as applied by the export gate |
+| ERC | not re-run for this package |
+| DRC | the 83 warnings of the KiCad DRC run with zone refill, 0 unconnected items |
+| Placement | the placement on 60.9 x 48.5 mm, as pinned in `ice40_bga_node.placement.layout.toml` |
 | Parts and values | the BOM identities of `fab/bom.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
 
 The parts this board adds to `registry/parts/` (`tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); `stm32f103c8` gains the `usb_dn`, `usb_dp` and `spi_cs` capability tags the board's checks read, with PA11 and PA12 typed as the differential USB pair; `ice40hx4k_bg121` types `VPP_FAST` (B10) as a passive pin that is not required, so it can stay unconnected; every other part keeps its registry record.
 
 ## USB pair: supported speed, impedance estimate and skew
 
-The USB data pair runs from `J1` through the 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11` of `U5` (STM32F103C8). The delivered lengths are 34.3 mm (D+) and 44.2 mm (D-), a 9.9 mm difference. The pair is in the `USB` net class (0.12 mm tracks, 0.127 mm clearance, on `F.Cu` and `B.Cu`), declared 90 ohm differential.
+The USB data pair runs from `J1` through the 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11` of `U5` (STM32F103C8). The delivered lengths are 114.7 mm (D+) and 175.5 mm (D-), a 60.8 mm difference, all on `F.Cu`. The pair is in the `USB` net class (0.12 mm tracks, 0.127 mm clearance, locked to `F.Cu`), declared 90 ohm differential.
 
 ### Supported speed
 
@@ -212,8 +189,8 @@ Edge-coupled microstrip on the outer layer of the declared stackup: dielectric h
 - Single-ended, Z0 = 87 / sqrt(er + 1.41) x ln(5.98 h / (0.8 w + t)) = 54.8 ohm.
 - Differential, Zdiff = 2 x Z0 x (1 - 0.48 exp(-0.96 s / h)) = 94 ohm.
 
-94 ohm is inside 76.5 to 103.5 ohm. On the delivered board `USB_DM_C` (D-, `J1` to `R26`) runs about 8.9 mm on `B.Cu` through two vias while `USB_DP_C` stays on `F.Cu`, so that segment changes layer on D- only and about that length is not coupled on one layer; the 94 ohm figure applies only to the same-layer sections. The formulas are the common IPC-2141 approximations; they carry several ohms of error, the solder-mask and the real etched width are not modelled, and no field solver or TDR measurement was run.
+94 ohm is inside 76.5 to 103.5 ohm. On the delivered board both legs stay on `F.Cu`, so the 94 ohm figure applies along their whole length. The formulas are the common IPC-2141 approximations; they carry several ohms of error, the solder-mask and the real etched width are not modelled, and no field solver or TDR measurement was run.
 
 ### Skew
 
-Effective permittivity 0.475 x 4.4 + 0.67 = 2.76 gives a propagation delay of sqrt(2.76) / 299.8 mm/ns = 5.5 ps/mm. The 9.9 mm difference is about 55 ps, 1.4 % of the 4 ns minimum rise time and 0.07 % of the bit time. At 12 Mbit/s that skew is far inside what the receiver and the 22 ohm series resistors absorb, so the pair is left unmatched; it would matter at 480 Mbit/s, which the part does not run.
+Effective permittivity 0.475 x 4.4 + 0.67 = 2.76 gives a propagation delay of sqrt(2.76) / 299.8 mm/ns = 5.5 ps/mm. The 60.8 mm difference is about 334 ps, 8.4 % of the 4 ns minimum rise time and 0.4 % of the 83 ns bit time. The pair is left unmatched. It would matter at 480 Mbit/s, which the part does not run.

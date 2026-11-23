@@ -23,4 +23,4 @@ The crystal `Y1` is the JYJE 3TJ480000FYLBC (LCSC `C2924620`): 8 MHz, load capac
 
 The flash's package was checked against the manufacturer listings (LCSC, Arrow, RS, JITX): the W25Q128JVSIQ is an 8-pin SOIC of 208 mil, and the board's footprint is `Package_SO:SOIC-8_5.3x5.3mm_P1.27mm`. The TLV70012 is listed at LCSC only in the DDC (thin) package, which the board's footprint `TSOT-23-5` matches; its pinout is the same as the DBV package (1 IN, 2 GND, 3 EN, 4 NC, 5 OUT).
 
-Read [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. Read [`PROVENANCE.md`](PROVENANCE.md) for how the board was made. Gerber content hash `ceeb7444dd`.
+Read [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. Read [`PROVENANCE.md`](PROVENANCE.md) for how the board was made.
