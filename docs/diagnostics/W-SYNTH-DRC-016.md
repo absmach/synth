@@ -24,7 +24,7 @@ every signal net unless the design declares the net slow: a `netclass` with
 USB or timer edge as readily as a slow GPIO, so pin type cannot prove a slow
 edge and an unclassified net stays blocking. One that is slow by declaration is
 not given a return via, even where there is room for one: the via would take
-room from the nets that need it. Its layer change is still listed as this
+room from the nets that need it. The DRC pass still lists its layer change as this
 warning, with the net and the position, and does not block.
 
 A net class may instead declare `edge_rate medium`: edges no faster than 0.3 ns.

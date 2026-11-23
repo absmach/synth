@@ -1867,6 +1867,13 @@ fn stitch(
     let mut offsets_by_window: HashMap<u64, Vec<(f64, f64)>> = HashMap::new();
     let (mut unresolved, mut advisory) = (Vec::new(), Vec::new());
     for &(vx, vy, ref signal_net) in &signals {
+        // A net the design declares slow has no fast edge to return, so it is not
+        // given a via, and the DRC pass still lists its layer change as
+        // W-SYNTH-DRC-016. The search is skipped: a via added for it would take
+        // room from the nets that need one and spend the limited rounds.
+        if !ground_nets.needs_return(signal_net) {
+            continue;
+        }
         let (reach_mm, window) = ground_nets.reach_and_window(signal_net, reach_mm);
         if ground
             .iter()
@@ -1919,24 +1926,14 @@ fn stitch(
         };
         let spot = usual.or_else(in_pad_spot).or_else(compact);
         if let Some((p, size, drill)) = spot {
-            // Only a net held to a return via is given one. A net the design
-            // declares slow has no fast edge to return, so a via added for it
-            // takes room from the nets that need it and spends the limited
-            // rounds.
-            if ground_nets.needs_return(signal_net) {
-                ground.push(p);
-                out.push(tie_via_at(net, p, size, drill));
-            }
-        } else if ground_nets.needs_return(signal_net) {
-            if ground_nets.fine_pitch_advisory && in_fine_pitch_breakout(&fine_pads, vx, vy) {
-                advisory.push(format!(
+            ground.push(p);
+            out.push(tie_via_at(net, p, size, drill));
+        } else if ground_nets.fine_pitch_advisory && in_fine_pitch_breakout(&fine_pads, vx, vy) {
+            advisory.push(format!(
                 "net {signal_net} changes layers at ({vx:.2}, {vy:.2}) mm in a fine-pitch pad breakout with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the pads leave no room, so the loop is left as an advisory for the signal-integrity review"
-                ));
-            } else {
-                unresolved.push(missing_return((vx, vy), reach_mm, net, None));
-            }
+            ));
         } else {
-            advisory.push(missing_return((vx, vy), reach_mm, net, Some(signal_net)));
+            unresolved.push(missing_return((vx, vy), reach_mm, net));
         }
     }
     Stitched {
@@ -1946,19 +1943,12 @@ fn stitch(
     }
 }
 
-/// What the report says of a signal via at `at` that no ground via serves: a
-/// blocking finding, or, for a net that carries no fast edge (`advisory` names
-/// it), an advisory.
-fn missing_return(at: (f64, f64), reach_mm: f64, net: &str, advisory: Option<&str>) -> String {
+/// What the report says of a signal via at `at` that no ground via serves.
+fn missing_return(at: (f64, f64), reach_mm: f64, net: &str) -> String {
     let (x, y) = at;
-    match advisory {
-        None => format!(
-            "the signal via at ({x:.2}, {y:.2}) mm has no ground return via within {reach_mm:.2} mm, and no spot in the {net} pour holds one clear of the pads, vias and tracks beside it"
-        ),
-        Some(signal_net) => format!(
-            "net {signal_net} changes layers at ({x:.2}, {y:.2}) mm with no ground return via within {reach_mm:.2} mm and no spot in the {net} pour for one; the net carries no fast edge, so the loop is left as an advisory"
-        ),
-    }
+    format!(
+        "the signal via at ({x:.2}, {y:.2}) mm has no ground return via within {reach_mm:.2} mm, and no spot in the {net} pour holds one clear of the pads, vias and tracks beside it"
+    )
 }
 
 /// A ground pad that can take a return via: where it is and the copper layers
@@ -3599,11 +3589,11 @@ mod tests {
         assert!((at.0 - 10.0).hypot(at.1 - 10.0) >= 0.8, "{at:?}");
     }
 
-    /// The return-path rule is advisory in the DRC because a missing return via
-    /// only matters to a fast edge. A slow net with no room for one is listed for
-    /// the review; a net that rides a fast edge still holds the board back.
+    /// A slow net is not given a return via and the router reports nothing for
+    /// it: the DRC pass lists its layer change as `W-SYNTH-DRC-016`. A net that
+    /// rides a fast edge with no room for one still holds the board back.
     #[test]
-    fn a_slow_net_with_no_room_for_a_return_via_is_an_advisory_and_a_critical_net_is_not() {
+    fn a_slow_net_with_no_room_for_a_return_via_is_not_reported_and_a_critical_net_is() {
         let blocker = r#"(footprint "R" (at 0 0) (layer "F.Cu")
             (pad "1" smd rect (at 10 10) (size 6 6) (layers "F.Cu") (net 3)))"#;
         let board = stitched_board(blocker);
@@ -3611,8 +3601,7 @@ mod tests {
         let slow = Ground::default().with_critical(&["CLK".to_string()]);
         let plan = plan_all_with(&board, REACH, &slow, &ViaDeclarations::new());
         assert!(plan.unresolved.is_empty(), "{plan:?}");
-        assert_eq!(plan.advisory.len(), 1, "{plan:?}");
-        assert!(plan.advisory[0].contains("net SIG"), "{plan:?}");
+        assert!(plan.advisory.is_empty(), "{plan:?}");
 
         let fast = Ground::default().with_critical(&["SIG".to_string()]);
         let plan = plan_all_with(&board, REACH, &fast, &ViaDeclarations::new());
@@ -3652,13 +3641,16 @@ mod tests {
     fn a_slow_via_does_not_take_the_spot_a_nearby_fast_via_needs() {
         let board = stitched_board(
             r#"(net 4 "RF")
-              (via (at 10.7 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 4))"#,
+              (via (at 12.5 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net 4))"#,
         );
         let critical = Ground::default().with_critical(&["RF".to_string()]);
         let plan = plan_all_with(&board, REACH, &critical, &ViaDeclarations::new());
+        // The slow via at (10, 10) is 2.5 mm from the fast one, beyond REACH, so a
+        // return via added for the slow net could not serve it: one via means the
+        // slow net was not given one.
         assert_eq!(plan.vias.len(), 1, "{plan:?}");
         let (x, y) = at_mm(&plan.vias[0]);
-        let to_fast = ((x - 10.7).powi(2) + (y - 10.0).powi(2)).sqrt();
+        let to_fast = ((x - 12.5).powi(2) + (y - 10.0).powi(2)).sqrt();
         assert!(
             to_fast <= REACH,
             "return via {to_fast} mm from the fast via: {plan:?}"
