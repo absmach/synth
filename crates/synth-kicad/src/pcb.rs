@@ -4441,6 +4441,54 @@ mod tests {
             .unwrap_or_else(|| panic!("footprint has no (at …): {module:?}"))
     }
 
+    /// Pad `(at x y [angle])` triples from rendered board text, used to
+    /// compare KiCad's re-saved board with the one the exporter wrote.
+    fn pad_at_values(text: &str) -> Vec<(f64, f64, f64)> {
+        let mut values = Vec::new();
+        let mut pos = 0;
+        while let Some(idx) = text[pos..].find("(pad") {
+            let start = pos + idx;
+            // Skip names such as `(padstack)`; a real pad head is followed
+            // by whitespace, including the newline of pretty-printed output.
+            if !text
+                .as_bytes()
+                .get(start + 4)
+                .is_some_and(u8::is_ascii_whitespace)
+            {
+                pos = start + 4;
+                continue;
+            }
+            let Some(end) = balanced_close(text, start) else {
+                break;
+            };
+            let block = &text[start..end];
+            if let Some(at) = block.find("(at")
+                && block
+                    .as_bytes()
+                    .get(at + 3)
+                    .is_some_and(u8::is_ascii_whitespace)
+                && let Some(at_end) = balanced_close(block, at)
+            {
+                let nums: Vec<f64> = block[at + 3..at_end - 1]
+                    .split_whitespace()
+                    .filter_map(|word| word.parse().ok())
+                    .collect();
+                if nums.len() >= 3 {
+                    values.push((nums[0], nums[1], nums[2]));
+                }
+            }
+            pos = end;
+        }
+        values
+    }
+
+    fn assert_point(actual: (f64, f64), expected: (f64, f64)) {
+        assert!(
+            (actual.0 - expected.0).abs() < 1e-3 && (actual.1 - expected.1).abs() < 1e-3,
+            "expected {expected:?}, got {actual:?}"
+        );
+    }
+
     fn bottom_instance(rotation: Rotation) -> Sexp {
         let part = no_footprint_part();
         let component = synth_ir::Component {
@@ -4557,6 +4605,35 @@ mod tests {
             flipped.contains("(property ki_fp_filters \"R_*\")"),
             "metadata properties are not text: {flipped}"
         );
+    }
+
+    /// KiCad's `FOOTPRINT::Flip(TOP_BOTTOM)` negates local y, negates the
+    /// footprint orientation and negates each pad's library angle. A pad's
+    /// stored angle is its absolute board orientation; its position is the
+    /// footprint origin plus the stored local offset rotated by the footprint
+    /// angle. Check the resulting numbers, not just string patterns.
+    #[test]
+    fn a_bottom_pad_lands_at_the_kicad_flip_position_and_angle() {
+        let body = r#"
+            (pad "A" smd rect (at 1.5 2 30) (size 1 1) (layers "F.Cu" "F.Paste"))
+            (pad "B" smd rect (at -3 -1 0) (size 1 1) (layers "F.Cu" "F.Paste"))
+        "#;
+        // +90° placement: footprint stores -90°, pads (x, -y, -(lib + 90)).
+        let pads = pad_at_values(&add_footprint_angle_to_pads(
+            &flip_footprint_body(body),
+            -90.0,
+        ));
+        assert_eq!(pads.len(), 2, "{pads:?}");
+        assert_point((pads[0].0, pads[0].1), (1.5, -2.0));
+        assert!((pads[0].2 - 240.0).abs() < 1e-6, "{pads:?}");
+        assert_point((pads[1].0, pads[1].1), (-3.0, 1.0));
+        assert!((pads[1].2 - 270.0).abs() < 1e-6, "{pads:?}");
+
+        // Absolute pad centre = origin + R(-90°) · local offset.
+        let origin = (10.0, 20.0);
+        let absolute = |local: (f64, f64)| (origin.0 + local.1, origin.1 - local.0);
+        assert_point(absolute((pads[0].0, pads[0].1)), (8.0, 18.5));
+        assert_point(absolute((pads[1].0, pads[1].1)), (11.0, 23.0));
     }
 
     #[test]
@@ -5338,6 +5415,144 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+
+    /// Verify the flipped geometry with KiCad itself: load and re-save the
+    /// board, then render its back copper. If the mirror axis or pad angle
+    /// sign were wrong, KiCad's save would normalise them differently.
+    #[test]
+    fn a_bottom_footprint_is_resaved_and_rendered_by_kicad() {
+        let mut part = no_footprint_part();
+        let mut pins = part.pins.clone();
+        for (index, name) in ["3", "4"].iter().enumerate() {
+            let template = pins[index].clone();
+            pins.push(Pin {
+                name: (*name).to_string(),
+                number: PinNumber((*name).to_string()),
+                ..template
+            });
+        }
+        part.pins = pins;
+        part.footprint_dimensions = Some(synth_registry::FootprintDimensions {
+            width_mm: 4.0,
+            height_mm: 4.0,
+            courtyard_margin_mm: None,
+            mating_face: None,
+            label_side: None,
+            label_hidden: None,
+        });
+        let component = synth_ir::Component {
+            id: ComponentId(0),
+            refdes: "U1".into(),
+            kind: part.kind.clone(),
+            part: Some(part.clone()),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            escape: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        };
+        let mut board = plain_test_board();
+        board.components = vec![component];
+        // Fallback pads are emitted only for netted pins; give each one a net.
+        board.nets = (0..4)
+            .map(|pin| synth_ir::Net {
+                id: synth_ir::NetId(pin),
+                name: format!("N{pin}"),
+                auto_named: false,
+                endpoints: vec![synth_ir::NetEndpoint {
+                    component: ComponentId(0),
+                    pin: synth_ir::PinId(pin),
+                    source_span: Span::new(0, 0),
+                }],
+                netclass: None,
+                voltage: None,
+            })
+            .collect();
+        let placement = Placement {
+            board_outline: synth_geometry::Rect::from_center_half_extents(
+                Point::new(0, 0),
+                mm_to_nm(25.0),
+                mm_to_nm(25.0),
+            ),
+            components: vec![ComponentPlacement {
+                id: ComponentId(0),
+                center: Point {
+                    x_nm: mm_to_nm(10.0),
+                    y_nm: mm_to_nm(20.0),
+                },
+                rotation: Rotation::Ninety,
+                layer: Layer::Bottom,
+            }],
+        };
+        let text = build_pcb(
+            &board,
+            &placement,
+            &Routing::default(),
+            &Uuid::nil(),
+            &HashMap::new(),
+            &[],
+            &[],
+        )
+        .expect("export")
+        .to_string_pretty();
+        let before = pad_at_values(&text);
+        assert_eq!(before.len(), 4, "four fallback pads: {text}");
+
+        let tmp =
+            std::env::temp_dir().join(format!("bottom_flip_{}.kicad_pcb", std::process::id()));
+        std::fs::write(&tmp, &text).expect("write temp pcb");
+        let upgrade = std::process::Command::new("kicad-cli")
+            .args(["pcb", "upgrade", "--force", tmp.to_str().unwrap()])
+            .output();
+        let svg = std::env::temp_dir().join(format!("bottom_flip_{}.svg", std::process::id()));
+        let render = std::process::Command::new("kicad-cli")
+            .args([
+                "pcb",
+                "export",
+                "svg",
+                "--layers",
+                "B.Cu",
+                "--mode-single",
+                "--output",
+                svg.to_str().unwrap(),
+                tmp.to_str().unwrap(),
+            ])
+            .output();
+        let saved = std::fs::read_to_string(&tmp).ok();
+        let _ = std::fs::remove_file(&tmp);
+        let _ = std::fs::remove_file(&svg);
+
+        let Some(upgrade) = upgrade.ok() else {
+            return; // kicad-cli unavailable, as in the existing roundtrip test
+        };
+        assert!(
+            upgrade.status.success(),
+            "KiCad must load a bottom footprint: {}",
+            String::from_utf8_lossy(&upgrade.stderr)
+        );
+        let saved = saved.expect("KiCad re-saved the board");
+        let after = pad_at_values(&saved);
+        assert_eq!(after.len(), before.len(), "{saved}");
+        let angle_close =
+            |a: f64, b: f64| (a - b).rem_euclid(360.0).min((b - a).rem_euclid(360.0)) < 1e-3;
+        for (a, b) in before.iter().zip(&after) {
+            assert_point((a.0, a.1), (b.0, b.1));
+            assert!(
+                angle_close(a.2, b.2),
+                "KiCad changed a pad angle: {a:?} -> {b:?}"
+            );
+        }
+
+        let render = render.expect("kicad-cli export");
+        assert!(
+            render.status.success(),
+            "KiCad must render back copper: {}",
+            String::from_utf8_lossy(&render.stderr)
+        );
     }
 }
 

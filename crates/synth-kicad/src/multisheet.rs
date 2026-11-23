@@ -1138,15 +1138,32 @@ mod tests {
                 .any(|instance| (instance.at_mm.1 - first_row).abs() > 1.0),
             "nine boxes must wrap, not sit in one row"
         );
-        let max_x = plan
-            .furniture
-            .instances
-            .iter()
-            .map(|instance| instance.at_mm.0 + instance.size_mm.0)
-            .fold(0.0_f64, f64::max);
-        // The plan wraps at the smallest ladder page that holds the rows, so
-        // the rows fit that page's width and the index never needs A0.
-        let page = plan.sheet_size.expect("nine boxes fit a ladder page");
+        // Use the same bounds `export_sheets` feeds to `root_page`: root
+        // content plus the real instance and wire extents, not a made-up y.
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = root_bounds;
+        for instance in &plan.furniture.instances {
+            min_x = min_x.min(instance.at_mm.0);
+            max_x = max_x.max(instance.at_mm.0 + instance.size_mm.0);
+            min_y = min_y.min(instance.at_mm.1);
+            max_y = max_y.max(instance.at_mm.1 + instance.size_mm.1);
+        }
+        for wire in &plan.furniture.wires {
+            for (x, y) in [wire.a_mm, wire.b_mm] {
+                min_x = min_x.min(x);
+                max_x = max_x.max(x);
+                min_y = min_y.min(y);
+                max_y = max_y.max(y);
+            }
+        }
+        // The plan wraps at the smallest ladder page that holds the rows, and
+        // the page those real bounds need is no larger than that.
+        let planned = plan.sheet_size.expect("nine boxes fit a ladder page");
+        assert_ne!(planned, SheetSize::A0, "the plan must not need an A0 index");
+        let page = root_page(
+            &b,
+            sheets[0].layout.sheet_size,
+            (min_x, max_x, min_y, max_y),
+        );
         assert_ne!(page, SheetSize::A0, "wrapping must not need an A0 index");
         assert!(
             max_x <= page.dims_mm().0,
