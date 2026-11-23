@@ -146,10 +146,28 @@ fn relative_key(design_dir: &Path, path: &Path) -> String {
     {
         return relative.to_string_lossy().replace('\\', "/");
     }
-    std::path::absolute(path)
-        .unwrap_or_else(|_| path.to_path_buf())
-        .to_string_lossy()
-        .replace('\\', "/")
+    // Keep machine paths out of the hash: outside a sidecar is named by its
+    // path relative to the design directory, with `..` segments.
+    let dir = std::path::absolute(design_dir).unwrap_or_else(|_| design_dir.to_path_buf());
+    let file = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let dir_parts: Vec<_> = dir.components().collect();
+    let file_parts: Vec<_> = file.components().collect();
+    let common = dir_parts
+        .iter()
+        .zip(&file_parts)
+        .take_while(|(a, b)| a == b)
+        .count();
+    if common == 0 {
+        return file.to_string_lossy().replace('\\', "/");
+    }
+    let mut relative = std::path::PathBuf::new();
+    for _ in common..dir_parts.len() {
+        relative.push("..");
+    }
+    for part in &file_parts[common..] {
+        relative.push(part.as_os_str());
+    }
+    relative.to_string_lossy().replace('\\', "/")
 }
 
 /// Compute the design-state hash of a design.
@@ -490,6 +508,10 @@ mod tests {
             paths.iter().filter(|p| p.ends_with("x.toml")).count(),
             2,
             "both sidecars are kept: {paths:?}"
+        );
+        assert!(
+            paths.iter().all(|p| !p.starts_with('/')),
+            "the hash must not embed the checkout path: {paths:?}"
         );
 
         std::fs::write(&a, "schema_version = 1\n# moved\n").unwrap();

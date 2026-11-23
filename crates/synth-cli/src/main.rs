@@ -2550,6 +2550,14 @@ fn read_capped(pipe: &mut impl std::io::Read, cap: usize) -> (Vec<u8>, bool) {
 /// budget with `SYNTH_CHECK_STAGE_BUDGET_SECS` without editing the command.
 /// An unparsable or non-positive value keeps the default, exactly like the
 /// other `SYNTH_*` budgets.
+fn check_stage_budget_secs() -> u64 {
+    std::env::var("SYNTH_CHECK_STAGE_BUDGET_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(120)
+}
+
 /// The source stage's status. A stage that timed out did not fail the design:
 /// it did not run, so it is `unknown` and the gate folds to Incomplete (exit
 /// 3), as the documented exit table says, not ValidationErrors (exit 1).
@@ -2561,14 +2569,6 @@ fn source_stage_status(timed_out: bool, passed: bool) -> &'static str {
     } else {
         "fail"
     }
-}
-
-fn check_stage_budget_secs() -> u64 {
-    std::env::var("SYNTH_CHECK_STAGE_BUDGET_SECS")
-        .ok()
-        .and_then(|v| v.trim().parse::<u64>().ok())
-        .filter(|s| *s > 0)
-        .unwrap_or(120)
 }
 
 fn run_check_child(

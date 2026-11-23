@@ -5387,13 +5387,13 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
     let item = serde_json::json!({ "refdes": refdes });
     if sidecar.components.get(&refdes) != Some(&placement) {
         // The merge kept an existing human position. Nothing changes, so
-        // nothing is written.
-        outcome.fail(
-            item,
-            "a human_drag override of equal or higher priority takes precedence",
-        );
-        return Err(format!(
-            "refused: a human_drag override of equal or higher priority takes precedence for {refdes}"
+        // nothing is written. The refusal travels as the same JSON envelope
+        // the other refusals use, so `refusal_of` can parse it.
+        return Err(refusal(
+            Some("refdes"),
+            format!(
+                "a human_drag override of equal or higher priority takes precedence for {refdes}"
+            ),
         ));
     }
     outcome.apply(item);
@@ -8056,7 +8056,9 @@ mod gate_outcome_tests {
             None,
         )
         .unwrap_err();
-        assert!(err.contains("human_drag"), "{err}");
+        let refused = refusal_of(&err);
+        assert_eq!(refused["field"], "refdes", "{err}");
+        assert_eq!(refused["outcome"]["kind"], "refused", "{err}");
     }
 
     #[test]
@@ -8098,7 +8100,9 @@ mod gate_outcome_tests {
             None,
         )
         .unwrap_err();
-        assert!(err.contains("human_drag"), "{err}");
+        let refused = refusal_of(&err);
+        assert_eq!(refused["field"], "refdes", "{err}");
+        assert_eq!(refused["outcome"]["kind"], "refused", "{err}");
         assert_eq!(snapshot(dir.path()), before);
     }
 
