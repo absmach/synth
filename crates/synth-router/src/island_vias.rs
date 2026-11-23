@@ -96,8 +96,9 @@ pub struct TieOutcome {
     /// spot holds a via, or the rounds ran out. Each is a reason the board must
     /// not be delivered, because KiCad refuses a zone against itself.
     pub unresolved: Vec<String>,
-    /// Signal vias on a slow net that no ground return via could be placed for:
-    /// listed for the review, not a reason to hold the board back.
+    /// Signal vias in a fine-pitch pad breakout that no ground return via could
+    /// be placed for, where the design opted in: listed for the review, not a
+    /// reason to hold the board back.
     pub advisory: Vec<String>,
 }
 
@@ -128,7 +129,7 @@ pub fn tie_islands(
 }
 
 /// [`tie_islands`] for a [`Ground`] that may also say which nets must keep a
-/// return via, so a slow net with no room for one is an advisory.
+/// return via, so a slow net is not given one.
 ///
 /// # Errors
 /// As [`tie_islands`].
@@ -424,7 +425,8 @@ pub struct TiePlan {
     pub vias: Vec<TieVia>,
     /// Copper-bearing islands no via fits in: a finding, not a success.
     pub unresolved: Vec<String>,
-    /// Slow-net signal vias with no room for a return via: advisories.
+    /// Signal vias in a fine-pitch pad breakout with no room for a return via,
+    /// where the design opted in: advisories.
     pub advisory: Vec<String>,
 }
 
