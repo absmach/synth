@@ -1999,7 +1999,9 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
 /// and now finishes the one it chose. `has_sidecar` keeps an author's own
 /// floorplan untouched, as that entry point does.
 pub fn finish_default_placement(board: &Board, placement: &mut Placement, has_sidecar: bool) {
-    if board.outline.is_none() && has_sidecar {
+    // A declared outline is the author's frame; the rules' outline fit would
+    // overwrite it, exactly as the other placement paths keep it.
+    if board.outline.is_some() || has_sidecar {
         return;
     }
     let rules_start = std::time::Instant::now();
@@ -2144,9 +2146,13 @@ fn place_with_export_winner(
             )
         })
         .ok_or_else(|| first_error.expect("a failed solve records its error"))?;
-    default_rules::apply(board, &mut best, with_groups);
-    if with_groups {
-        default_rules::close_edges(board, &mut best);
+    // A declared outline is the author's frame; the rules' outline fit would
+    // overwrite it. The solver already placed inside it.
+    if board.outline.is_none() {
+        default_rules::apply(board, &mut best, with_groups);
+        if with_groups {
+            default_rules::close_edges(board, &mut best);
+        }
     }
     Ok(best)
 }
@@ -12517,6 +12523,55 @@ board "near" {
         );
         let expected = board.outline.expect("declared outline");
         let placement = place(&board).expect("place");
+        assert_eq!(placement.board_outline.width_nm(), expected.width.0);
+        assert_eq!(placement.board_outline.height_nm(), expected.height.0);
+    }
+
+    /// The export sweep's winner takes the same declared frame: the rules that
+    /// finish it must not fit a new outline around the parts.
+    #[test]
+    fn the_export_sweep_keeps_a_declared_outline() {
+        let board = board_from_source(
+            r#"board "fixed_outline_sweep" {
+              layers 2
+              outline 60mm x 30mm
+              component U1: mcu "rp2350"
+              component J1: connector "header_1x4"
+              component R1: resistor "r_generic_0603" value "10k"
+              connect U1.gp0 -> J1.p1
+              connect U1.gp1 -> R1.p1
+            }"#,
+            "fixed_outline_sweep.synth",
+        );
+        let expected = board.outline.expect("declared outline");
+        let placement = place_with_export_sweep(&board).expect("place");
+        assert_eq!(placement.board_outline.min.x_nm, 0);
+        assert_eq!(placement.board_outline.min.y_nm, 0);
+        assert_eq!(placement.board_outline.width_nm(), expected.width.0);
+        assert_eq!(placement.board_outline.height_nm(), expected.height.0);
+    }
+
+    /// [`finish_default_placement`] is the export's finishing tail; on a
+    /// declared-outline board it must leave the frame alone too.
+    #[test]
+    fn finishing_a_declared_outline_keeps_the_rules_off() {
+        let board = board_from_source(
+            r#"board "fixed_outline_finish" {
+              layers 2
+              outline 60mm x 30mm
+              component U1: mcu "rp2350"
+              component J1: connector "header_1x4"
+              component R1: resistor "r_generic_0603" value "10k"
+              connect U1.gp0 -> J1.p1
+              connect U1.gp1 -> R1.p1
+            }"#,
+            "fixed_outline_finish.synth",
+        );
+        let expected = board.outline.expect("declared outline");
+        let mut placement = place(&board).expect("place");
+        finish_default_placement(&board, &mut placement, false);
+        assert_eq!(placement.board_outline.min.x_nm, 0);
+        assert_eq!(placement.board_outline.min.y_nm, 0);
         assert_eq!(placement.board_outline.width_nm(), expected.width.0);
         assert_eq!(placement.board_outline.height_nm(), expected.height.0);
     }
