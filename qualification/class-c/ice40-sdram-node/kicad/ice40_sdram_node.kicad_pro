@@ -218,8 +218,13 @@
       "+1V2": "PWR12",
       "+3V3": "PWR33",
       "+5V": "PWR5",
-      "/Q1_GATE": "LOWSPD",
+      "+5V_REG": "PWR5",
+      "/USB_CC1": "LOWSPD",
+      "/USB_CC2": "LOWSPD",
+      "CBSEL0": "LOWSPD",
+      "CBSEL1": "LOWSPD",
       "CDONE": "LOWSPD",
+      "CLK25": "SDCLK",
       "CRESET_B": "LOWSPD",
       "FLASH_HOLD": "LOWSPD",
       "FLASH_WP": "LOWSPD",
@@ -229,7 +234,6 @@
       "LED_PWR": "LOWSPD",
       "LED_USER_A": "LOWSPD",
       "LED_USER_R": "LOWSPD",
-      "Q1_GATE": "LOWSPD",
       "SD_A0": "SDADDR",
       "SD_A1": "SDADDR",
       "SD_A10": "SDADDR",
@@ -252,15 +256,22 @@
       "SD_CK_F": "SDCLK",
       "SD_CS": "SDADDR",
       "SD_CS_F": "SDADDR",
+      "SD_DQ0": "LOWSPD",
+      "SD_DQ1": "LOWSPD",
       "SD_DQ10": "SDDATA",
       "SD_DQ11": "SDDATA",
       "SD_DQ12": "SDDATA",
       "SD_DQ13": "SDDATA",
       "SD_DQ14": "SDDATA",
       "SD_DQ15": "SDDATA",
+      "SD_DQ2": "LOWSPD",
+      "SD_DQ3": "LOWSPD",
+      "SD_DQ4": "LOWSPD",
+      "SD_DQ5": "LOWSPD",
+      "SD_DQ6": "LOWSPD",
+      "SD_DQ7": "LOWSPD",
       "SD_DQ8": "SDDATA",
       "SD_DQ9": "SDDATA",
-      "SD_DQ_LO": "LOWSPD",
       "SD_LDQM": "SDADDR",
       "SD_RAS": "SDADDR",
       "SD_RAS_F": "SDADDR",
@@ -274,13 +285,16 @@
       "USB_CC1": "LOWSPD",
       "USB_CC2": "LOWSPD",
       "VCCPLL": "PLLSUP",
-      "VIN_FUSED": "PWR5",
       "VIN_RAW": "PWR5"
     },
     "netclass_patterns": [
       {
         "netclass": "LOWSPD",
-        "pattern": "/*/Q1_GATE"
+        "pattern": "/*/USB_CC1"
+      },
+      {
+        "netclass": "LOWSPD",
+        "pattern": "/*/USB_CC2"
       }
     ]
   },
@@ -295,8 +309,8 @@
       ""
     ],
     [
-      "c0b5c801-7d3f-5e3d-acec-2c094b430b21",
-      "ice40_sdram_node_POWER_INPUT.kicad_sch"
+      "9bc257de-bf05-58fd-bc23-7fb70f9c32fb",
+      "ice40_sdram_node_FPGA_CLOCK.kicad_sch"
     ],
     [
       "5ae927d9-d3dc-58a7-94c8-adf0537a586e",

@@ -10,7 +10,7 @@ The board is the output of agents driving `synth mcp` from prompts. Orchestratio
 | Stackup | JLCPCB's six-layer `JLC06161H-3313` stackup, from [jlcpcb.com/impedance](https://jlcpcb.com/impedance), declared in the source. | [`ice40_sdram_node.synth`](ice40_sdram_node.synth) |
 | Edge rate | The `SDADDR` class declares `edge_rate medium` on the strength of Lattice's IBIS model `ice40.ibs` rev 2.5 (see [`QUALIFICATION.md`](QUALIFICATION.md), Edge rate); `SDDATA` and `SDCLK` stay `fast`. | [`ice40_sdram_node.synth`](ice40_sdram_node.synth) |
 | Placement | The orchestrator pinned the placement in the sidecar through sweeps of probe exports (details below the table) | [`ice40_sdram_node.placement.layout.toml`](ice40_sdram_node.placement.layout.toml) |
-| Final exports | Three fresh-directory exports through `synth mcp`, `synth_export`, each with `router_timeout_secs` 2700 (the router needs about 1,800 s on the machine that made them; the default budget is 1,200 s). Each export returns no blocking signal-integrity finding. | not kept in the repository |
+| Final export | One fresh-directory export through `synth mcp`, `synth_export`, with `router_timeout_secs` 2700. It returns no blocking signal-integrity finding. | not kept in the repository |
 
 Placement details:
 
@@ -24,9 +24,9 @@ Placement details:
 
 | | |
 |---|---|
-| Synth, final exports | the binary built from commit `48a0a490b2c3dde076a90e55ba05b82ce4137605`; the exports set `SYNTH_SOURCE_REVISION` to that commit, and the routing record of each export carries it as `source_revision` |
+| Synth, final export | the `synth mcp --stdio` build used for the final export |
 | KiCadRoutingTools | `9399bfb2` |
-| KiCad | 10.0.6 |
+| KiCad | 10.0.8 |
 | Registry inputs | `registry/parts/` of the repository: `ice40hx4k_tq144`, `header_1x6_prog`, `w25q128jvsiq_208mil`, `tlv70012_ddc` |
 
 Synth findings from this board: #425 (silkscreen), #428 (flattened symbol), #445 (the `edge_rate medium` tier), #147 (class skew budgets are not enforced at export).

@@ -24,4 +24,4 @@ The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040). The part model in [`regis
 
 The memory pins sit on the FPGA's left side facing the SDRAM, in the order of the SDRAM's near pin row, so the data bus runs straight across with no crossings.
 
-See [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. See [`PROVENANCE.md`](PROVENANCE.md) for how the board was made. Gerber content hash `e4663ac189`.
+See [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. See [`PROVENANCE.md`](PROVENANCE.md) for how the board was made.

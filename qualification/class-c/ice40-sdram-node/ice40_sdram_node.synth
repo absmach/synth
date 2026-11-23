@@ -35,7 +35,8 @@ board "ice40_sdram_node" {
   netclass "PLLSUP" { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#f0e442" }
   netclass "GNDC"   { trace_width 0.3mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#444444" }
   netclass "LOWSPD" { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow color "#009e73" }
-  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm max_skew 10mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
+  // SDDATA skew budget, same window as SDADDR below (7 ns cycle less 1.5 ns setup and 0.8 ns hold leaves 4.7 ns): 25 mm is 0.175 ns at 7.0 ps/mm, 4 % of it.
+  netclass "SDDATA" { trace_width 0.15mm clearance 0.127mm max_skew 25mm max_length 60mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast color "#0072b2" }
   // SDADDR is driven only by the FPGA, so its edge is the iCE40's: Lattice's IBIS model (ice40.ibs rev 2.5,
   // lvc330io for banks 0-2, lvc330_b3io for bank 3) gives dV/dt_r and dV/dt_f 20-80 % times of at least 0.976 ns
   // (banks 0-2) and 0.728 ns (bank 3) at the fast corner, so no edge here is faster than 0.3 ns: `medium`.
