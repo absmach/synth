@@ -22,7 +22,10 @@ All figures come from the files of the export this package was built from (KiCad
 | Address, bank and control group | lengths from 11.1 mm (`SD_A5`) to 72.4 mm (`SD_RAS`, both nets of its series resistor), a spread of 61.3 mm, which is 1.3 mm over the declared `max_skew 60 mm` (details below the table) |
 | Edge rate | `SDDATA` and `SDCLK` declare `edge_rate fast` (the SDRAM drives the data bus on a read, and no output-edge figure for the IS42S16400J was found, so no slower claim is made). `SDADDR` declares `edge_rate medium`: the FPGA alone drives it, and Lattice's IBIS model `ice40.ibs` rev 2.5 gives 20 to 80 % rise and fall times of at least 0.976 ns (banks 0 to 2, `lvc330io`) and 0.728 ns (bank 3, `lvc330_b3io`) at the fast corner, so no edge is faster than 0.3 ns. The medium window is 6 mm ([#445](https://github.com/absmach/synth/issues/445)) |
 | Warnings | 84 `lib_footprint_issues` in the export's `kicad-cli` DRC report (not committed): silkscreen cut back from vias and pads by the exporter, #425; no other warning type |
+| Zone fill | The committed board carries refilled zones (`kicad-cli pcb drc --refill-zones --save-board`), and the Gerbers are plotted from that fill. `kicad-cli pcb drc` without a refill reports 0 unconnected items on it |
 | Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy, which rejects any track or via narrower than the size its net class declares. The engine's counters record 139 vias claimed and 0 in pads, and "rules below board floor: none reported". The delivered board's own counts, 193 vias in all, are the ones this document uses |
+
+Note on `synth validate`: it reports `W-SYNTH-THERMAL-001` on `Q2`. The warning applies the generic package rating of the AO3400A to an LED switch. It does not reflect a real load.
 
 Notes on the address, bank and control group:
 
