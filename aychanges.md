@@ -12,6 +12,8 @@ This document records the architectural and functional code changes introduced i
 | **KiCad Windows Discovery** | [`synth-cli`](file:///D:/AYSynth/crates/synth-cli), [`synth-drc`](file:///D:/AYSynth/crates/synth-drc), [`synth-kicad`](file:///D:/AYSynth/crates/synth-kicad), [`synth-layout`](file:///D:/AYSynth/crates/synth-layout), [`synth-registry`](file:///D:/AYSynth/crates/synth-registry), [`synth-router`](file:///D:/AYSynth/crates/synth-router) | Automated discovery of KiCad 8.0, 9.0, and 10.0 executables (`kicad-cli.exe`), bundled Python interpreters, footprint libraries (`.kicad_mod`), symbol tables, and router plugins across standard Windows drive installations (`C:\`, `D:\`). |
 | **Schematic Hierarchy** | [`synth-kicad`](file:///D:/AYSynth/crates/synth-kicad) | Fixed root sheet UUID symbol path formatting and single-sheet detection condition. |
 | **Electrical Rule Check (ERC)** | [`synth-validate`](file:///D:/AYSynth/crates/synth-validate) | Filtered ground domain nets in component supply voltage resolution to avoid false positive pin driver conflicts. |
+| **Multi-Pad & Package Topologies** | [`synth-registry`](file:///D:/AYSynth/crates/synth-registry), [`synth-layout`](file:///D:/AYSynth/crates/synth-layout), [`synth-kicad`](file:///D:/AYSynth/crates/synth-kicad) | Generic physical pad synthesis supporting multi-pad pins (`Pin.physical_pads`), standard 4-sided `PackageType::Quad` perimeter pad distribution, `SingleRow` headers, and multi-pad net assignments. |
+| **Review & Verification Gates** | [`AGENTS.md`](file:///D:/AYSynth/AGENTS.md), [`GEMINI.md`](file:///D:/AYSynth/GEMINI.md), [`.agents/rules`](file:///D:/AYSynth/.agents/rules/schematic-review-workflow.md) | Human-in-the-Loop schematic review gate and mandatory pre-placement full symbol & footprint verification gate. |
 
 ---
 
@@ -98,6 +100,53 @@ Standard Linux/macOS paths (`/usr/share/kicad`, `/usr/bin/kicad-cli`) fail on Wi
     }
     ```
   - Prevents ground nets from being considered positive voltage supply drivers during deep electrical validation.
+
+---
+
+### D. Multi-Pad Pin Mapping & Generic Package Footprint Synthesis
+
+#### 1. Problem Description & Root-Cause Analysis
+When generating a PCB design where a component lacked a bundled KiCad library footprint (or when synthesized dynamically):
+1. **Truncated 2-Sided Quad Packages**: The fallback pad layout generator (`synth_part_pads` in `crates/synth-layout/src/kicad_footprint_loader.rs`) hardcoded a dual-column layout (`left = n.div_ceil(2)`, `right = n - left`). For 4-sided surface-mount modules (e.g., the Waveshare ESP32-P4 module with 88 pins on a 25×25 mm square body), all 88 pads were generated exclusively on the Left (44 pads) and Right (44 pads) edges, leaving the Top and Bottom edges completely devoid of pads.
+2. **Missing Physical Pads on Multi-Pad Components**: Components where multiple physical pads map to a single logical terminal (e.g. 4-pin SPST tactile pushbuttons where pins 1 & 2 share terminal A and pins 3 & 4 share terminal B, or power MOSFETs with multiple drain pads) were restricted to 1 pad per `Pin`. Consequently, the synthetic footprint generator only emitted 2 pads instead of 4, leaving half of the mechanical and electrical lands missing from the PCB.
+3. **Unverified On-the-Fly PCB Synthesis**: Footprints were directly synthesized into the `.kicad_pcb` during export without first creating verified, standalone `.kicad_sym` and `.kicad_mod` files in the project library, bypassing human review and DRC verification.
+
+#### 2. Generic Implementation Details
+
+* **Multi-Pad Support (`Pin.physical_pads`) in [`crates/synth-registry`](file:///D:/AYSynth/crates/synth-registry)**:
+  - Added `pub physical_pads: Vec<String>` to `Pin` (`crates/synth-registry/src/part.rs`), with `#[serde(default, skip_serializing_if = "Vec::is_empty")]`.
+  - Added helper `pub fn pad_numbers(&self) -> Vec<String>` on `Pin` which returns `self.physical_pads` if populated, falling back to `vec![self.number.0.clone()]`.
+  - Implemented `Default` for `Pin` to ensure clean backward compatibility for testing and builder APIs.
+
+* **Generic Package Topologies (`PackageType`) in [`crates/synth-registry`](file:///D:/AYSynth/crates/synth-registry) & [`crates/synth-layout`](file:///D:/AYSynth/crates/synth-layout)**:
+  - Added `PackageType` enum (`Dual`, `Quad`, `SingleRow`, `Radial`) and optional field `package_type: Option<PackageType>` on `FootprintDimensions`.
+  - Completely refactored `synth_part_pads` (`crates/synth-layout/src/kicad_footprint_loader.rs`):
+    - Collects all physical pads across pins via `pin.pad_numbers()`.
+    - Automatically infers `PackageType::Quad` for components with $\ge 16$ pads and roughly square aspect ratios ($0.65 \le w/h \le 1.55$), or honors explicit `package_type`.
+    - **Quad Perimeter Distribution**: Distributes pads across all 4 edges (**West/Left** $\rightarrow$ **South/Bottom** $\rightarrow$ **East/Right** $\rightarrow$ **North/Top**) in standard JEDEC/KiCad counter-clockwise perimeter pin order (Pin 1 top-left). Orientations and dimensions swap correctly (vertical pads $0.6 \times 0.45\text{ mm}$ on West/East, horizontal pads $0.45 \times 0.6\text{ mm}$ on South/North).
+    - **SingleRow Distribution**: Arranges pads in a single vertical or horizontal column/row for headers and connectors.
+    - **Dual / Radial Distribution**: Preserves dual-column layout for DIP, SOIC, and dual-terminal discretes.
+  - Added comprehensive unit tests in `crates/synth-layout/src/kicad_footprint_loader.rs` (`test_synth_part_pads_quad_distribution`, `test_synth_part_pads_multi_pad_switch`).
+
+* **Multi-Pad Net Mapping in [`crates/synth-kicad`](file:///D:/AYSynth/crates/synth-kicad)**:
+  - Updated `build_net_assignments` (`crates/synth-kicad/src/pcb.rs`) to iterate over all `pin.pad_numbers()`, ensuring every physical pad (e.g., pads 1, 2, 3, 4 of a pushbutton) is correctly entered into `PadNetLookup` with its respective net ID and net name.
+  - `build_footprint_instance` and `build_synthesized_footprint_module` in `pcb.rs` export all physical pads to the board instance and `.kicad_mod` files in `<project>.pretty/`.
+
+---
+
+### E. Workflow & Review Gates
+
+To prevent unverified or malformed footprints from ever reaching the board layout and router, strict workflow gates were established:
+
+1. **Human-in-the-Loop KiCad Schematic Review Gate**:
+   - Enforced across [`AGENTS.md`](file:///D:/AYSynth/AGENTS.md), [`GEMINI.md`](file:///D:/AYSynth/GEMINI.md), and [`.agents/rules/schematic-review-workflow.md`](file:///D:/AYSynth/.agents/rules/schematic-review-workflow.md).
+   - Whenever a schematic is generated, the agent MUST stop before PCB component placement or PCB routing and present the complete review packet (clickable `file://` links to `.kicad_sch`, sub-sheets, rendered SVG/PNG images, and `bom.csv`).
+   - PCB routing proceeds **only** after explicit user approval.
+
+2. **Pre-Placement Symbol & Footprint Verification Gate**:
+   - Mandates that every part must have a complete `.kicad_sym` symbol and `.kicad_mod` footprint generated in `<project>.pretty/` (or confirmed in standard KiCad libraries) before placement begins.
+   - Forbids relying on on-the-fly direct synthetic PCB footprints.
+   - Verifies 100% pin-to-pad alignment and package topology (Quad perimeter layout for MCUs/modules, full multi-pad mapping for switches/connectors) before running placement tools (`place_simple.py`, `/plan-pcb-placement`).
 
 ---
 

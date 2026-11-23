@@ -286,6 +286,7 @@ mod tests {
                 capabilities: vec![PinCapability::Gpio],
                 required: true,
                 footprint_only: false,
+                physical_pads: Vec::new(),
                 unit: None,
                 voltage_max_v: Some(3.6),
                 voltage_min_v: Some(1.8),

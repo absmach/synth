@@ -233,6 +233,24 @@ pub struct FootprintDimensions {
     /// this per part in its placement sidecar.
     #[serde(default)]
     pub label_hidden: Option<bool>,
+    /// Package layout topology (e.g. `quad`, `dual`, `single_row`, `radial`)
+    /// for physical footprint synthesis and pad placement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_type: Option<PackageType>,
+}
+
+/// Standard package layout topology for physical footprint synthesis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PackageType {
+    /// Dual-in-line or dual-row SMD (DIP, SOIC, TSSOP). Pads on 2 opposing edges (Left & Right).
+    Dual,
+    /// Quad-flat or 4-sided module (QFN, QFP, castellated module). Pads on all 4 edges (Left, Bottom, Right, Top).
+    Quad,
+    /// Single-in-line or single-row header (1xN connector, SIP). Pads in a single row/column.
+    SingleRow,
+    /// Two-terminal radial/axial (passives, crystals, diodes).
+    Radial,
 }
 
 /// A side of a part, in board axes, for its silkscreen label.
@@ -339,6 +357,14 @@ pub struct Pin {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub footprint_only: bool,
 
+    /// Physical footprint pad numbers mapped to this logical pin.
+    ///
+    /// For multi-pad components (e.g. 4-pin tactile switches where terminals 1 & 2 are tied,
+    /// or power MOSFETs where pins 5, 6, 7, 8 are drain), list all physical pad designators.
+    /// If empty, defaults to a single pad matching `self.number`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub physical_pads: Vec<String>,
+
     /// Unit or gate identifier for multi-unit components (e.g. `"A"`, `"B"` for dual op-amps).
     #[serde(default)]
     pub unit: Option<String>,
@@ -417,9 +443,43 @@ pub struct PinPwm {
     pub datasheet_ref: String,
 }
 
+impl Default for Pin {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            number: PinNumber(String::new()),
+            electrical_type: ElectricalType::Passive,
+            capabilities: Vec::new(),
+            required: false,
+            footprint_only: false,
+            physical_pads: Vec::new(),
+            unit: None,
+            voltage_max_v: None,
+            voltage_min_v: None,
+            voltage_nominal_v: None,
+            drive: None,
+            gate: None,
+            pwm: None,
+        }
+    }
+}
+
 impl Pin {
     pub fn nominal_voltage_v(&self) -> Option<f64> {
         self.voltage_nominal_v.or(self.voltage_max_v)
+    }
+
+    /// Return all physical footprint pad designators that map to this logical pin.
+    ///
+    /// If `self.physical_pads` is populated, returns those designators; otherwise
+    /// defaults to `vec![self.number.0.clone()]`.
+    #[must_use]
+    pub fn pad_numbers(&self) -> Vec<String> {
+        if self.physical_pads.is_empty() {
+            vec![self.number.0.clone()]
+        } else {
+            self.physical_pads.clone()
+        }
     }
 }
 

@@ -1,6 +1,8 @@
 id = "esd_usb"
 kind = "diode"
 description = "USB-line ESD protection (TVS diode array), bidirectional"
+mpn = "PESD5V0X1BC"
+lcsc_pn = "C9882"
 kicad_symbol = "Device:D_TVS"
 kicad_footprint = "Diode_SMD:D_SOD-323"
 

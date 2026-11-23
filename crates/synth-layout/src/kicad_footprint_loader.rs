@@ -788,61 +788,248 @@ fn xy_after(text: &str, key: &str) -> Option<(f64, f64)> {
 /// exactly where the maze router planned traces, so the part connects
 /// instead of leaving dangling/via-dangling copper.
 ///
-/// Pads are laid out in two columns (left/right) straddling the part's
-/// `footprint_dimensions` rectangle, one pad per IR pin, named by the
-/// pin's `number` so the net assignment lookup matches the schematic.
-/// The pitch is derived from the body height so every pin fits with a
-/// safe gap (no solder-mask bridge between adjacent pads).
+/// Synthesize a fallback pad layout for a registry part that has no
+/// bundled KiCad footprint (`kicad_footprint` is `None`).
+///
+/// This is the geometry the exporter emits when it can't reference a
+/// real `.kicad_mod` (e.g. a brand-new module like the ESP32-P4 or
+/// ESP32-C61-MINI-1 that has no official KiCad library yet), and —
+/// crucially — the **same** geometry the router stamps when `pads()`
+/// returns `None`. Keeping both sides in lock-step means the exported
+/// copper lands exactly where the maze router planned traces, so the
+/// part connects instead of leaving dangling/via-dangling copper.
+///
+/// Pads are generated for all physical pads mapped to each IR pin
+/// (via `pin.pad_numbers()`), supporting multi-pad pins such as
+/// 4-pin tactile switches or multi-pad power terminals.
+///
+/// Package topologies supported:
+/// - `PackageType::Quad`: Pads distributed around all 4 edges
+///   (Left/West, Bottom/South, Right/East, Top/North) in standard
+///   counter-clockwise perimeter order (Pin 1 at top-left).
+/// - `PackageType::Dual`: Pads distributed in two opposing columns
+///   (Left & Right) for DIP, SOIC, and dual-terminal passives.
+/// - `PackageType::SingleRow`: Pads arranged in a single row/column.
+/// - `PackageType::Radial`: 2-terminal opposing pad layout.
+///
+/// When `package_type` is not specified, quad layout is automatically
+/// inferred if the part has 16 or more pads and a roughly square
+/// aspect ratio (0.65..=1.55); otherwise dual column is used.
 pub fn synth_part_pads(part: &synth_registry::Part) -> Option<Vec<Pad>> {
-    if part.pins.is_empty() {
+    let mut pad_numbers = Vec::new();
+    for pin in &part.pins {
+        for pad_num in pin.pad_numbers() {
+            pad_numbers.push(pad_num);
+        }
+    }
+    if pad_numbers.is_empty() {
         return None;
     }
+    let n = pad_numbers.len();
     let (w_mm, h_mm) = part.footprint_dimensions.as_ref().map_or_else(
-        || default_synth_dims(part.pins.len()),
+        || default_synth_dims(n),
         |d| (d.width_mm, d.height_mm),
     );
-    let n = part.pins.len();
-    let left = n.div_ceil(2);
-    let right = n - left;
-    let pad_w = 0.6_f64;
-    let pad_h = 0.45_f64;
-    let inset = (w_mm / 2.0).min(0.9_f64);
-    let pitch_l = if left > 1 {
-        h_mm / (left as f64 + 1.0)
-    } else {
-        0.0
-    };
-    let pitch_r = if right > 1 {
-        h_mm / (right as f64 + 1.0)
-    } else {
-        0.0
-    };
-    let mut pads = Vec::with_capacity(n);
-    for (i, pin) in part.pins.iter().enumerate() {
-        let (x, y) = if i < left {
-            let y = if left > 1 {
-                -h_mm / 2.0 + (i as f64 + 1.0) * pitch_l
+
+    let package_type = part
+        .footprint_dimensions
+        .as_ref()
+        .and_then(|d| d.package_type)
+        .unwrap_or_else(|| {
+            let aspect_ratio = w_mm / h_mm.max(0.001);
+            if n >= 16 && (0.65..=1.55).contains(&aspect_ratio) {
+                synth_registry::PackageType::Quad
             } else {
-                0.0
-            };
-            (-(w_mm / 2.0 - inset), y)
-        } else {
-            let j = i - left;
-            let y = if right > 1 {
-                -h_mm / 2.0 + (j as f64 + 1.0) * pitch_r
-            } else {
-                0.0
-            };
-            (w_mm / 2.0 - inset, y)
-        };
-        pads.push(Pad {
-            number: pin.number.0.clone(),
-            center_mm: (x, y),
-            size_mm: (pad_w, pad_h),
-            copper_layers: PadCopperLayers::Front,
-            is_npth: false,
+                synth_registry::PackageType::Dual
+            }
         });
+
+    let mut pads = Vec::with_capacity(n);
+
+    match package_type {
+        synth_registry::PackageType::Quad => {
+            let base = n / 4;
+            let rem = n % 4;
+            let (n_left, n_bottom, n_right, n_top) = if h_mm >= w_mm {
+                (
+                    base + usize::from(rem >= 1),
+                    base + usize::from(rem >= 3),
+                    base + usize::from(rem >= 2),
+                    base,
+                )
+            } else {
+                (
+                    base + usize::from(rem >= 3),
+                    base + usize::from(rem >= 1),
+                    base,
+                    base + usize::from(rem >= 2),
+                )
+            };
+
+            let pad_w_vert = 0.6_f64;
+            let pad_h_vert = 0.45_f64;
+            let pad_w_horiz = 0.45_f64;
+            let pad_h_horiz = 0.6_f64;
+
+            let inset_x = (w_mm / 2.0).min(0.9_f64);
+            let inset_y = (h_mm / 2.0).min(0.9_f64);
+
+            let pitch_left = if n_left > 1 {
+                h_mm / (n_left as f64 + 1.0)
+            } else {
+                0.0
+            };
+            let pitch_bottom = if n_bottom > 1 {
+                w_mm / (n_bottom as f64 + 1.0)
+            } else {
+                0.0
+            };
+            let pitch_right = if n_right > 1 {
+                h_mm / (n_right as f64 + 1.0)
+            } else {
+                0.0
+            };
+            let pitch_top = if n_top > 1 {
+                w_mm / (n_top as f64 + 1.0)
+            } else {
+                0.0
+            };
+
+            for (idx, pad_num) in pad_numbers.into_iter().enumerate() {
+                let ((x, y), size) = if idx < n_left {
+                    // Left edge (West): Top to Bottom
+                    let i = idx;
+                    let y = if n_left > 1 {
+                        -h_mm / 2.0 + (i as f64 + 1.0) * pitch_left
+                    } else {
+                        0.0
+                    };
+                    ((-(w_mm / 2.0 - inset_x), y), (pad_w_vert, pad_h_vert))
+                } else if idx < n_left + n_bottom {
+                    // Bottom edge (South): Left to Right
+                    let j = idx - n_left;
+                    let x = if n_bottom > 1 {
+                        -w_mm / 2.0 + (j as f64 + 1.0) * pitch_bottom
+                    } else {
+                        0.0
+                    };
+                    ((x, h_mm / 2.0 - inset_y), (pad_w_horiz, pad_h_horiz))
+                } else if idx < n_left + n_bottom + n_right {
+                    // Right edge (East): Bottom to Top
+                    let k = idx - (n_left + n_bottom);
+                    let y = if n_right > 1 {
+                        h_mm / 2.0 - (k as f64 + 1.0) * pitch_right
+                    } else {
+                        0.0
+                    };
+                    (((w_mm / 2.0 - inset_x), y), (pad_w_vert, pad_h_vert))
+                } else {
+                    // Top edge (North): Right to Left
+                    let m = idx - (n_left + n_bottom + n_right);
+                    let x = if n_top > 1 {
+                        w_mm / 2.0 - (m as f64 + 1.0) * pitch_top
+                    } else {
+                        0.0
+                    };
+                    ((x, -(h_mm / 2.0 - inset_y)), (pad_w_horiz, pad_h_horiz))
+                };
+
+                pads.push(Pad {
+                    number: pad_num,
+                    center_mm: (x, y),
+                    size_mm: size,
+                    copper_layers: PadCopperLayers::Front,
+                    is_npth: false,
+                });
+            }
+        }
+        synth_registry::PackageType::SingleRow => {
+            let is_vertical = h_mm >= w_mm;
+            let pitch = if n > 1 {
+                if is_vertical {
+                    h_mm / (n as f64 + 1.0)
+                } else {
+                    w_mm / (n as f64 + 1.0)
+                }
+            } else {
+                0.0
+            };
+            let (pad_w, pad_h) = if is_vertical {
+                (0.6_f64, 0.45_f64)
+            } else {
+                (0.45_f64, 0.6_f64)
+            };
+
+            for (i, pad_num) in pad_numbers.into_iter().enumerate() {
+                let (x, y) = if is_vertical {
+                    let y = if n > 1 {
+                        -h_mm / 2.0 + (i as f64 + 1.0) * pitch
+                    } else {
+                        0.0
+                    };
+                    (0.0, y)
+                } else {
+                    let x = if n > 1 {
+                        -w_mm / 2.0 + (i as f64 + 1.0) * pitch
+                    } else {
+                        0.0
+                    };
+                    (x, 0.0)
+                };
+                pads.push(Pad {
+                    number: pad_num,
+                    center_mm: (x, y),
+                    size_mm: (pad_w, pad_h),
+                    copper_layers: PadCopperLayers::Front,
+                    is_npth: false,
+                });
+            }
+        }
+        synth_registry::PackageType::Dual | synth_registry::PackageType::Radial => {
+            let left = n.div_ceil(2);
+            let right = n - left;
+            let pad_w = 0.6_f64;
+            let pad_h = 0.45_f64;
+            let inset = (w_mm / 2.0).min(0.9_f64);
+            let pitch_l = if left > 1 {
+                h_mm / (left as f64 + 1.0)
+            } else {
+                0.0
+            };
+            let pitch_r = if right > 1 {
+                h_mm / (right as f64 + 1.0)
+            } else {
+                0.0
+            };
+
+            for (i, pad_num) in pad_numbers.into_iter().enumerate() {
+                let (x, y) = if i < left {
+                    let y = if left > 1 {
+                        -h_mm / 2.0 + (i as f64 + 1.0) * pitch_l
+                    } else {
+                        0.0
+                    };
+                    (-(w_mm / 2.0 - inset), y)
+                } else {
+                    let j = i - left;
+                    let y = if right > 1 {
+                        -h_mm / 2.0 + (j as f64 + 1.0) * pitch_r
+                    } else {
+                        0.0
+                    };
+                    (w_mm / 2.0 - inset, y)
+                };
+                pads.push(Pad {
+                    number: pad_num,
+                    center_mm: (x, y),
+                    size_mm: (pad_w, pad_h),
+                    copper_layers: PadCopperLayers::Front,
+                    is_npth: false,
+                });
+            }
+        }
     }
+
     Some(pads)
 }
 
@@ -1087,5 +1274,146 @@ mod courtyard_rect_tests {
     #[test]
     fn a_footprint_with_no_courtyard_still_answers_none() {
         assert!(courtyard_rect_from_text(NO_COURTYARD).is_none());
+    }
+
+    #[test]
+    fn test_synth_part_pads_quad_distribution() {
+        let mut pins = Vec::new();
+        for i in 1..=88 {
+            pins.push(synth_registry::Pin {
+                name: format!("p{i}"),
+                number: synth_registry::PinNumber(i.to_string()),
+                electrical_type: synth_registry::ElectricalType::Passive,
+                capabilities: Vec::new(),
+                required: false,
+                footprint_only: false,
+                physical_pads: Vec::new(),
+                unit: None,
+                voltage_max_v: None,
+                voltage_min_v: None,
+                voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
+            });
+        }
+        let part = synth_registry::Part {
+            id: synth_registry::PartId("esp32_p4_test".into()),
+            kind: "mcu".into(),
+            description: None,
+            version: 0,
+            lifecycle: synth_registry::Lifecycle::Active,
+            signed_by: Vec::new(),
+            substitutes: Vec::new(),
+            mpn: Some("ESP32-P4".into()),
+            lcsc_pn: None,
+            provenance: None,
+            pins,
+            required_decoupling: Vec::new(),
+            kicad_symbol: None,
+            kicad_footprint: None,
+            footprint_dimensions: Some(synth_registry::FootprintDimensions {
+                width_mm: 25.0,
+                height_mm: 25.0,
+                courtyard_margin_mm: Some(0.5),
+                mating_face: None,
+                label_side: None,
+                label_hidden: None,
+                package_type: Some(synth_registry::PackageType::Quad),
+            }),
+            operating_conditions: None,
+            spice: None,
+        };
+
+        let pads = super::synth_part_pads(&part).expect("pads synthesized");
+        assert_eq!(pads.len(), 88);
+
+        // 88 / 4 = 22 pads per side.
+        // Side 1: Left (West) -> x < 0
+        for pad in &pads[0..22] {
+            assert!(pad.center_mm.0 < -10.0, "West pad x should be negative: got {}", pad.center_mm.0);
+        }
+        // Side 2: Bottom (South) -> y > 0
+        for pad in &pads[22..44] {
+            assert!(pad.center_mm.1 > 10.0, "South pad y should be positive: got {}", pad.center_mm.1);
+        }
+        // Side 3: Right (East) -> x > 0
+        for pad in &pads[44..66] {
+            assert!(pad.center_mm.0 > 10.0, "East pad x should be positive: got {}", pad.center_mm.0);
+        }
+        // Side 4: Top (North) -> y < 0
+        for pad in &pads[66..88] {
+            assert!(pad.center_mm.1 < -10.0, "North pad y should be negative: got {}", pad.center_mm.1);
+        }
+    }
+
+    #[test]
+    fn test_synth_part_pads_multi_pad_switch() {
+        let pins = vec![
+            synth_registry::Pin {
+                name: "p1".into(),
+                number: synth_registry::PinNumber("1".into()),
+                electrical_type: synth_registry::ElectricalType::Passive,
+                capabilities: Vec::new(),
+                required: false,
+                footprint_only: false,
+                physical_pads: vec!["1".into(), "2".into()],
+                unit: None,
+                voltage_max_v: None,
+                voltage_min_v: None,
+                voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
+            },
+            synth_registry::Pin {
+                name: "p2".into(),
+                number: synth_registry::PinNumber("2".into()),
+                electrical_type: synth_registry::ElectricalType::Passive,
+                capabilities: Vec::new(),
+                required: false,
+                footprint_only: false,
+                physical_pads: vec!["3".into(), "4".into()],
+                unit: None,
+                voltage_max_v: None,
+                voltage_min_v: None,
+                voltage_nominal_v: None,
+                drive: None,
+                gate: None,
+                pwm: None,
+            },
+        ];
+        let part = synth_registry::Part {
+            id: synth_registry::PartId("spst_test".into()),
+            kind: "switch".into(),
+            description: None,
+            version: 0,
+            lifecycle: synth_registry::Lifecycle::Active,
+            signed_by: Vec::new(),
+            substitutes: Vec::new(),
+            mpn: None,
+            lcsc_pn: None,
+            provenance: None,
+            pins,
+            required_decoupling: Vec::new(),
+            kicad_symbol: None,
+            kicad_footprint: None,
+            footprint_dimensions: Some(synth_registry::FootprintDimensions {
+                width_mm: 6.0,
+                height_mm: 6.0,
+                courtyard_margin_mm: Some(0.25),
+                mating_face: None,
+                label_side: None,
+                label_hidden: None,
+                package_type: Some(synth_registry::PackageType::Dual),
+            }),
+            operating_conditions: None,
+            spice: None,
+        };
+
+        let pads = super::synth_part_pads(&part).expect("pads synthesized");
+        assert_eq!(pads.len(), 4, "A 2-terminal switch with 4 physical pads produces 4 pads");
+        let numbers: Vec<String> = pads.into_iter().map(|p| p.number).collect();
+        assert_eq!(numbers, vec!["1", "2", "3", "4"]);
     }
 }

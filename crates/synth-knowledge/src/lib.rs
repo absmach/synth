@@ -993,6 +993,7 @@ mod tests {
             capabilities: vec![],
             required: false,
             footprint_only: false,
+            physical_pads: Vec::new(),
             unit: None,
             voltage_max_v: None,
             voltage_min_v: None,

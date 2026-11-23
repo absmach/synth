@@ -4799,6 +4799,7 @@ fn ensure_footprint_dimensions(part: &mut synth_registry::Part) -> Result<(), St
         mating_face: None,
         label_side: None,
         label_hidden: None,
+        package_type: None,
     });
     Ok(())
 }
