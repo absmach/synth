@@ -202,6 +202,7 @@ pub struct OutlineStmt {
     pub width: ValueWithUnit,
     pub height: ValueWithUnit,
     /// The stated reason for the fixed size (`reason "<text>"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     pub span: Span,
 }
