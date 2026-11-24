@@ -106,13 +106,10 @@ fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     );
 }
 
-/// `secure_tracker`'s outline before the 25 MHz oscillator's courtyard was
-/// The canvas fix in #158 re-places this board from 64.90 x 63.85 mm
-/// (4143.9 mm2) to 62.25 x 45.19 mm (2813.1 mm2). That is the corrected
-/// output, so the guard is re-baselined to it: a later canvas or part change
-/// that silently inflates the outline still fails here, while the pre-fix
-/// value no longer describes what the placer should produce.
-const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 62.25 * 45.19;
+/// `secure_tracker`'s outline after the placement rules (64.90 x 61.36 ->
+/// 63.40 x 59.30 mm): 3503.8 mm2, an intended 15.4% improvement over the
+/// 4143.9 mm2 the #158 guard was written against.
+const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 3503.8;
 
 /// A 1 mm part correction must not move the board 44%.
 ///

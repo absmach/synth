@@ -195,6 +195,7 @@ mod tests {
         let board = Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -242,6 +243,7 @@ mod tests {
         let board = Board {
             schematic_overflow: None,
             schematic_paper: None,
+            placement_spacing_nm: None,
             groups: Vec::new(),
             legends: false,
             labels: true,
