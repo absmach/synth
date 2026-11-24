@@ -30,6 +30,6 @@ See [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measur
 
 - **Interface timing:** no controller or bitstream has run on the board, so setup, hold and 143 MHz operation are not claimed.
 - **Return paths:** some vias on the fast clock nets are farther from a ground via than the fast-net window.
-- **3.3 V budget:** the oscillator's supply current and the FPGA's dynamic current are not counted.
+- **3.3 V budget:** the oscillator adds at most 4.5 mA (SiT8008B datasheet, 20 MHz, no load; indicative for the 25 MHz AI part); the FPGA's dynamic current is not counted.
 - **Surge:** a sustained over-voltage is held off the regulator only until `F1` opens.
 - **Review:** the board has a self-review only. The independent PCB expert sign-off required by #40 is open.

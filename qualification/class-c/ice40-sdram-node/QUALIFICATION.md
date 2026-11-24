@@ -65,14 +65,14 @@ Measured on the delivered board, centre to centre, the distance from each via on
 | Three LEDs, 1 k | 10 mA (3.3 V / 1 k each, which ignores the LED forward drop) | the design's own arithmetic |
 | Total known | 192 mA | |
 
-The oscillator's supply current and the FPGA's dynamic current are not counted. The core and I/O figures are startup peak maxima for a blank pattern. The dynamic current depends on the bitstream, and none has run on this board. `U2` dissipates (3.3 V - 1.2 V) x 0.0287 A = 0.06 W.
+The oscillator `X1` (SiTime SiT8008AI-31-33S) draws at most 4.5 mA (SiT8008B datasheet Rev. 1.07, Idd, no load, 20 MHz, 3.3 V; the board runs it at 25 MHz and the datasheet table is for the B variant, so the figure is indicative). That brings the known total to 196.5 mA, inside the 0.10 A left at 70 degC. The FPGA's dynamic current is not counted. The core and I/O figures are startup peak maxima for a blank pattern. The dynamic current depends on the bitstream, and none has run on this board. `U2` dissipates (3.3 V - 1.2 V) x 0.0287 A = 0.06 W.
 
 With `R_SURGE` (1 ohm) ahead of the regulator, the input is at most 5.02 V at the 5.25 V maximum VBUS. The board is rated for 70 degC ambient.
 
 - The regulator dissipates (5.02 V - 3.3 V) x 0.192 A = 0.33 W, a 36 degC rise.
 - Tj is 61 degC at 25 degC ambient and 106 degC at 70 degC ambient, under 125 degC.
 - Tj reaches 125 degC at `(125 - 25) / 110 / 1.72 = 0.53 A` in total at 25 degC ambient, which leaves 0.34 A for the uncounted loads.
-- Tj reaches 125 degC at `(125 - 70) / 110 / 1.72 = 0.29 A` at 70 degC ambient, which leaves 0.10 A for the oscillator and the FPGA's dynamic current.
+- Tj reaches 125 degC at `(125 - 70) / 110 / 1.72 = 0.29 A` at 70 degC ambient, which leaves 0.10 A, of which the oscillator takes 4.5 mA, for the FPGA's dynamic current.
 - Dropout is 360 mV typical at 1 A. At the 4.52 V worst-case input (4.75 V less `F1` and `R_SURGE`), the output stays in regulation with 1.22 V to spare.
 
 `D1` (Nexperia PTVS6V0S1UR) has a 6.0 V standoff above the 5.25 V maximum VBUS, a 6.67 V minimum breakdown and a 10.3 V clamp at 38.8 A. `U1` is rated 6.5 V absolute maximum at its input. The low-dropout regulators this board could use (AP7361C, AP2114, AP2112K, LP5907) are all rated 6.5 V or less, below the least breakdown of any TVS with a standoff above 5.25 V.
@@ -87,8 +87,8 @@ So `R_SURGE`, 1 ohm, sits between `D1` and `U1`, with `C2` and `C3` behind it. A
 |---|---|---|---|
 | The regulator input stays inside its recommended range in operation | `U1` AP7361C-33E, input 2.2 to 6.0 V | VBUS is at most 5.25 V; less `F1` (0.21 ohm x 0.192 A = 0.04 V) and `R_SURGE` (0.192 V) the input is at most 5.02 V, 0.98 V under 6.0 V | Met |
 | Enough headroom for the dropout | 360 mV typical at 1 A (Diodes DS37274) | at the 4.75 V minimum the input is 4.75 - 0.04 - 0.192 = 4.52 V; 4.52 V - 3.3 V = 1.22 V against 0.36 V at 1 A, less at 0.192 A | Met |
-| The regulator carries every load | 1 A output | known loads 0.192 A, 19 % of the rating; the uncounted oscillator and dynamic currents fit electrically up to 0.81 A | Met electrically |
-| The regulator sheds its dissipation | SOT-223, `RthJA` 110 C/W | (5.02 V - 3.3 V) x 0.192 A = 0.33 W gives 106 C at 70 C ambient and 61 C at 25 C ambient; the total at which Tj reaches 125 C is 0.53 A at 25 C and 0.29 A at 70 C | Met for the known loads; at 70 C the uncounted loads have 0.10 A |
+| The regulator carries every load | 1 A output | known loads 0.192 A, 19 % of the rating; the oscillator and the uncounted dynamic current fit electrically up to 0.81 A | Met electrically |
+| The regulator sheds its dissipation | SOT-223, `RthJA` 110 C/W | (5.02 V - 3.3 V) x 0.192 A = 0.33 W gives 106 C at 70 C ambient and 61 C at 25 C ambient; the total at which Tj reaches 125 C is 0.53 A at 25 C and 0.29 A at 70 C | Met for the known loads; at 70 C the uncounted dynamic current has about 0.10 A |
 | `R_SURGE` carries the load | 1 ohm, 250 mW | 0.192 A squared x 1 ohm = 0.037 W | Met |
 | The TVS does not conduct in operation | `D1` PTVS6V0S1UR, 6.0 V standoff, 6.67 V minimum breakdown | 5.25 V maximum VBUS is 0.75 V under the standoff | Met |
 | The regulator survives a short clamp event | `U1` absolute maximum input 6.5 V | `D1` clamps at up to 10.3 V at 38.8 A (Nexperia PTVS6V0S1UR: 400 W, VRWM 6 V, 6.67 to 7.37 V breakdown); the current through `R_SURGE` is at most (10.3 V - 4.5 V) / 1 ohm = 5.8 A, so a 60 ns event carries 0.35 uC, which raises 20 uF by 0.02 V and holds the regulator input near 5 V; the energy in the resistor is about 2 uJ (its pulse rating was not read) | Met for events of 60 ns |
@@ -107,7 +107,7 @@ The placement is pinned in [`ice40_sdram_node.placement.layout.toml`](ice40_sdra
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 85 lines: 76 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J figures are from the ISSI datasheet Rev. G (copy at static.chipdip.ru). `D6` and `D7` have no distributor listing yet: their BOM lines carry the manufacturer, MPN and datasheet, and the order number is to be added.
+[`fab/bom.csv`](fab/bom.csv) has 85 lines: 76 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 9 board features (2 mounting holes, 7 test points) that are not parts and carry no identity. `J2` is a hand-fit through-hole part. The part pages were read in 2026-11 and the stock is not firm. The IS42S16400J figures are from the ISSI IS42S16400J datasheet, Rev. G (AC Characteristics and DC Electrical Characteristics 1). The ISSI-hosted PDF could not be retrieved, so the figures were read from a mirror at static.chipdip.ru; check them against ISSI's own copy. `D6` and `D7` have no distributor listing yet: their BOM lines carry the manufacturer, MPN and datasheet, and the order number is to be added.
 
 ## Fabrication package
 
