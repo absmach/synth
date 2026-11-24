@@ -23,15 +23,19 @@ const OVERSIZE_AREA_FACTOR: f64 = 1.5;
 /// Stable code for a hard placement hint that is not a physical constraint.
 const HINT_CODE: &str = "W-SYNTH-BOARD-005";
 
-/// Courtyard area ÷ board area the fitted outline lands on.
+/// Courtyard area ÷ board area a fitted outline lands on at the estimate's
+/// target.
 ///
 /// The placer's own target is 0.45, but that is the canvas it packs into; the
-/// fitted board also carries routing channels and the edge rim, so its fill
-/// fills 26-29% on the reference boards (sensor_logger 756/2883 mm²,
-/// secure_tracker 994/3760, feather_m4_express 977/3417). 0.32 reproduces
-/// those fitted sizes to within 12% of area; using 0.45 underestimates them by
-/// about a third.
-const ESTIMATE_FILL_RATIO: f64 = 0.32;
+/// fitted board also carries routing channels and the edge rim. Calibrated on
+/// four boards: sensor_logger, secure_tracker and feather_m4_express (square
+/// estimates, all within 20% of the fitted area) and the gateway (120 parts,
+/// 1.5:1 declared aspect): its export fit is 157.4 x 113.4 mm with the hard
+/// hints as written and 118.0 x 115.5 mm with the non-physical hard hints
+/// soft. 0.26 puts the gateway estimate 23% under the first and within 2% of
+/// the second, without overfitting any one board. 0.32 was the first guess and
+/// missed the gateway by 37%.
+const ESTIMATE_FILL_RATIO: f64 = 0.26;
 
 /// Stable code for both the oversized-outline warning and the estimate info.
 const BOARD_ESTIMATE_CODE: &str = "W-SYNTH-BOARD-004";

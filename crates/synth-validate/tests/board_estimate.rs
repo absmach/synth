@@ -183,9 +183,10 @@ fn the_estimate_is_deterministic() {
     assert_eq!(estimate_board_size(&board), estimate_board_size(&board));
 }
 
-/// The estimate must track the fitted outline on boards that already have no
-/// `outline` statement: those are the sizes the exporter chose from the same
-/// courtyards.
+/// The estimate's area must track the fitted outline on boards that already
+/// have no `outline` statement: those are the sizes the exporter chose from
+/// the same courtyards. The estimate is square here while the fitted board is
+/// wide, so the area is the comparison the gate uses.
 #[test]
 fn the_estimate_matches_the_fitted_outline_on_existing_boards() {
     let mut seen = 0;
@@ -215,18 +216,15 @@ fn the_estimate_matches_the_fitted_outline_on_existing_boards() {
             (estimate.est_w_mm - fitted_w).abs() / fitted_w * 100.0,
             (estimate.est_h_mm - fitted_h).abs() / fitted_h * 100.0,
         );
-        for (estimated, fitted, axis) in [
-            (estimate.est_w_mm, fitted_w, "width"),
-            (estimate.est_h_mm, fitted_h, "height"),
-        ] {
-            let off = (estimated - fitted).abs() / fitted;
-            if off > 0.25 {
-                failures.push(format!(
-                    "{design}: estimated {axis} {estimated:.1} mm is {:.1}% off the fitted \
-                     {fitted:.1} mm",
-                    off * 100.0
-                ));
-            }
+        let area_off = (estimate.est_area_mm2 - fitted_area).abs() / fitted_area;
+        if area_off > 0.25 {
+            failures.push(format!(
+                "{design}: estimated area {:.0} mm2 is {:.1}% off the fitted {:.0} mm2 \
+                 ({fitted_w:.1} x {fitted_h:.1})",
+                estimate.est_area_mm2,
+                area_off * 100.0,
+                fitted_area
+            ));
         }
         seen += 1;
     }
@@ -281,6 +279,34 @@ fn the_area_gate_is_unchanged_by_the_aspect() {
         board_size_diagnostics(&board, "gateway_estimate.synth")
             .iter()
             .any(|d| d.code == "W-SYNTH-BOARD-004" && d.severity == Severity::Warning)
+    );
+}
+
+/// The gateway-shaped fixture's estimate, at its 1.5:1 declared aspect, must
+/// stay within 25% of the board the same parts fit without the outline.
+#[test]
+fn the_gateway_fixture_estimate_tracks_its_fitted_board() {
+    let board = gateway_board();
+    let estimate = estimate_board_size(&board);
+    assert!(
+        (estimate.est_w_mm / estimate.est_h_mm - 1.5).abs() < 1e-6,
+        "gateway fixture aspect {:.3}",
+        estimate.est_w_mm / estimate.est_h_mm
+    );
+
+    let mut no_outline = board.clone();
+    no_outline.outline = None;
+    let placed = synth_place::place(&no_outline).expect("the fixture's parts fit");
+    let fitted_w = nm_to_mm(placed.board_outline.max.x_nm - placed.board_outline.min.x_nm);
+    let fitted_h = nm_to_mm(placed.board_outline.max.y_nm - placed.board_outline.min.y_nm);
+    let fitted_area = fitted_w * fitted_h;
+    let off = (estimate.est_area_mm2 - fitted_area).abs() / fitted_area;
+    assert!(
+        off <= 0.25,
+        "estimate {:.0} mm2 is {:.1}% off the fitted {:.0} mm2 ({fitted_w:.1} x {fitted_h:.1})",
+        estimate.est_area_mm2,
+        off * 100.0,
+        fitted_area
     );
 }
 
