@@ -108,6 +108,10 @@ pub fn run_erc_with_config(board: &Board, file: &str, config: &ErcConfig) -> Vec
 
 fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
     vec![
+        // Board-shape advisories run first so their estimate reaches the
+        // agent before the per-connection findings.
+        Box::new(board_estimate::BoardSizeEstimateRule),
+        Box::new(board_estimate::HardHintRule),
         Box::new(RequiredPinsConnectedRule),
         Box::new(SingleEndpointNetRule),
         Box::new(NoConnectMismatchRule),

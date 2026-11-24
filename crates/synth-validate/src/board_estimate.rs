@@ -357,3 +357,37 @@ fn region_name(region: &PlacementRegion) -> &'static str {
         PlacementRegion::RightEdge => "right_edge",
     }
 }
+
+/// `W-SYNTH-BOARD-004` in the ERC registry.
+pub(crate) struct BoardSizeEstimateRule;
+
+impl crate::ErcRule for BoardSizeEstimateRule {
+    fn code(&self) -> &'static str {
+        BOARD_ESTIMATE_CODE
+    }
+
+    fn category(&self) -> crate::ErcCategory {
+        crate::ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        board_size_diagnostics(board, file)
+    }
+}
+
+/// `W-SYNTH-BOARD-005` in the ERC registry.
+pub(crate) struct HardHintRule;
+
+impl crate::ErcRule for HardHintRule {
+    fn code(&self) -> &'static str {
+        HINT_CODE
+    }
+
+    fn category(&self) -> crate::ErcCategory {
+        crate::ErcCategory::Board
+    }
+
+    fn check(&self, board: &Board, file: &str) -> Vec<Diagnostic> {
+        hard_hint_diagnostics(board, file)
+    }
+}

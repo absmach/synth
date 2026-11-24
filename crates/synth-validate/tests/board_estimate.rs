@@ -117,6 +117,34 @@ fn a_board_without_an_outline_reports_the_estimate_as_info() {
     }
 }
 
+/// Both checks belong to the ERC registry, not only to the two hand-wired
+/// validate entry points.
+#[test]
+fn the_erc_registry_reports_the_board_size_and_hint_rules() {
+    let board = lower(
+        r#"board "registry" {
+            layers 2
+            outline 180mm x 120mm
+            component U1: ic "stm32g030k8_lqfp32" {
+                placement_hint { region centre priority: hard }
+            }
+        }"#,
+        "registry.synth",
+    );
+    let codes: Vec<String> = synth_validate::run_erc(&board, "registry.synth")
+        .into_iter()
+        .map(|d| d.code)
+        .collect();
+    assert!(
+        codes.iter().any(|code| code == "W-SYNTH-BOARD-004"),
+        "{codes:?}"
+    );
+    assert!(
+        codes.iter().any(|code| code == "W-SYNTH-BOARD-005"),
+        "{codes:?}"
+    );
+}
+
 #[test]
 fn a_stated_reason_suppresses_the_oversized_outline_warning() {
     let board = lower(
