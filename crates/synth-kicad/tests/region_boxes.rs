@@ -256,6 +256,22 @@ fn the_region_boxes_read_as_one_box_cut_into_sections() {
             height - BORDER_MM
         ));
     }
+    // Tiled boxes never overlap.
+    for (i, a) in layout.group_boxes.iter().enumerate() {
+        for c in &layout.group_boxes[i + 1..] {
+            let (ax0, ay0) = a.min_mm;
+            let (ax1, ay1) = a.max_mm;
+            let (cx0, cy0) = c.min_mm;
+            let (cx1, cy1) = c.max_mm;
+            if ax0 < cx1 - JOIN_MM
+                && cx0 < ax1 - JOIN_MM
+                && ay0 < cy1 - JOIN_MM
+                && cy0 < ay1 - JOIN_MM
+            {
+                found.push(format!("{} and {} overlap", a.group, c.group));
+            }
+        }
+    }
     found.sort();
     found.dedup();
     assert!(found.is_empty(), "region outline:\n{}", found.join("\n"));

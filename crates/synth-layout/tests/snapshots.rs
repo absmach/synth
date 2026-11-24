@@ -198,25 +198,40 @@ fn compact_designs_stay_on_a4() {
 /// the fill is covered by the unit tests instead.
 #[test]
 fn real_design_regions_fill_the_page_frame() {
-    // The frame the boxes are cut for: inside the 20 mm margin and above the
-    // 34 mm title block plus its 6.35 mm text margin.
-    const MARGIN: f64 = 20.0;
-    const TITLE_BAND: f64 = 34.0 + 6.35;
+    // The real frame: the sheet border, with KiCad's 110 x 34 mm title block
+    // cut out only where it sits (10 mm from the paper's bottom-right corner).
+    const BORDER: f64 = 12.0;
     const GRID_MM: f64 = 2.54;
+    const TITLE_BLOCK_W: f64 = 110.0;
+    const TITLE_BLOCK_H: f64 = 34.0;
     let board = board_for("examples/env_logger/env_logger.synth");
     let layout = synth_layout::layout(&board);
     let boxes = &layout.group_boxes;
     assert!(boxes.len() >= 3, "{} regions", boxes.len());
 
     let (w, h) = layout.sheet_size.dims_mm();
-    let frame_area = (w - 2.0 * MARGIN) * (h - MARGIN - TITLE_BAND);
+    let frame_area = (w - 2.0 * BORDER) * (h - 2.0 * BORDER);
+    let block = (
+        w - 10.0 - TITLE_BLOCK_W,
+        h - 10.0 - TITLE_BLOCK_H,
+        w - 10.0,
+        h - 10.0,
+    );
+    let block_area = (block.2.min(w - BORDER) - block.0.max(BORDER)).max(0.0)
+        * (block.3.min(h - BORDER) - block.1.max(BORDER)).max(0.0);
+    let frame_area = frame_area - block_area;
     let covered: f64 = boxes
         .iter()
-        .map(|b| (b.max_mm.0 - b.min_mm.0) * (b.max_mm.1 - b.min_mm.1))
+        .map(|b| {
+            let over_block = (b.max_mm.0.min(block.2) - b.min_mm.0.max(block.0)).max(0.0)
+                * (b.max_mm.1.min(block.3) - b.min_mm.1.max(block.1)).max(0.0);
+            (b.max_mm.0 - b.min_mm.0) * (b.max_mm.1 - b.min_mm.1) - over_block
+        })
         .sum();
     assert!(
         covered >= 0.95 * frame_area,
-        "boxes cover {covered:.0} of the {frame_area:.0} mm2 frame"
+        "boxes cover {covered:.0} of the {frame_area:.0} mm2 strict frame ({:.1}%)",
+        100.0 * covered / frame_area
     );
 
     // Of the boxes beside (or below) one that share part of its edge, the
