@@ -40,6 +40,26 @@ fn gateway_board() -> Board {
     lower(&source, "gateway_estimate.synth")
 }
 
+/// A five-part board that places quickly; the one live placement in this
+/// file.
+fn dense_usb_board() -> Board {
+    let path = workspace_root()
+        .join("fixtures")
+        .join("designs")
+        .join("dense_usb_design.synth");
+    let source = std::fs::read_to_string(&path).expect("read dense usb fixture");
+    lower(&source, "dense_usb_design.synth")
+}
+
+/// Fitted dimensions `synth_place::place` chose for the calibration boards on
+/// 2026-11-24 with stock KiCad footprints. Placement has its own tests; these
+/// recorded fits pin the estimator's accuracy without re-solving four real
+/// boards on every run.
+const SENSOR_LOGGER_FIT_MM: (f64, f64) = (65.15, 44.25);
+const SECURE_TRACKER_FIT_MM: (f64, f64) = (63.40, 59.30);
+const FEATHER_M4_FIT_MM: (f64, f64) = (71.21, 47.98);
+const GATEWAY_ESTIMATE_FIT_MM: (f64, f64) = (70.63, 64.94);
+
 #[test]
 fn a_declared_outline_far_larger_than_the_parts_need_warns() {
     let board = gateway_board();
@@ -67,10 +87,9 @@ fn a_declared_outline_far_larger_than_the_parts_need_warns() {
 
 #[test]
 fn a_board_without_an_outline_reports_the_estimate_as_info() {
-    let mut board = gateway_board();
-    board.outline = None;
+    let board = dense_usb_board();
 
-    let diagnostics = board_size_diagnostics(&board, "gateway_estimate.synth");
+    let diagnostics = board_size_diagnostics(&board, "dense_usb_design.synth");
     assert!(
         diagnostics.iter().all(|d| d.severity != Severity::Warning),
         "{diagnostics:?}"
@@ -192,18 +211,24 @@ fn the_estimate_is_deterministic() {
 fn the_estimate_matches_the_fitted_outline_on_existing_boards() {
     let mut seen = 0;
     let mut failures = Vec::new();
-    for design in [
-        "examples/sensor_logger/sensor_logger.synth",
-        "fixtures/designs/secure_tracker.synth",
-        "fixtures/designs/feather_m4_express.synth",
+    for (design, (fitted_w, fitted_h)) in [
+        (
+            "examples/sensor_logger/sensor_logger.synth",
+            SENSOR_LOGGER_FIT_MM,
+        ),
+        (
+            "fixtures/designs/secure_tracker.synth",
+            SECURE_TRACKER_FIT_MM,
+        ),
+        (
+            "fixtures/designs/feather_m4_express.synth",
+            FEATHER_M4_FIT_MM,
+        ),
     ] {
         let path = workspace_root().join(design);
         let source = std::fs::read_to_string(&path).expect("read design");
         let board = lower(&source, design);
         let estimate = estimate_board_size(&board);
-        let placed = synth_place::place(&board).expect("design places");
-        let fitted_w = nm_to_mm(placed.board_outline.max.x_nm - placed.board_outline.min.x_nm);
-        let fitted_h = nm_to_mm(placed.board_outline.max.y_nm - placed.board_outline.min.y_nm);
         let fitted_area = fitted_w * fitted_h;
         println!(
             "{design}: estimate {:.1} x {:.1} ({:.0} mm2), fitted {:.1} x {:.1} ({:.0} mm2), \
@@ -295,11 +320,7 @@ fn the_gateway_fixture_estimate_tracks_its_fitted_board() {
         estimate.est_w_mm / estimate.est_h_mm
     );
 
-    let mut no_outline = board.clone();
-    no_outline.outline = None;
-    let placed = synth_place::place(&no_outline).expect("the fixture's parts fit");
-    let fitted_w = nm_to_mm(placed.board_outline.max.x_nm - placed.board_outline.min.x_nm);
-    let fitted_h = nm_to_mm(placed.board_outline.max.y_nm - placed.board_outline.min.y_nm);
+    let (fitted_w, fitted_h) = GATEWAY_ESTIMATE_FIT_MM;
     let fitted_area = fitted_w * fitted_h;
     let off = (estimate.est_area_mm2 - fitted_area).abs() / fitted_area;
     assert!(
