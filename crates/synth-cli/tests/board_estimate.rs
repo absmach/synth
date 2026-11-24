@@ -106,3 +106,22 @@ fn validate_warns_on_a_hard_hint_that_is_not_physical() {
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
+
+/// An info estimate must not hide the `ok:` line a clean design used to print.
+#[test]
+fn an_info_estimate_keeps_the_ok_line() {
+    let root = workspace_root();
+    let fixture = root
+        .join("fixtures")
+        .join("erc")
+        .join("pass__analog_001_isolated.synth");
+    let out = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .arg("validate")
+        .arg(&fixture)
+        .current_dir(&root)
+        .output()
+        .expect("run synth validate");
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.starts_with("ok: "), "{stdout}");
+    assert!(stdout.contains("W-SYNTH-BOARD-004"), "{stdout}");
+}

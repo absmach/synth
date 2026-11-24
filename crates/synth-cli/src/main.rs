@@ -3690,20 +3690,24 @@ fn validate(
             writeln!(&mut out)?;
         }
         Format::Human => {
-            if diagnostics.is_empty() {
+            // An info-only report still means the design is clean; keep the
+            // `ok:` line scripts match on, then show the infos.
+            if !diagnostics
+                .iter()
+                .any(|d| d.severity != synth_diagnostics::Severity::Info)
+            {
                 writeln!(&mut out, "ok: {}", input.display())?;
-            } else {
-                for d in &diagnostics {
-                    let where_ = d.location.as_ref().map_or_else(
-                        || "?".into(),
-                        |l| format!("{}:{}-{}", l.file, l.span.byte_start, l.span.byte_end),
-                    );
-                    writeln!(
-                        &mut out,
-                        "{}: [{}] {} ({})",
-                        d.severity, d.code, d.title, where_
-                    )?;
-                }
+            }
+            for d in &diagnostics {
+                let where_ = d.location.as_ref().map_or_else(
+                    || "?".into(),
+                    |l| format!("{}:{}-{}", l.file, l.span.byte_start, l.span.byte_end),
+                );
+                writeln!(
+                    &mut out,
+                    "{}: [{}] {} ({})",
+                    d.severity, d.code, d.title, where_
+                )?;
             }
         }
     }
