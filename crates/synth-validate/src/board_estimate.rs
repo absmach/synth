@@ -23,11 +23,11 @@ const OVERSIZE_AREA_FACTOR: f64 = 1.5;
 /// Stable code for a hard placement hint that is not a physical constraint.
 const HINT_CODE: &str = "W-SYNTH-BOARD-005";
 
-/// Courtyard area ÷ board area a fitted outline lands on at the estimate's
-/// target.
+/// Courtyard area ÷ the pre-rim board area a fitted outline lands on.
 ///
 /// The placer's own target is 0.45, but that is the canvas it packs into; the
-/// fitted board also carries routing channels and the edge rim. Calibrated on
+/// fitted board also spends area on routing channels. The rim is added after
+/// this ratio is applied. Calibrated on
 /// four boards: sensor_logger, secure_tracker and feather_m4_express (square
 /// estimates, all within 20% of the fitted area) and the gateway (120 parts,
 /// 1.5:1 declared aspect): its export fit is 157.4 x 113.4 mm with the hard
@@ -145,7 +145,8 @@ pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
         )
         .location(Location::from_span(file.to_string(), outline.source_span))
         .expected(format!(
-            "a declared outline within {OVERSIZE_AREA_FACTOR}x the estimated {:.1} x {:.1} mm ({:.0} mm2)",
+            "a declared outline no more than {OVERSIZE_AREA_FACTOR}x the estimated area \
+             ({:.1} x {:.1} mm, {:.0} mm2)",
             estimate.est_w_mm, estimate.est_h_mm, estimate.est_area_mm2,
         ))
         .found(format!(
@@ -153,7 +154,7 @@ pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
         ))
         .message(format!(
             "declared outline {declared_w_mm:.1} x {declared_h_mm:.1} mm is {ratio:.1}x \
-             the estimated {:.1} x {:.1} mm the parts need; remove the outline or \
+             the estimated area the parts need ({:.1} x {:.1} mm); remove the outline or \
              add a stated reason",
             estimate.est_w_mm, estimate.est_h_mm,
         ))
@@ -192,10 +193,19 @@ pub fn hard_hint_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
         if hint.priority != PlacementPriority::Hard || is_physical(component, hint) {
             continue;
         }
-        let span = forced_span(board, component, board_w_mm, board_h_mm, 8)
-            .map_or_else(String::new, |span_mm| {
-                format!("it pins the part {span_mm:.1} mm from the far side; ")
-            });
+        let span = forced_span(board, component, board_w_mm, board_h_mm, 8).map_or_else(
+            String::new,
+            |span| {
+                if span.via_near {
+                    format!(
+                        "it follows a part pinned {:.1} mm from the far side; ",
+                        span.mm
+                    )
+                } else {
+                    format!("it pins the part {:.1} mm from the far side; ", span.mm)
+                }
+            },
+        );
         let description = describe_hint(hint);
         out.push(
             DiagnosticBuilder::new(
@@ -213,8 +223,9 @@ pub fn hard_hint_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
                 component.refdes, component.kind,
             ))
             .message(format!(
-                "`{}` ({}) {description} {span}the parts need about {:.1} x {:.1} mm. \
-                 Make it soft unless it is physical (a connector edge or a mounting hole).",
+                "`{}` ({}) sets {description}, which is not a physical constraint; {span}\
+                 the parts need about {:.1} x {:.1} mm. Make it soft unless it is \
+                 physical (a connector edge or a mounting hole).",
                 component.refdes, component.kind, estimate.est_w_mm, estimate.est_h_mm,
             ))
             .explanation_url(format!("synth.docs/diagnostics/{HINT_CODE}"))
@@ -235,10 +246,18 @@ fn board_rect(board: &Board, estimate: &BoardEstimate) -> (f64, f64) {
         })
 }
 
-/// A connector's edge and a mounting hole's corner are the two hints a
+/// The edge of a board-edge part and a mounting hole are the two hints a
 /// mechanical constraint fixes; every other hard hint is advisory.
 fn is_physical(component: &Component, hint: &PlacementConstraint) -> bool {
-    component.kind == "mounting_hole" || (component.kind == "connector" && hint.edge.is_some())
+    component.kind == "mounting_hole"
+        || (crate::BOARD_EDGE_KINDS.contains(&component.kind.as_str()) && hint.edge.is_some())
+}
+
+/// The distance a hard hint pins its cluster from the opposite board side,
+/// and whether it only reaches that anchor through a `near` chain.
+struct ForcedSpan {
+    mm: f64,
+    via_near: bool,
 }
 
 /// How far the hint pins a part from the opposite side, following a hard
@@ -250,13 +269,16 @@ fn forced_span(
     board_w_mm: f64,
     board_h_mm: f64,
     depth: usize,
-) -> Option<f64> {
+) -> Option<ForcedSpan> {
     let hint = component.placement_hint.as_ref()?;
     if hint.priority != PlacementPriority::Hard {
         return None;
     }
     if let Some(span_mm) = hint_span(hint, board_w_mm, board_h_mm) {
-        return Some(span_mm);
+        return Some(ForcedSpan {
+            mm: span_mm,
+            via_near: false,
+        });
     }
     let target_refdes = hint.near.as_deref()?;
     if depth == 0 {
@@ -266,7 +288,10 @@ fn forced_span(
         .components
         .iter()
         .find(|candidate| candidate.refdes == target_refdes)?;
-    forced_span(board, target, board_w_mm, board_h_mm, depth - 1)
+    forced_span(board, target, board_w_mm, board_h_mm, depth - 1).map(|span| ForcedSpan {
+        via_near: true,
+        ..span
+    })
 }
 
 #[allow(clippy::similar_names)]

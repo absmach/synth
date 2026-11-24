@@ -6,17 +6,24 @@
 ## What this means
 
 A component declares `priority: hard`, which the placer may not relax. A
-connector edge and a mounting-hole corner are physical: the enclosure fixes
-them. A hard `near`, `region` or `edge` on any other part pins it without a
-mechanical reason and blocks the compact placement.
+board-edge connector (`connector`, `jack`, `receptacle`) with an `edge` hint
+and a mounting-hole corner are physical: the enclosure fixes them. A hard
+`near`, `region` or `edge` on any other part pins it without a mechanical
+reason and blocks the compact placement.
+
+A `receptacle` edge counts as physical here even though the placer's flush fit
+currently recognizes `connector` and `jack` only, so a receptacle may sit
+slightly inset from the edge it is pinned to.
 
 Measured on the gateway board: with the hints as written the export fit
-157.4 × 113.4 mm; with the 90 non-connector, non-mounting-hole hard hints made
-soft it fit 118.0 × 115.5 mm, 31 % less area.
+157.4 × 113.4 mm; with the 90 hard hints on parts that are not edge connectors
+or mounting holes made soft it fit 118.0 × 115.5 mm, 23.6 % less area. The
+hinted board is 31 % larger by area.
 
-The warning names the hint and, for an `edge`/`region` hint or a `near` chain
-ending in one, the distance it pins the part from the far side. It also names
-the board size the parts need.
+The warning names the hint and, for an `edge`/`region` hint, the distance it
+pins the part from the far side. For a `near` chain it names the part the
+chain follows and that part's distance. It also names the board size the parts
+need.
 
 ## Minimal reproduction
 

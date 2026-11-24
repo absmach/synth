@@ -1792,7 +1792,7 @@ impl ErcRule for ClockSourceCollisionRule {
 /// A net that reaches one of these leaves the design, and what drives it on
 /// the other side is not in the source Synth is reading. `E-SYNTH-ESD-001`
 /// already uses this notion for its own reason, in `deep_erc`.
-const BOARD_EDGE_KINDS: [&str; 3] = ["connector", "jack", "receptacle"];
+pub(crate) const BOARD_EDGE_KINDS: [&str; 3] = ["connector", "jack", "receptacle"];
 
 /// Whether any endpoint of `net` is something that drives a clock: a pin
 /// declaring `clock_output`, a crystal or oscillator, or the board edge.

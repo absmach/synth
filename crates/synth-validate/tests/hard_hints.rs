@@ -73,6 +73,12 @@ fn connector_edges_and_mounting_holes_are_not_reported() {
             component J1: connector "header_1x4" {
                 placement_hint { edge left priority: hard }
             }
+            component J2: jack "rj45_hr911105a" {
+                placement_hint { edge right priority: hard }
+            }
+            component J3: receptacle "usb_c_receptacle" {
+                placement_hint { edge bottom priority: hard }
+            }
             component H1: mounting_hole "mounting_hole_m2_5" {
                 placement_hint { region top_left priority: hard }
             }
@@ -80,6 +86,22 @@ fn connector_edges_and_mounting_holes_are_not_reported() {
         "physical.synth",
     );
     assert!(hint_warnings(&board).is_empty());
+}
+
+/// Only an edge hint makes a board-edge part physical; a region hint on the
+/// same kind still pins it without a mechanical reason.
+#[test]
+fn a_jack_region_hint_is_still_reported() {
+    let board = lower(
+        r#"board "jack" {
+            layers 2
+            component J1: jack "rj45_hr911105a" {
+                placement_hint { region centre priority: hard }
+            }
+        }"#,
+        "jack.synth",
+    );
+    assert_eq!(hint_warnings(&board).len(), 1);
 }
 
 #[test]
@@ -111,6 +133,7 @@ fn a_hard_edge_names_the_distance_it_pins_against_the_estimate() {
     let warnings = hint_warnings(&board);
     assert_eq!(warnings.len(), 1, "{warnings:?}");
     let message = warnings[0].message.as_deref().unwrap_or_default();
+    assert!(message.contains("it pins the part"), "{message}");
     assert!(message.contains("180.0 mm"), "{message}");
     assert!(message.contains("parts need about"), "{message}");
 }
@@ -137,4 +160,8 @@ fn a_hard_near_hint_inherits_its_targets_cluster_distance() {
         .unwrap_or_else(|| panic!("no C1 hint warning: {warnings:?}"));
     let message = near.message.as_deref().unwrap_or_default();
     assert!(message.contains("180.0 mm"), "{message}");
+    assert!(
+        message.contains("follows a part pinned"),
+        "a near chain must not claim the part itself is edge-pinned: {message}"
+    );
 }

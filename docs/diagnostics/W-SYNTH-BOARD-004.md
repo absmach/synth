@@ -5,15 +5,20 @@
 
 ## What this means
 
-Every component contributes its footprint courtyard. Summed at the placer's
-target fill ratio (45 %) and widened by the export's tight edge rim, that is
+Every component contributes its footprint courtyard. Summed at the 26 % fill
+that sets the fitted square (the placer's 45 % packing target leaves less room
+for routing channels), and widened by the export's tight edge rim, that is
 roughly the board the parts get when placement fits the outline. A declared
-`outline` whose area is more than 1.5× that estimate disables fitting (ADR
-0001) and leaves the difference as dead board: unused copper, a larger panel
-slot, and a size no one computed.
+`outline` whose area is more than 1.5× that estimated area disables fitting
+(ADR 0001) and leaves the difference as dead board: unused copper, a larger
+panel slot, and a size no one computed.
 
 When the source declares no `outline`, the same code is emitted at info
 severity with the estimate, so a size can be checked before it is pinned.
+
+The estimate assumes a compact fit. A hard placement hint that is not physical
+can enlarge the fitted board: `W-SYNTH-BOARD-005` reports those hints, and the
+estimate deliberately names the compact size they would otherwise allow.
 
 ## Minimal reproduction
 

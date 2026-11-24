@@ -59,7 +59,8 @@ fn a_declared_outline_far_larger_than_the_parts_need_warns() {
     assert!(message.contains("180.0 x 120.0"), "{message}");
     assert!(message.contains("estimated"), "{message}");
     assert!(message.contains("remove the outline"), "{message}");
-    assert!(warning.expected.is_some(), "{warning:?}");
+    let expected = warning.expected.as_deref().unwrap_or_default();
+    assert!(expected.contains("estimated area"), "{expected}");
     assert!(warning.found.is_some(), "{warning:?}");
     assert!(!warning.suggested_fixes.is_empty(), "{warning:?}");
 }
@@ -184,8 +185,8 @@ fn the_estimate_is_deterministic() {
 }
 
 /// The estimate's area must track the fitted outline on boards that already
-/// have no `outline` statement: those are the sizes the exporter chose from
-/// the same courtyards. The estimate is square here while the fitted board is
+/// have no `outline` statement: those are the sizes placement fits from the
+/// same courtyards. The estimate is square here while the fitted board is
 /// wide, so the area is the comparison the gate uses.
 #[test]
 fn the_estimate_matches_the_fitted_outline_on_existing_boards() {

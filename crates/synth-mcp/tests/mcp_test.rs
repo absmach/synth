@@ -1461,6 +1461,7 @@ fn test_mcp_instructions_forbid_guessed_outlines_and_non_physical_hard_hints() {
     for needle in [
         "Never declare `outline <width> x <height>`",
         "the user gave the size or a mating constraint",
+        "state why on the statement",
         "`priority: hard`",
         "physical constraints only",
     ] {
