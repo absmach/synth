@@ -35,7 +35,6 @@ board "ice40_bga_node" {
   netclass "PWR_MCU"  { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
   netclass "MCU_IO"  { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
   netclass "XTAL"     { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow layers "F.Cu" }
-  netclass "USB"      { trace_width 0.12mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate fast layers "F.Cu" }
 
   // ---- Power entry ---------------------------------------------------------
   group "POWER ENTRY" color "#b91c1c" {
@@ -44,23 +43,12 @@ board "ice40_bga_node" {
     component R_CC2: resistor "r_generic_0402" value "5.1k" { placement_hint { near: "J1" priority: hard } }
     component F1: fuse "polyfuse_500ma" { placement_hint { near: "J1" priority: hard } }
     component D1: diode "ptvs6v0s1ur" { placement_hint { near: "F1" priority: hard } }
-    component D7: diode "prtr5v0u2x" value "TVS" { placement_hint { near: "J1" priority: hard } }
-    component D8: diode "prtr5v0u2x" value "TVS" { placement_hint { near: "J1" priority: hard } }
+    component D8: diode "tpd1e10b06" value "TVS" { placement_hint { near: "J1" priority: hard } }
+    component D9: diode "tpd1e10b06" value "TVS" { placement_hint { near: "J1" priority: hard } }
     component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "F1" priority: hard } }
     notes "" {
       "USB-C VBUS 5 V max 5.25 V. Order: fuse (0.5 A hold) -> TVS (6.0 V standoff) -> +5V. No reverse-polarity stage: a Type-C receptacle cannot be mated reversed, and one would only add drop ahead of the LDO. D7 and D8 are ESD arrays on the data and CC lines."
       "CC1 and CC2 each 5.1k to ground: sink, 5 V only."
-    }
-  }
-
-  // ---- USB data ------------------------------------------------------------
-  group "USB INPUT" color "#c2410c" {
-    component R25: resistor "r_generic_0402" value "22" { placement_hint { near: "U5.pa12" priority: hard } }
-    component R26: resistor "r_generic_0402" value "22" { placement_hint { near: "U5.pa11" priority: hard } }
-    component R40: resistor "r_generic_0402" value "1.5k" { placement_hint { near: "U5.pa12" priority: hard } }
-    notes "" {
-      "D+ and D- from the receptacle through 22 ohm series resistors to PA12 and PA11."
-      "R40 1.5k pulls D+ (MCU side) to 3V3: the STM32F103 USB peripheral has no internal pull-up, and the host detects a full-speed device only through it."
     }
   }
 
@@ -231,7 +219,7 @@ board "ice40_bga_node" {
     X1.vcc X1.oe C41.p1 R8.p1
     FB2.p1 R21.p1 J4.p1
   }
-  net "+3V3_MCU" class "PWR_MCU" { R40.p2 FB2.p2 U5.vdd U5.vdd_2 U5.vdd_3 U5.vdda U5.vbat C27.p1 C28.p1 C29.p1 C30.p1 C31.p1 C32.p1 }
+  net "+3V3_MCU" class "PWR_MCU" { FB2.p2 U5.vdd U5.vdd_2 U5.vdd_3 U5.vdda U5.vbat C27.p1 C28.p1 C29.p1 C30.p1 C31.p1 C32.p1 }
   power "+1V2" 1.2v class "PWR_CORE" {
     U4.vout C7.p1 C8.p1 U1.vcc U1.vcc_2 U1.vcc_3 U1.vcc_4
     C9.p1 C10.p1 C11.p1 C12.p1 FB1.p1 TP3.p1
@@ -242,7 +230,7 @@ board "ice40_bga_node" {
   net "GND" class "GND" {
     J1.gnd J1.gnd_a12 J1.gnd_b12 J1.gnd_b1 J1.shld R_CC1.p2 R_CC2.p2 D1.anode C1.p2
     U5.vss U5.vss_2 U5.vss_3 U5.vssa C27.p2 C28.p2 C29.p2 C30.p2 C31.p2 C32.p2 C33.p2 C34.p2 C35.p2
-    SW1.p2 R22.p2 Y1.gnd_2 Y1.gnd_4 J4.p5 D7.gnd D8.gnd
+    SW1.p2 R22.p2 Y1.gnd_2 Y1.gnd_4 J4.p5 D8.p2 D9.p2
     U3.gnd C2.p2 C3.p2 C4.p2 C5.p2 U4.gnd C6.p2 C7.p2 C8.p2
     U1.gnd U1.gnd_2 U1.gnd_3 U1.gnd_4 U1.gnd_5 U1.gnd_6 U1.gnd_7 U1.gnd_8 U1.gnd_9 U1.gnd_10
     U1.gndpll0 U1.gndpll1
@@ -253,17 +241,10 @@ board "ice40_bga_node" {
   }
 
   // ---- Input chain nets ----------------------------------------------------
-  net "VBUS" class "PWR_5V" { J1.vbus J1.vbus_a9 J1.vbus_b4 J1.vbus_b9 F1.p1 D7.vcc D8.vcc }
-  net "USB_CC1" class "STATIC" { J1.cc1 R_CC1.p1 D8.io1 }
-  net "USB_CC2" class "STATIC" { J1.cc2 R_CC2.p1 D8.io2 }
+  net "VBUS" class "PWR_5V" { J1.vbus J1.vbus_a9 J1.vbus_b4 J1.vbus_b9 F1.p1 }
+  net "USB_CC1" class "STATIC" { J1.cc1 R_CC1.p1 D8.p1 }
+  net "USB_CC2" class "STATIC" { J1.cc2 R_CC2.p1 D9.p1 }
 
-  // ---- USB data and MCU ------------------------------------------------------
-  net "USB_DP_C" class "USB" { J1.dp J1.dp_b6 R25.p1 D7.io1 }
-  net "USB_DM_C" class "USB" { J1.dn J1.dn_b7 R26.p1 D7.io2 }
-  net "USB_DP" class "USB" { R25.p2 U5.pa12 R40.p1 }
-  net "USB_DM" class "USB" { R26.p2 U5.pa11 }
-  diff_pair USB_DP USB_DM { impedance 90ohm }
-  diff_pair USB_DP_C USB_DM_C { impedance 90ohm }
 
   net "NRST" class "MCU_IO" { U5.nrst R21.p2 C33.p1 SW1.p1 J4.p4 }
   net "BOOT0" class "MCU_IO" { U5.boot0 R22.p1 }

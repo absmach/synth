@@ -33,26 +33,3 @@
 (rule "netclass XTAL changes no layer"
   (condition "A.NetClass == 'XTAL'")
   (constraint disallow via))
-(rule "netclass USB stays off In1.Cu"
-  (layer "In1.Cu")
-  (condition "A.NetClass == 'USB'")
-  (constraint disallow track))
-(rule "netclass USB stays off In2.Cu"
-  (layer "In2.Cu")
-  (condition "A.NetClass == 'USB'")
-  (constraint disallow track))
-(rule "netclass USB stays off In3.Cu"
-  (layer "In3.Cu")
-  (condition "A.NetClass == 'USB'")
-  (constraint disallow track))
-(rule "netclass USB stays off In4.Cu"
-  (layer "In4.Cu")
-  (condition "A.NetClass == 'USB'")
-  (constraint disallow track))
-(rule "netclass USB stays off B.Cu"
-  (layer "B.Cu")
-  (condition "A.NetClass == 'USB'")
-  (constraint disallow track))
-(rule "netclass USB changes no layer"
-  (condition "A.NetClass == 'USB'")
-  (constraint disallow via))

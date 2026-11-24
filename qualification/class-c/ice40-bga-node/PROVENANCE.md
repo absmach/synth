@@ -1,16 +1,16 @@
-# Provenance: how the iCE40 BGA node with a USB-C input and an MCU was made
+# Provenance: how the iCE40 BGA node with a USB-C power input and an MCU was made
 
 The board is the output of agents driving `synth mcp` from prompts, followed by orchestration steps that all go through Synth's own tools or are named here. This file is the record of that path.
 
 | Stage | What happened | Evidence |
 |---|---|---|
-| Prompts | The first prompt asked for a full board (USB-C, a companion MCU, a UART bridge, two headers); later sessions, after the iCE40 supply and configuration nets would not close, used a simplified board: 5 V entry, 3.3 V and 1.2 V rails, the FPGA, an SPI boot flash, one header, LEDs. Two further sessions added the USB-C input and the companion MCU to that board. | not kept in the repository |
+| Prompts | The first prompt asked for a full board (USB-C, a companion MCU, a UART bridge, two headers); later sessions, after the iCE40 supply and configuration nets would not close, used a simplified board: 5 V entry, 3.3 V and 1.2 V rails, the FPGA, an SPI boot flash, one header, LEDs. Two further sessions added the USB-C input and the companion MCU to that board. The USB data path was removed from the released board (see the release note below). | not kept in the repository |
 | Agent sessions | Fifteen session logs (not kept in the repository), each a `claude -p` run with only the Synth MCP and file tools; sessions 8, 13 and 14 are described below the table. The early ones did not release. | not kept in the repository |
 | Part packages | Two parts were corrected against their manufacturer listings: the flash's footprint to the 208 mil outline (registry part `w25q128jvsiq_208mil`) and the regulator to the DDC package (registry part `tlv70012_ddc`); the header was reduced to the 1x12 the board uses. The crystal is the JYJE 3TJ480000FYLBC, in the registry part `xtal_8mhz_3225_jyje_4p`, because JLCPCB listed the NDK part as out of stock. | `registry/parts/` |
-| Placement | The orchestrator pinned the placement in the sidecar through probe exports: the series resistors `R25` and `R26` next to the MCU's USB pins, the MCU's decoupling column, the USB-C receptacle at rotation 270 flush on the left edge, the 12-pin header `J3` on the top edge and the mounting holes at opposite corners. Scale-mode compaction (`synth_compact_layout`) ran on an earlier pose of this layout; its steps below 1000 failed on return-via and plane-via findings, so the pose was kept. | [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml) |
+| Placement | The orchestrator pinned the placement in the sidecar through probe exports: the MCU's decoupling column, the USB-C receptacle at rotation 270 flush on the left edge, the 12-pin header `J3` on the top edge and the mounting holes at opposite corners. Scale-mode compaction (`synth_compact_layout`) ran on an earlier pose of this layout; its steps below 1000 failed on return-via and plane-via findings, so the pose was kept. | [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml) |
 | Final export | One fresh-directory export through `synth mcp`, `synth_export`. | not kept in the repository |
 
-The released source differs from the agent's source in two declarations: the `XTAL` net class (0.15 mm tracks, locked to `F.Cu`, `edge_rate slow`) holds `HSE_IN` and `HSE_OUT`, and the `USB` class is locked to `F.Cu`.
+The released source differs from the agent's source in three ways: the `XTAL` net class (0.15 mm tracks, locked to `F.Cu`, `edge_rate slow`) holds `HSE_IN` and `HSE_OUT`; the USB data path is removed (`R25`, `R26`, `R40`, `D7`, the `USB` net class and its two differential pairs), because the pair routed 114.7 mm and 175.5 mm long on the board and no export without the removal released; and the CC protection is two rail-less TPD1E10B06 diodes in place of the PRTR5V0U2X array `D8`.
 
 Agent session notes:
 

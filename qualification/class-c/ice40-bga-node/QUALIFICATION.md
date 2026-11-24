@@ -1,8 +1,8 @@
-# Qualification: iCE40HX4K BGA node with a USB-C input and an MCU (Class C, case 1)
+# Qualification: iCE40HX4K BGA node with a USB-C power input and an MCU (Class C, case 1)
 
 **Status:** the board is routed and released.
 
-- All 42 of 42 nets are routed. The export's routing report shows 0 open nets.
+- All 38 of 38 nets are routed. The export's routing report shows 0 open nets.
 - KiCad 10.0.8 with zone refill reports 0 unconnected items on the committed board.
 - The exported KiCad files, the fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)).
 
@@ -14,16 +14,15 @@ All figures come from the files of the export this package was built from (KiCad
 
 | | |
 |---|---|
-| Outline | 60.9 x 48.5 mm, 81 parts (74 excluding mounting holes and test points) |
+| Outline | 63.0 x 51.0 mm, 78 parts (71 excluding mounting holes and test points) |
 | Stackup | six copper layers, `manufacturer "jlc-advanced"` (the JLCPCB tier that offers the 0.2 mm drill and via-in-pad on six layers), `requires via_in_pad`, 1.37 mm in the STEP model |
-| Routing | 42 of 42 nets, 639 segments, 142 vias (0.35/0.2 mm: 21, 0.46/0.2 mm: 16, 0.6/0.3 mm: 105), 1396.5 mm of track, measured on the delivered board; the router's report (not committed) agrees |
+| Routing | 38 of 38 nets, 472 segments, 98 vias (0.35/0.2 mm: 19, 0.46/0.2 mm: 10, 0.6/0.3 mm: 69), 1260.2 mm of track, measured on the delivered board; the router's report (not committed) agrees |
 | Plane | `+3V3` is poured on the inner layers (`plane` on its net class); ground on the outer layers; the 1.2 V core rail, the PLL supply and the MCU supply `+3V3_MCU` are routed |
-| BGA escape | `escape { method underpad }` on `U1`; the board has 21 vias at 0.35/0.2 mm, the size of a filled and capped via in a ball pad; see the BGA escape notes below the table |
-| USB-C | `J1` sits on the left edge with its mating opening facing the edge (rotation 270, courtyard 0.05 mm from Edge.Cuts); `escape { off }` on `J1` and on the MCU `U5`, which are not ball grids |
-| USB pair | D+ and D- run from `J1` through 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11`, declared as 90 ohm differential pairs (the connector side and the MCU side) in the `USB` class (0.12 mm tracks, locked to `F.Cu`, `edge_rate fast`); see the USB pair notes below the table |
-| DRC rules | The 21 vias at 0.35/0.2 mm are below the 0.46 mm and 0.13 mm floors of the board setup. The rules file `kicad/ice40_bga_node.kicad_dru` lowers the floor to 0.35 mm and 0.075 mm for vias of that size inside the courtyard of `U1`, the filled and capped via-in-pad process of `jlc-advanced`. KiCad loads the file when it sits beside the board. Without it, DRC reports 21 `via_diameter` and 21 `annular_width` errors |
+| BGA escape | `escape { method underpad }` on `U1`; the board has 19 vias at 0.35/0.2 mm, the size of a filled and capped via in a ball pad; see the BGA escape notes below the table |
+| USB-C | `J1` sits on the left edge with its mating opening facing the edge (rotation 270, courtyard 0.05 mm from Edge.Cuts); `escape { off }` on `J1` and on the MCU `U5`, which are not ball grids. `J1` is a power-only input: its data pins are not connected |
+| DRC rules | The 19 vias at 0.35/0.2 mm are below the 0.46 mm and 0.13 mm floors of the board setup. The rules file `kicad/ice40_bga_node.kicad_dru` lowers the floor to 0.35 mm and 0.075 mm for vias of that size inside the courtyard of `U1`, the filled and capped via-in-pad process of `jlc-advanced`. KiCad loads the file when it sits beside the board. Without it, DRC reports `via_diameter` and `annular_width` errors on those vias |
 | Zone fill | The committed board carries refilled zones (`kicad-cli pcb drc --refill-zones --save-board`), and the Gerbers are plotted from that fill. `kicad-cli pcb drc` without a refill reports 0 unconnected items on it |
-| Warnings | 83 in the export's `kicad-cli` DRC report with zone refill (not committed): 81 `lib_footprint_issues` (silkscreen cut back from vias and pads by the exporter, #425), 1 `silk_overlap` and 1 `silk_over_copper`; 0 errors and 0 unconnected items with the rules file `kicad/ice40_bga_node.kicad_dru` beside the board |
+| Warnings | 80 in the export's `kicad-cli` DRC report with zone refill (not committed): 78 `lib_footprint_issues` (silkscreen cut back from vias and pads by the exporter, #425), 1 `silk_overlap` and 1 `silk_over_copper`; 0 errors and 0 unconnected items with the rules file `kicad/ice40_bga_node.kicad_dru` beside the board |
 | Engine verdict | `engine_policy_verdict: rejected`: the routing engine runs its strict-size policy; see the engine verdict notes below the table |
 
 BGA escape notes:
@@ -32,21 +31,13 @@ BGA escape notes:
 - A dog-bone escape was tried and does not fit. An export with `escape { method channel }` and without `requires via_in_pad` stopped at the power-plane stage with `net +3V3: no legal stitching-via position beside the pad at (38.00, 36.40) mm on Top: every candidate is outside the board or within clearance of another pad or via`.
 - The board therefore keeps `requires via_in_pad`.
 
-USB pair notes:
-
-- Measured on the delivered board: D+ is 114.7 mm (84.4 mm from `J1` to `R25`, 30.3 mm beyond) and D- is 175.5 mm (95.0 mm from `J1` to `R26`, 80.5 mm beyond), a 60.8 mm difference, all on `F.Cu`.
-- The pair is not length-matched, and its impedance is an analytic estimate, not a field solve.
-- The supported operation is USB full-speed (12 Mbit/s) only. The STM32F103 `U5` is a USB 2.0 full-speed device (ST datasheet DS5319, "USB 2.0 full-speed interface"), and `PA11`/`PA12` carry no high-speed PHY.
-- Full-speed drivers have 4 to 20 ns rise and fall times and a 90 ohm differential +/-15 % target.
-- The USB section below cites the pages and shows the arithmetic: 94 ohm differential estimated from the stackup, and 60.8 mm of skew, about 334 ps, 8.4 % of a 4 ns minimum rise time.
-
 Engine verdict notes:
 
 - The engine reports no rule below the board floor (`rules_below_board_floor: none reported`).
-- Its `claimed_total_vias: 67` and `claimed_via_in_pad: 57` count the vias its own routing and fanout steps placed.
+- Its `claimed_total_vias: 34` and `claimed_via_in_pad: 39` count the vias its own routing and fanout steps placed.
 - Synth's later steps add the plane, return and stitch vias and move vias out of the pads of components that do not declare an under-pad escape.
-- The board's own counts are the ones this document uses: 142 vias, 21 of them 0.35/0.2 mm.
-- The delivered board is judged by Synth's own checks: connectivity (42 of 42), the process floor and KiCad DRC. JLCPCB's via-in-pad page gives the land for that via.
+- The board's own counts are the ones this document uses: 98 vias, 19 of them 0.35/0.2 mm.
+- The delivered board is judged by Synth's own checks: connectivity (38 of 38), the process floor and KiCad DRC. JLCPCB's via-in-pad page gives the land for that via.
 
 ## 3.3 V regulator thermal budget
 
@@ -76,10 +67,10 @@ Note: The load currents are datasheet maxima added together, which no operating 
 
 ## ESD on the connector signals
 
-`E-SYNTH-ESD-001` flagged the four USB-C data pins (`D+` and `D-` on both receptacle rows).
+The data pins of the USB-C receptacle are not connected, so they carry no signal to protect.
 
-- The board adds two PRTR5V0U2X arrays beside the receptacle: `D7` on `D+` and `D-`, and `D8` on `CC1` and `CC2`.
-- The data lines also reach `U5` through the 22 ohm series resistors `R25` and `R26`.
+- The board adds two TPD1E10B06 bidirectional TVS diodes beside the receptacle, `D8` on `CC1` and `D9` on `CC2`. They have a 5.5 V stand-off and no rail connection.
+- The CC diodes have no connection to `VBUS`, so a source that drives CC before VBUS does not back-power the rail through them. A 3 A charger attach test was not run.
 - `D1` (a 6.0 V standoff TVS) protects `VBUS`.
 - The MCU's own pins are rated 2 kV human-body-model (class 2) and 500 V charge-device-model according to ST DS5319, section 5.3.11, as listed on mirrors ([example](https://www.alldatasheet.net/html-pdf/516843/STMICROELECTRONICS/STM32F103C8T7/117354/60/STM32F103C8T7.html)). The datasheet itself was not read on st.com.
 - The 12-pin header `J3` carries FPGA I/O through 100 ohm series resistors and carries no protection device either.
@@ -88,11 +79,11 @@ Note: The board is a bench programming node, and no IEC 61000-4-2 level is claim
 
 ## Layout and fill
 
-The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml): the USB-C receptacle on the left edge with its opening facing out, the MCU group between the receptacle and the FPGA, the 12-pin header `J3` on the top edge with nothing beyond it, the two mounting holes at opposite corners, and the power parts along the bottom.
+The placement is pinned in [`ice40_bga_node.placement.layout.toml`](ice40_bga_node.placement.layout.toml): the USB-C receptacle on the left edge with its opening facing out.
 
 ## Sourcing
 
-[`fab/bom.csv`](fab/bom.csv) has 81 lines: 74 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 7 board features (2 mounting holes, 5 test points) that are not parts and carry no identity. Several LCSC pages show different stock figures between snapshots and are noted in the table; the part pages were read in 2026-11 and the stock is not firm. `J3` and `J4` are hand-fit through-hole parts. The BOM-matching findings are `U1` and `Y1` below the 5-board quantity and `J4` without a match.
+[`fab/bom.csv`](fab/bom.csv) has 78 lines: 71 parts, each with a manufacturer, MPN, package, rating, datasheet or page, distributor and order number, and 7 board features (2 mounting holes, 5 test points) that are not parts and carry no identity. Several LCSC pages show different stock figures between snapshots and are noted in the table; the part pages were read in 2026-11 and the stock is not firm. `J3` and `J4` are hand-fit through-hole parts. The BOM-matching findings are `U1` and `Y1` below the 5-board quantity and `J4` without a match.
 
 ## Fabrication package
 
@@ -120,7 +111,7 @@ Export the source and sidecar in this directory through the Synth MCP server to 
 2. Call the `synth_export` tool, the call an agent makes, with an empty directory as the output and the router included.
 3. Compare the result with the committed files.
 
-The committed export used KiCadRoutingTools `9399bfb2` and KiCad 10.0.8. It gave 42 of 42 nets, 639 segments, 142 vias and 1396.5 mm of track. Everything committed comes from that export. [`PROVENANCE.md`](PROVENANCE.md) describes how the board was made.
+The committed export used KiCadRoutingTools `9399bfb2` and KiCad 10.0.8. It gave 38 of 38 nets, 472 segments, 98 vias and 1260.2 mm of track. Everything committed comes from that export. [`PROVENANCE.md`](PROVENANCE.md) describes how the board was made.
 
 ## Images
 
@@ -162,36 +153,8 @@ PCB review sign-off required by #40: JeffMboya, 2026-11-10, on the package in `f
 | PCB and Gerber package | the Gerbers, drill, BOM and CPL of `fab/`, the exported KiCad board and the STEP model of `fab/` |
 | Return paths | the return-path rule as applied by the export gate |
 | ERC | 0 errors in `kicad-cli sch erc`; the warnings are library symbol and footprint-link warnings, and their number depends on the configured library tables |
-| DRC | the 83 warnings of the KiCad DRC run with zone refill, 0 unconnected items |
-| Placement | the placement on 60.9 x 48.5 mm, as pinned in `ice40_bga_node.placement.layout.toml` |
+| DRC | the 80 warnings of the KiCad DRC run with zone refill, 0 errors and 0 unconnected items |
+| Placement | the placement on 63.0 x 51.0 mm, as pinned in `ice40_bga_node.placement.layout.toml` |
 | Parts and values | the BOM identities of `fab/bom.csv`, including `Y1` (JYJE 3TJ480000FYLBC, `C2924620`) and `U1` (Lattice ICE40HX4K-BG121, `C1552775`) |
 
-The parts this board adds to `registry/parts/` (`tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); `stm32f103c8` gains the `usb_dn`, `usb_dp` and `spi_cs` capability tags the board's checks read, with PA11 and PA12 typed as the differential USB pair; `ice40hx4k_bg121` types `VPP_FAST` (B10) as a passive pin that is not required, so it can stay unconnected; every other part keeps its registry record.
-
-## USB pair: supported speed, impedance estimate and skew
-
-The USB data pair runs from `J1` through the 22 ohm series resistors `R25` and `R26` to `PA12` and `PA11` of `U5` (STM32F103C8). The delivered lengths are 114.7 mm (D+) and 175.5 mm (D-), a 60.8 mm difference, all on `F.Cu`. The pair is in the `USB` net class (0.12 mm tracks, 0.127 mm clearance, locked to `F.Cu`), declared 90 ohm differential.
-
-### Supported speed
-
-USB full-speed, 12 Mbit/s, only. The STM32F103x8/xB datasheet (DS5319) lists a USB 2.0 full-speed interface among its features and has a section "USB: Full-speed electrical characteristics" ([ST datasheet copies indexed at radiolocman.com](https://www.radiolocman.com/datasheet/pdf.html?di=184185)); the part has no high-speed PHY, so the board is not specified or tested for 480 Mbit/s.
-
-### What full-speed asks of the pair
-
-- Edge rates: USB transceiver data sheets give the full-speed rise and fall times as 4 to 20 ns, measured between 10 % and 90 % (onsemi/Fairchild USB1T20: [datasheet](https://www.mouser.com/datasheet/2/149/USB1T20-117246.pdf); TI TUSB1210: [datasheet](https://www.ti.com.cn/document-viewer/cn/lit/html/ZHCSKM0J/GUID-1003578D-34E0-47DB-BF8D-514B4C9072EC)). The bit time at 12 Mbit/s is 83.3 ns.
-- Impedance: ST's application note AN4879 asks a full-speed platform to route 90 ohm +/-15 % differential and 30 ohm +/-30 % common mode ([AN4879, Rev 1 copy](https://github.com/PaxInstruments/labwiz-board/files/560836/ST.AN4879.pdf)). That is 76.5 to 103.5 ohm.
-
-These are secondary copies of the figures (transceiver data sheets and an application-note copy), not the USB-IF specification text, which I did not read.
-
-### Impedance estimate (analytic, not field-solved)
-
-Edge-coupled microstrip on the outer layer of the declared stackup: dielectric height h = 0.1 mm, relative permittivity 4.4, track width w = 0.12 mm, copper t = 0.035 mm, gap s = 0.127 mm.
-
-- Single-ended, Z0 = 87 / sqrt(er + 1.41) x ln(5.98 h / (0.8 w + t)) = 54.8 ohm.
-- Differential, Zdiff = 2 x Z0 x (1 - 0.48 exp(-0.96 s / h)) = 94 ohm.
-
-94 ohm is inside 76.5 to 103.5 ohm. On the delivered board both legs stay on `F.Cu`, so the 94 ohm figure applies along their whole length. The formulas are the common IPC-2141 approximations; they carry several ohms of error, the solder-mask and the real etched width are not modelled, and no field solver or TDR measurement was run.
-
-### Skew
-
-Effective permittivity 0.475 x 4.4 + 0.67 = 2.76 gives a propagation delay of sqrt(2.76) / 299.8 mm/ns = 5.5 ps/mm. The 60.8 mm difference is about 334 ps, 8.4 % of the 4 ns minimum rise time and 0.4 % of the 83 ns bit time. The pair is left unmatched. It would matter at 480 Mbit/s, which the part does not run.
+The parts this board adds to `registry/parts/` (`tlv70012_ddc`, `w25q128jvsiq_208mil`, `xtal_8mhz_3225_jyje_4p`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); `stm32f103c8` gains the `usb_dn`, `usb_dp` and `spi_cs` capability tags the board's checks read, with PA11 and PA12 typed as the differential USB pair (both unconnected on this board); `ice40hx4k_bg121` types `VPP_FAST` (B10) as a passive pin that is not required, so it can stay unconnected; every other part keeps its registry record.
