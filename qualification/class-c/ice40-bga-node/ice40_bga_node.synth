@@ -2,7 +2,7 @@
 //   USB-C VBUS -> polyfuse -> TVS -> +5V
 //   +5V -> AMS1117-3.3 -> +3V3 (I/O banks, SPI flash, header, MCU)
 //   +3V3 -> TLV70012 -> +1V2 (FPGA core) -> ferrite -> VCCPLL
-//   The FPGA boots in master SPI mode from a W25Q128 flash that the STM32F103C8 MCU programs over USB.
+//   The FPGA boots in master SPI mode from a W25Q128 flash that an external programmer writes through the 6-pin header J2.
 board "ice40_bga_node" {
   layers 6
   manufacturer "jlc-advanced"
@@ -32,9 +32,6 @@ board "ice40_bga_node" {
   netclass "FPGA_IO"  { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
   netclass "STATIC"   { trace_width 0.2mm  clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
   netclass "CONFIG"   { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
-  netclass "PWR_MCU"  { trace_width 0.2mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
-  netclass "MCU_IO"  { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow }
-  netclass "XTAL"     { trace_width 0.15mm clearance 0.127mm via_diameter 0.46mm via_drill 0.2mm edge_rate slow layers "F.Cu" }
 
   // ---- Power entry ---------------------------------------------------------
   group "POWER ENTRY" color "#b91c1c" {
@@ -47,33 +44,8 @@ board "ice40_bga_node" {
     component D9: diode "tpd1e10b06" value "TVS" { placement_hint { near: "J1" priority: hard } }
     component C1: capacitor "c_generic_0805" value "10uF" { placement_hint { near: "F1" priority: hard } }
     notes "" {
-      "USB-C VBUS 5 V max 5.25 V. Order: fuse (0.5 A hold) -> TVS (6.0 V standoff) -> +5V. No reverse-polarity stage: a Type-C receptacle cannot be mated reversed, and one would only add drop ahead of the LDO. D7 and D8 are ESD arrays on the data and CC lines."
+      "USB-C VBUS 5 V max 5.25 V. Order: fuse (0.5 A hold) -> TVS (6.0 V standoff) -> +5V. No reverse-polarity stage: a Type-C receptacle cannot be mated reversed, and one would only add drop ahead of the LDO. D8 and D9 are ESD diodes on the CC lines, with no rail connection."
       "CC1 and CC2 each 5.1k to ground: sink, 5 V only."
-    }
-  }
-
-  // ---- Companion MCU ---------------------------------------------------------
-  group "MCU" color "#0072b2" {
-    component U5: mcu "stm32f103c8" { escape { off } placement_hint { near: "J1" priority: soft } }
-    component C27: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd" priority: hard } }
-    component C28: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd_2" priority: hard } }
-    component C29: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdd_3" priority: hard } }
-    component C30: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vdda" priority: hard } }
-    component C31: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.vbat" priority: hard } }
-    component C32: capacitor "c_generic_0603" value "4.7uF" { placement_hint { near: "U5.vdd" priority: hard } }
-    component R21: resistor "r_generic_0402" value "10k" { placement_hint { near: "U5.nrst" priority: hard } }
-    component C33: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U5.nrst" priority: hard } }
-    component SW1: switch "spst_tactile" { placement_hint { near: "U5.nrst" priority: hard } }
-    component R22: resistor "r_generic_0402" value "10k" { placement_hint { near: "U5.boot0" priority: hard } }
-    component Y1: crystal "xtal_8mhz_3225_jyje_4p" { placement_hint { near: "U5.pd0" priority: hard } }
-    component C34: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
-    component C35: capacitor "c_generic_0402" value "10pF" { placement_hint { near: "Y1" priority: hard } }
-    component J4: connector "header_1x5"
-    component FB2: inductor "ferrite_bead_0603" { placement_hint { near: "U5.vdd" priority: hard } }
-    notes "" {
-      "STM32F103C8T6 on 3V3. Streams the bitstream to flash U2 over SPI1 (135,183 byte bitstream > 64 KB MCU flash)."
-      "8 MHz JYJE 3TJ480000FYLBC, CL 8 pF, ESR 150 ohm max, C0 5 pF max; assumed stray 3 pF: C = 2 x (8 - 3) = 10 pF each."
-      "SWD header: 3V3, SWDIO, SWCLK, NRST, GND."
     }
   }
 
@@ -152,6 +124,7 @@ board "ice40_bga_node" {
   }
 
   group "SPI FLASH" color "#0072b2" {
+    component J2: connector "header_1x6_prog" { placement_hint { edge: bottom priority: hard } }
     component U2: memory "w25q128jvsiq_208mil"
     component C26: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "U2.vcc" priority: hard } }
     component R19: resistor "r_generic_0402" value "10k" { placement_hint { near: "U2.io2" priority: hard } }
@@ -217,9 +190,7 @@ board "ice40_bga_node" {
     U2.vcc C26.p1 R19.p1 R20.p1 R4.p1 R5.p2
     R7.p1 J3.p1 TP2.p1
     X1.vcc X1.oe C41.p1 R8.p1
-    FB2.p1 R21.p1 J4.p1
   }
-  net "+3V3_MCU" class "PWR_MCU" { FB2.p2 U5.vdd U5.vdd_2 U5.vdd_3 U5.vdda U5.vbat C27.p1 C28.p1 C29.p1 C30.p1 C31.p1 C32.p1 }
   power "+1V2" 1.2v class "PWR_CORE" {
     U4.vout C7.p1 C8.p1 U1.vcc U1.vcc_2 U1.vcc_3 U1.vcc_4
     C9.p1 C10.p1 C11.p1 C12.p1 FB1.p1 TP3.p1
@@ -229,8 +200,7 @@ board "ice40_bga_node" {
 
   net "GND" class "GND" {
     J1.gnd J1.gnd_a12 J1.gnd_b12 J1.gnd_b1 J1.shld R_CC1.p2 R_CC2.p2 D1.anode C1.p2
-    U5.vss U5.vss_2 U5.vss_3 U5.vssa C27.p2 C28.p2 C29.p2 C30.p2 C31.p2 C32.p2 C33.p2 C34.p2 C35.p2
-    SW1.p2 R22.p2 Y1.gnd_2 Y1.gnd_4 J4.p5 D8.p2 D9.p2
+    D8.p2 D9.p2 J2.p6
     U3.gnd C2.p2 C3.p2 C4.p2 C5.p2 U4.gnd C6.p2 C7.p2 C8.p2
     U1.gnd U1.gnd_2 U1.gnd_3 U1.gnd_4 U1.gnd_5 U1.gnd_6 U1.gnd_7 U1.gnd_8 U1.gnd_9 U1.gnd_10
     U1.gndpll0 U1.gndpll1
@@ -246,20 +216,14 @@ board "ice40_bga_node" {
   net "USB_CC2" class "STATIC" { J1.cc2 R_CC2.p1 D9.p1 }
 
 
-  net "NRST" class "MCU_IO" { U5.nrst R21.p2 C33.p1 SW1.p1 J4.p4 }
-  net "BOOT0" class "MCU_IO" { U5.boot0 R22.p1 }
-  net "SWDIO" class "MCU_IO" { U5.pa13 J4.p2 }
-  net "SWCLK" class "MCU_IO" { U5.pa14 J4.p3 }
-  net "HSE_IN" class "XTAL" { U5.pd0 Y1.xtal_a C34.p1 }
-  net "HSE_OUT" class "XTAL" { U5.pd1 Y1.xtal_b C35.p1 }
 
   // ---- Configuration -------------------------------------------------------
-  net "CRESET_B" class "CONFIG" { U1.creset R5.p1 TP4.p1 U5.pb0 }
-  net "CDONE" class "CONFIG" { U1.cdone R4.p2 TP5.p1 Q2.g U5.pb1 }
-  net "CFG_SS_B" class "CONFIG" { U1.iob_108_ss U2.cs R20.p2 U5.pa4 }
-  net "CFG_SCK" class "CONFIG" { U1.iob_107_sck U2.clk U5.pa5 }
-  net "CFG_SDO" class "CONFIG" { U1.iob_105_sdo U2.io0 U5.pa7 }
-  net "CFG_SDI" class "CONFIG" { U1.iob_106_sdi U2.io1 U5.pa6 }
+  net "CRESET_B" class "CONFIG" { U1.creset R5.p1 TP4.p1 J2.p5 }
+  net "CDONE" class "CONFIG" { U1.cdone R4.p2 TP5.p1 Q2.g }
+  net "CFG_SS_B" class "CONFIG" { U1.iob_108_ss U2.cs R20.p2 J2.p1 }
+  net "CFG_SCK" class "CONFIG" { U1.iob_107_sck U2.clk J2.p2 }
+  net "CFG_SDO" class "CONFIG" { U1.iob_105_sdo U2.io0 J2.p4 }
+  net "CFG_SDI" class "CONFIG" { U1.iob_106_sdi U2.io1 J2.p3 }
   net "FLASH_WPHOLD" class "STATIC" { U2.io2 U2.io3 R19.p2 }
 
   // ---- LEDs ----------------------------------------------------------------

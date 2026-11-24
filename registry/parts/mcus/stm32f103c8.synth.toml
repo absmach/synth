@@ -165,14 +165,14 @@ capabilities = ["gpio", "uart_rx"]
 [[pins]]
 name = "pa11"
 number = "32"
-electrical_type = "differential_negative"
-capabilities = ["gpio", "usb_dn"]
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
 
 [[pins]]
 name = "pa12"
 number = "33"
-electrical_type = "differential_positive"
-capabilities = ["gpio", "usb_dp"]
+electrical_type = "bidirectional"
+capabilities = ["gpio"]
 
 [[pins]]
 name = "pa13"
@@ -270,7 +270,7 @@ capabilities = ["gpio"]
 name = "pb12"
 number = "25"
 electrical_type = "bidirectional"
-capabilities = ["gpio", "spi_cs"]
+capabilities = ["gpio"]
 
 [[pins]]
 name = "pb13"
