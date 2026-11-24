@@ -44,8 +44,9 @@ struct Cli {
     #[arg(long, global = true, value_name = "N")]
     jobs: Option<usize>,
 
-    /// List a missing fast-edge return via beside a fine-pitch pad row as an
-    /// advisory instead of blocking. Needs signal-integrity review sign-off.
+    /// List a missing return via beside a fine-pitch pad row with the breakout
+    /// wording. Every missing return via is an advisory, so this selects the
+    /// wording only and does not change the verdict.
     /// `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1` (or `true`) also enables it.
     #[arg(long, global = true)]
     fine_pitch_return_via_advisory: bool,

@@ -416,10 +416,10 @@ A hidden label takes no room. A sidecar entry beats the part file, and a hard of
 ### Fine-pitch return-via advisory (opt-in)
 
 `--fine-pitch-return-via-advisory` (env `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1`,
-MCP `fine_pitch_return_via_advisory`) lists a missing fast-edge return via
-beside a fine-pitch pad row as an advisory instead of a blocking finding.
-Default off. It relaxes a signal-integrity gate, so use it only with
-signal-integrity review sign-off and record that sign-off with the board.
+MCP `fine_pitch_return_via_advisory`) lists a missing return via beside a
+fine-pitch pad row with the breakout wording. Default off. Every missing return
+via is an advisory, so the option selects the wording only and does not change
+the verdict.
 
 ---
 
