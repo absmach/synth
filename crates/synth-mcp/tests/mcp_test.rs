@@ -1406,3 +1406,21 @@ fn test_mcp_route_is_quiet_when_the_profile_offers_the_process() {
         "a met requirement must not be reported: {text}"
     );
 }
+
+/// The standing instructions must keep an agent from pinning a board size or a
+/// placement the user never asked for: a declared `outline` that is a guess
+/// leaves dead board, and a `hard` hint that is not physical blocks compaction.
+#[test]
+fn test_mcp_instructions_forbid_guessed_outlines_and_non_physical_hard_hints() {
+    for needle in [
+        "Never declare `outline <width> x <height>`",
+        "the user gave the size or a mating constraint",
+        "`priority: hard`",
+        "physical constraints only",
+    ] {
+        assert!(
+            SERVER_INSTRUCTIONS.contains(needle),
+            "standing instruction missing: {needle}"
+        );
+    }
+}
