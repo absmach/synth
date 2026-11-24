@@ -131,10 +131,14 @@ pub struct Board {
 }
 
 /// The board rectangle a design declares, in integer nanometres.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BoardOutline {
     pub width: Length,
     pub height: Length,
+    /// Why the size is fixed (`reason "<text>"`). `None` when the design did
+    /// not state one; a stated reason suppresses `W-SYNTH-BOARD-004`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     pub source_span: Span,
 }
 

@@ -29,12 +29,16 @@ board "gateway" {
 ## Suggested fix
 
 Remove the `outline` statement and let placement fit the board to its parts,
-or size the outline from the estimate in the diagnostic (`expected`). Keep a
-declared outline when a mechanical or mating constraint fixes the size, and
-state that reason on the board.
+or size the outline from the estimate in the diagnostic (`expected`).
 
-There is no parsed syntax for an outline reason yet; the check reports the
-warning for every oversized declared outline.
+Keep a declared outline when a mechanical or mating constraint fixes the size,
+and state that reason on the board:
+
+```synth
+outline 180mm x 120mm reason "fits the enclosure"
+```
+
+A non-empty reason suppresses this warning.
 
 ## See also
 

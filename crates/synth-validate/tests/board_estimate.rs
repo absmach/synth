@@ -98,6 +98,30 @@ fn a_board_without_an_outline_reports_the_estimate_as_info() {
 }
 
 #[test]
+fn a_stated_reason_suppresses_the_oversized_outline_warning() {
+    let board = lower(
+        r#"board "reason" {
+            layers 2
+            outline 180mm x 120mm reason "fits the enclosure"
+            component R1: resistor "r_generic_0603"
+        }"#,
+        "reason.synth",
+    );
+    assert_eq!(
+        board
+            .outline
+            .as_ref()
+            .and_then(|outline| outline.reason.as_deref()),
+        Some("fits the enclosure")
+    );
+    let diagnostics = board_size_diagnostics(&board, "reason.synth");
+    assert!(
+        diagnostics.iter().all(|d| d.code != "W-SYNTH-BOARD-004"),
+        "{diagnostics:?}"
+    );
+}
+
+#[test]
 fn a_tight_outline_is_not_warned_about() {
     let mut board = gateway_board();
     board.outline = None;
@@ -105,6 +129,7 @@ fn a_tight_outline_is_not_warned_about() {
     board.outline = Some(BoardOutline {
         width: Length::from_mm(estimate.est_w_mm * 1.2),
         height: Length::from_mm(estimate.est_h_mm * 1.2),
+        reason: None,
         source_span: board.source_span,
     });
 

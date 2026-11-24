@@ -1499,7 +1499,7 @@ fn validate_sidecar_inside_outline(
     board: &Board,
     sidecar: &synth_layout::sidecar::SidecarLayout,
 ) -> Result<(), PlaceError> {
-    let Some(outline) = board.outline else {
+    let Some(outline) = board.outline.as_ref() else {
         return Ok(());
     };
     let board_rect = Rect::new(
@@ -1932,7 +1932,7 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
     // the sidecar already states every coordinate, and running the solver
     // only reproduces them more slowly. Legalisation still runs below.
     if pinned.len() == board.components.len()
-        && let Some(outline) = board.outline
+        && let Some(outline) = board.outline.as_ref()
     {
         let mut components: Vec<ComponentPlacement> = board
             .components
@@ -2952,7 +2952,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
     // A declared `outline` is the board: solve inside it as given, with no
     // fitting or compaction afterwards. Everything else keeps the historical
     // auto-sized path.
-    if let Some(outline) = board.outline {
+    if let Some(outline) = board.outline.as_ref() {
         return place_with_outline(
             board,
             Rect::new(
@@ -13897,7 +13897,7 @@ board "near" {
             }"#,
             "fixed_outline.synth",
         );
-        let expected = board.outline.expect("declared outline");
+        let expected = board.outline.clone().expect("declared outline");
         let placement = place(&board).expect("place");
         assert_eq!(placement.board_outline.width_nm(), expected.width.0);
         assert_eq!(placement.board_outline.height_nm(), expected.height.0);
@@ -13919,7 +13919,7 @@ board "near" {
             }"#,
             "fixed_outline_sweep.synth",
         );
-        let expected = board.outline.expect("declared outline");
+        let expected = board.outline.clone().expect("declared outline");
         let placement = place_with_export_sweep(&board).expect("place");
         assert_eq!(placement.board_outline.min.x_nm, 0);
         assert_eq!(placement.board_outline.min.y_nm, 0);
@@ -13943,7 +13943,7 @@ board "near" {
             }"#,
             "fixed_outline_finish.synth",
         );
-        let expected = board.outline.expect("declared outline");
+        let expected = board.outline.clone().expect("declared outline");
         let mut placement = place(&board).expect("place");
         finish_default_placement(&board, &mut placement, false);
         assert_eq!(placement.board_outline.min.x_nm, 0);

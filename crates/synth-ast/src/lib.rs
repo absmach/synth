@@ -201,6 +201,8 @@ pub struct SchematicStmt {
 pub struct OutlineStmt {
     pub width: ValueWithUnit,
     pub height: ValueWithUnit,
+    /// The stated reason for the fixed size (`reason "<text>"`).
+    pub reason: Option<String>,
     pub span: Span,
 }
 

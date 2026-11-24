@@ -84,7 +84,7 @@ pub fn estimate_board_size(board: &Board) -> BoardEstimate {
 #[allow(clippy::similar_names)]
 pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
     let estimate = estimate_board_size(board);
-    let Some(outline) = board.outline else {
+    let Some(outline) = board.outline.as_ref() else {
         return vec![
             DiagnosticBuilder::new(BOARD_ESTIMATE_CODE, Severity::Info, "board size estimate")
                 .location(Location::from_span(file.to_string(), board.source_span))
@@ -101,6 +101,12 @@ pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
                 .build(),
         ];
     };
+
+    // A stated reason is the author's answer to this warning (a mechanical or
+    // mating constraint); do not repeat it.
+    if outline.reason.is_some() {
+        return Vec::new();
+    }
 
     let declared_w_mm = outline.width.to_mm();
     let declared_h_mm = outline.height.to_mm();
