@@ -358,10 +358,13 @@ report --severity-error --severity-warning --refill-zones
   the statement the exporter fits the edge round the parts and
   `synth validate` reports the estimated size as an info diagnostic;
   rounded or chamfered corners are a manual edit. Keep `priority: hard`
-  hints physical (an edge connector or a mounting hole) — any other
-  hard hint triggers `W-SYNTH-BOARD-005` and blocks compaction.
-  Double-sided assembly is an explicit engineer decision, never a
-  default.
+  for physical and electrical proximity — a connector edge, a mounting
+  hole, or a part that must sit at a pin (decoupling, a regulator's
+  switch loop, a crystal, ESD at its connector, series terminations).
+  An `edge` or `region` hint on any other part fixes a board span and
+  triggers `W-SYNTH-BOARD-005`; make it soft unless an enclosure or
+  mating constraint fixes it. Double-sided assembly is an explicit
+  engineer decision, never a default.
 
 ### Placement JSON coordinate contract
 

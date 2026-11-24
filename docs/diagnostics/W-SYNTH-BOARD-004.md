@@ -17,9 +17,10 @@ oversize only wastes board, it does not cause fitting to stop.
 When the source declares no `outline`, the same code is emitted at info
 severity with the estimate, so a size can be checked before it is pinned.
 
-The estimate assumes a compact fit. A hard placement hint that is not physical
-can enlarge the fitted board: `W-SYNTH-BOARD-005` reports those hints, and the
-estimate deliberately names the compact size they would otherwise allow.
+The estimate assumes a compact fit. A hard `edge` or `region` hint on a part
+with no mechanical reason, or a `near` chain ending in one, fixes a board span
+and can enlarge the fitted board: `W-SYNTH-BOARD-005` reports those hints, and
+the estimate deliberately names the compact size they would otherwise allow.
 
 ## Minimal reproduction
 
