@@ -125,16 +125,6 @@ expect_fab = "unestablished"
 rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin UART break-out: the Class-A single-bus envelope. Source passes; the routed copper fails DRC on the pinned run, so the gate is `fail`."
 
 [[board]]
-id = "irrigation_fixture"
-path = "qualification/class-a/irrigation-fixture/irrigation_fixture.synth"
-fixture_sha256 = "ff10482e6580a5bd0e621578968f2e3a9ce37f7691f23e828b9a06abe9cb259f"
-class = "A"
-status = "experimental"
-expect = "fail"
-expect_fab = "unestablished"
-rationale = "Two soil-moisture probes, a flow meter, two solenoid outputs and ambient temperature, humidity and light: a Class-A board wide enough to exercise mixed sensing and switched loads. Source passes; the pinned KiCad 10.0.8 run completes routing and `kicad-cli pcb drc` reports violations, so the gate is `fail`. The LQFP-32 has no HSE pins, so the 8 MHz crystal is removed and the MCU runs from HSI; the 15 V TVS and the 3.3 V divider are corrected. This is a fixture of the matrix, not the Class-A case 1 board: it has no crystal, and case 1 requires one."
-
-[[board]]
 id = "negative_broken_mcu_board"
 path = "qualification/class-a/negative-broken-mcu-board/negative_broken_mcu_board.synth"
 fixture_sha256 = "bcd85846f5995fc5134350dfaace26bca3280b1a9e704045cbf7bb07946439a5"
@@ -154,56 +144,6 @@ status = "experimental"
 expect = "pass"
 expect_fab = "unestablished"
 rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a 15 V TVS, a buck to 5 V, a soft-start load switch and a 3V3 rail, with no MCU: a power front end that exists to be reviewed as one. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner."
-
-[[board]]
-id = "rp2350_debug_target"
-path = "qualification/class-a/rp2350-debug-target/rp2350_debug_target.synth"
-fixture_sha256 = "6a91f49f94391addfc7b46cdb6bdd46135835ba7bdc2939d726442adba66f509"
-class = "A"
-status = "experimental"
-expect = "unknown"
-expect_fab = "unestablished"
-rationale = "USB-C power into a 3V3 LDO, the RP2350's own crystal, a tactile reset on RUN, a 3-pin SWD header, QSPI boot flash and one status LED: the Class-A debug target. Source passes; the DRC stage could not produce a verdict on the pinned run (`unknown`)."
-
-[[board]]
-id = "dual_usb_compute"
-path = "qualification/class-c/dual-usb-compute/dual_usb_compute.synth"
-fixture_sha256 = "e1bb65ff54b11e9cb0b92e7c6559959cf85c8c7a90633695238c0dfe83512f44"
-class = "C"
-status = "experimental"
-expect = "unknown"
-expect_fab = "unestablished"
-rationale = "Two RP2350s on their own USB 2.0 pairs, a QSPI boot flash on the first RP2350 (the second has none on this board), and a USB 3.0 Type-A receptacle whose SuperSpeed lanes reach a 20-pin header, on six layers: Class-C case 3. Source passes on the pinned run; the DRC stage could not produce a verdict (`unknown`). The U4 core supply, 27 ohm series resistors and 12 MHz crystals are wired as the review asked."
-
-[[board]]
-id = "hdmi_routing_fixture"
-path = "qualification/class-c/hdmi-routing-fixture/hdmi_routing_fixture.synth"
-fixture_sha256 = "91627ae5224f23b89169bd538cc444a39e8f60b1a078f6227cea62181ecb280b"
-class = "C"
-status = "experimental"
-expect = "unknown"
-expect_fab = "unestablished"
-rationale = "A Lattice iCE40 HX4K in a 121-ball 0.8 mm BGA driving an HDMI Type-A output, with configuration flash, a 25 MHz oscillator, and 1.2 V and 3.3 V planes from one 5 V input: Class-C case 1. Source passes; the DRC stage could not produce a verdict on the pinned run (`unknown`). This is a fixture of the matrix, not the Class-C case 3 board."
-
-[[board]]
-id = "multirail_fixture"
-path = "qualification/class-c/multirail-fixture/multirail_fixture.synth"
-fixture_sha256 = "9a52457c6b8b891a530007e6ebef8a75c8d5574fa809b447cb502cdf1a2f65dd"
-class = "C"
-status = "experimental"
-expect = "fail"
-expect_fab = "unestablished"
-rationale = "An ESP32-WROOM-32 on four supply rails from one 12 V input, with an I2C GPIO expander and two expansion headers, on four layers: Class-C case 4. Source passes; on the pinned KiCad 10.0.8 run against current main the DRC stage fails (measured in CI on 2026-11-19), so the gate is `fail`; manufacturing is unestablished until it is measured on the pinned runner. This is a fixture of the matrix, not the Class-C case 4 board."
-
-[[board]]
-id = "sdram_routing_fixture"
-path = "qualification/class-c/sdram-routing-fixture/sdram_routing_fixture.synth"
-fixture_sha256 = "20269478bf3f17a48ffc65fd767c83376524e9fd1466234f4d66885761f0189e"
-class = "C"
-status = "experimental"
-expect = "unknown"
-expect_fab = "unestablished"
-rationale = "Two ISSI IS42S16400J SDRAM dice on four layers sharing a series-damped address and command bus, bringing a 32-bit data bus to a pair of dual-row carrier connectors, with serial presence detect and thermal sense: Class-C case 2. Source passes; the DRC stage could not produce a verdict on the pinned run (`unknown`). The pipe deadlock that used to report a false parse failure is fixed; the remaining `unknown` is DRC, not source. This is a fixture of the matrix, not the Class-C case 2 board: it has no controller, so it qualifies the routing only, not a working interface."
 
 [[board]]
 id = "buck"

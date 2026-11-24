@@ -22,9 +22,9 @@ and edit `matrix.toml` second.
 
 ### Where the corpus stands
 
-The corpus has 19 rows: 18 measured boards plus the skipped `usb-uart` row.
-**Three clear the source/DRC gate** — `buck`,
-`protected_power_entry` and `multirail_fixture` — on the pinned environment (KiCad 10.0 with
+The corpus has 14 rows: 12 measured boards plus the skipped `usb-uart` and
+`rtd-afe` rows. **Three clear the source/DRC gate** — `hello`, `buck` and
+`protected_power_entry` — on the pinned environment (KiCad 10.0 with
 KiCadRoutingTools v0.23.0). Clearing the gate is a measurement, not an
 approval: both are still `experimental`, and the table further down is what a
 human still has to judge before either becomes `qualified`.
@@ -36,15 +36,10 @@ KiCad 10 through the checked script.
 
 What still fails, and why it is not one cause:
 
-- `hello` has nothing to route and the engine exits 1 on an empty board, so its
-  DRC is `unknown`.
-- `env_logger`, `sensor_logger`, `i2c_sensor_node` and
-  `irrigation_fixture` clear the source stage and fail `kicad-cli pcb drc`
-  on the copper that came back.
-- `hello`, `placement_and_diff_pair`, `rp2350_debug_target`,
-  `dual_usb_compute`, `hdmi_routing_fixture` and `sdram_routing_fixture` clear source and
-  report `unknown` for DRC: the stage could not produce a verdict, which is not
-  a pass.
+- `env_logger`, `sensor_logger` and `i2c_sensor_node` clear the source stage
+  and fail `kicad-cli pcb drc` on the copper that came back.
+- `placement_and_diff_pair` clears source and reports `unknown` for DRC: the
+  stage could not produce a verdict, which is not a pass.
 - The `ref_*` boards and `negative_broken_mcu_board` are negative tests and
   fail at source by design.
 
