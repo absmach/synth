@@ -140,6 +140,7 @@ fn build(
         .collect();
     Board {
         outline: None,
+        placement_spacing_nm: None,
         schematic_overflow: Some(SchematicOverflow::Hierarchy),
         schematic_paper: paper,
         groups: Vec::new(),
