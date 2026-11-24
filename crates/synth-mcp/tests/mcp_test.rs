@@ -102,6 +102,30 @@ fn test_mcp_call_synth_search_registry() {
     assert!(content_text.contains("total_matches"));
 }
 
+/// The same board-size estimate `synth validate` reports must reach MCP
+/// clients: an arbitrary 180 x 120 mm outline over one resistor leaves a huge
+/// dead board, and an agent has to see the warning.
+#[test]
+fn test_mcp_validate_reports_the_board_size_estimate() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_validate",
+            "arguments": {
+                "source": "board \"test\" {\n  layers 2\n  outline 180mm x 120mm\n  component R1: resistor \"r_generic_0603\"\n}\n"
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content_text.contains("W-SYNTH-BOARD-004"),
+        "board-size estimate missing from synth_validate: {content_text}"
+    );
+}
+
 #[test]
 fn test_mcp_call_synth_validate() {
     let req = json!({
