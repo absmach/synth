@@ -1721,7 +1721,7 @@ fn check(
     let validate_pass =
         !validate_timed_out && validate_output.status.success() && validate_parse_ok;
 
-    let mut simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass)?;
+    let mut simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass);
     if let Ok(bytes) = std::fs::read(synth_sim::sidecar_path(input)) {
         simulation["testbench_sha256"] = serde_json::json!(sha256_hex(&bytes));
     }
@@ -2004,7 +2004,8 @@ impl PreFabDrc {
 ///
 /// `skipped` is not evidence either way and does not block. `unknown` means
 /// the sidecar exists but the simulator could not run, so it blocks just like
-/// the other unknown physical stages.
+/// the other unknown physical stages. A spawned `synth sim` that cannot start
+/// is one of those unknowns, not an error for the whole check.
 fn simulation_stage(
     exe: &Path,
     input: &Path,
@@ -2012,19 +2013,19 @@ fn simulation_stage(
     budget: u64,
     base: &[String],
     validate_pass: bool,
-) -> anyhow::Result<serde_json::Value> {
+) -> serde_json::Value {
     if !validate_pass {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "skipped",
             "reason": "source gate failed",
-        }));
+        });
     }
     let sidecar = synth_sim::sidecar_path(input);
     if std::fs::symlink_metadata(&sidecar).is_err() {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "skipped",
             "reason": "no testbench sidecar",
-        }));
+        });
     }
 
     // Leave enough time for the simulator's own process-tree kill to run
@@ -2049,7 +2050,7 @@ fn simulation_stage(
     if let Some(dir) = registry {
         args.extend(["--registry".to_string(), dir.display().to_string()]);
     }
-    let invocation = synth_router::process::run_cancellable(
+    let invocation = match synth_router::process::run_cancellable(
         exe,
         &args,
         std::time::Duration::from_secs(budget),
@@ -2057,40 +2058,48 @@ fn simulation_stage(
         None,
         None,
         synth_router::process::KillScope::ProcessTree,
-    )
-    .map_err(|error| anyhow::anyhow!("could not run `synth sim`: {}", error.detail))?;
+    ) {
+        Ok(invocation) => invocation,
+        Err(error) => {
+            return serde_json::json!({
+                "status": "unknown",
+                "reason": "simulation setup failed",
+                "detail": format!("could not run `synth sim`: {}", error.detail),
+            });
+        }
+    };
     if invocation.timed_out {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "unknown",
             "reason": "timeout",
             "detail": "`synth sim` exceeded its stage budget",
-        }));
+        });
     }
     if invocation.output_truncated {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "unknown",
             "reason": "unreadable simulation report",
             "detail": "`synth sim` output exceeded the report cap",
-        }));
+        });
     }
 
     let Ok(result) = serde_json::from_str::<serde_json::Value>(&invocation.stdout) else {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "unknown",
             "reason": "unreadable simulation report",
             "stderr": invocation.stderr,
-        }));
+        });
     };
     if invocation.succeeded() && result["passed"].as_bool() == Some(true) {
-        return Ok(serde_json::json!({"status": "pass", "result": result}));
+        return serde_json::json!({"status": "pass", "result": result});
     }
     if let Some(error) = result["error"].as_str() {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "unknown",
             "reason": "simulation setup failed",
             "detail": error,
             "result": result,
-        }));
+        });
     }
     let has_code = |code: &str| {
         result["diagnostics"].as_array().is_some_and(|diagnostics| {
@@ -2100,20 +2109,20 @@ fn simulation_stage(
         })
     };
     if has_code(synth_sim::E_SYNTH_SIM_005) {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "unknown",
             "reason": "timeout",
             "result": result,
-        }));
+        });
     }
     if has_code(synth_sim::E_SYNTH_SIM_001) {
-        return Ok(serde_json::json!({
+        return serde_json::json!({
             "status": "unknown",
             "reason": "simulator unavailable",
             "result": result,
-        }));
+        });
     }
-    Ok(serde_json::json!({"status": "fail", "result": result}))
+    serde_json::json!({"status": "fail", "result": result})
 }
 
 /// Classify a `synth drc` run record.
@@ -7318,5 +7327,39 @@ mod tests {
         assert!(!validate_stdout_passed(
             br#"{"diagnostics": [], "parse_error": true}"#
         ));
+    }
+
+    fn simulation_scratch(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "synth_simulation_stage_{label}_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        std::fs::write(dir.join("d.synth"), "").expect("write design");
+        std::fs::write(dir.join("d.sim.toml"), "").expect("write sidecar");
+        dir
+    }
+
+    #[test]
+    fn a_simulation_that_cannot_spawn_is_unknown() {
+        let dir = simulation_scratch("spawn");
+        let stage = simulation_stage(
+            &dir.join("missing-synth"),
+            &dir.join("d.synth"),
+            None,
+            10,
+            &[],
+            true,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "simulation setup failed", "{stage:#}");
+        assert!(
+            stage["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("could not run `synth sim`")),
+            "{stage:#}"
+        );
     }
 }
