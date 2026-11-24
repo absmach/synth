@@ -31,5 +31,5 @@ The qualification verdict, measurements, evidence and sign-off are in [`QUALIFIC
 - **HDMI compliance:** none is claimed. The interface is DVI-style, with LVCMOS33 outputs through series resistors.
 - **Coupled pairs:** the pairs are routed as independent nets on different layers, so they are not a coupled differential interface.
 - **Impedance:** the differential impedance is not established. Only an analytic estimate for an outer-layer microstrip is given.
-- **Pair spacing:** the delivered gap between the legs does not meet the 0.15 mm class clearance.
+- **Pair spacing:** the delivered median gap between the legs, 1.40 to 2.05 mm, is wider than the declared 0.15 mm coupling gap, so the legs are not coupled.
 - **Review:** the board has a self-review only. The independent PCB expert sign-off required by #40 is open.
