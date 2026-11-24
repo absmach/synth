@@ -20,6 +20,7 @@ All figures come from the committed export (KiCad 10.0.8).
 | Routing | 42 of 42 nets, 434 segments, 90 vias (0.46/0.2 mm: 23, 0.6/0.3 mm: 67), 1285.9 mm of track |
 | Copper | `GND` is poured on all four layers (a zone on each); the rails are routed as tracks, not planes |
 | DRC with the library tables | 0 errors, 0 unconnected, 89 warnings: 85 `lib_footprint_mismatch` (silkscreen cut back from vias and pads by the exporter, #425; the footprint comparison shows no difference in pads, courtyard or fabrication layers) and 4 `silk_over_copper` |
+| Zone fill | The committed board carries refilled zones (`kicad-cli pcb drc --refill-zones --save-board`), and the Gerbers are plotted from that fill. `kicad-cli pcb drc` without a refill reports 0 unconnected items on it |
 | Synth validation | exits 0 with 40 warnings in a `synth validate` run on this source; 17 are schematic-layout findings (see the notes below the table) |
 
 Notes on the `synth validate` row:
