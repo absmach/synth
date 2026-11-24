@@ -56,3 +56,23 @@ fn a_reason_without_a_string_is_a_parse_error() {
         "{codes:?}"
     );
 }
+
+#[test]
+fn a_whitespace_only_reason_is_a_parse_error() {
+    let (_, codes) =
+        outline_reason("board \"b\" {\n layers 2\n outline 60mm x 30mm reason \"   \"\n}");
+    assert!(
+        codes.iter().any(|code| code == "E-SYNTH-PARSE-047"),
+        "{codes:?}"
+    );
+}
+
+#[test]
+fn a_reason_is_followed_by_the_next_statement() {
+    let (reason, codes) = outline_reason(
+        "board \"b\" {\n layers 2\n outline 60mm x 30mm reason \"fits the enclosure\"\n \
+         component R1: resistor \"r_generic_0603\"\n}",
+    );
+    assert!(codes.is_empty(), "{codes:?}");
+    assert_eq!(reason.as_deref(), Some("fits the enclosure"));
+}

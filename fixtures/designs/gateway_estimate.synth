@@ -1,8 +1,10 @@
 // A trimmed RS-485/CAN-FD gateway, the board shape that motivated the
 // board-size estimate: 41 parts in a declared 180 x 120 mm rectangle,
-// where the parts themselves need roughly 50 x 50 mm. Only parts the
-// shipped registry carries, so the fixture lowers without a Tier-2
-// registry. No nets: the estimate depends on courtyards, not wiring.
+// where the parts themselves need about 86 x 57 mm at this 1.5:1 aspect
+// (~70 x 70 mm square). Only parts the shipped registry carries, so the
+// fixture lowers without a Tier-2 registry. No nets: the estimate depends
+// on courtyards, not wiring, and the netless design is not a clean
+// reference, so it is not an anomaly-model training input.
 
 board "gateway_estimate" {
   layers 4

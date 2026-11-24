@@ -378,3 +378,22 @@ fn the_info_says_the_estimate_is_at_a_square_aspect() {
         info.message
     );
 }
+
+/// A hand-built outline with no height (the parser rejects those) falls back
+/// to the square estimate instead of dividing by zero.
+#[test]
+fn a_zero_height_outline_falls_back_to_a_square_estimate() {
+    let mut board = gateway_board();
+    board.outline = Some(BoardOutline {
+        width: Length::from_mm(60.0),
+        height: Length(0),
+        reason: None,
+        source_span: board.source_span,
+    });
+    let estimate = estimate_board_size(&board);
+    assert!(
+        (estimate.est_w_mm - estimate.est_h_mm).abs() < 1e-9,
+        "{estimate:?}"
+    );
+    assert!(estimate.est_area_mm2 > 0.0);
+}
