@@ -448,9 +448,9 @@ fn write_report(report: &mut RouteReport, request: &RouteRequest) {
 
 /// The verdict with the findings of the mandatory island repair added. A
 /// repair that did not run is a required check that could not be performed,
-/// which is review-required; an island it left untied is a blocking finding.
+/// which is review-required; a pad tie with no legal via is a blocking finding.
 /// Either way the candidate is not fabrication-ready, whatever the other checks
-/// said.
+/// said. An island left untied and a return via not placed are advisories.
 fn with_repair_findings(
     mut verdict: validate::FabricationVerdict,
     blocking: Vec<String>,
@@ -469,7 +469,7 @@ fn with_repair_findings(
 
 /// The verdict with a declared pair outside its skew budget marked blocking.
 /// The finding names the pair and its budget; the candidate is not
-/// fabrication-ready, the same way a return-via blocker holds it.
+/// fabrication-ready, the same way an unfittable pad tie holds it.
 fn with_diff_pair_findings(
     mut verdict: validate::FabricationVerdict,
     findings: Vec<String>,
@@ -565,8 +565,9 @@ pub fn finalize_candidate(
     // A pour that tracks cut into regions leaves some of them tied to nothing
     // else. Tie each back before the candidate is judged, so the verdict is on
     // the board that would be delivered. The repair is mandatory: when it did
-    // not run, or an island is left that it cannot tie, the candidate is not
-    // promoted, because the island is a zone against itself and KiCad refuses it.
+    // not run, or a pad tie has no legal via, the candidate is not promoted. An
+    // island it leaves untied, and a return via it cannot place, are advisories
+    // for the review; the board's DRC decides whether an island blocks.
     let mut repair_blocking: Vec<String> = Vec::new();
     let mut repair_unavailable: Vec<String> = Vec::new();
     // A via the engine left in a pad of its own net is moved off it, with the tracks
@@ -643,7 +644,7 @@ pub fn finalize_candidate(
         repair_advisory,
     );
     // A declared pair the copper does not length-match to its budget blocks
-    // the release here, in the same verdict the return-via blockers do: a
+    // the release here, in the same verdict the pad-tie blockers do: a
     // board that releases with 9.9 mm of skew on a `max_skew 0.15mm` pair is
     // the failure #447 shipped, and it stops being silent.
     let skew_findings = match &delivered_board {
@@ -1006,7 +1007,7 @@ mod repair_tests {
     }
 
     /// A declared pair outside its skew budget blocks the candidate in the
-    /// same verdict the return-via blockers do: the finding names the pair,
+    /// same verdict the pad-tie blockers do: the finding names the pair,
     /// the board lands in validation-failed, and the release gate keeps it
     /// (absmach/synth#447).
     #[test]

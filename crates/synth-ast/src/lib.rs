@@ -748,7 +748,7 @@ pub enum NetclassAttr {
     /// bus/group length-match budget.
     MaxSkew(ValueWithUnit),
     /// How fast the class's nets switch (`edge_rate slow`, `medium` or `fast`).
-    /// A slow net may lose a ground return via with an advisory; an
+    /// A slow net is not given a ground return via and its layer change is only a warning; an
     /// undeclared net is treated as fast, because a generic output or
     /// bidirectional pin carries a fast SPI, USB or timer edge too.
     EdgeRate {

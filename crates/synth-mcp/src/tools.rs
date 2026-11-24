@@ -161,7 +161,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "kicad_routing_tools_python": { "type": "string", "description": "Python interpreter with KiCadRoutingTools dependencies" },
                     "router_timeout_secs": { "type": "number", "description": "Wall-clock budget for the whole external run" },
                     "allow_via_in_pad": { "type": "boolean", "description": "Permit via-in-pad in the fabrication gate (default false)" },
-                    "fine_pitch_return_via_advisory": { "type": "boolean", "description": "List a missing fast-edge return via beside a fine-pitch pad row as an advisory instead of blocking (default false; needs signal-integrity review sign-off)" },
+                    "fine_pitch_return_via_advisory": { "type": "boolean", "description": "List a missing return via beside a fine-pitch pad row with the breakout wording (default false). Every missing return via is an advisory, so this selects the wording only" },
                     "log_routing_outcomes": { "type": "string", "description": "Optional directory to append a Dataset 6 routing outcome record to; a later run on the same board reads it back as retry advice" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
@@ -245,7 +245,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "kicad_routing_tools_python": { "type": "string", "description": "Python interpreter with KiCadRoutingTools dependencies" },
                     "router_timeout_secs": { "type": "number", "description": "Wall-clock budget for the whole external run" },
                     "allow_via_in_pad": { "type": "boolean", "description": "Permit via-in-pad in the fabrication gate (default false)" },
-                    "fine_pitch_return_via_advisory": { "type": "boolean", "description": "List a missing fast-edge return via beside a fine-pitch pad row as an advisory instead of blocking (default false; needs signal-integrity review sign-off)" },
+                    "fine_pitch_return_via_advisory": { "type": "boolean", "description": "List a missing return via beside a fine-pitch pad row with the breakout wording (default false). Every missing return via is an advisory, so this selects the wording only" },
                     "log_routing_outcomes": { "type": "string", "description": "Optional directory to append a Dataset 6 routing outcome record to; a later run on the same board reads it back as retry advice" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
                     "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
