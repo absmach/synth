@@ -3641,6 +3641,7 @@ fn validate(
             let lowered = synth_ir::lower(&resolved.program, &registry, &file);
             diagnostics.extend(lowered.diagnostics);
             if let Some(board) = lowered.board.as_ref() {
+                diagnostics.extend(synth_validate::board_size_diagnostics(board, &file));
                 // Per-design ERC config (`<design>.synth.erc.toml`),
                 // when present, overrides the pin-conflict table and
                 // the deeper-check thresholds.

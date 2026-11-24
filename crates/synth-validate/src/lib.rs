@@ -63,6 +63,9 @@ mod stackup;
 mod thermal;
 pub use patch_mlp::PatchMlp;
 
+pub mod board_estimate;
+pub use board_estimate::{BoardEstimate, board_size_diagnostics, estimate_board_size};
+
 pub mod placement;
 pub use placement::validate_placement;
 
