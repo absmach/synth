@@ -2091,6 +2091,17 @@ fn simulation_stage(
         });
     };
     if invocation.succeeded() && result["passed"].as_bool() == Some(true) {
+        // `passed` only means no blocking diagnostic. A testbench that
+        // measures without asserting a limit verified nothing, and a report
+        // without the count cannot prove one was checked; neither is evidence.
+        if result["limits_checked"].as_u64().unwrap_or(0) == 0 {
+            return serde_json::json!({
+                "status": "unknown",
+                "reason": "no limits checked",
+                "detail": "the testbench measures values but asserts no min/max, so it is not evidence",
+                "result": result,
+            });
+        }
         return serde_json::json!({"status": "pass", "result": result});
     }
     if let Some(error) = result["error"].as_str() {
@@ -7339,6 +7350,41 @@ mod tests {
         std::fs::write(dir.join("d.synth"), "").expect("write design");
         std::fs::write(dir.join("d.sim.toml"), "").expect("write sidecar");
         dir
+    }
+
+    #[cfg(unix)]
+    fn fake_sim_report(dir: &Path, report: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("fake-synth");
+        std::fs::write(&path, format!("#!/bin/sh\ncat <<'JSON'\n{report}\nJSON\n"))
+            .expect("write fake synth");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake synth executable");
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_report_with_one_checked_limit_passes() {
+        let dir = simulation_scratch("one-limit");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": true, "limits_checked": 1, "diagnostics": []}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "pass", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_report_without_limits_checked_is_unknown() {
+        let dir = simulation_scratch("absent-limits");
+        let exe = fake_sim_report(&dir, r#"{"passed": true, "diagnostics": []}"#);
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "no limits checked", "{stage:#}");
     }
 
     #[test]

@@ -73,7 +73,9 @@ The human output prints the same four lists on one coverage line. A part the
 emitter could not wire is named by its diagnostic; it is not added to
 `unmodelled`, which is specifically about unusable models. `limits_checked`
 counts the measures that had a `min` or `max`; zero means the run checked no
-limits, even if its measures are reported as `MEASURED`.
+limits, even if its measures are reported as `MEASURED`. `synth check` reports
+that case as `unknown`, so a sidecar that asserts nothing cannot turn the check
+green.
 
 ### Check integration
 
@@ -84,12 +86,14 @@ same stage.
 | Status | Meaning | Blocks `synth check`? |
 | ------ | ------- | --------------------- |
 | `skipped` | No sidecar, or the source gate failed. | No |
-| `pass` | The testbench ran and every blocking diagnostic is clear. | No |
+| `pass` | The testbench ran, at least one measure had a `min` or `max`, and every blocking diagnostic is clear. | No |
 | `fail` | A blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit measure. | Yes |
-| `unknown` | The sidecar exists but the simulator could not run: ngspice is missing, it timed out, the report was unreadable, or setup failed (for example the registry did not load). | Yes |
+| `unknown` | The sidecar exists but the simulator could not run (ngspice is missing, it timed out, the report was unreadable, or setup failed, for example the registry did not load), or it ran but checked no limits. | Yes |
 
 An unknown stage is not a pass: install ngspice or remove the sidecar
-deliberately. A sidecar that exists but cannot run blocks the check. The
+deliberately. A sidecar that exists but cannot run blocks the check, and so
+does one whose measures all lack a `min` or `max`: measuring a value is not
+evidence that it is right. The
 stage carries `testbench_sha256` so a pass is tied to the sidecar revision,
 not only the `.synth` source hash.
 

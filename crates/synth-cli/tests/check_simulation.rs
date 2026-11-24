@@ -239,6 +239,63 @@ fn an_out_of_limit_measure_makes_the_simulation_stage_fail() {
 }
 
 #[test]
+fn a_sidecar_that_checks_no_limits_is_unknown_not_pass() {
+    let dir = Scratch::new("no-limits");
+    let design = design_with_sidecar(&dir);
+    let sidecar = std::fs::read_to_string(dir.join("divider.sim.toml"))
+        .expect("read sidecar")
+        .replace("min = 5.7\n", "")
+        .replace("max = 6.3\n", "");
+    std::fs::write(dir.join("divider.sim.toml"), sidecar).expect("write sidecar");
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = run_check(&design, &stub);
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "unknown", "{report:#}");
+    assert_eq!(
+        simulation(&report)["reason"],
+        "no limits checked",
+        "{report:#}"
+    );
+    assert_eq!(
+        simulation(&report)["result"]["limits_checked"],
+        0,
+        "{report:#}"
+    );
+    assert_eq!(report["status"], "fail", "{report:#}");
+    assert!(!output.status.success(), "{report:#}");
+}
+
+#[test]
+fn a_sidecar_with_no_measures_fails_not_pass() {
+    let dir = Scratch::new("no-measures");
+    let design = dir.join("divider.synth");
+    std::fs::copy(example_design(), &design).expect("copy design");
+    std::fs::write(
+        dir.join("divider.sim.toml"),
+        "ground = \"GND\"\n\n[[source]]\nnet = \"VCC\"\nkind = \"dc\"\ndc = 12.0\n\n[analysis]\nop = true\n",
+    )
+    .expect("write sidecar");
+    let stub = stub_ngspice(&dir, "ok");
+
+    let output = run_check(&design, &stub);
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "fail", "{report:#}");
+    assert!(
+        simulation(&report)["result"]["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .any(|diagnostic| diagnostic["code"] == "E-SYNTH-SIM-007"),
+        "{report:#}"
+    );
+    assert_eq!(report["status"], "fail", "{report:#}");
+    assert!(!output.status.success(), "{report:#}");
+}
+
+#[test]
 fn fab_keeps_the_simulation_stage() {
     let dir = Scratch::new("fab");
     let design = design_with_sidecar(&dir);
