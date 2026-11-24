@@ -1,21 +1,22 @@
 # Qualification: Irrigation controller (Class A, case 1)
 
-**Status:** the board is routed (51 of 51 nets; KiCad reports 0 errors and 0 unconnected pads), and the exported KiCad files, a fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)). The routing and DRC figures below are from the latest export; other figures not listed there are from the earlier export.
+**Status:** the board is routed (51 of 51 nets; KiCad reports 0 errors and 0 unconnected pads), and the exported KiCad files, a fabrication package and the STEP model are committed ([`kicad/`](kicad/), [`fab/`](fab/), [`models/`](models/)). The figures in this document come from the same export.
 
 ## What was measured
 
-Routing and DRC figures come from the latest export.
+The figures come from the export this package was built from.
 
 | | |
 |---|---|
 | Board | 79.2 x 70.7 mm, 5599 mm2, two layers, 107 placed items (87 parts, and 20 mounting holes and test points), 51 nets; courtyard fill 27.8 % |
 | Routing | state `routed`, 51 of 51 nets connected, 648 segments and 474 vias in the file (438 of 0.6 mm over a 0.2 mm drill and 36 of 0.46 mm over 0.2 mm), 1663.8 mm of track |
 | KiCad DRC, `--refill-zones --severity-all` | 0 errors, 0 unconnected; 115 warnings: 107 `lib_footprint_issues`, 7 `silk_over_copper`, 1 `silk_overlap` |
+| Zone fill | The committed board carries refilled zones (`kicad-cli pcb drc --refill-zones --save-board`), and the Gerbers are plotted from that fill. `kicad-cli pcb drc` without a refill reports 0 errors and 0 unconnected items on it |
 | Router state | state `routed`, `fabrication_ready` true, no blocking reason, no via in a pad |
 | Trace width, as routed | `VIN_FUSED` 0.2 to 0.8 mm; `VALVE1_SW` and `VALVE2_SW` 0.8 mm; `+12V_VALVE` 0.2 to 0.8 mm; `+3V3` 0.2 to 0.4 mm; the other signals 0.2 mm |
 | Fine-pitch escape | `U1` (SOIC-8, exposed pad) and `U2` (LQFP-32) declare `escape { off }` in the source: their pads are routed from the surface, and no via sits in a pad |
 | BOM | 107 fitted lines, each with a manufacturer, MPN, distributor, order number and page, and 20 board features (mounting holes and test points) that are not parts ([`fab/bom.csv`](fab/bom.csv)) |
-| Schematic | `kicad/irrigation_controller.kicad_sch` is the root sheet with the design notes; the group sheets are not committed (`kicad/` holds only the root sheet, which contains no sub-sheet), so the other figures in this row are not properties of the shipped root schematic. They are from the full export: it had 13 group sheets, one per named group, no `OTHER` region, and KiCad's ERC, run with the symbol and footprint library tables configured, reported 0 errors and 5 warnings, explained below. The `+12V_VALVE` rail carries a `PWR_FLAG` |
+| Schematic | `kicad/irrigation_controller.kicad_sch` is the root sheet with the design notes. The ten group sheets are committed beside it (`BUCK_3V3`, `FLOW`, `I2C_SENSORS`, `LEDS`, `MCU`, `SOIL_1`, `SOIL_2`, `TEST_POINTS_AND_MOUNTING`, `VALVE_1` and `VALVE_2`), one per named group, with no `OTHER` region. KiCad's ERC reports 0 errors. Its warnings are library symbol and footprint-link warnings and one `label_multiple_wires`; their number depends on the configured library tables. The `+12V_VALVE` rail carries a `PWR_FLAG` |
 | STEP | [`models/irrigation_controller.step`](models/irrigation_controller.step), exported from the delivered board |
 
 
@@ -76,7 +77,7 @@ JeffMboya accepts these margins for the stated source: 12 V +/-5 % (12.6 V maxim
 | DRC with the library table | 0 errors, 0 unconnected, above. |
 | Crystal load | the FC-135 32.7680KF-AG0 has a 7 pF load. With 5 pF assumed for stray capacitance, CL = C1 x C2 / (C1 + C2) + 5 pF; C1 = C2 = 2 x (7 - 5) = 4 pF; the nearest E24 value 4.3 pF gives 7.15 pF. `C_X1` and `C_X2` are 4.3 pF. The 7 pF is from the Epson FC-135 datasheet and the LCSC listing; the 5 pF is an assumption, not confirmed (see "LED and crystal values"). |
 | Valve current | a 12 V solenoid at most 0.5 A: the `PWR12` class is 0.8 mm; the AO3400A (5.7 A on its listing) and the 1N5819HW flyback diode (1 A) are above it. Calculated from listing figures, not measured. |
-| Schematic references and groups | in the full export, every part is in a named group and there is no `OTHER` region; the 13 group sheets are not committed, so this is not checkable from the shipped root sheet. |
+| Schematic references and groups | every part is in a named group and there is no `OTHER` region. The ten group sheets are committed beside the root sheet. |
 | MP2307 divider | VFB 0.925 V (0.900 to 0.950 V, MPS datasheet); the divider and compensation are calculated from it. |
 | MP2307 compensation | MPS MP2307 datasheet Rev. 1.7, "Compensation Components": `R3 < 2 pi C2 (0.1 fS) VOUT / (GEA GCS VFB)` with GEA 820 uA/V, GCS 5.2 A/V, fS 340 kHz (300 to 380 kHz) and VFB 0.925 V puts the crossover below one tenth of the switching frequency. The output capacitance is 2 x 22 uF, 44 uF nominal and about 31 uF with the DC-bias derating of an X5R 1206 at 3.3 V (an assumption, not a measurement): `R3` below 7.9 k and 5.5 k respectively. `R_COMP` is 5.6 k, giving a crossover of 24 kHz at 44 uF and 34 kHz at 31 uF, 0.07 and 0.10 of fS. `C3 > 4 / (2 pi R3 fC)` is 4.7 nF at the 34 kHz crossover (3.3 nF), so `C_COMP` is 4.7 nF. The second capacitor `C6` is not fitted: the ESR zero of a ceramic output capacitor is far above fS / 2. |
 
