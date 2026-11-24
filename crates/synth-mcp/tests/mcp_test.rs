@@ -102,6 +102,28 @@ fn test_mcp_call_synth_search_registry() {
     assert!(content_text.contains("total_matches"));
 }
 
+/// A hard hint on a non-physical part must reach MCP clients too.
+#[test]
+fn test_mcp_validate_reports_non_physical_hard_hints() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_validate",
+            "arguments": {
+                "source": "board \"hint\" {\n  layers 2\n  component U1: ic \"stm32g030k8_lqfp32\" {\n    placement_hint { region centre priority: hard }\n  }\n}\n"
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content_text.contains("W-SYNTH-BOARD-005"),
+        "hard-hint check missing from synth_validate: {content_text}"
+    );
+}
+
 /// The same board-size estimate `synth validate` reports must reach MCP
 /// clients: an arbitrary 180 x 120 mm outline over one resistor leaves a huge
 /// dead board, and an agent has to see the warning.

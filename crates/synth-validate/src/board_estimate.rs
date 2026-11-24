@@ -11,12 +11,17 @@
 //! without the statement.
 
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, Location, Patch, PatchKind, Severity};
-use synth_ir::Board;
+use synth_ir::{
+    Board, Component, PlacementConstraint, PlacementEdge, PlacementPriority, PlacementRegion,
+};
 
 /// A declared outline this many times larger (by area) than the estimate is
 /// reported. 1.5x leaves room for a real mechanical or mating constraint while
 /// catching a size that was never computed from the parts.
 const OVERSIZE_AREA_FACTOR: f64 = 1.5;
+
+/// Stable code for a hard placement hint that is not a physical constraint.
+const HINT_CODE: &str = "W-SYNTH-BOARD-005";
 
 /// Courtyard area ÷ board area the fitted outline lands on.
 ///
@@ -138,4 +143,165 @@ pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
         .explanation_url(format!("synth.docs/diagnostics/{BOARD_ESTIMATE_CODE}"))
         .build(),
     ]
+}
+
+/// Report hard placement hints that are not physical constraints.
+///
+/// A connector edge or a mounting-hole corner is physical: the enclosure fixes
+/// it. A hard `near`, `region` or `edge` on anything else pins a part without a
+/// mechanical reason and blocks the compact placement. Measured on the gateway:
+/// 157.4 x 113.4 mm with the hints as written, 118.0 x 115.5 mm with the 90
+/// non-physical hard hints made soft (the hints' board is 31% larger by area).
+#[must_use]
+#[allow(clippy::similar_names)]
+pub fn hard_hint_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
+    let estimate = estimate_board_size(board);
+    let (board_w_mm, board_h_mm) = board_rect(board, &estimate);
+    let mut out = Vec::new();
+    for component in &board.components {
+        let Some(hint) = component.placement_hint.as_ref() else {
+            continue;
+        };
+        if hint.priority != PlacementPriority::Hard || is_physical(component, hint) {
+            continue;
+        }
+        let span = forced_span(board, component, board_w_mm, board_h_mm, 8)
+            .map_or_else(String::new, |span_mm| {
+                format!("it pins the part {span_mm:.1} mm from the far side; ")
+            });
+        let description = describe_hint(hint);
+        out.push(
+            DiagnosticBuilder::new(
+                HINT_CODE,
+                Severity::Warning,
+                "hard placement hint on a non-physical part",
+            )
+            .location(Location::from_span(file.to_string(), component.source_span))
+            .expected(
+                "a soft placement hint unless the part is physically pinned by a connector \
+                 edge or a mounting hole",
+            )
+            .found(format!(
+                "`{}` ({}) {description}",
+                component.refdes, component.kind,
+            ))
+            .message(format!(
+                "`{}` ({}) {description} {span}the parts need about {:.1} x {:.1} mm. \
+                 Make it soft unless it is physical (a connector edge or a mounting hole).",
+                component.refdes, component.kind, estimate.est_w_mm, estimate.est_h_mm,
+            ))
+            .explanation_url(format!("synth.docs/diagnostics/{HINT_CODE}"))
+            .build(),
+        );
+    }
+    out
+}
+
+/// The rectangle a hint's span is measured on: the declared outline when
+/// there is one, else the estimate.
+fn board_rect(board: &Board, estimate: &BoardEstimate) -> (f64, f64) {
+    board
+        .outline
+        .as_ref()
+        .map_or((estimate.est_w_mm, estimate.est_h_mm), |outline| {
+            (outline.width.to_mm(), outline.height.to_mm())
+        })
+}
+
+/// A connector's edge and a mounting hole's corner are the two hints a
+/// mechanical constraint fixes; every other hard hint is advisory.
+fn is_physical(component: &Component, hint: &PlacementConstraint) -> bool {
+    component.kind == "mounting_hole" || (component.kind == "connector" && hint.edge.is_some())
+}
+
+/// How far the hint pins a part from the opposite side, following a hard
+/// `near` chain to the hint that fixes the cluster's position.
+#[allow(clippy::similar_names)]
+fn forced_span(
+    board: &Board,
+    component: &Component,
+    board_w_mm: f64,
+    board_h_mm: f64,
+    depth: usize,
+) -> Option<f64> {
+    let hint = component.placement_hint.as_ref()?;
+    if hint.priority != PlacementPriority::Hard {
+        return None;
+    }
+    if let Some(span_mm) = hint_span(hint, board_w_mm, board_h_mm) {
+        return Some(span_mm);
+    }
+    let target_refdes = hint.near.as_deref()?;
+    if depth == 0 {
+        return None;
+    }
+    let target = board
+        .components
+        .iter()
+        .find(|candidate| candidate.refdes == target_refdes)?;
+    forced_span(board, target, board_w_mm, board_h_mm, depth - 1)
+}
+
+#[allow(clippy::similar_names)]
+fn hint_span(hint: &PlacementConstraint, board_w_mm: f64, board_h_mm: f64) -> Option<f64> {
+    if let Some(edge) = &hint.edge {
+        return Some(match edge {
+            PlacementEdge::Left | PlacementEdge::Right => board_w_mm,
+            PlacementEdge::Top | PlacementEdge::Bottom => board_h_mm,
+        });
+    }
+    hint.region
+        .as_ref()
+        .map(|region| region_span(region, board_w_mm, board_h_mm))
+}
+
+#[allow(clippy::similar_names)]
+fn region_span(region: &PlacementRegion, board_w_mm: f64, board_h_mm: f64) -> f64 {
+    match region {
+        PlacementRegion::TopLeft
+        | PlacementRegion::TopRight
+        | PlacementRegion::BottomLeft
+        | PlacementRegion::BottomRight => board_w_mm.hypot(board_h_mm),
+        PlacementRegion::Centre => (board_w_mm / 2.0).hypot(board_h_mm / 2.0),
+        PlacementRegion::TopEdge | PlacementRegion::BottomEdge => board_h_mm,
+        PlacementRegion::LeftEdge | PlacementRegion::RightEdge => board_w_mm,
+    }
+}
+
+fn describe_hint(hint: &PlacementConstraint) -> String {
+    let mut parts = Vec::new();
+    if let Some(edge) = &hint.edge {
+        parts.push(format!("edge: {}", edge_name(edge)));
+    }
+    if let Some(region) = &hint.region {
+        parts.push(format!("region: {}", region_name(region)));
+    }
+    if let Some(near) = &hint.near {
+        parts.push(format!("near: \"{near}\""));
+    }
+    parts.push("priority: hard".to_string());
+    format!("placement_hint {{ {} }}", parts.join(", "))
+}
+
+fn edge_name(edge: &PlacementEdge) -> &'static str {
+    match edge {
+        PlacementEdge::Top => "top",
+        PlacementEdge::Bottom => "bottom",
+        PlacementEdge::Left => "left",
+        PlacementEdge::Right => "right",
+    }
+}
+
+fn region_name(region: &PlacementRegion) -> &'static str {
+    match region {
+        PlacementRegion::TopLeft => "top_left",
+        PlacementRegion::TopRight => "top_right",
+        PlacementRegion::BottomLeft => "bottom_left",
+        PlacementRegion::BottomRight => "bottom_right",
+        PlacementRegion::Centre => "centre",
+        PlacementRegion::TopEdge => "top_edge",
+        PlacementRegion::BottomEdge => "bottom_edge",
+        PlacementRegion::LeftEdge => "left_edge",
+        PlacementRegion::RightEdge => "right_edge",
+    }
 }

@@ -1220,6 +1220,7 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
             diagnostics.extend(lowered.diagnostics);
             if let Some(board) = lowered.board.as_ref() {
                 diagnostics.extend(synth_validate::board_size_diagnostics(board, file_name));
+                diagnostics.extend(synth_validate::hard_hint_diagnostics(board, file_name));
                 diagnostics.extend(synth_validate::run_erc(board, file_name));
                 // Readability rules (E-SYNTH-SCHEM-*) alongside the
                 // electrical ones, matching what `synth validate` does

@@ -74,3 +74,35 @@ fn validate_warns_on_an_oversized_outline_and_informs_when_there_is_none() {
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
+
+/// A hard hint on a non-physical part must reach the CLI report, not just the
+/// library check.
+#[test]
+fn validate_warns_on_a_hard_hint_that_is_not_physical() {
+    let root = workspace_root();
+    let scratch = std::env::temp_dir().join(format!("synth_hard_hint_{}", std::process::id()));
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let source = scratch.join("hint.synth");
+    std::fs::write(
+        &source,
+        "board \"hint\" {\n  layers 2\n  component U1: ic \"stm32g030k8_lqfp32\" {\n    placement_hint { region centre priority: hard }\n  }\n}\n",
+    )
+    .expect("write hint fixture");
+
+    let payload = validate(&source, &root);
+    let warning = payload["diagnostics"]
+        .as_array()
+        .expect("diagnostics array")
+        .iter()
+        .find(|d| d["code"] == "W-SYNTH-BOARD-005")
+        .expect("a W-SYNTH-BOARD-005 diagnostic");
+    assert_eq!(warning["severity"], "warning");
+    assert!(
+        warning["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("soft")),
+        "{warning}"
+    );
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
