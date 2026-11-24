@@ -88,6 +88,31 @@ fn connector_edges_and_mounting_holes_are_not_reported() {
     assert!(hint_warnings(&board).is_empty());
 }
 
+/// A mounting hole is physical only when an edge or region holds it; a `near`
+/// hint chains it to another part without an enclosure reason.
+#[test]
+fn a_hard_near_hint_on_a_mounting_hole_is_reported() {
+    let board = lower(
+        r#"board "hole_near" {
+            layers 2
+            component U1: ic "stm32g030k8_lqfp32"
+            component H1: mounting_hole "mounting_hole_m2_5" {
+                placement_hint { near: "U1" priority: hard }
+            }
+        }"#,
+        "hole_near.synth",
+    );
+    let warnings = hint_warnings(&board);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0]
+            .found
+            .as_deref()
+            .is_some_and(|f| f.contains("H1")),
+        "{warnings:?}"
+    );
+}
+
 /// Only an edge hint makes a board-edge part physical; a region hint on the
 /// same kind still pins it without a mechanical reason.
 #[test]

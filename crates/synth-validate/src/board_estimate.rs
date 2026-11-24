@@ -249,7 +249,7 @@ fn board_rect(board: &Board, estimate: &BoardEstimate) -> (f64, f64) {
 /// The edge of a board-edge part and a mounting hole are the two hints a
 /// mechanical constraint fixes; every other hard hint is advisory.
 fn is_physical(component: &Component, hint: &PlacementConstraint) -> bool {
-    component.kind == "mounting_hole"
+    (component.kind == "mounting_hole" && (hint.edge.is_some() || hint.region.is_some()))
         || (crate::BOARD_EDGE_KINDS.contains(&component.kind.as_str()) && hint.edge.is_some())
 }
 

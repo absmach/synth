@@ -7,9 +7,9 @@
 
 A component declares `priority: hard`, which the placer may not relax. A
 board-edge connector (`connector`, `jack`, `receptacle`) with an `edge` hint
-and a mounting-hole corner are physical: the enclosure fixes them. A hard
-`near`, `region` or `edge` on any other part pins it without a mechanical
-reason and blocks the compact placement.
+and a mounting hole held by an `edge` or `region` hint are physical: the
+enclosure fixes them. A hard `near`, `region` or `edge` on any other part
+pins it without a mechanical reason and blocks the compact placement.
 
 A `receptacle` edge counts as physical here even though the placer's flush fit
 currently recognizes `connector` and `jack` only, so a receptacle may sit
