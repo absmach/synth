@@ -233,3 +233,72 @@ fn the_estimate_matches_the_fitted_outline_on_existing_boards() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     assert_eq!(seen, 3);
 }
+
+/// A declared 3:1 rectangle gets a 3:1 estimate of the same area, so a long
+/// thin board is not judged against a square.
+#[test]
+fn a_declared_aspect_reshapes_the_estimate_without_changing_its_area() {
+    let board = lower(
+        r#"board "wide" {
+            layers 2
+            outline 120mm x 40mm
+            component R1: resistor "r_generic_0603"
+            component R2: resistor "r_generic_0603"
+            component C1: capacitor "c_generic_0603"
+        }"#,
+        "wide.synth",
+    );
+    let shaped = estimate_board_size(&board);
+    let mut square_board = board.clone();
+    square_board.outline = None;
+    let square = estimate_board_size(&square_board);
+
+    assert!(
+        (shaped.est_area_mm2 - square.est_area_mm2).abs() < 1e-6,
+        "the reshape must keep the area: {} vs {}",
+        shaped.est_area_mm2,
+        square.est_area_mm2
+    );
+    assert!(
+        (shaped.est_w_mm / shaped.est_h_mm - 3.0).abs() < 1e-6,
+        "estimated aspect {:.3} is not 3:1",
+        shaped.est_w_mm / shaped.est_h_mm
+    );
+}
+
+/// The warning threshold compares areas, so the reshape must not change
+/// whether the oversized outline is reported.
+#[test]
+fn the_area_gate_is_unchanged_by_the_aspect() {
+    let board = gateway_board();
+    let shaped = estimate_board_size(&board);
+    let mut square_board = board.clone();
+    square_board.outline = None;
+    let square = estimate_board_size(&square_board);
+
+    assert!((shaped.est_area_mm2 - square.est_area_mm2).abs() < 1e-6);
+    assert!(
+        board_size_diagnostics(&board, "gateway_estimate.synth")
+            .iter()
+            .any(|d| d.code == "W-SYNTH-BOARD-004" && d.severity == Severity::Warning)
+    );
+}
+
+#[test]
+fn the_info_says_the_estimate_is_at_a_square_aspect() {
+    let mut board = gateway_board();
+    board.outline = None;
+    let diagnostics = board_size_diagnostics(&board, "square.synth");
+    let info = diagnostics
+        .iter()
+        .find(|d| d.code == "W-SYNTH-BOARD-004")
+        .expect("board-size info");
+    assert!(
+        info.message
+            .as_deref()
+            .unwrap_or_default()
+            .contains("square aspect"),
+        "{:?}",
+        info.message
+    );
+}

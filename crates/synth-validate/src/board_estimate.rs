@@ -49,8 +49,10 @@ pub struct BoardEstimate {
     pub est_h_mm: f64,
 }
 
-/// Estimate the square board the components need: their courtyard area at the
-/// fill a fitted board lands on, plus the tight rim the export fits round them.
+/// Estimate the board the components need: their courtyard area at the fill a
+/// fitted board lands on, plus the tight rim the export fits round them. The
+/// area is the gate; a declared outline reshapes the width and height to its
+/// aspect ratio, and a board without one is reported square.
 #[must_use]
 #[allow(clippy::similar_names)]
 pub fn estimate_board_size(board: &Board) -> BoardEstimate {
@@ -68,12 +70,27 @@ pub fn estimate_board_size(board: &Board) -> BoardEstimate {
 
     let side_mm = (total_courtyard_mm2 / ESTIMATE_FILL_RATIO).sqrt();
     let rim_mm = synth_place::tight_edge_margin_mm(board);
-    let est_w_mm = side_mm + 2.0 * rim_mm;
-    let est_h_mm = side_mm + 2.0 * rim_mm;
+    let square_side_mm = side_mm + 2.0 * rim_mm;
+    let est_area_mm2 = square_side_mm * square_side_mm;
+    let (est_w_mm, est_h_mm) =
+        board
+            .outline
+            .as_ref()
+            .map_or((square_side_mm, square_side_mm), |outline| {
+                let aspect = outline.width.to_mm() / outline.height.to_mm();
+                if aspect.is_finite() && aspect > 0.0 {
+                    (
+                        (est_area_mm2 * aspect).sqrt(),
+                        (est_area_mm2 / aspect).sqrt(),
+                    )
+                } else {
+                    (square_side_mm, square_side_mm)
+                }
+            });
 
     BoardEstimate {
         total_courtyard_mm2,
-        est_area_mm2: est_w_mm * est_h_mm,
+        est_area_mm2,
         est_w_mm,
         est_h_mm,
     }
@@ -93,8 +110,8 @@ pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
                     estimate.est_w_mm, estimate.est_h_mm, estimate.est_area_mm2,
                 ))
                 .message(format!(
-                    "the parts need about {:.1} x {:.1} mm at the fitted fill; \
-                 placement fits the outline to them",
+                    "the parts need about {:.1} x {:.1} mm at a square aspect; \
+                     placement fits the outline to them",
                     estimate.est_w_mm, estimate.est_h_mm,
                 ))
                 .explanation_url(format!("synth.docs/diagnostics/{BOARD_ESTIMATE_CODE}"))
