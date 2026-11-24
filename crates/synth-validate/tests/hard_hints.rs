@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! Report-only check for hard placement hints that are not physical
-//! constraints. Measured on the gateway: the same parts fit 157.4 x 113.4 mm
-//! with the hints as written and 118.0 x 115.5 mm once every non-connector,
-//! non-mounting-hole hint is soft, so the hints enlarge the board by 31% of
-//! area.
+//! Report-only check for hard placement hints that fix a board span. A hard
+//! `near` at a pin is electrical proximity and stays hard; a hard `edge` or
+//! `region` on a part with no mechanical reason, or a `near` chain ending in
+//! one, pins the cluster against a board side. Measured on the gateway: 157.4 x
+//! 113.4 mm (17 849 mm2) with the hints as written, unchanged with the 38
+//! span-fixing hints soft. Softening every non-physical hard hint instead also
+//! relaxes the electrical `near` hints at pins, which this rule leaves hard.
 
 use std::path::{Path, PathBuf};
 use synth_diagnostics::Severity;
@@ -60,7 +62,7 @@ fn a_hard_region_hint_on_an_ic_is_reported_with_the_estimate() {
     assert!(message.contains("priority: hard"), "{message}");
     assert!(message.contains("parts need about"), "{message}");
     assert!(message.contains("soft"), "{message}");
-    assert!(message.contains("physical"), "{message}");
+    assert!(message.contains("enclosure"), "{message}");
     assert!(warning.expected.is_some(), "{warning:?}");
     assert!(warning.found.is_some(), "{warning:?}");
 }
@@ -88,10 +90,10 @@ fn connector_edges_and_mounting_holes_are_not_reported() {
     assert!(hint_warnings(&board).is_empty());
 }
 
-/// A mounting hole is physical only when an edge or region holds it; a `near`
-/// hint chains it to another part without an enclosure reason.
+/// A plain `near` does not fix a board span, so a mounting hole chained to a
+/// part with no span-fixing hint is not reported either.
 #[test]
-fn a_hard_near_hint_on_a_mounting_hole_is_reported() {
+fn a_plain_hard_near_on_a_mounting_hole_is_not_reported() {
     let board = lower(
         r#"board "hole_near" {
             layers 2
@@ -102,15 +104,7 @@ fn a_hard_near_hint_on_a_mounting_hole_is_reported() {
         }"#,
         "hole_near.synth",
     );
-    let warnings = hint_warnings(&board);
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
-    assert!(
-        warnings[0]
-            .found
-            .as_deref()
-            .is_some_and(|f| f.contains("H1")),
-        "{warnings:?}"
-    );
+    assert!(hint_warnings(&board).is_empty());
 }
 
 /// Only an edge hint makes a board-edge part physical; a region hint on the

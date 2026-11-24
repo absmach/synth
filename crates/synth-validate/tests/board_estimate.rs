@@ -8,7 +8,9 @@ use synth_diagnostics::Severity;
 use synth_geometry::nm_to_mm;
 use synth_ir::board::BoardOutline;
 use synth_ir::{Board, Length};
-use synth_validate::board_estimate::{board_size_diagnostics, estimate_board_size};
+use synth_validate::board_estimate::{
+    board_size_diagnostics, estimate_board_size, hard_hint_diagnostics,
+};
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -396,4 +398,134 @@ fn a_zero_height_outline_falls_back_to_a_square_estimate() {
         "{estimate:?}"
     );
     assert!(estimate.est_area_mm2 > 0.0);
+}
+
+fn hint_warnings(board: &Board) -> Vec<synth_diagnostics::Diagnostic> {
+    hard_hint_diagnostics(board, "hints.synth")
+        .into_iter()
+        .filter(|d| d.code == "W-SYNTH-BOARD-005")
+        .collect()
+}
+
+/// A hard `near` binds a decoupling capacitor to its supply pin. It is
+/// electrical proximity, not a board span, so it is not reported.
+#[test]
+fn a_hard_near_on_a_pin_is_not_reported() {
+    let board = lower(
+        r#"board "pin" {
+            layers 2
+            component U1: ic "stm32g030k8_lqfp32"
+            component C1: capacitor "c_generic_0603" {
+                placement_hint { near: "U1.vdd" priority: hard }
+            }
+        }"#,
+        "pin.synth",
+    );
+    let warnings = hint_warnings(&board);
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+/// An edge on an IC is not physical: a hard `near` that chains to it pins the
+/// cluster against a free board side and is reported on the follower.
+#[test]
+fn a_hard_near_chain_ending_in_a_non_physical_edge_is_reported() {
+    let board = lower(
+        r#"board "chain" {
+            layers 2
+            outline 180mm x 120mm
+            component U1: ic "stm32g030k8_lqfp32" {
+                placement_hint { edge right priority: hard }
+            }
+            component C1: capacitor "c_generic_0603" {
+                placement_hint { near: "U1" priority: hard }
+            }
+        }"#,
+        "chain.synth",
+    );
+    let warnings = hint_warnings(&board);
+    let c1 = warnings
+        .iter()
+        .find(|d| d.found.as_deref().is_some_and(|f| f.contains("C1")))
+        .unwrap_or_else(|| panic!("no C1 chain warning: {warnings:?}"));
+    let message = c1.message.as_deref().unwrap_or_default();
+    assert!(message.contains("follows a part pinned"), "{message}");
+    assert!(message.contains("180.0 mm"), "{message}");
+}
+
+/// A hard `near` at a connector edge follows a physical constraint, not a free
+/// board side; the protection part at its connector stays hard and unwarned.
+#[test]
+fn a_hard_near_chain_to_a_physical_edge_is_not_reported() {
+    let board = lower(
+        r#"board "physical_chain" {
+            layers 2
+            component J1: connector "header_1x4" {
+                placement_hint { edge left priority: hard }
+            }
+            component D1: diode "d_schottky" {
+                placement_hint { near: "J1" priority: hard }
+            }
+        }"#,
+        "physical_chain.synth",
+    );
+    let warnings = hint_warnings(&board);
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+/// A connector edge and a mounting hole are physical however the hint is
+/// worded; neither is reported.
+#[test]
+fn hard_edges_on_physical_parts_are_not_reported() {
+    let board = lower(
+        r#"board "physical" {
+            layers 2
+            component J1: connector "header_1x4" {
+                placement_hint { edge left priority: hard }
+            }
+            component H1: mounting_hole "mounting_hole_m2_5" {
+                placement_hint { edge top priority: hard }
+            }
+            component H2: mounting_hole "mounting_hole_m2_5" {
+                placement_hint { region bottom_right priority: hard }
+            }
+        }"#,
+        "physical.synth",
+    );
+    let warnings = hint_warnings(&board);
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+/// Absent, soft and target-less hints neither panic nor warn; a region on a
+/// non-physical part still fixes a span and is reported.
+#[test]
+fn odd_hints_are_handled() {
+    let board = lower(
+        r#"board "odd" {
+            layers 2
+            outline 180mm x 120mm
+            component R1: resistor "r_generic_0603"
+            component C1: capacitor "c_generic_0603" {
+                placement_hint { near: "R1" priority: soft }
+            }
+            component C2: capacitor "c_generic_0603" {
+                placement_hint { near: "R99" priority: hard }
+            }
+            component C3: capacitor "c_generic_0603" {
+                placement_hint { near: "R1" priority: hard }
+            }
+            component U1: ic "stm32g030k8_lqfp32" {
+                placement_hint { region centre priority: hard }
+            }
+        }"#,
+        "odd.synth",
+    );
+    let warnings = hint_warnings(&board);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(
+        warnings[0]
+            .found
+            .as_deref()
+            .is_some_and(|f| f.contains("U1")),
+        "{warnings:?}"
+    );
 }

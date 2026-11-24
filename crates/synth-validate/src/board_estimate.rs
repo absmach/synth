@@ -20,7 +20,7 @@ use synth_ir::{
 /// catching a size that was never computed from the parts.
 const OVERSIZE_AREA_FACTOR: f64 = 1.5;
 
-/// Stable code for a hard placement hint that is not a physical constraint.
+/// Stable code for a hard placement hint that fixes a board span.
 const HINT_CODE: &str = "W-SYNTH-BOARD-005";
 
 /// Courtyard area ÷ the pre-rim board area a fitted outline lands on.
@@ -30,11 +30,11 @@ const HINT_CODE: &str = "W-SYNTH-BOARD-005";
 /// this ratio is applied. Calibrated on
 /// four boards: sensor_logger, secure_tracker and feather_m4_express (square
 /// estimates, all within 20% of the fitted area) and the gateway (120 parts,
-/// 1.5:1 declared aspect): its export fit is 157.4 x 113.4 mm with the hard
-/// hints as written and 118.0 x 115.5 mm with the non-physical hard hints
-/// soft. 0.26 puts the gateway estimate 23% under the first and within 2% of
-/// the second, without overfitting any one board. 0.32 was the first guess and
-/// missed the gateway by 37%.
+/// 1.5:1 declared aspect): its export fit is 157.4 x 113.4 mm with the hints
+/// as written, and softening the only span-fixing hints changes nothing. 0.26
+/// puts the gateway estimate at 144.2 x 96.1 mm (13 859 mm2), 22% under that
+/// fit, without overfitting any one board. 0.32 was the first guess and missed
+/// the gateway by 37%.
 const ESTIMATE_FILL_RATIO: f64 = 0.26;
 
 /// Stable code for both the oversized-outline warning and the estimate info.
@@ -173,13 +173,20 @@ pub fn board_size_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
     ]
 }
 
-/// Report hard placement hints that are not physical constraints.
+/// Report hard placement hints that fix a board span.
 ///
-/// A connector edge or a mounting-hole corner is physical: the enclosure fixes
-/// it. A hard `near`, `region` or `edge` on anything else pins a part without a
-/// mechanical reason and blocks the compact placement. Measured on the gateway:
-/// 157.4 x 113.4 mm with the hints as written, 118.0 x 115.5 mm with the 90
-/// non-physical hard hints made soft (the hints' board is 31% larger by area).
+/// A hard `near` binds a part to its anchor — a decoupling capacitor at its
+/// supply pin, the switch loop at a regulator — without fixing where the
+/// cluster sits, so it is electrical, not mechanical, and is not reported. A
+/// connector edge and a mounting-hole corner are physical: the enclosure fixes
+/// them. What blocks compaction is a hard `edge` or `region` on any other part,
+/// or a `near` chain that ends in one, because it pins the cluster against a
+/// board side.
+///
+/// Measured on the gateway: 157.4 x 113.4 mm with the hints as written, and
+/// the same with only the 38 span-fixing hints soft. Softening every
+/// non-physical hard hint instead also relaxes the electrical `near` hints at
+/// pins, which this rule leaves hard.
 #[must_use]
 #[allow(clippy::similar_names)]
 pub fn hard_hint_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
@@ -193,39 +200,36 @@ pub fn hard_hint_diagnostics(board: &Board, file: &str) -> Vec<Diagnostic> {
         if hint.priority != PlacementPriority::Hard || is_physical(component, hint) {
             continue;
         }
-        let span = forced_span(board, component, board_w_mm, board_h_mm, 8).map_or_else(
-            String::new,
-            |span| {
-                if span.via_near {
-                    format!(
-                        "it follows a part pinned {:.1} mm from the far side; ",
-                        span.mm
-                    )
-                } else {
-                    format!("it pins the part {:.1} mm from the far side; ", span.mm)
-                }
-            },
-        );
+        let Some(span) = forced_span(board, component, board_w_mm, board_h_mm, 8) else {
+            continue; // a plain `near` is electrical proximity, not a board span
+        };
+        let span = if span.via_near {
+            format!(
+                "it follows a part pinned {:.1} mm from the far side; ",
+                span.mm
+            )
+        } else {
+            format!("it pins the part {:.1} mm from the far side; ", span.mm)
+        };
         let description = describe_hint(hint);
         out.push(
             DiagnosticBuilder::new(
                 HINT_CODE,
                 Severity::Warning,
-                "hard placement hint on a non-physical part",
+                "hard placement hint fixes the board span",
             )
             .location(Location::from_span(file.to_string(), component.source_span))
             .expected(
-                "a soft placement hint unless the part is physically pinned by a connector \
-                 edge or a mounting hole",
+                "a soft placement hint unless an enclosure or mating constraint fixes the part",
             )
             .found(format!(
                 "`{}` ({}) {description}",
                 component.refdes, component.kind,
             ))
             .message(format!(
-                "`{}` ({}) sets {description}, which is not a physical constraint; {span}\
-                 the parts need about {:.1} x {:.1} mm. Make it soft unless it is \
-                 physical (a connector edge or a mounting hole).",
+                "`{}` ({}) sets {description}, which fixes a board span; {span}\
+                 the parts need about {:.1} x {:.1} mm. Make it soft unless an \
+                 enclosure or mating constraint fixes it.",
                 component.refdes, component.kind, estimate.est_w_mm, estimate.est_h_mm,
             ))
             .explanation_url(format!("synth.docs/diagnostics/{HINT_CODE}"))
@@ -247,7 +251,7 @@ fn board_rect(board: &Board, estimate: &BoardEstimate) -> (f64, f64) {
 }
 
 /// The edge of a board-edge part and a mounting hole are the two hints a
-/// mechanical constraint fixes; every other hard hint is advisory.
+/// mechanical constraint fixes; an edge or region anywhere else fixes a span.
 fn is_physical(component: &Component, hint: &PlacementConstraint) -> bool {
     (component.kind == "mounting_hole" && (hint.edge.is_some() || hint.region.is_some()))
         || (crate::BOARD_EDGE_KINDS.contains(&component.kind.as_str()) && hint.edge.is_some())
@@ -275,7 +279,9 @@ fn forced_span(
         return None;
     }
     if let Some(span_mm) = hint_span(hint, board_w_mm, board_h_mm) {
-        return Some(ForcedSpan {
+        // A connector edge or mounting hole is where the enclosure puts it; a
+        // cluster that follows it is not pinned against a free board side.
+        return (!is_physical(component, hint)).then_some(ForcedSpan {
             mm: span_mm,
             via_near: false,
         });

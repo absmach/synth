@@ -102,7 +102,7 @@ fn test_mcp_call_synth_search_registry() {
     assert!(content_text.contains("total_matches"));
 }
 
-/// A hard hint on a non-physical part must reach MCP clients too.
+/// A hard hint that fixes a board span must reach MCP clients too.
 #[test]
 fn test_mcp_validate_reports_non_physical_hard_hints() {
     let req = json!({
@@ -1455,15 +1455,19 @@ fn test_mcp_route_is_quiet_when_the_profile_offers_the_process() {
 
 /// The standing instructions must keep an agent from pinning a board size or a
 /// placement the user never asked for: a declared `outline` that is a guess
-/// leaves dead board, and a `hard` hint that is not physical blocks compaction.
+/// leaves dead board, and an `edge`/`region` hint with no mechanical reason
+/// fixes a board span. Electrical proximity at a pin stays hard.
 #[test]
-fn test_mcp_instructions_forbid_guessed_outlines_and_non_physical_hard_hints() {
+fn test_mcp_instructions_forbid_guessed_outlines_and_span_fixing_hard_hints() {
     for needle in [
         "Never declare `outline <width> x <height>`",
         "the user gave the size or a mating constraint",
         "state why on the statement",
         "`priority: hard`",
-        "physical constraints only",
+        "physical and electrical proximity",
+        "must sit at a pin",
+        "fixes a board span",
+        "enclosure or mating constraint",
     ] {
         assert!(
             SERVER_INSTRUCTIONS.contains(needle),

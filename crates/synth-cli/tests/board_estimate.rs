@@ -75,7 +75,7 @@ fn validate_warns_on_an_oversized_outline_and_informs_when_there_is_none() {
     let _ = std::fs::remove_dir_all(&scratch);
 }
 
-/// A hard hint on a non-physical part must reach the CLI report, not just the
+/// A hard hint that fixes a board span must reach the CLI report, not just the
 /// library check.
 #[test]
 fn validate_warns_on_a_hard_hint_that_is_not_physical() {
