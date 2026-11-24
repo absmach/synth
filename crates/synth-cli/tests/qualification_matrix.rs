@@ -532,7 +532,6 @@ fn reference_boards_match_their_declared_qualification() {
                     board.manufacturing.as_deref().unwrap_or("absent")
                 );
             }
-            eprintln!("see docs/qualification-handoff.md for what this blocks");
         }
     }
 

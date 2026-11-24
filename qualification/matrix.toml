@@ -22,9 +22,8 @@ fab_command = "synth check <board> --fab --json"
 # stage could not run rather than the runner carried the wrong KiCad.
 #
 # `status` is unmoved by any of that. Clearing the gate is a measurement;
-# promotion to `qualified` takes the human review in
-# `docs/qualification-handoff.md`, so every positive board here stays
-# `experimental`.
+# promotion to `qualified` takes a human review, so every positive board
+# here stays `experimental`.
 
 [[board]]
 id = "hello"
