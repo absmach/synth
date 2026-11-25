@@ -504,6 +504,7 @@ async fn serve<R, W, H>(
 /// Uses plain newline-delimited JSON (one message per line), which is what
 /// Antigravity, Claude Desktop, and Cursor all use for stdio MCP servers.
 pub async fn run_stdio_server(default_registry: Option<PathBuf>) -> anyhow::Result<()> {
+    crate::call_log::mark_server_start();
     let reader = BufReader::new(tokio::io::stdin()).lines();
     serve(
         reader,
@@ -649,6 +650,7 @@ fn sse_router(dispatcher: Arc<Dispatcher>) -> Router {
 
 /// Run MCP Server over HTTP (SSE / REST transport).
 pub async fn run_sse_server(port: u16, default_registry: Option<PathBuf>) -> anyhow::Result<()> {
+    crate::call_log::mark_server_start();
     let dispatcher = Arc::new(Dispatcher::new(
         Arc::new(move |req| handle_jsonrpc_request(req, default_registry.as_deref())),
         HEARTBEAT_INTERVAL,

@@ -9,6 +9,7 @@
 //! tools to AI agents and LLM clients.
 
 pub mod audit;
+pub mod call_log;
 pub mod cloud_endpoint;
 mod findings;
 pub mod server;

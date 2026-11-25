@@ -638,6 +638,26 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 "required": ["file_path"]
             }),
         },
+        McpToolInfo {
+            name: "synth_recent_calls".into(),
+            description: "List the most recent tool calls from the server audit log, newest first. Use it to see which call failed and why before you retry. Each entry has call_id, tool, timestamp, duration_ms, status (ok, error or refused), error_kind and a short message. Returns an empty list with a note when the audit log is missing or disabled. Malformed log lines are skipped and counted.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Number of calls to return. Default 20, maximum 200." },
+                    "tool": { "type": "string", "description": "Only return calls to this tool name" },
+                    "status": { "type": "string", "enum": ["ok", "error", "refused"], "description": "Only return calls with this status" }
+                }
+            }),
+        },
+        McpToolInfo {
+            name: "synth_server_stats".into(),
+            description: "Report cheap server statistics from the audit log: server version, uptime, audit log path, total, error and refused call counts, per-tool call and error counts, and the time since the last call. Returns zero counts with a note when the audit log is missing or disabled.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {}
+            }),
+        },
     ]
 }
 
@@ -651,6 +671,8 @@ pub fn call_tool(
         "synth_language_reference" => Ok(execute_language_reference(args)),
         "synth_search_registry" => execute_search_registry(args, default_registry),
         "synth_validate" => execute_validate(args, default_registry),
+        "synth_recent_calls" => crate::call_log::execute_recent_calls(args),
+        "synth_server_stats" => crate::call_log::execute_server_stats(args),
         "synth_erc_report" => execute_erc_report(args, default_registry),
         "synth_query_knowledge" => execute_query_knowledge(args, default_registry),
         "synth_drc_report" => execute_drc_report(args, default_registry),

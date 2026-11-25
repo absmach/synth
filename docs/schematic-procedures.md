@@ -317,6 +317,19 @@ The MCP server exposes the closed loop an agent runs to make a schematic _readab
 
 The gate order for a handoff is: `synth_validate` (zero blocking) → placement review → **render inspection** → `synth_export` → `kicad-cli sch erc` (zero errors).
 
+### 6.2 Inspect the call log (MCP)
+
+Two tools let an agent read the server's own audit log (`audit.jsonl`). Use them to find out which call failed before you retry it. Neither tool adds fields to the log, and neither returns tool arguments.
+
+| Tool                 | Purpose                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `synth_recent_calls` | Return the last calls, newest first: `call_id`, `tool`, `timestamp`, `duration_ms`, `status`, `error_kind`, `message` |
+| `synth_server_stats` | Return version, uptime, log path, total and error counts, per-tool counts, and time since the last call          |
+
+To list recent failures, call `synth_recent_calls` with `status` set to `error`. The other filter is `tool`. `limit` is an integer from 1 to 200 and defaults to 20. `status` is `ok`, `error` or `refused`; any other value is refused.
+
+`call_id` is the line number in the log. `error_kind`, `message` and `design_hash` are `null` or absent unless the log entry records them under `metadata`. A message is cut to 200 characters. If the log is missing or `SYNTH_AUDIT_LOG` is empty, both tools return an empty result with a `note`. They count lines they cannot parse in `malformed_lines`.
+
 ---
 
 ## 7. Where the code lives
