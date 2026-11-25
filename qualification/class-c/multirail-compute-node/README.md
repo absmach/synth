@@ -10,112 +10,112 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ### Parts
 
-| Group | Parts |
-|---|---|
-| DC input (5 to 12 V) | `J2` 1x2 header; `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 16 V); `D1` Littelfuse SMAJ15A TVS; `D2` Vishay SS36 Schottky reverse-blocking diode (60 V, 0.75 V at 3 A) |
-| USB input | `J1` Korean Hroparts TYPE-C-31-M-12 receptacle, flush on the left edge, 5 V only (D+ and D- go to the MCU); `R11` and `R12` 5.1 k CC pull-downs; `F2` Bourns MF-MSMF110/16-2; `D3` Nexperia PTVS6V0S1UR; `D4` Diodes 1N5819HW-7-F ORs VBUS into the buck input (40 V, 450 mV at 1 A); `D5` and `D6` Nexperia PESD5V0S1BA on D+ and D-; `D11` and `D12` the same part on CC1 and CC2; `C30` |
-| Buck 3.6 V | `U1` Texas Instruments LMR33640ADDA (3.8 to 36 V in, 4 A, internal compensation, EN tied to VIN); `L1` Bourns SRN6045TA-6R8M 6.8 uH (Isat 5.7 A, Idc 3.6 A); input `C1`, `C2` 10 uF 25 V and `C3` 220 nF; output `C4`, `C5` 22 uF 25 V; `C6` 100 nF bootstrap; `C7` 1 uF VCC bypass; feedback divider `R2` 10 k and `R3` 3.83 k; `R1` pulls PG up |
-| 3.3 V rail | `U2` TI LP5907MFX-3.3 (3.3 V, 250 mA) with `C8`, `C9` |
-| Load switch | `U5` TI TPS22918DBVR (53 mohm at 3.3 V) with `C12`, `C13` (1 nF, rise time) and `C14`; enable delay `R16` 100 k and `C17` 100 nF |
-| 1.8 V rail | `U3` Diodes AP2112K-1.8 (600 mA, no minimum load) behind the switch, with `C10`, `C11` |
-| 1.2 V rail | `U4` TI TLV70012DDCR (1.2 V, 200 mA, DDC package) enabled by the 1.8 V rail, with `C15`, `C16` |
-| Compute core | `U6` STMicroelectronics STM32F103C8T6 (LQFP-48) with decoupling `C20` to `C25`; `Y1` JYJE 3TJ480000FYLBC 8 MHz crystal with `C26`, `C27` 10 pF; reset `R9`, `C28`, `SW1`; `R10` pulls BOOT0 low; `R13` 1.5 k USB D+ pull-up; `J3` 1x5 SWD header |
-| Memory | `U7` Winbond W25Q128JVSIQ, SOIC-8 208 mil, on SPI1 (`PA4` to `PA7`) with `C29`, `R14`, `R15` |
-| Indicators | `D7` red (3.6 V), `D8` green (3.3 V), `D9` and `D10` yellow user LEDs, with `R5` to `R8` |
-| Expansion | `J4` Harwin M20-9990846 1x8 header: 3.6 V gated, 3.3 V, 1.8 V, 1.2 V, two GPIOs, two grounds |
-| Fabrication features | Test points `TP1` to `TP9`; fiducials `FID1` to `FID3`; two M2.5 mounting holes |
+| Group                | Parts                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| DC input (5 to 12 V) | `J2` 1x2 header; `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 16 V); `D1` Littelfuse SMAJ15A TVS; `D2` Vishay SS36 Schottky reverse-blocking diode (60 V, 0.75 V at 3 A)                                                                                                                                                                                                                       |
+| USB input            | `J1` Korean Hroparts TYPE-C-31-M-12 receptacle, flush on the left edge, 5 V only (D+ and D- go to the MCU); `R11` and `R12` 5.1 k CC pull-downs; `F2` Bourns MF-MSMF110/16-2; `D3` Nexperia PTVS6V0S1UR; `D4` Diodes 1N5819HW-7-F ORs VBUS into the buck input (40 V, 450 mV at 1 A); `D5` and `D6` Nexperia PESD5V0S1BA on D+ and D-; `D11` and `D12` the same part on CC1 and CC2; `C30` |
+| Buck 3.6 V           | `U1` Texas Instruments LMR33640ADDA (3.8 to 36 V in, 4 A, internal compensation, EN tied to VIN); `L1` Bourns SRN6045TA-6R8M 6.8 uH (Isat 5.7 A, Idc 3.6 A); input `C1`, `C2` 10 uF 25 V and `C3` 220 nF; output `C4`, `C5` 22 uF 25 V; `C6` 100 nF bootstrap; `C7` 1 uF VCC bypass; feedback divider `R2` 10 k and `R3` 3.83 k; `R1` pulls PG up                                          |
+| 3.3 V rail           | `U2` TI LP5907MFX-3.3 (3.3 V, 250 mA) with `C8`, `C9`                                                                                                                                                                                                                                                                                                                                      |
+| Load switch          | `U5` TI TPS22918DBVR (53 mohm at 3.3 V) with `C12`, `C13` (1 nF, rise time) and `C14`; enable delay `R16` 100 k and `C17` 100 nF                                                                                                                                                                                                                                                           |
+| 1.8 V rail           | `U3` Diodes AP2112K-1.8 (600 mA, no minimum load) behind the switch, with `C10`, `C11`                                                                                                                                                                                                                                                                                                     |
+| 1.2 V rail           | `U4` TI TLV70012DDCR (1.2 V, 200 mA, DDC package) enabled by the 1.8 V rail, with `C15`, `C16`                                                                                                                                                                                                                                                                                             |
+| Compute core         | `U6` STMicroelectronics STM32F103C8T6 (LQFP-48) with decoupling `C20` to `C25`; `Y1` JYJE 3TJ480000FYLBC 8 MHz crystal with `C26`, `C27` 10 pF; reset `R9`, `C28`, `SW1`; `R10` pulls BOOT0 low; `R13` 1.5 k USB D+ pull-up; `J3` 1x5 SWD header                                                                                                                                           |
+| Memory               | `U7` Winbond W25Q128JVSIQ, SOIC-8 208 mil, on SPI1 (`PA4` to `PA7`) with `C29`, `R14`, `R15`                                                                                                                                                                                                                                                                                               |
+| Indicators           | `D7` red (3.6 V), `D8` green (3.3 V), `D9` and `D10` yellow user LEDs, with `R5` to `R8`                                                                                                                                                                                                                                                                                                   |
+| Expansion            | `J4` Harwin M20-9990846 1x8 header: 3.6 V gated, 3.3 V, 1.8 V, 1.2 V, two GPIOs, two grounds                                                                                                                                                                                                                                                                                               |
+| Fabrication features | Test points `TP1` to `TP9`; fiducials `FID1` to `FID3`; two M2.5 mounting holes                                                                                                                                                                                                                                                                                                            |
 
 ### Layout
 
-| Item | Value |
-|---|---|
-| Outline | 85.0 x 63.0 mm |
-| Copper layers | 4 |
-| Stackup | 1.59 mm total (board file); `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled, capped vias for the exposed-pad vias); JLCPCB 7628 stack, 1.065 mm core |
-| Parts in the BOM | 85 lines: 71 parts and 14 board features (test points, fiducials, mounting holes) |
-| Parts placed in the CPL | 74 |
-| Nets | 42, all routed |
-| Track segments | 434 |
-| Vias | 90: 23 x 0.46/0.2 mm and 67 x 0.6/0.3 mm |
-| Track length | 1285.9 mm |
-| Zones and planes | `GND` poured on all four layers; the rails are tracks, not planes; `hot_buck` keepout rule area on `U1`; 2.75 mm screw-head zones on `H1` and `H2` |
-| Fab package | `fab/gerbers.zip` (16 files), `fab/bom.csv`, `fab/cpl.csv`; every file is in `SHA256SUMS` |
+| Item                    | Value                                                                                                                                                                         |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outline                 | 85.0 x 63.0 mm                                                                                                                                                                |
+| Copper layers           | 4                                                                                                                                                                             |
+| Stackup                 | 1.59 mm total (board file); `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled, capped vias for the exposed-pad vias); JLCPCB 7628 stack, 1.065 mm core |
+| Parts in the BOM        | 85 lines: 71 parts and 14 board features (test points, fiducials, mounting holes)                                                                                             |
+| Parts placed in the CPL | 74                                                                                                                                                                            |
+| Nets                    | 42, all routed                                                                                                                                                                |
+| Track segments          | 434                                                                                                                                                                           |
+| Vias                    | 90: 23 x 0.46/0.2 mm and 67 x 0.6/0.3 mm                                                                                                                                      |
+| Track length            | 1285.9 mm                                                                                                                                                                     |
+| Zones and planes        | `GND` poured on all four layers; the rails are tracks, not planes; `hot_buck` keepout rule area on `U1`; 2.75 mm screw-head zones on `H1` and `H2`                            |
+| Fab package             | `fab/gerbers.zip` (16 files), `fab/bom.csv`, `fab/cpl.csv`; every file is in `SHA256SUMS`                                                                                     |
 
 ### Checks
 
-| Check | Result | Notes |
-|---|---|---|
-| KiCad DRC (10.0.8, --refill-zones) | 0 errors, 4 warnings, 0 unconnected | The 4 warnings are `silk_over_copper` |
-| KiCad ERC (10.0.8) | 0 errors, 63 warnings, 0 unconnected | 62 `lib_symbol_issues`, 1 `lib_symbol_mismatch` |
-| KiCad DRC with the library tables | 85 `lib_footprint_mismatch` | The exporter cuts back the silkscreen (#425); pads and courtyards match the library |
-| Gerbers | Plotted from refilled zones | Plotted from the refilled zones of the committed board |
-| `synth validate` | 0 errors, 40 warnings | 17 are schematic-layout findings: 9 `E-SYNTH-SCHEM-003`, 7 `E-SYNTH-SCHEM-001`, 1 `E-SYNTH-SCHEM-004` |
-| Schematic-layout findings | Accepted as a group | They concern the drawing of the generated schematic, not the netlist or the board |
-| `synth validate` warning count | Varies | The count changes with the Synth version |
+| Check                              | Result                               | Notes                                                                                                 |
+| ---------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| KiCad DRC (10.0.8, --refill-zones) | 0 errors, 4 warnings, 0 unconnected  | The 4 warnings are `silk_over_copper`                                                                 |
+| KiCad ERC (10.0.8)                 | 0 errors, 63 warnings, 0 unconnected | 62 `lib_symbol_issues`, 1 `lib_symbol_mismatch`                                                       |
+| KiCad DRC with the library tables  | 85 `lib_footprint_mismatch`          | The exporter cuts back the silkscreen (#425); pads and courtyards match the library                   |
+| Gerbers                            | Plotted from refilled zones          | Plotted from the refilled zones of the committed board                                                |
+| `synth validate`                   | 0 errors, 40 warnings                | 17 are schematic-layout findings: 9 `E-SYNTH-SCHEM-003`, 7 `E-SYNTH-SCHEM-001`, 1 `E-SYNTH-SCHEM-004` |
+| Schematic-layout findings          | Accepted as a group                  | They concern the drawing of the generated schematic, not the netlist or the board                     |
+| `synth validate` warning count     | Varies                               | The count changes with the Synth version                                                              |
 
 ### Design figures
 
-| Area | Item | Value | Basis |
-|---|---|---|---|
-| Protection | `D1` standoff | 15 V, above the 12.6 V maximum input (12 V +5 %) | Littelfuse SMAJ15A datasheet; calculated |
-| Protection | `D1` clamp | 24.4 V at 16.4 A, below the 36 V input maximum of `U1` | Littelfuse SMAJ15A and TI LMR33640 datasheets |
-| Protection | `D3` standoff | 6.0 V, above the 5.25 V maximum VBUS | Nexperia PTVS6V0S1UR datasheet |
-| Power | Buck output voltage | 1.0 V x (1 + 10 / 3.83) = 3.611 V | Calculated; 1.0 V feedback reference from the TI LMR33640 datasheet |
-| Power | Inductor ripple | (12 - 3.611) x (3.611 / 12) / (6.8 uH x 400 kHz) = 0.93 A at 12 V in, 400 kHz | Calculated |
-| Power | Load switch enable delay | `R16` 100 k x `C17` 100 nF = 10 ms | Calculated |
-| Power | Rail sequence | 3.3 V first; then the switch passes 3.6 V to the 1.8 V regulator; then 1.8 V enables the 1.2 V regulator | Netlist in the .synth source |
-| Power | Sequenced rail loads | The 1.8 V and 1.2 V rails feed only `J4` and test points; the STM32F103C8 runs from 3.3 V alone, so the sequencing protects no device on this board | Netlist in the .synth source |
-| Power | USB-only input to `U1` | At 4.75 V VBUS and 1.0 A, `F2` (0.21 ohm) drops 0.21 V and `D4` drops 0.45 V, so `U1` sees 4.09 V | Calculated |
-| Power | USB-only buck margin | `U1` needs 3.76 V for a 3.611 V output (150 mV dropout at 1 A); margin 0.33 V | TI LMR33640 datasheet; calculated |
-| Power | USB-only LDO margin | The LP5907 needs 3.55 V (250 mV dropout at 250 mA); margin 61 mV | TI LP5907 datasheet; calculated |
-| Power | Power good | `PG_3V6` goes to `PA0` of `U6`, pulled up by `R1` 10 k to `V3V3` (0.33 mA when low) | Calculated |
-| Thermal | Method | Tj = TA + P x RthetaJA, with the datasheet JEDEC RthetaJA; rails run from the 3.611 V buck output; current limit is the load at which Tj reaches 125 C | Calculated |
-| Thermal | `U2` LP5907 3.3 V | Drop 0.311 V; 78 mW at 250 mA, +15 K; not limiting | TI LP5907 datasheet, RthetaJA 193.4 C/W (DBV) |
-| Thermal | `U3` AP2112K-1.8 | Drop 1.811 V; 1.09 W at 600 mA, beyond 125 C; limit 0.23 A at 50 C, 0.12 A at 85 C | Diodes AP2112 datasheet, RthetaJA 184 C/W (SOT-25) |
-| Thermal | `U4` TLV70012 1.2 V | Drop 2.411 V; 482 mW at 200 mA, beyond 125 C; limit 0.118 A at 50 C, 0.063 A at 85 C | TI TLV700 datasheet, RthetaJA 262.8 C/W (DDC) |
-| Thermal | `U5` TPS22918 | Loss 53 mohm x I^2; 53 mW at 1 A, +9.7 K; not limiting | TI TPS22918 datasheet, RthetaJA 183.2 C/W (DBV) |
-| Thermal | External load on `J4` | The 1.8 V and 1.2 V limits above are the currents an external load on `J4` may draw | Calculated |
-| Thermal | `U1` thermal vias | Exposed pad 2.41 x 3.1 mm (`GND`) carries six 0.46/0.2 mm vias at 1.2 mm pitch, as `[[vias]]` entries of the placement sidecar; Synth has no thermal-array statement | Measured on the board file; TI LMR33640 datasheet, section 9.5.1.1, asks for 4 x 3 |
-| Thermal | `hot_buck` keepout | 5 mm ring anchored on `U1`, exported as a rule area; its `allow` list holds the buck nets plus `GND` and `V3V6`, so it is not a copper-free ring | .synth source; measured on the board file |
-| Signal integrity | USB pair | Full speed only; both lines on `F.Cu`; 111.8 mm (D+) and 92.7 mm (D-) | Measured on the board file |
-| Signal integrity | USB skew | The 19.1 mm difference is about 105 ps against a 4 ns minimum edge; the `USB` class declares `edge_rate medium`; no `diff_pair` is declared | Calculated |
-| Signal integrity | Net classes | `PWR` 0.6 mm (about 1.6 A), `PWR_LOW` 0.3 mm (about 1.0 A), `GNDC` 0.4 mm, `BUCK_SW` 0.6 mm on `F.Cu`, signals 0.2 mm | IPC-2221, 10 K rise; .synth source |
-| Signal integrity | Return vias | `XTAL`, `SPI` and `USB` are locked to `F.Cu`, so they need no return via | .synth source |
-| Assembly | Connector on its edge | `J1` courtyard 0.0 mm from Edge.Cuts | Measured on the board file |
-| Assembly | Headers inboard | `J3` 1.68 mm, `J4` 1.77 mm, `J2` 3.68 mm from the edge | Measured on the board file |
-| Assembly | Other parts | The four LEDs 3.81 mm from the edge, everything else further | Measured on the board file |
-| Assembly | Through-hole to SMD pad | At least 2.58 mm (`J3` pin 5 to `TP8`); the JLCPCB rule is 2.1 mm | Measured on the board file |
-| Assembly | Fiducials | `FID1` to `FID3`, 1 mm with a 2 mm mask opening | Measured on the board file |
-| Assembly | Mounting holes | Nearest courtyard 11.2 mm from `H1` and 11.4 mm from `H2` | Measured on the board file |
-| Assembly | Via rings | 0.13 mm (0.46/0.2 mm) and 0.15 mm (0.6/0.3 mm), at the `jlc-filled-via` floors | Measured on the board file |
+| Area             | Item                     | Value                                                                                                                                                                | Basis                                                                              |
+| ---------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Protection       | `D1` standoff            | 15 V, above the 12.6 V maximum input (12 V +5 %)                                                                                                                     | Littelfuse SMAJ15A datasheet; calculated                                           |
+| Protection       | `D1` clamp               | 24.4 V at 16.4 A, below the 36 V input maximum of `U1`                                                                                                               | Littelfuse SMAJ15A and TI LMR33640 datasheets                                      |
+| Protection       | `D3` standoff            | 6.0 V, above the 5.25 V maximum VBUS                                                                                                                                 | Nexperia PTVS6V0S1UR datasheet                                                     |
+| Power            | Buck output voltage      | 1.0 V x (1 + 10 / 3.83) = 3.611 V                                                                                                                                    | Calculated; 1.0 V feedback reference from the TI LMR33640 datasheet                |
+| Power            | Inductor ripple          | (12 - 3.611) x (3.611 / 12) / (6.8 uH x 400 kHz) = 0.93 A at 12 V in, 400 kHz                                                                                        | Calculated                                                                         |
+| Power            | Load switch enable delay | `R16` 100 k x `C17` 100 nF = 10 ms                                                                                                                                   | Calculated                                                                         |
+| Power            | Rail sequence            | 3.3 V first; then the switch passes 3.6 V to the 1.8 V regulator; then 1.8 V enables the 1.2 V regulator                                                             | Netlist in the .synth source                                                       |
+| Power            | Sequenced rail loads     | The 1.8 V and 1.2 V rails feed only `J4` and test points; the STM32F103C8 runs from 3.3 V alone, so the sequencing protects no device on this board                  | Netlist in the .synth source                                                       |
+| Power            | USB-only input to `U1`   | At 4.75 V VBUS and 1.0 A, `F2` (0.21 ohm) drops 0.21 V and `D4` drops 0.45 V, so `U1` sees 4.09 V                                                                    | Calculated                                                                         |
+| Power            | USB-only buck margin     | `U1` needs 3.76 V for a 3.611 V output (150 mV dropout at 1 A); margin 0.33 V                                                                                        | TI LMR33640 datasheet; calculated                                                  |
+| Power            | USB-only LDO margin      | The LP5907 needs 3.55 V (250 mV dropout at 250 mA); margin 61 mV                                                                                                     | TI LP5907 datasheet; calculated                                                    |
+| Power            | Power good               | `PG_3V6` goes to `PA0` of `U6`, pulled up by `R1` 10 k to `V3V3` (0.33 mA when low)                                                                                  | Calculated                                                                         |
+| Thermal          | Method                   | Tj = TA + P x RthetaJA, with the datasheet JEDEC RthetaJA; rails run from the 3.611 V buck output; current limit is the load at which Tj reaches 125 C               | Calculated                                                                         |
+| Thermal          | `U2` LP5907 3.3 V        | Drop 0.311 V; 78 mW at 250 mA, +15 K; not limiting                                                                                                                   | TI LP5907 datasheet, RthetaJA 193.4 C/W (DBV)                                      |
+| Thermal          | `U3` AP2112K-1.8         | Drop 1.811 V; 1.09 W at 600 mA, beyond 125 C; limit 0.23 A at 50 C, 0.12 A at 85 C                                                                                   | Diodes AP2112 datasheet, RthetaJA 184 C/W (SOT-25)                                 |
+| Thermal          | `U4` TLV70012 1.2 V      | Drop 2.411 V; 482 mW at 200 mA, beyond 125 C; limit 0.118 A at 50 C, 0.063 A at 85 C                                                                                 | TI TLV700 datasheet, RthetaJA 262.8 C/W (DDC)                                      |
+| Thermal          | `U5` TPS22918            | Loss 53 mohm x I^2; 53 mW at 1 A, +9.7 K; not limiting                                                                                                               | TI TPS22918 datasheet, RthetaJA 183.2 C/W (DBV)                                    |
+| Thermal          | External load on `J4`    | The 1.8 V and 1.2 V limits above are the currents an external load on `J4` may draw                                                                                  | Calculated                                                                         |
+| Thermal          | `U1` thermal vias        | Exposed pad 2.41 x 3.1 mm (`GND`) carries six 0.46/0.2 mm vias at 1.2 mm pitch, as `[[vias]]` entries of the placement sidecar; Synth has no thermal-array statement | Measured on the board file; TI LMR33640 datasheet, section 9.5.1.1, asks for 4 x 3 |
+| Thermal          | `hot_buck` keepout       | 5 mm ring anchored on `U1`, exported as a rule area; its `allow` list holds the buck nets plus `GND` and `V3V6`, so it is not a copper-free ring                     | .synth source; measured on the board file                                          |
+| Signal integrity | USB pair                 | Full speed only; both lines on `F.Cu`; 111.8 mm (D+) and 92.7 mm (D-)                                                                                                | Measured on the board file                                                         |
+| Signal integrity | USB skew                 | The 19.1 mm difference is about 105 ps against a 4 ns minimum edge; the `USB` class declares `edge_rate medium`; no `diff_pair` is declared                          | Calculated                                                                         |
+| Signal integrity | Net classes              | `PWR` 0.6 mm (about 1.6 A), `PWR_LOW` 0.3 mm (about 1.0 A), `GNDC` 0.4 mm, `BUCK_SW` 0.6 mm on `F.Cu`, signals 0.2 mm                                                | IPC-2221, 10 K rise; .synth source                                                 |
+| Signal integrity | Return vias              | `XTAL`, `SPI` and `USB` are locked to `F.Cu`, so they need no return via                                                                                             | .synth source                                                                      |
+| Assembly         | Connector on its edge    | `J1` courtyard 0.0 mm from Edge.Cuts                                                                                                                                 | Measured on the board file                                                         |
+| Assembly         | Headers inboard          | `J3` 1.68 mm, `J4` 1.77 mm, `J2` 3.68 mm from the edge                                                                                                               | Measured on the board file                                                         |
+| Assembly         | Other parts              | The four LEDs 3.81 mm from the edge, everything else further                                                                                                         | Measured on the board file                                                         |
+| Assembly         | Through-hole to SMD pad  | At least 2.58 mm (`J3` pin 5 to `TP8`); the JLCPCB rule is 2.1 mm                                                                                                    | Measured on the board file                                                         |
+| Assembly         | Fiducials                | `FID1` to `FID3`, 1 mm with a 2 mm mask opening                                                                                                                      | Measured on the board file                                                         |
+| Assembly         | Mounting holes           | Nearest courtyard 11.2 mm from `H1` and 11.4 mm from `H2`                                                                                                            | Measured on the board file                                                         |
+| Assembly         | Via rings                | 0.13 mm (0.46/0.2 mm) and 0.15 mm (0.6/0.3 mm), at the `jlc-filled-via` floors                                                                                       | Measured on the board file                                                         |
 
 ### Sourcing
 
-| Item | Status | Notes |
-|---|---|---|
-| MCU choice | Registry part `stm32f103c8` | Picked from the registry MCUs (ATmega328P, ESP32-C3 and WROOM-32, nRF52840, RP2350, STM32F103C8, STM32G030 variants); the board needs a USB full-speed device, a 72 MHz core and an external SPI flash on a hand-solderable 0.5 mm LQFP |
-| `stm32f103c8` registry entry | Extended | Adds the `usb_dn` and `usb_dp` capability tags (and the differential USB pin types) on PA11 and PA12, and the `spi_cs` tag on PB12 |
-| `U7` flash | Registry part | The registry 128 Mbit W25Q128 with the 208 mil outline of the JVSIQ part |
-| `U4` regulator | DDC package | The package that LCSC lists |
-| `U2` LP5907 | LCSC `C80670` | The registry LCSC number pointed at another part |
-| `R3` 3.83 k | Yageo, LCSC `C482840` | LCSC has no UNI-ROYAL 3.83 k |
-| `J4` | DigiKey | No LCSC listing |
-| `J2`, `J3`, `J4` | Hand-fit | Through-hole parts |
-| `L1` Bourns SRN6045TA-6R8M | At risk | One distributor lists the part as discontinued |
-| Stock | Not firm | The part pages were read in 2026-11 |
+| Item                         | Status                      | Notes                                                                                                                                                                                                                                   |
+| ---------------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MCU choice                   | Registry part `stm32f103c8` | Picked from the registry MCUs (ATmega328P, ESP32-C3 and WROOM-32, nRF52840, RP2350, STM32F103C8, STM32G030 variants); the board needs a USB full-speed device, a 72 MHz core and an external SPI flash on a hand-solderable 0.5 mm LQFP |
+| `stm32f103c8` registry entry | Extended                    | Adds the `usb_dn` and `usb_dp` capability tags (and the differential USB pin types) on PA11 and PA12, and the `spi_cs` tag on PB12                                                                                                      |
+| `U7` flash                   | Registry part               | The registry 128 Mbit W25Q128 with the 208 mil outline of the JVSIQ part                                                                                                                                                                |
+| `U4` regulator               | DDC package                 | The package that LCSC lists                                                                                                                                                                                                             |
+| `U2` LP5907                  | LCSC `C80670`               | The registry LCSC number pointed at another part                                                                                                                                                                                        |
+| `R3` 3.83 k                  | Yageo, LCSC `C482840`       | LCSC has no UNI-ROYAL 3.83 k                                                                                                                                                                                                            |
+| `J4`                         | DigiKey                     | No LCSC listing                                                                                                                                                                                                                         |
+| `J2`, `J3`, `J4`             | Hand-fit                    | Through-hole parts                                                                                                                                                                                                                      |
+| `L1` Bourns SRN6045TA-6R8M   | At risk                     | One distributor lists the part as discontinued                                                                                                                                                                                          |
+| Stock                        | Not firm                    | The part pages were read in 2026-11                                                                                                                                                                                                     |
 
 ## Not verified by Synth
 
-| Area | What is not verified |
-|---|---|
-| Junction temperature of `U1` | Not estimated, because the efficiency curve of the buck was not read. |
-| Buck output from USB | The current `U1` can deliver at 4.09 V is not stated, because its efficiency curve was not read. |
-| Thermal array | The six vias (2 x 3) are below the 4 x 3 TI recommends. |
-| Thermal array in the source | The six vias are in the placement sidecar, not a Synth statement. No copper area per hot part is declared. |
-| Courtyard fill | 20.5 %, below the Class C target of 30 %. |
-| Unused rails | The 1.8 V and 1.2 V rails carry no load on the board. |
-| Low-rail limits | `U3` and `U4` exceed 125 C at their rated current; see the thermal rows in Design figures. |
-| Via rings | A 0.20 mm annular ring is not met by the 0.46/0.2 mm and 0.6/0.3 mm vias. |
-| JLCPCB reports | No JLCPCB DFM or BOM-matching run is recorded for this package. |
-| USB ESD capacitance | The junction capacitance of the PESD5V0S1BA on D+ and D- was not read. |
-| Stock | The stock is not firm. |
+| Area                         | What is not verified                                                                                       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Junction temperature of `U1` | Not estimated, because the efficiency curve of the buck was not read.                                      |
+| Buck output from USB         | The current `U1` can deliver at 4.09 V is not stated, because its efficiency curve was not read.           |
+| Thermal array                | The six vias (2 x 3) are below the 4 x 3 TI recommends.                                                    |
+| Thermal array in the source  | The six vias are in the placement sidecar, not a Synth statement. No copper area per hot part is declared. |
+| Courtyard fill               | 20.5 %, below the Class C target of 30 %.                                                                  |
+| Unused rails                 | The 1.8 V and 1.2 V rails carry no load on the board.                                                      |
+| Low-rail limits              | `U3` and `U4` exceed 125 C at their rated current; see the thermal rows in Design figures.                 |
+| Via rings                    | A 0.20 mm annular ring is not met by the 0.46/0.2 mm and 0.6/0.3 mm vias.                                  |
+| JLCPCB reports               | No JLCPCB DFM or BOM-matching run is recorded for this package.                                            |
+| USB ESD capacitance          | The junction capacitance of the PESD5V0S1BA on D+ and D- was not read.                                     |
+| Stock                        | The stock is not firm.                                                                                     |
