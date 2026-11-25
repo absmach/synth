@@ -1680,7 +1680,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers", "voltage", "protection", "target_length", "reference"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius", "anchor", "at", "layers", "allow"],
                 "component": ["placement_hint", "escape"],
