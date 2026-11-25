@@ -24,6 +24,14 @@ The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040). The part model in [`regis
 
 The memory pins sit on the FPGA's left side facing the SDRAM, in the order of the SDRAM's near pin row, so the data bus runs straight across with no crossings.
 
+The committed route measures as follows against the declared length limits:
+
+| Group | Measured | Limit |
+|---|---|---|
+| Address and command skew | 54.3 mm | `max_skew` 60 mm |
+| `SD_CS`, the longest address or command net | 65.2 mm | `max_length` 80 mm |
+| Data bus spread | 6.3 mm | `max_skew` 10 mm |
+
 ## Not verified by Synth
 
 - **Interface timing:** no controller or bitstream has run on the board, so setup, hold and 143 MHz operation are not claimed.
