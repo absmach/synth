@@ -683,8 +683,10 @@ mod release_gate {
         let router = stub_router::install(&dir);
         let output = Command::new(SYNTH)
             .envs(router.envs())
+            .envs(non_empty_design_env())
             .arg("check")
-            .arg(design())
+            .arg(two_resistors(&format!("check_{label}")))
+            .args(non_empty_design_args())
             .arg("--fab")
             .arg("--json")
             .env("KICAD_CLI", kicad_cli)
@@ -707,7 +709,10 @@ mod release_gate {
         let (code, report) = check_fab("missing", &dir.join("does-not-exist"));
         let manufacturing = &report["stages"]["manufacturing"];
 
-        assert_eq!(code, Some(1), "an unknown stage must block: {report:#}");
+        // Blocks with the INCOMPLETE exit code: a stage that could not be
+        // evaluated is distinct from one that failed.
+        assert_eq!(code, Some(3), "an unknown stage must block: {report:#}");
+        assert_eq!(report["verdict"], "INCOMPLETE", "{report:#}");
         assert_eq!(
             manufacturing["status"], "unknown",
             "a missing tool is an absence of evidence, not a rejection: {report:#}"
@@ -787,7 +792,8 @@ exit 0"#
         let (code, report) = check_fab("broken", &cli);
         let manufacturing = &report["stages"]["manufacturing"];
 
-        assert_eq!(code, Some(1), "{report:#}");
+        // A tool that could not run leaves the verdict INCOMPLETE, exit 3.
+        assert_eq!(code, Some(3), "{report:#}");
         assert_eq!(manufacturing["status"], "unknown", "{report:#}");
         let drc = drc_evidence(&report);
         assert_eq!(drc["reason"], "command_failed", "{drc:#}");
@@ -842,8 +848,10 @@ exit 0"#
         let router = stub_router::install(&dir);
         let output = Command::new(SYNTH)
             .envs(router.envs())
+            .envs(non_empty_design_env())
             .arg("check")
-            .arg(design())
+            .arg(two_resistors("gate_text"))
+            .args(non_empty_design_args())
             .arg("--fab")
             .env("KICAD_CLI", &cli)
             .output()
@@ -878,6 +886,29 @@ fn two_resistors(label: &str) -> PathBuf {
 }
 
 const SILK_ON_PAD: (&str, &str) = ("STUB_ROUTER_SILK_ON_PAD", "1");
+
+/// The registry and footprint library [`two_resistors`] needs.
+///
+/// `synth check` reports an empty board as EMPTY (exit 4), so a check that is
+/// about the release gate needs a board with parts on it.
+fn non_empty_design_args() -> Vec<String> {
+    let registry = workspace_root()
+        .join("fixtures")
+        .join("release-overrides")
+        .join("reviewed");
+    vec!["--registry".into(), registry.display().to_string()]
+}
+
+fn non_empty_design_env() -> Vec<(String, String)> {
+    let footprints = workspace_root()
+        .join("fixtures")
+        .join("release-overrides")
+        .join("footprints");
+    vec![(
+        "KICAD_FOOTPRINT_DIR".into(),
+        footprints.display().to_string(),
+    )]
+}
 
 /// Export the two-resistor board with the fixture registry and footprint
 /// library, so the result does not depend on a KiCad library being installed

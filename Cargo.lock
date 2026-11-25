@@ -2304,6 +2304,7 @@ name = "synth-diagnostics"
 version = "0.1.4"
 dependencies = [
  "insta",
+ "proptest",
  "schemars",
  "serde",
  "serde_json",

@@ -19,6 +19,7 @@ schemars = { workspace = true }
 synth-smt = { workspace = true }
 
 [dev-dependencies]
+proptest = { workspace = true }
 insta = { workspace = true }
 synth-parser = { workspace = true }
 synth-ir = { workspace = true }

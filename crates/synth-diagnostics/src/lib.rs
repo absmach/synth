@@ -15,6 +15,7 @@
 
 mod advisor;
 mod diagnostic;
+pub mod gate;
 pub mod harness;
 mod location;
 mod native;
@@ -26,6 +27,9 @@ pub use advisor::{
 };
 pub use diagnostic::{
     Candidate, Diagnostic, DiagnosticBuilder, EntityRef, EntityRole, SuggestedAction,
+};
+pub use gate::{
+    Coverage, Gate, GateReport, GateStatus, Verdict, combined_status, threshold_status,
 };
 pub use harness::{AgentHarness, HarnessRunResult, HarnessStrategy};
 pub use location::{ByteOffset, FileId, LineCol, Location, Span};
