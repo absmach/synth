@@ -1,57 +1,117 @@
 # PT100 4-wire RTD analog front end (Class B, SYN-363)
 
-A 4-wire PT100 front end with a USB readout: a TI ADS124S08 24-bit delta-sigma ADC with IDAC excitation, a TI REF5025 2.5 V reference and a Raspberry Pi RP2350A host on USB-C. The board is 40.0 x 44.2 mm on four copper layers (1.6 mm FR4), with one GND plane.
+This board is a 4-wire PT100 front end with a USB readout. It uses a TI ADS124S08 24-bit delta-sigma ADC with IDAC excitation, a TI REF5025 2.5 V reference and a Raspberry Pi RP2350A host on USB-C. The board is 40.0 x 44.2 mm on four copper layers (1.6 mm FR4), with one GND plane.
 
-It answers SYN-363: a compact mixed-signal board where a precision analog chain shares a board and a ground plane with a USB microcontroller. It is meant for bench or lab use, not as an instrument, a product or a safety function.
-
-The board is untrusted and not release-ready. The committed KiCad, fab, image and STEP files are historical output from source revision `01a77d54`. The current tree does not route this board, so they are not reproducible from head. The board is not fabricated and not tested on hardware. No analog accuracy is claimed.
-
-Authored by nyagamunene. The SI/PI/RF review by the designated reviewer and the issue owner's sign-off on the single ground plane are open.
+The board answers SYN-363: a compact mixed-signal board where a precision analog chain shares a board and a ground plane with a USB microcontroller. It is for bench or lab use, not an instrument, a product or a safety function. The board is untrusted and not release-ready. It is not fabricated and not tested on hardware. No analog accuracy is claimed.
 
 The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## The board
 
+### Parts
+
 | Group | Parts |
 |---|---|
-| RTD input | `J2` 1x4 2.54 mm header (pin 1 F+, pin 2 S+, pin 3 S-, pin 4 F-); `R_S1`, `R_S2` 1k 0.1 % series resistors on the sense pair; `C_D` 100 nF X7R across the pair; `C_CM1`, `C_CM2` 10 nF C0G to GND; `C_F` 10 nF C0G on F+; `R_BIAS` 1k 0.1 % from F- to GND |
-| ADC | `U1` TI ADS124S08IRHBR (VQFN-32, exposed pad), AIN0 force output, AIN1/AIN2 differential sense input; `C_AV1`, `C_AV2`, `C_DV`, `C_IO` decoupling; `C_RO` 1 uF on REFOUT; `R_RST` 10k pull-up on RESET, also driven by the MCU |
-| Reference | `U3` TI REF5025AIDR 2.5 V on REFP0/REFN0, with `C_RI` and `C_RV` 1 uF |
-| Analog supply | `L2` Murata BLM18AG601SN1D ferrite bead (600 ohm at 100 MHz) makes `+3V3A` for `U1` and `U3` |
-| MCU | `U2` RP2350A (QFN-60) on its on-chip regulator, `L1` 3.3 uH (Sunlord MPL2012S3R3MHT, 0805) to the 1.1 V DVDD net; `U4` W25Q128JVSIQ QSPI flash (SOIC-8 208 mil); `Y1` ECS-120-20-33-TR 12 MHz crystal with 33 pF C0G `C_X1`, `C_X2` and `R_X` 1k on XOUT; `R_AV` 33 ohm and `C_AVF` for VREG_AVDD and ADC_AVDD; `R_RUN` 10k; `J3` 1x3 SWD header (SWCLK, SWDIO, GND) |
-| USB-C readout | `J1` HRO TYPE-C-31-M-12; `R_CC1`, `R_CC2` 5.1k; `R_DP`, `R_DN` 27 ohm; `D1`, `D2` ESD5V0B03-323 on D+/D-; `U5` TI LP5907MFX-3.3 LDO (250 mA) makes `+3V3` from VBUS, with `C_L1`, `C_L2` 2.2 uF |
-| Mechanical | `H1` to `H4` M2.5 non-plated holes (2.7 mm) at (6, 3.5), (39, 3.5), (6, 40.7) and (39, 40.7) mm |
+| RTD input | `J2` 1x4 2.54 mm header (pin 1 F+, pin 2 S+, pin 3 S-, pin 4 F-); `R_S1`, `R_S2` 1k 0.1 % series resistors on the sense pair; `C_D` 100 nF X7R across the pair; `C_CM1`, `C_CM2` 10 nF C0G to GND; `C_F` 10 nF C0G on F+; `R_BIAS` 1k 0.1 % from F- to GND. |
+| ADC | `U1` TI ADS124S08IRHBR (VQFN-32, exposed pad), AIN0 force output, AIN1/AIN2 differential sense input; `C_AV1`, `C_AV2`, `C_DV`, `C_IO` decoupling; `C_RO` 1 uF on REFOUT; `R_RST` 10k pull-up on RESET, also driven by the MCU. |
+| Reference | `U3` TI REF5025AIDR 2.5 V on REFP0/REFN0, with `C_RI` and `C_RV` 1 uF. |
+| Analog supply | `L2` Murata BLM18AG601SN1D ferrite bead (600 ohm at 100 MHz) makes `+3V3A` for `U1` and `U3`. |
+| MCU | `U2` RP2350A (QFN-60) on its on-chip regulator; `L1` 3.3 uH (Sunlord MPL2012S3R3MHT, 0805) to the 1.1 V DVDD net. |
+| MCU support | `U4` W25Q128JVSIQ QSPI flash (SOIC-8 208 mil); `Y1` ECS-120-20-33-TR 12 MHz crystal with 33 pF C0G `C_X1`, `C_X2` and `R_X` 1k on XOUT; `R_AV` 33 ohm and `C_AVF` for VREG_AVDD and ADC_AVDD; `R_RUN` 10k; `J3` 1x3 SWD header (SWCLK, SWDIO, GND). |
+| USB-C readout | `J1` HRO TYPE-C-31-M-12; `R_CC1`, `R_CC2` 5.1k; `R_DP`, `R_DN` 27 ohm; `D1`, `D2` ESD5V0B03-323 on D+/D-. |
+| 3.3 V supply | `U5` TI LP5907MFX-3.3 LDO (250 mA) makes `+3V3` from VBUS, with `C_L1`, `C_L2` 2.2 uF. |
+| Mechanical | `H1` to `H4` M2.5 non-plated holes (2.7 mm) at (6, 3.5), (39, 3.5), (6, 40.7) and (39, 40.7) mm. |
 
-Signal chain: J2, then the RC filter, then U1 AIN1/AIN2. IDAC1 sources 1 mA (firmware setting) out of AIN0 into F+, through the PT100 and F-, and into `R_BIAS` to GND. `R_BIAS` lifts the RTD common mode to about 1.1 V at 100 ohm and 1.25 V at 250 ohm.
+### Layout
 
-The reference is absolute, not ratiometric. VREF is 2.5 V from U3. The IDAC's absolute accuracy and drift therefore limit the measurement unless the firmware calibrates them. This trade is deliberate.
+| Item | Value |
+|---|---|
+| Outline | 40.0 x 44.2 mm, a plain rectangle from the placement sidecar. |
+| Copper layers | 4 |
+| Stackup | None declared in the source or the KiCad project. The board file sets 1.6 mm. No net has controlled impedance. |
+| Parts in the BOM | 53 |
+| Parts placed in the CPL | 53 |
+| Nets | 40 named nets in the board file net table. |
+| Track segments | 389 |
+| Vias | 89: 60 GND and 29 signal. 83 are 0.6/0.3 mm and 6 are a compact 0.46/0.20 mm size. |
+| Track length | 688.4 mm |
+| Zones and planes | One GND zone on each of the four copper layers, with no AGND/DGND split and no tie resistor. Four keepout zones cover the H1 to H4 screw heads. |
+| Fab package | `fab/gerbers.zip`, `fab/bom.csv`, `fab/cpl.csv`, `models/rtd_afe.step`. The KiCad, fab, image and STEP files are historical output from source revision `01a77d54`. The current tree does not route this board, so they are not reproducible from head. |
 
-Nominal filter corners, assuming the 2 k filter resistance dominates the 100 to 250 ohm PT100:
+### Checks
 
-| Path | Elements | Corner |
+| Check | Result | Notes |
 |---|---|---|
-| Differential | R_S1 + R_S2 = 2 k; C_D 100 nF + C_CM1/C_CM2 in series (5 nF) = 105 nF | about 758 Hz |
-| Common mode | R_S 1 k, C_CM 10 nF | about 15.9 kHz |
+| KiCad DRC (10.0.8, --refill-zones) | 0 errors, 47 warnings, 0 unconnected | All 47 warnings are `lib_footprint_mismatch`. |
+| KiCad ERC (10.0.8) | 0 errors, 25 warnings, 0 unconnected | 24 `lib_symbol_issues` and 1 `lib_symbol_mismatch`. The stock libraries were not configured in the run. |
+| Schematic parity (KiCad 10.0.8 DRC) | Clean | From the DRC run on 2026-11-25. |
+| Routing (historical route) | Passed only with `--fine-pitch-return-via-advisory` | With the flag off, the route ended `validation_failed` with 12 blocking return-via findings. With it on, 11 `W-SYNTH-DRC-016` advisories (SPI, ADC control, CC1, `USB_DN`, `DVDD_1V1`) stay open. |
+| JLCDFM (2026-11-04) | Danger and warning items accepted, not changed | The four `J1` shield slots (0.60 mm, as in the HRO drawing) are slot-width danger items. 72 tracks at 0.127 mm are trace-width warnings. |
 
-`C_D` is ten times each `C_CM`, so capacitor mismatch turns into little differential error. `C_D` is X7R because no 0603 C0G 100 nF is stocked. The `.synth` note says "about 720 Hz"; it assumes 110 nF instead of 105 nF.
+### Design figures
 
-Ground: one GND plane on all four copper layers, with no AGND/DGND split and no tie resistor. The ADC's AVSS, AVSS_SW, REFN0, REFCOM, exposed pad, DGND (pin 14) and CLK (pin 17, internal oscillator) return to the same plane as the MCU, flash, USB and LDO. Issue #363 asked for a split; this is a deviation.
+| Area | Item | Value | Basis |
+|---|---|---|---|
+| Signal chain | Path | J2, then the RC filter, then U1 AIN1/AIN2. | `rtd_afe.synth` |
+| Signal chain | Excitation | IDAC1 sources 1 mA (firmware setting) out of AIN0 into F+, through the PT100 and F-, into `R_BIAS` to GND. | `rtd_afe.synth` |
+| Signal chain | RTD common mode | `R_BIAS` lifts F- to 1.0 V. F+ is about 1.1 V at 100 ohm and 1.25 V at 250 ohm. | Calculated, 1 mA into 1k plus the PT100 |
+| Signal chain | Reference | Absolute, not ratiometric. VREF is 2.5 V from U3. IDAC absolute accuracy and drift limit the measurement unless firmware calibrates them. This trade is deliberate. | TI SBAS660C (ADS124S08); TI SBOS410I (REF5025) |
+| Filter | Differential corner | About 758 Hz: R_S1 + R_S2 = 2 k; C_D 100 nF plus C_CM1/C_CM2 in series (5 nF) = 105 nF. | Calculated, assuming the 2 k filter resistance dominates the 100 to 250 ohm PT100 |
+| Filter | Common-mode corner | About 15.9 kHz: R_S 1 k, C_CM 10 nF. | Calculated |
+| Filter | Capacitor ratio | `C_D` is ten times each `C_CM`, so capacitor mismatch turns into little differential error. | Calculated |
+| Filter | `C_D` dielectric | X7R, because no 0603 C0G 100 nF is stocked. | `rtd_afe.synth` |
+| Filter | Source note | The `.synth` note says "about 720 Hz". It assumes 110 nF instead of 105 nF. | `rtd_afe.synth` |
+| Ground | Single plane | AVSS, AVSS_SW, REFN0, REFCOM, the exposed pad, DGND (pin 14) and CLK (pin 17, internal oscillator) return to the same plane as the MCU, flash, USB and LDO. | `rtd_afe.synth`; TI SBAS660C |
+| Ground | Deviation | Issue #363 asked for an AGND/DGND split. The single plane is a deviation. | `rtd_afe.synth` |
+| Power | 3.3 V regulator | LP5907 rated 250 mA. | TI SNVS798Q (LP5907) |
+| Power | Analog supply filter | BLM18AG601SN1D, 600 ohm at 100 MHz. | `fab/bom.csv` |
+| Power | RP2350 decoupling | Four IOVDD caps for six IOVDD pins. Two DVDD caps plus `C_DVB` for three DVDD pins. | Raspberry Pi RP2350 hardware design guide, section 2.2.1 |
+| Layout | Placement | Analog on the left, digital on the right. | Measured on the board file |
+| Layout | Analog routing | All analog nets on F.Cu with no via. | Measured on the board file |
+| Signal integrity | RTD_FP | 16.78 mm | Measured on the board file |
+| Signal integrity | RTD_SP | 6.75 mm | Measured on the board file |
+| Signal integrity | AIN1 | 12.39 mm | Measured on the board file |
+| Signal integrity | RTD_SN | 6.94 mm | Measured on the board file |
+| Signal integrity | AIN2 | 13.55 mm | Measured on the board file |
+| Signal integrity | RTD_FN | 15.46 mm | Measured on the board file |
+| Signal integrity | VREF | 37.85 mm | Measured on the board file |
+| Signal integrity | USB DP | 13.59 + 13.06 = 26.65 mm | Measured on the board file |
+| Signal integrity | USB DN | 15.40 + 12.56 = 27.96 mm | Measured on the board file |
+| Signal integrity | USB pair mismatch | 1.31 mm. Only `USB_DN` changes layer. The pair is not routed as a coupled pair. | Measured on the board file |
+| Signal integrity | Crystal nets | XIN 11.49 mm, XOUT 5.09 mm, XOUT_R 19.29 mm, all on F.Cu. | Measured on the board file |
+| Signal integrity | Parallel run | `SPI_MISO` and `ADC_DRDY` run 3.5 mm side by side on B.Cu, 0.203 mm apart. | Measured on the board file |
+| Manufacturing | Process | The source declares `requires via_in_pad` and the `jlc-filled-via` manufacturer profile. | `rtd_afe.synth` |
+| Manufacturing | Via in pad | The historical route was recorded with one via in a `C_DV` pad (order filled and capped vias). That record is no longer in the tree. | Historical route record |
+| Mechanical | H1 to H4 (2.7 mm holes) | 3.50 to 3.59 mm from the side edges, 3.51 mm from the top or bottom; 2.15 to 2.24 mm of material around each hole. | Measured on the board file (drawing facts, not a fit check) |
+| Mechanical | `J1` | 1.27 mm from the top edge, centred on the board. | Measured on the board file (drawing facts, not a fit check) |
+| Mechanical | `J2`, `J3` | 0.71 mm from the bottom edge. | Measured on the board file (drawing facts, not a fit check) |
 
-Layout: analog on the left, digital on the right. The outline is a plain rectangle from the placement sidecar. The committed `kicad/rtd_afe.kicad_pcb` holds 389 track segments and 89 vias. The source declares `requires via_in_pad` and the `jlc-filled-via` manufacturer profile.
+### Sourcing
+
+| Item | Status | Notes |
+|---|---|---|
+| `C_D` | `fab/bom.csv` out of date | The BOM lists `C_D` as C0G with no part number. The source pins C14663 (X7R). |
+| `L1` | `fab/bom.csv` out of date | The BOM lists `L1` with no part number. The source pins C98331. |
+| `Y1` | `fab/bom.csv` out of date | The BOM lists `Y1` with no LCSC number. The source pins C2449814. |
+| `J1` 3D model | Stock path | The J1 model path in `kicad/rtd_afe.kicad_pcb` is the stock KiCad library path. The HRO model in `../models/` is not referenced by the board file. |
+| Via in pad | Not accepted | JLCPCB has not accepted the filled and capped via process for this board. |
+| Fab order | Not placed | Nothing was sent to a fab house. |
 
 ## Not verified by Synth
 
-- **Route and release:** the current tree does not route this board. The DRC, ERC, signal-integrity and release results of the historical route are no longer in the tree and are not checked in this folder.
-- **Via in pad:** the historical route was recorded with one via in a `C_DV` pad (order filled and capped vias). That record is no longer in the tree, and JLCPCB has not accepted the process.
-- **Fab BOM:** `fab/bom.csv` predates the source pins for `C_D`, `L1` and `Y1`. It lists `C_D` as C0G with no part number, and `L1` and `Y1` without one. The source pins C14663 (X7R), C98331 and C2449814.
-- **Design note:** a USB note in `rtd_afe.synth` points at a qualification file that is no longer in the tree.
-- **VBUS protection:** no VBUS fuse, TVS or reverse-polarity stage. CC1/CC2 have no TVS. The USB shield is tied directly to GND.
-- **3.3 V budget:** the LP5907 is 250 mA. The RP2350, ADC, reference and flash loads were not checked against it.
-- **RP2350 decoupling:** four IOVDD caps for six IOVDD pins and two DVDD caps plus `C_DVB` for three DVDD pins, below the one-per-pin recommendation of Raspberry Pi's hardware design guide. `L1` DCR and saturation current are not checked.
-- **Analog:** accuracy, noise, linearity, drift and the PT100 reading; IDAC accuracy; the PGA common-mode limit at the chosen gain (SBAS660C); the RC filter against the ADC data rate.
-- **Unused pins:** AIN3 to AIN11, AINCOM, REFP1/REFN1, the ADC GPIOs and pin 25 are open, with no datasheet review of their termination.
-- **Firmware:** gain, data rate, IDAC value, register map, USB descriptors and calibration do not exist in this repository.
-- **No test points:** earlier attempts to add them left GND islands.
-- **Silkscreen:** no board name or revision, and no header pin labels. Some reference labels are hidden.
-- **Other:** crystal ESR and drive level, QSPI timing, USB signal integrity, ESD, surge, USB-C compliance, mechanical fit and fabrication. Nothing was sent to a fab house.
-- **Review:** the SI/PI/RF review and the issue owner's sign-off on the single ground plane are open.
+| Area | What is not verified |
+|---|---|
+| Route and release | The current tree does not route this board. The signal-integrity and release results of the historical route are no longer in the tree and are not checked in this folder. |
+| Return vias | The 11 open `W-SYNTH-DRC-016` advisories of the historical route are not resolved. |
+| Hand edit | The `C_DVB` reference label in `kicad/rtd_afe.kicad_pcb` was moved by hand to (+1.5, -2.2) mm, off the board edge. The copper is unchanged. |
+| Design note | A USB note in `rtd_afe.synth` points at a qualification file that is no longer in the tree. |
+| VBUS protection | No VBUS fuse, TVS or reverse-polarity stage. CC1/CC2 have no TVS. The USB shield is tied directly to GND. |
+| 3.3 V budget | The RP2350, ADC, reference and flash loads are not checked against the 250 mA LP5907 rating. |
+| RP2350 decoupling | The cap count is below the one-per-pin recommendation of the RP2350 hardware design guide. The registry `rp2350` part asks for 7 IOVDD and 3 DVDD 100 nF caps, so its requirement is also unmet. |
+| `L1` | DCR and saturation current are not checked. |
+| Analog | Accuracy, noise, linearity, drift and the PT100 reading; IDAC accuracy; the PGA common-mode limit at the chosen gain (TI SBAS660C); the RC filter against the ADC data rate. |
+| Unused pins | AIN3 to AIN11, AINCOM, REFP1/REFN1, the ADC GPIOs and pin 25 are open, with no datasheet review of their termination. |
+| Firmware | Gain, data rate, IDAC value, register map, USB descriptors and calibration do not exist in this repository. |
+| Test points | None. Earlier attempts to add them left GND islands. |
+| Silkscreen | No board name or revision, and no header pin labels. Some reference labels are hidden. |
+| Other | Crystal ESR and drive level, QSPI timing, USB signal integrity, ESD, surge, USB-C compliance, mechanical fit and fabrication. |
