@@ -24,7 +24,7 @@ Run it with:
 ## Ceiling policy
 
 The ceiling is measured on the catalogue that lands, not on one branch.
-It is 45700 bytes: the 45375 bytes of `main` with #510 merged, plus about
+It is 45800 bytes: the 45520 bytes of `main` at `31c37393`, plus about
 300 bytes of headroom. Any other PR that adds tools must measure again on
 a tree that includes it and raise the ceiling in its own commit.
 
@@ -38,6 +38,7 @@ it only on purpose, in its own commit, with the reason in the message.
 | Before | 36 | 45926 | 11482 |
 | After (this PR alone) | 36 | 44208 | 11052 |
 | On main with #510 (`synth_recent_calls`, `synth_server_stats`) | 38 | 45375 | 11344 |
+| On main at `31c37393` (gate verdict, design hash, outcome envelope) | 38 | 45520 | 11380 |
 
 Largest tools after the change: `synth_export` (4255 bytes),
 `synth_place_with_hints` (3153), `synth_compact_layout` (2741),
