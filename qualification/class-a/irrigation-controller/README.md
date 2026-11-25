@@ -2,6 +2,8 @@
 
 A two-zone irrigation controller powered from 12 V DC: an input fuse, a TVS and an ideal-diode reverse-polarity stage, an MP2307 buck to 3.3 V, an STM32G030 microcontroller, two low-side solenoid drivers, two soil probes with AC excitation, a flow-pulse input, an I2C header with an ambient light sensor and an EEPROM, an SWD header, and snubbers, ESD protection on the field connectors, indicator LEDs and test points. Two copper layers, JLCPCB process, 79.2 x 70.7 mm, 107 placed items (87 parts and 20 mounting holes and test points). There is no humidity sensor on the board: a breakout attaches to the I2C header at address 0x44.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |
