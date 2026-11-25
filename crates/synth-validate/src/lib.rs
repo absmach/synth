@@ -70,7 +70,9 @@ pub use board_estimate::{
 };
 
 pub mod placement;
+pub mod preflight;
 pub use placement::validate_placement;
+pub use preflight::{PreflightOptions, placement_preflight};
 
 pub fn run_erc(board: &Board, file: &str) -> Vec<Diagnostic> {
     run_erc_with_config(board, file, &ErcConfig::default())

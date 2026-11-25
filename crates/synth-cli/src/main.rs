@@ -104,6 +104,12 @@ enum Command {
         /// Skip resolution and lowering; run parsing only.
         #[arg(long)]
         parse_only: bool,
+
+        /// Skip the placement preflight. `validate` otherwise runs the real
+        /// placer through its bounded ladder and reports the board it gets;
+        /// the flag keeps the fast source-and-netlist check.
+        #[arg(long)]
+        no_placement_preflight: bool,
     },
 
     /// Simulate a design against its `<design>.sim.toml` testbench
@@ -1072,6 +1078,7 @@ fn main() -> ExitCode {
             user_registry,
             strict_registry,
             parse_only,
+            no_placement_preflight,
         } => validate(
             &input,
             format,
@@ -1079,6 +1086,7 @@ fn main() -> ExitCode {
             user_registry.as_deref(),
             strict_registry,
             parse_only,
+            no_placement_preflight,
         ),
         Command::Sim {
             input,
@@ -4050,6 +4058,7 @@ fn draft_testbench(board: &synth_ir::Board, input: &Path, force: bool) -> u8 {
     EXIT_SUCCESS
 }
 
+#[allow(clippy::too_many_arguments)]
 fn validate(
     input: &Path,
     format: Format,
@@ -4057,6 +4066,7 @@ fn validate(
     user_registry: Option<&Path>,
     strict_registry: bool,
     parse_only: bool,
+    no_placement_preflight: bool,
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
@@ -4089,6 +4099,16 @@ fn validate(
                     &file,
                     &erc_config,
                 ));
+                // The placer is the only thing that knows whether the parts
+                // actually pack. Run it bounded, and report what it finds.
+                if !no_placement_preflight {
+                    diagnostics.extend(synth_validate::placement_preflight(
+                        board,
+                        &file,
+                        input,
+                        &synth_validate::PreflightOptions::default(),
+                    ));
+                }
                 // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
                 // warnings; never blocking. Per-sheet on §P26 split
                 // boards so findings attribute to their page (and the
