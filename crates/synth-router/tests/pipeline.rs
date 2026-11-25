@@ -1386,8 +1386,7 @@ fn a_declared_pair_outside_its_skew_budget_is_tuned_before_release() {
     let blocking = report
         .validation
         .as_ref()
-        .map(|v| v.blocking_reasons.clone())
-        .unwrap_or_default();
+        .map_or_default(|v| v.blocking_reasons.clone());
     assert!(
         !blocking.iter().any(|r| r.contains("E-SYNTH-DRC-014")),
         "tuned copper must clear the skew rule: {blocking:?}"
