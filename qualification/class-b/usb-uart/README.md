@@ -4,7 +4,7 @@ A USB-C adapter built on a WCH CH342F dual UART bridge, on two copper layers. UA
 
 It is a bench or lab adapter for short cables, point-to-point links or the last node on an RS-485 bus. It is not for industrial installs, long cable runs or a node in the middle of a multidrop bus. The board has not been fabricated, powered or tested, and nothing here claims signal integrity, impedance control or hardware function.
 
-No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. No agent prompt was kept; the nearest record is the cleaned brief in `absmach/synth-website` at `public/showcase/usb-uart/prompt.md` (`be423c81`).
 
 ## The board
 
@@ -99,3 +99,4 @@ No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
 | Silkscreen                | Synth has no silkscreen text, so header pin labels exist only in the schematic                                                                                         |
 | Parts                     | No part has been reviewed                                                                                                                                              |
 | Hardware                  | The board has not been fabricated, powered or tested                                                                                                                   |
+| Independent sign-off      | The independent PCB review required by #38 is still open.                                                                                                              |

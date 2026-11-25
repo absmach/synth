@@ -4,7 +4,7 @@ This board is a 4-wire PT100 front end with a USB readout. It uses a TI ADS124S0
 
 The board answers SYN-363: a compact mixed-signal board where a precision analog chain shares a board and a ground plane with a USB microcontroller. It is for bench or lab use, not an instrument, a product or a safety function. The board is untrusted and not release-ready. It is not fabricated and not tested on hardware. No analog accuracy is claimed.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `fc1e4639`.
 
 ## The board
 
@@ -99,19 +99,20 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## Not verified by Synth
 
-| Area              | What is not verified                                                                                                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Route and release | The current tree does not route this board. The signal-integrity and release results of the historical route are no longer in the tree and are not checked in this folder.                       |
-| Return vias       | The 11 open `W-SYNTH-DRC-016` advisories of the historical route are not resolved.                                                                                                               |
-| Hand edit         | The `C_DVB` reference label in `kicad/rtd_afe.kicad_pcb` was moved by hand to (+1.5, -2.2) mm, off the board edge. The copper is unchanged.                                                      |
-| Design note       | A USB note in `rtd_afe.synth` points at a qualification file that is no longer in the tree.                                                                                                      |
-| VBUS protection   | No VBUS fuse, TVS or reverse-polarity stage. CC1/CC2 have no TVS. The USB shield is tied directly to GND.                                                                                        |
-| 3.3 V budget      | The RP2350, ADC, reference and flash loads are not checked against the 250 mA LP5907 rating.                                                                                                     |
-| RP2350 decoupling | The cap count is below the one-per-pin recommendation of the RP2350 hardware design guide. The registry `rp2350` part asks for 7 IOVDD and 3 DVDD 100 nF caps, so its requirement is also unmet. |
-| `L1`              | DCR and saturation current are not checked.                                                                                                                                                      |
-| Analog            | Accuracy, noise, linearity, drift and the PT100 reading; IDAC accuracy; the PGA common-mode limit at the chosen gain (TI SBAS660C); the RC filter against the ADC data rate.                     |
-| Unused pins       | AIN3 to AIN11, AINCOM, REFP1/REFN1, the ADC GPIOs and pin 25 are open, with no datasheet review of their termination.                                                                            |
-| Firmware          | Gain, data rate, IDAC value, register map, USB descriptors and calibration do not exist in this repository.                                                                                      |
-| Test points       | None. Earlier attempts to add them left GND islands.                                                                                                                                             |
-| Silkscreen        | No board name or revision, and no header pin labels. Some reference labels are hidden.                                                                                                           |
-| Other             | Crystal ESR and drive level, QSPI timing, USB signal integrity, ESD, surge, USB-C compliance, mechanical fit and fabrication.                                                                    |
+| Area                 | What is not verified                                                                                                                                                                             |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Route and release    | The current tree does not route this board. The signal-integrity and release results of the historical route are no longer in the tree and are not checked in this folder.                       |
+| Return vias          | The 11 open `W-SYNTH-DRC-016` advisories of the historical route are not resolved.                                                                                                               |
+| Hand edit            | The `C_DVB` reference label in `kicad/rtd_afe.kicad_pcb` was moved by hand to (+1.5, -2.2) mm, off the board edge. The copper is unchanged.                                                      |
+| Design note          | A USB note in `rtd_afe.synth` points at a qualification file that is no longer in the tree.                                                                                                      |
+| VBUS protection      | No VBUS fuse, TVS or reverse-polarity stage. CC1/CC2 have no TVS. The USB shield is tied directly to GND.                                                                                        |
+| 3.3 V budget         | The RP2350, ADC, reference and flash loads are not checked against the 250 mA LP5907 rating.                                                                                                     |
+| RP2350 decoupling    | The cap count is below the one-per-pin recommendation of the RP2350 hardware design guide. The registry `rp2350` part asks for 7 IOVDD and 3 DVDD 100 nF caps, so its requirement is also unmet. |
+| `L1`                 | DCR and saturation current are not checked.                                                                                                                                                      |
+| Analog               | Accuracy, noise, linearity, drift and the PT100 reading; IDAC accuracy; the PGA common-mode limit at the chosen gain (TI SBAS660C); the RC filter against the ADC data rate.                     |
+| Unused pins          | AIN3 to AIN11, AINCOM, REFP1/REFN1, the ADC GPIOs and pin 25 are open, with no datasheet review of their termination.                                                                            |
+| Firmware             | Gain, data rate, IDAC value, register map, USB descriptors and calibration do not exist in this repository.                                                                                      |
+| Test points          | None. Earlier attempts to add them left GND islands.                                                                                                                                             |
+| Silkscreen           | No board name or revision, and no header pin labels. Some reference labels are hidden.                                                                                                           |
+| Other                | Crystal ESR and drive level, QSPI timing, USB signal integrity, ESD, surge, USB-C compliance, mechanical fit and fabrication.                                                                    |
+| Independent sign-off | The independent PCB review required by #38 is still open.                                                                                                                                        |

@@ -4,7 +4,7 @@ This is a 2-layer source-only test board with six declared components: a JST PH 
 
 The board is meant to fail. It shows what Synth reports when a design is wrong. It is useful only if the diagnostics name what is wrong and where. It is never routed and never exported, so it makes no claim about layout or fabrication.
 
-No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
+No prompt was kept. [`PROMPT.md`](PROMPT.md) summarises the design from the planted defects listed in its source header.
 
 ## The board
 
@@ -50,3 +50,4 @@ No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Impossible footprint | The fourth test case also asks for an impossible footprint. That defect is not on this board. A footprint KiCad does not ship is caught at export, not at validation, and this board never reaches export. The check `E-SYNTH-EXPORT-001` exists and several shipped parts trip it, but this board does not exercise it. |
 | Warnings             | The board also reports warnings. They are not part of the exercise and nothing asserts them. A new warning is free to appear.                                                                                                                                                                                            |
+| Independent sign-off | The independent PCB review required by #39 is still open.                                                                                                                                                                                                                                                                |

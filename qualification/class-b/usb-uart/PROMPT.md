@@ -1,3 +1,5 @@
-# Prompt
+# Design summary
 
-No prompt for this board was kept in this repository.
+This is a summary of the delivered board, written after the board was finished. It is not the prompt the agent ran, and no agent prompt was kept in this repository. The nearest record of the brief is the cleaned version published in `absmach/synth-website` at `public/showcase/usb-uart/prompt.md` (commit `be423c81`); that file says it is not the exact text that ran.
+
+Using synth mcp server design a two-layer USB-C dual-UART and RS-485 adapter for JLCPCB, about 41 x 32 mm. Use a WCH CH342F bridge, a TI THVD1450D RS-485 transceiver with a 120 ohm termination and a 4.7k pull-down on TNOW0, a TI LP5907-3.3 LDO, a PRTR5V0U2X ESD array on D+ and D-, and PTVS6V0S1UR TVS diodes on VBUS, CC1 and CC2. Break UART1 out as TTL on two 3-pin headers J2 and J3 with 1k series resistors on RXD1 and CTS1, break RS-485 out on a 3-pin header J4 that switches direction on its own from DTR0/TNOW0, and add a 3-pin jumper J_VIO that selects 3.3 V or 5 V I/O. Add a power LED and TX LEDs with 470 ohm resistors, four M2.5 mounting holes, 0603 passives with 100 nF decoupling on the bridge, USB-C on the top edge and the four headers in one row on the bottom edge, and list in the README what is not verified.

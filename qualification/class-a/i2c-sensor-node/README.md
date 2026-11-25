@@ -4,7 +4,7 @@ A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temp
 
 Case 2 is claimed for a plain default export of a protected, low-speed board: every external line has a series resistor and a 3.3 V clamp, and every net is a static or slow line. No firmware has run on the board and no board has been built.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `dcf1e328`.
 
 ## The board
 
@@ -90,3 +90,4 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | Narrow copper         | The router draws 0.127 mm stubs at the pads of `U2`, below the class widths. The current they carry is not checked.                             |
 | Part data             | Several BOM lines cite distributor listings only (for example `F1`, `D4`, `J5` and the `U1` thermal figures). Those datasheets were not opened. |
 | Firmware and bring-up | No firmware has run and no board has been built.                                                                                                |
+| Independent sign-off  | The independent PCB review required by #39 is still open.                                                                                       |

@@ -4,7 +4,7 @@ A 12 V power-entry board with no microcontroller. The input passes a polyfuse, a
 
 It answers whether `synth mcp`, driven by an agent from a prompt, makes a routed power stage with a protected input, net classes sized for the current and connectors on the board edges. The claim covers the circuit, the part choices and the routed board in `kicad/`. No board has been built or powered, so no electrical behaviour is measured.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `972cc597`.
 
 ## The board
 
@@ -90,3 +90,4 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | Return paths               | One `+12V_PROT` via is farther from a ground via than the return-via window ([absmach/synth#280](https://github.com/absmach/synth/issues/280)) |
 | Placement density          | Courtyard fill is low ([absmach/synth#427](https://github.com/absmach/synth/issues/427))                                                       |
 | Surge                      | The input is qualified only up to 12.6 V and a surge of 18.6 A (10/1000 us)                                                                    |
+| Independent sign-off       | The independent PCB review required by #39 is still open.                                                                                      |
