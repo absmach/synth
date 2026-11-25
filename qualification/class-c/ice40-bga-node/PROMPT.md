@@ -1,5 +1,5 @@
-# Design summary
+# Prompt
 
-This is a summary of the delivered board, written after the board was finished and reviewed. It is not the prompt the agent ran. The prompts the agent ran are in the history at `0daaed69`.
+This prompt is written from the finished board so that someone can rerun it. It is not the text the agent was given. The prompts the agent ran are in the history at `0daaed69`.
 
 Using synth mcp server design a six-layer iCE40HX4K BGA node for JLCPCB, about 60 x 46 mm. Use a Lattice iCE40HX4K in a 121-ball, 0.8 mm pitch BGA, escaped under the pads with via-in-pad, and put a decoupling capacitor on every supply ball. Power it from a power-only USB-C input with 5.1 kohm CC pull-downs and TVS diodes on CC1 and CC2, through a 0.5 A resettable fuse and a 6.0 V standoff TVS diode. Regulate 3.3 V with an AMS1117-3.3 and the 1.2 V core with a TLV70012, and filter the PLL supply with a ferrite bead. Add a 25 MHz oscillator on GBIN1, a W25Q128JVSIQ SPI boot flash with a 6-pin programming header, and a 12-pin header carrying four FPGA I/O through 100 ohm series resistors. Include four status LEDs, test points on the rails and configuration signals, and two M2.5 mounting holes. Group the schematic by function and keep the design notes explicit.

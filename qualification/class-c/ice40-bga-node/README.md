@@ -4,7 +4,7 @@ The board carries an iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its sup
 
 It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`. The board carries no firmware and has no USB data path. The figures below are measured on the board file or calculated from datasheets; nothing was built or measured on hardware.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `0daaed69`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `0daaed69`.
 
 ## The board
 
