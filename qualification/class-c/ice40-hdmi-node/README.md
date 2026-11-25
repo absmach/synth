@@ -10,6 +10,8 @@ This is the Class C case 3 attempt for #330 under #40. The board declares impeda
 
 The interface is DVI-style. The iCE40 cannot source TMDS levels, so each line is an LVCMOS33 output through a series resistor into the sink's 50 ohm termination to 3.3 V. No HDMI compliance is claimed. The board demonstrates only what is measured below.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |
