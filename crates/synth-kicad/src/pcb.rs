@@ -1290,10 +1290,15 @@ fn plane_via_offset(
     } else {
         [(0, sy), (sx, 0), (-sx, 0), (0, -sy)]
     };
+    // The near candidates come first so a board that already finds a position
+    // keeps it. The far ones reach past the tips of a fine-pitch package's
+    // pads, where the neighbours' copper no longer blocks the via.
     let distances = [
         PLANE_VIA_OFFSET_NM,
         PLANE_VIA_OFFSET_NM * 3 / 4,
         PLANE_VIA_OFFSET_NM / 2,
+        PLANE_VIA_OFFSET_NM * 3 / 2,
+        PLANE_VIA_OFFSET_NM * 2,
     ];
     // The whole fanout stub is checked, not only the via endpoint: a stub from
     // the pad to a nearby candidate can cut across another pad even when the via
@@ -4961,6 +4966,26 @@ mod plane_via_in_pad_tests {
             plane_via_offset(pad.centre, pad.origin, outline(), &copper, &via()),
             None
         );
+    }
+
+    /// A gull-wing pad on a 0.5 mm pitch: 1.5 x 0.27 mm pads in a column, so
+    /// every candidate up to 1 mm out along the pin still sits beside the
+    /// neighbours' copper. The via has to go past the pin tips.
+    #[test]
+    fn a_fine_pitch_edge_pad_is_stitched_past_the_pin_tips() {
+        let pad = Point::new(50_000_000, 50_000_000);
+        let origin = Point::new(47_000_000, 50_000_000);
+        let half = (750_000, 135_000);
+        let pads: Vec<PadRect> = (-3..=3)
+            .map(|i| (Point::new(pad.x_nm, pad.y_nm + i * 500_000), half))
+            .collect();
+        let copper = PlaneCopper {
+            pads: &pads,
+            vias: &[],
+        };
+        let at = plane_via_offset(pad, origin, outline(), &copper, &via())
+            .expect("a legal spot exists past the pin tips");
+        assert_eq!(at, Point::new(pad.x_nm + 1_500_000, pad.y_nm));
     }
 
     /// A pad that can hold the via takes it, with the neighbours clear of its
