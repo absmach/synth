@@ -6,8 +6,6 @@ It answers whether `synth mcp`, driven by an agent from a prompt, makes a routed
 
 The claim covers the circuit, the part choices and the routed board in `kicad/`. The supply is 12 V +/-5 % (10.8 to 12.6 V), and the 5 V and 3.3 V rails are rated for 1.5 A and 0.35 A. No board has been built or powered, so no electrical behaviour is measured.
 
-Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB review sign-off is open.
-
 The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## The board
@@ -44,4 +42,3 @@ The board in [`kicad/protected_power_entry.kicad_pcb`](kicad/protected_power_ent
 - **Placement density:** courtyard fill is low ([absmach/synth#427](https://github.com/absmach/synth/issues/427)).
 - **Surge:** the input is qualified only up to 12.6 V and a surge of 18.6 A (10/1000 us).
 - **MP2307:** DigiKey lists it as Not For New Designs.
-- **Review:** the board has a self-review only. The independent PCB review sign-off is open.

@@ -6,8 +6,6 @@ The design is `i2c_sensor_node.synth` with its placement sidecar `i2c_sensor_nod
 
 Case 2 is claimed for a plain default export of a protected, low-speed board: every external line has a series resistor and a 3.3 V clamp, and every net is a static or slow line. No firmware has run on the board and no board has been built.
 
-Jeff Mboya is the author of this board and has self-reviewed it. The independent PCB review sign-off required by #39 is open.
-
 The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## The board
@@ -38,4 +36,3 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 - **Narrow copper:** the router draws 0.127 mm stubs at the pads of `U2`, below the class widths. The current they carry is not checked here.
 - **Part data:** several BOM lines cite distributor listings only (for example `F1`, `D4`, `J5` and the `U1` thermal figures); those datasheets were not opened.
 - **Firmware and bring-up:** no firmware has run and no board has been built.
-- **Review:** the board has a self-review only. The independent PCB review sign-off required by #39 is open.
