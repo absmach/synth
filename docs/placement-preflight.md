@@ -119,6 +119,117 @@ in a solver whose legalizer then refuses it.
 - It does not prove routability. A legal placement is a packing result.
 - It does not choose a sidecar. It reports both placements; the author decides.
 
+
+## Measured
+
+**2026-11-25, code `ef8e8492`, synth 0.1.4, rustc 1.100.0 (0ef1bc386 2026-11-09),
+cargo 1.100.0 (3acc79c0c 2026-11-05), kicad-cli 10.0.7.** The board is the
+committed CM4 carrier from `origin/syn-407-rebased` (c991a084), extracted with
+`git archive` into a scratch directory and run with the `synth` built from the
+commit above. The branch worktree was not touched. The design carries ten
+pre-existing ERC errors (nine `E-SYNTH-COMP-002` undefined pin, one
+`E-SYNTH-PROCESS-002`), so `synth validate` exits 1 in both runs; none of them
+is a placement diagnostic.
+
+### Validate, with and without the sidecar
+
+| Run | Preflight diagnostics | Time |
+| --- | --- | ---: |
+| sidecar present | warning `W-SYNTH-PLACE-004` "placement sidecar": 108.4 × 81.3 mm (8 809 mm²), dead area 5.7 %, 112 gate failures, pins 184 of 184. info `W-SYNTH-PLACE-004` "placement preflight": 169.6 × 169.6 mm (28 758 mm²), dead area 43.4 %, 97 gate failures, 6 solves, canvases 141.3 × 141.3 (four times) then 169.6 × 169.6, 60 s budget, review requires revision | 185.7 s |
+| sidecar absent | info `W-SYNTH-PLACE-004` "placement preflight": the same 169.6 × 169.6 mm line; no sidecar line | 152.9 s |
+
+The estimate is 141.3 × 141.3 mm (19 971 mm²), the #513 number. The four
+141.3 mm attempts are the four hint levels; the fifth attempt is the 1.2×
+canvas, where the placement succeeds with the hints as written.
+
+### Placements
+
+| Placement | Board (mm) | Area (mm²) | dead_area_ratio | gate_failures | Review | Time |
+| --- | --- | ---: | ---: | ---: | --- | ---: |
+| committed manual floorplan (sidecar, 184/184 pinned) | 108.38 × 81.28 | 8 809.1 | 0.0572 | 112 | requires revision | 45.2 s |
+| from-scratch, legal ladder | 169.58 × 169.58 | 28 758.2 | 0.4364 | 101 | requires revision | 29.5 s |
+| committed PCB Edge.Cuts (reference) | 100.0 × 80.0 | 8 000.0 | — | — | — | — |
+
+The from-scratch board is 3.26× the manual floorplan's area and 7.6× its dead
+area share. The ladder did not relax a hint (`level AsWritten`, `dropped []`);
+it grew the canvas from 141.3 to 169.6 mm. That is a legal placement, not a
+better floorplan.
+
+`place_with_replace` with `SYNTH_PLACE_REPLACE=1`: the default baseline fails
+on `D_ETH2` at 148 × 108 mm, the relaxed fallback is returned with
+`fell_back = true`, and the result is the same 169.58 × 169.58 mm placement
+(28 758.2 mm², dead 0.4364, 101 gate failures, review requires revision). Time
+226.0 s, most of it the export sweep inside the fallback. RePlAce itself is not
+seeded because there is no baseline arrangement to seed it from.
+
+### Test points
+
+From-scratch placement, where the late probe pass runs. All eleven probes are
+on the top side, all found a free cell, and no probe was placed at the
+nearest-cell fallback.
+
+| TP | nearest pad | mm | side | free cell |
+| --- | --- | ---: | --- | --- |
+| TP_5V | `C_HDMI_VCCB.p1` | 13.90 | Top | yes |
+| TP_3V3 | `R_VBUS.p1` | 7.40 | Top | yes |
+| TP_1V8 | `C_OUT8.p1` | 20.50 | Top | yes |
+| TP_CM4_3V3 | `J_CM4A.p86` | 27.44 | Top | yes |
+| TP_CM4_1V8 | `J_CM4A.p90` | 34.51 | Top | yes |
+| TP_RUN_PG | `J_CM4A.p92` | 27.00 | Top | yes |
+| TP_NEXTRST | `J_CM4A.p100` | 20.00 | Top | yes |
+| TP_GLOBAL_EN | `C_GEN.p1` | 7.39 | Top | yes |
+| TP_PG5V | `U1.pg` | 31.73 | Top | yes |
+| TP_PG3V3 | `R_PG2.p2` | 27.79 | Top | yes |
+| TP_PG1V8 | `R_PG3.p2` | 7.17 | Top | yes |
+
+Sidecar placement: the sidecar pins all 184 parts, so these are the manual
+positions. `TP_5V` is the one probe the review reports as having no free spot.
+
+| TP | nearest pad | mm | side | free cell / review |
+| --- | --- | ---: | --- | --- |
+| TP_5V | `D_HDMI5.vcc` | 27.70 | Top | review: no free spot (sidecar-pinned) |
+| TP_3V3 | `U4.vdda33_3` | 4.87 | Top | yes |
+| TP_1V8 | `L3.p2` | 19.74 | Top | yes |
+| TP_CM4_3V3 | `J_CM4A.p86` | 30.22 | Top | yes |
+| TP_CM4_1V8 | `J_CM4A.p90` | 31.67 | Top | yes |
+| TP_RUN_PG | `J_CM4A.p92` | 53.48 | Top | yes |
+| TP_NEXTRST | `J_CM4A.p100` | 45.42 | Top | yes |
+| TP_GLOBAL_EN | `R_GEN.p2` | 42.59 | Top | yes |
+| TP_PG5V | `R_PG.p2` | 30.13 | Top | yes |
+| TP_PG3V3 | `R_PG2.p2` | 29.49 | Top | yes |
+| TP_PG1V8 | `R_PG3.p2` | 31.36 | Top | yes |
+
+The stub lengths are a proxy: late placement shortens the stub but the router
+still has to reach each pad. `TP_RUN_PG` at 53.48 mm in the sidecar and
+`TP_CM4_1V8` at 34.51 mm from scratch are the two longest.
+
+### Test counts
+
+The full scoped suite (`cargo test --no-fail-fast -p synth-place -p
+synth-validate -p synth-cli`) ran 736 tests: 736 passed, 0 failed, 14 ignored
+across 66 targets — synth-cli 157, synth-place 336, synth-validate 243. The
+14 ignored are the pre-existing `#[ignore]` report tests. Two later changes
+(the 60 s budget and the unseeded-RePlAce return) were re-run on their own
+targets: `synth-place --test replace` 4, `synth-place --lib legal::` 4,
+`synth-cli --test placement_preflight` 4, `synth-validate --test hard_hints`
+12, all passing.
+
+`cargo fmt --all -- --check` and `cargo clippy -p synth-place -p synth-validate
+-p synth-cli --all-targets -- -D warnings` are clean.
+
+### Golden hashes and CI
+
+No golden was regenerated. The placement snapshots
+(`crates/synth-place/tests/snapshots.rs`, 10 passed) and the board-estimate
+fitted-dimension tests (`crates/synth-validate/tests/board_estimate.rs`, 18
+passed) are unchanged; the three unstable `place()` boards have no test
+points, so the probe deferral does not move them. `fixtures/kicad-reference/`
+and `qualification/**/SHA256SUMS` are untouched. The `synth-kicad` export
+tests (`replace_seam_export`, `placement_hints_pcb`) are outside the scoped
+command and were not re-run; the export code is unchanged. CI
+(`.github/workflows/ci.yml`) is unchanged: the same fmt, clippy and test
+commands, run here scoped to the three touched crates.
+
 ## See also
 
 - [`docs/diagnostics/W-SYNTH-PLACE-004.md`](diagnostics/W-SYNTH-PLACE-004.md)
