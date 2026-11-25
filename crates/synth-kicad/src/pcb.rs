@@ -4228,7 +4228,10 @@ mod tests {
     fn a_midpoint_fence_via_slides_off_a_pad() {
         let outline =
             synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
-        let pad = (Point::new(mm_to_nm(30.0), mm_to_nm(1.5)), (mm_to_nm(0.85), mm_to_nm(0.85)));
+        let pad = (
+            Point::new(mm_to_nm(30.0), mm_to_nm(1.5)),
+            (mm_to_nm(0.85), mm_to_nm(0.85)),
+        );
         let via = Point::new(mm_to_nm(30.0), mm_to_nm(1.5));
         let moved = clear_of_pads(via, outline, mm_to_nm(1.5), &[pad]);
         assert_ne!(moved, via);
