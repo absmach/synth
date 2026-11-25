@@ -1,3 +1,5 @@
-# Prompt
+# Design summary
+
+This is a summary of the delivered board, written after the board was finished and reviewed. It is not the prompt the agent ran. The prompts the agent ran are in the history at `45b6f93d`.
 
 Using synth mcp server design a six-layer iCE40 HDMI node for JLCPCB advanced fabrication, with via-in-pad and a declared stackup, about 88 x 79 mm. Power it from 5 V on a 2-pin terminal through a 1.1 A resettable fuse, a TVS diode and a P-MOSFET reverse-polarity stage. Regulate 3.3 V with an AP7361C and the 1.2 V core with a TLV70012, and filter the PLL supplies with ferrite beads. Use an iCE40HX4K-TQ144 FPGA with a 25 MHz oscillator and a W25Q128JVSIQ SPI boot flash. Drive an HDMI Type-A receptacle with four DVI-style TMDS pairs through 270 ohm series resistors, each declared at 100 ohm differential with a 25 mm skew budget. Add ESD arrays, a fused +5 V pin, level-shifted DDC, an HPD divider, four status LEDs, test points and two mounting holes. Group the schematic by function and keep the design notes explicit.

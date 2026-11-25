@@ -4,7 +4,7 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) drives an HDMI Type-A recepta
 
 This is the Class C case 3 attempt for #330 under #40. The board declares impedance, pair spacing and skew for its TMDS pairs, and the delivered copper is measured against those declarations. Only the skew budget is met; spacing, coupling and impedance are not (see [#447](https://github.com/absmach/synth/issues/447), open). The interface is DVI-style and no HDMI compliance is claimed.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `45b6f93d`.
 
 ## The board
 
@@ -98,7 +98,7 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | Protection       | Surge clamp          | `D1` clamps at up to 10.3 V                                                                                                                              | Nexperia PTVS6V0S1UR datasheet                      |
 | Protection       | Surge current        | `R_SURGE` limits the current into `C2` and `C3` (20 uF) to 5.8 A; a 60 ns event raises the regulator input by about 0.02 V                               | Calculated                                          |
 | Protection       | `Q3` gate            | `D_GZ` holds the `Q3` gate-source voltage under 5.4 V against its 8 V rating                                                                             | Vishay SI2301CDS datasheet; calculated              |
-| Assembly         | Via in pad           | The TQFP-144 does not need it; a few vias sit in small-part and test-point pads                                                                          | Measured on the board file                          |
+| Assembly         | Via in pad           | The TQFP-144 escape does not need it; the plane stage does until #512 is fixed. A few vias sit in small-part and test-point pads                         | Measured on the board file                          |
 
 ### Sourcing
 
@@ -122,3 +122,4 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | FPGA I/O current       | The thermal budget leaves about 0.02 A for the FPGA's 3.3 V I/O at 70 degC ambient. That current depends on the FPGA design and is not counted.                                    |
 | Test-point probing     | The effect of filled vias in the `TP2` and `TP5` pads on probing is not assessed.                                                                                                  |
 | Fabrication checks     | No JLCPCB DFM or BOM-matching run is recorded for the package in `fab/`.                                                                                                           |
+| Independent sign-off   | The independent PCB review required by #40 is still open.                                                                                                                          |
