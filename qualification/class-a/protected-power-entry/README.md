@@ -2,7 +2,7 @@
 
 A 12 V power-entry board: J1 takes 12 V through the polyfuse F1 (1.5 A hold), the SMAJ13A TVS D1 and the AO3401A reverse-polarity PFET Q1 (gate held by the 5.1 V zener D9 and R1). An MP2307 buck makes 5.0 V. A TPS22918 load switch makes a switched 5 V output, and an AMS1117-3.3 makes 3.3 V. Three JST XH outputs carry +5 V (J3), switched +5 V (J4) and +3.3 V (J5), and an 8-pin header J2 takes the load-switch enable from the outside and returns the 12 V, 5 V and 3.3 V sense levels. Six indicator LEDs show the rails and a tripped fuse, and ten test points reach the nodes. Two copper layers on JLCPCB, 114.9 x 76.0 mm, 84 parts. There is no microcontroller on the board: it is a power stage, powered from J1 alone.
 
-The design is `protected_power_entry.synth` with its placement sidecar `protected_power_entry.placement.layout.toml`. It was made with `synth mcp` from a prompt, then exported through the Synth MCP server (the `synth_export` tool) and checked with KiCad. [`PROVENANCE.md`](PROVENANCE.md) is the record of that path: the exact prompt, the agent's tool-call trace, the Synth revision, the registry inputs, the artifact hashes and the validation commands with their results.
+The design is `protected_power_entry.synth` with its placement sidecar `protected_power_entry.placement.layout.toml`. It was made with `synth mcp` from a prompt, then exported through the Synth MCP server (the `synth_export` tool) and checked with KiCad.
 
 ## What the board is
 
@@ -171,7 +171,7 @@ The source and sidecar in this directory were exported three times through the S
 | `pnp.csv` | e00d4fb5ba | e00d4fb5ba | e00d4fb5ba | byte-identical |
 | Gerber and drill content | 76a311a42f | 76a311a42f | 76a311a42f | identical after the creation time in the headers is masked (normalized) |
 
-With the random ids masked the routed board is `9ebe15a562` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made (see [`PROVENANCE.md`](PROVENANCE.md)); it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
+With the random ids masked the routed board is `9ebe15a562` in all three exports ([`reproduce/compare_exports.py`](reproduce/compare_exports.py) does the masking). [`reproduce/reproduce.sh`](reproduce/reproduce.sh) is supplemental tooling, not the evidence of how the board was made; it rebuilds Synth at the pinned commit, exports three times and compares, then builds the fabrication package.
 
 ## Bill of materials and fabrication package
 

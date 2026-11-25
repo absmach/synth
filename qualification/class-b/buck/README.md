@@ -17,7 +17,7 @@ feedback, power-good and thermal copper, plus a negative variant that the feedba
 
 ## What
 
-- `buck.synth`, negative `buck_neg_fb_sw.synth`, the placement sidecar `buck.placement.layout.toml`, hashes in `SHA256SUMS`, matrix and `#38` traceability in `QUALIFICATION.md`, evidence in `kicad/`, `reports/`, `images/`. `kicad/buck.step` is the board STEP with 3D models (`kicad-cli pcb export step --no-dnp`); the 3D views use the same stock KiCad models. The mounting holes have no model (the KiCad MountingHole step files are not installed).
+- `buck.synth`, negative `buck_neg_fb_sw.synth`, the placement sidecar `buck.placement.layout.toml`, hashes in `SHA256SUMS`, evidence in `kicad/`, `reports/`, `images/`. `kicad/buck.step` is the board STEP with 3D models (`kicad-cli pcb export step --no-dnp`); the 3D views use the same stock KiCad models. The mounting holes have no model (the KiCad MountingHole step files are not installed).
 - `kicad/`: the KiCad project, BOM, pick-and-place, `gerbers/` (22 Gerbers plus the job file, 4 copper layers) and `drill/` (PTH and NPTH). `reports/`: `release.json` (source/DRC gate) and `release-fab.json` (fab package), DRC, ERC, routing and connectivity.
 - Chain: J1 (JST XH) -> F1 PTC -> D1 SS36 Schottky (reverse block) -> VIN node.
   VIN node: D2 SMBJ30A TVS, C1 47 uF bulk, C2 10 uF, C3 220 nF (on the U1 VIN pin), U1 LMR38010, UVLO divider.
@@ -67,7 +67,7 @@ R_UV_B = 100k, R_UV_T = 1.37M, ratio 1 + 13.7 = 14.7.
 | Glitch filter | 40 us typ | 7.5 |
 | Presented on | J2 pin 3 (3.3 V logic) | this board |
 
-The netlist proves the connection (A15 in `QUALIFICATION.md`). Nothing proves the thresholds, the delay or
+The netlist proves the connection. Nothing proves the thresholds, the delay or
 the behaviour on a fault: Synth has no power-good rule (`synth capability list` marks
 `power_sequencing_and_power_good` unsupported), and this board was not powered.
 
@@ -186,7 +186,7 @@ The export routes with FreeRouting 2.4.1 on OpenJDK 25.0.4.1; the routed board i
 | Schematic netlist | 13 nets: the source's 7 `net` blocks plus the 6 further names its 10 `connect` statements create (`+3V3` joins an existing net), node for node | `kicad-cli sch export netlist --format kicadsexpr -o /tmp/buck.net $B/kicad/buck.kicad_sch` |
 | Outline | 70.99 x 33.99 mm (x 0.55 to 71.54, y 0.55 to 34.54), 2413 mm2 | `grep -A3 gr_line $B/kicad/buck.kicad_pcb \| grep -E 'start\|end'` |
 | Manufacturing exports | 22 Gerbers plus the job file (4 copper layers), PTH 27 holes (21 x 0.3 mm vias, 4 x 0.95 mm and 2 x 1.0 mm connector pins), NPTH 2 x 2.5 mm mounting holes | `ls $B/kicad/gerbers $B/kicad/drill`; `grep -c '^X' $B/kicad/drill/buck-PTH.drl` |
-| Hashes | full values in `SHA256SUMS` and `QUALIFICATION.md` | `cd $B && grep -v '^#' SHA256SUMS \| sha256sum -c -` |
+| Hashes | full values in `SHA256SUMS` | `cd $B && grep -v '^#' SHA256SUMS \| sha256sum -c -` |
 
 Pad-edge gaps in the placed, routed board, from `pad_gaps.py` (pcbnew pad bounding boxes, edge to edge):
 
@@ -235,8 +235,7 @@ error: [E-SYNTH-POWER-011] regulator feedback is taken from the switching node
 
 ## Qualification matrix
 
-The matrix (A: checked by tools, B: needs an expert) is in [`QUALIFICATION.md`](QUALIFICATION.md),
-together with the `#38` checklist traceability for this board. Its row for the corpus is in
+Its row for the corpus is in
 `qualification/matrix.toml` (section D there). Evidence files: `kicad/`, `reports/`, `images/`.
 
 ## Not true yet

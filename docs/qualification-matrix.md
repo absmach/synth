@@ -79,8 +79,8 @@ parse-and-print budget would report `unknown` for a board that is fine):
 
 The matrix proves the pipeline: source → schematic → PCB → native ERC/DRC →
 manufacturing package, with hashes and machine-readable records. It cannot
-prove the things a board review exists for. Every qualification record
-(`qualification/*/QUALIFICATION.md`) carries these as open gates, and a board
+prove the things a board review exists for. Every board's README
+carries these as open gates, and a board
 is not "qualified" until a named person has signed each one:
 
 - **Visual review.** Schematic readability (no wire-through-text, no

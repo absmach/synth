@@ -21,8 +21,7 @@ release. Remaining release blockers:
    converter stability, derating, switch-node/EMI, grounding/feedback or
    power-good behaviour.
 
-Until the rest close, the board stays `experimental` and `QUALIFICATION.md`
-says so.
+Until the rest close, the board stays `experimental`.
 
 ## Class A I2C sensor node (#423)
 

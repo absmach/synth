@@ -6,14 +6,13 @@ release-ready**. The committed evidence is historical (source revision
 blocking return-via findings. The board is **not fabricated and not tested on
 hardware**. The
 SI/PI/RF review is being carried out by the designated reviewer; the automated
-evidence and the open items are in [QUALIFICATION.md](QUALIFICATION.md). The
+evidence and the open items are in this README. The
 analog accuracy has not been measured, and several sourcing and decoupling items
 are open (see Known limits and gaps).
 
 Intended use: a bench or lab 4-wire PT100 front end with a USB readout. It is a
 compact mixed-signal board on a single ground plane, not an instrument. Do not
-use it for a product or a safety function until the review items in
-QUALIFICATION.md are closed.
+use it for a product or a safety function until the open review items are closed.
 
 ## What it is
 
@@ -45,7 +44,7 @@ J2 -> R_S1/R_S2 and the C_D/C_CM/C_F network -> U1 AIN1/AIN2. The reference is
 absolute: VREF = 2.5 V from U3. The current is not used as the reference, so the
 IDAC's absolute accuracy and drift limit the measurement unless the firmware
 calibrates them. That trade is deliberate and is called out as an open accuracy
-item in QUALIFICATION.md.
+item.
 
 Nominal filter corners (this work, assuming the 2 k filter resistance dominates
 the 100 to 250 ohm PT100):
@@ -65,7 +64,7 @@ Excitation and common mode: IDAC1 sources 1 mA into AIN0/F+, through the PT100,
 out of F- and through R_BIAS 1k to GND. R_BIAS lifts the RTD common mode to
 about 1.0 V plus the RTD drop (about 1.1 V at 100 ohm, 1.25 V at 250 ohm). The
 gain-dependent PGA common-mode limit was not re-checked against SBAS660C in this
-work; see QUALIFICATION.md.
+work.
 
 ## Ground
 
@@ -74,8 +73,7 @@ resistor. The ADC's AVSS, AVSS_SW, REFN0, REFCOM, exposed pad, DGND pin (14) and
 CLK pin (17) return to the same plane as the MCU, flash, USB and LDO. `check.sh`
 asserts with pcbnew that the board has `GND` and no `AGND` or `DGND` net. Issue
 #363 asked for an AGND/DGND split; the issue owner has not signed off on this
-deviation. The return-via advisories on the digital nets are listed in
-QUALIFICATION.md for the SI review.
+deviation. The return-via advisories on the digital nets are left for the SI review.
 
 ## Placement and routing
 
@@ -84,8 +82,7 @@ worktree this directory was exported from (source revision 01a77d54). The board
 was produced with this branch's opt-in fine-pitch return-via relaxation
 (`--fine-pitch-return-via-advisory`, needs SI-review sign-off, not given). On
 default settings it ends `validation_failed` with 12 blocking return-via
-findings, so the board is untrusted and not release-ready (see
-QUALIFICATION.md). The route is under review by the designated reviewer.
+findings, so the board is untrusted and not release-ready. The route is under review by the designated reviewer.
 
 - Analog left, digital right, packed rather than spread. The input chain is J2
   at (14.8, 41.7) mm, the RC filter just above it and U1 at (12, 25.1) mm. The
@@ -121,13 +118,12 @@ QUALIFICATION.md). The route is under review by the designated reviewer.
   one GND plane with no AGND or DGND net.
 - Synth's signal-integrity pass, with the fine-pitch relaxation on (default
   settings: 12 blocking return-via findings): 12 non-blocking findings, 11 `W-SYNTH-DRC-016`
-  layer changes with no ground-return via within 0.80 mm (advisories, see
-  QUALIFICATION.md) and 1 parallel-run finding (SPI_MISO and ADC_DRDY, 3.5 mm on
+  layer changes with no ground-return via within 0.80 mm (advisories) and 1 parallel-run finding (SPI_MISO and ADC_DRDY, 3.5 mm on
   B.Cu, 0.203 mm apart). No RTD, AIN or VREF net is flagged.
-- Silkscreen: no DRC warning (the C_DVB label was moved inboard by hand, see `QUALIFICATION.md`). U1 has a hard label override at (16, 30.6) mm;
+- Silkscreen: no DRC warning (the C_DVB label was moved inboard by hand). U1 has a hard label override at (16, 30.6) mm;
   29 passives/TVS and H1/H2/H3/J1/J3 have their reference label hidden because
   the compact refdes field has no clear spot. Their refdes remain in the BOM, PnP and
-  schematic; the full list is in QUALIFICATION.md.
+  schematic.
 
 ## Checks
 
@@ -184,7 +180,7 @@ netlist/PCB parity is clean. This disposition has not been reviewed by a human.
 - `check.sh`: the acceptance check above.
 - `SHA256SUMS`: hashes of the artifacts.
 
-The committed `kicad/`, `reports/`, `images/` and `SHA256SUMS` are historical output from source revision 01a77d54; the current tree does not route, so they are not reproducible from head (see QUALIFICATION.md, Reproducibility). `reports/release.json` (production, `release_ready: true`, reviewers all `reviewed`) is generated output from that revision and does not reflect the PR status (untrusted, `release_ready: false`, crystal unreviewed). `kicad/bom.csv` is historical and predates the source pins (C_D, L1, Y1).
+The committed `kicad/`, `reports/`, `images/` and `SHA256SUMS` are historical output from source revision 01a77d54; the current tree does not route, so they are not reproducible from head. `reports/release.json` (production, `release_ready: true`, reviewers all `reviewed`) is generated output from that revision and does not reflect the PR status (untrusted, `release_ready: false`, crystal unreviewed). `kicad/bom.csv` is historical and predates the source pins (C_D, L1, Y1).
 
 The reports are as the commands produce them, except that `check.sh` rewrites
 the checkout path in `release.json`, `rtd_afe.routing.json` and `rtd_afe.net` to
@@ -229,7 +225,7 @@ component review.
   exporter reproduces it without a post-export cut.
 - 29 passives/TVS and H1/H2/H3/J1/J3 have their reference label hidden because
   the refdes field has no clear spot in the compact layout. The refdes are still in
-  the BOM, PnP and schematic; the full list is in QUALIFICATION.md.
+  the BOM, PnP and schematic.
 - RP2350 decoupling is below the recommendation. The board has four IOVDD 100 nF
   caps (C_IO1..C_IO4) for six IOVDD pins, and two DVDD caps (C_DV1, C_DV2) plus
   C_DVB bulk for three DVDD pins. Raspberry Pi's hardware design guide (section
@@ -241,12 +237,10 @@ component review.
 - Y1 is pinned to C2449814 (exact MPN).
 - Issue #363 asked for an AGND/DGND split; this board uses one GND plane and the
   issue owner has not signed off on the deviation.
-- No GitHub issue numbers are linked for the Synth defects listed in
-  QUALIFICATION.md.
+- No GitHub issue numbers are linked for the Synth defects found in this work.
 - The mounting holes leave 2.15 to 2.24 mm of material around a 2.7 mm hole, the ISO 273 fine clearance for M2.5.
   J2/J3 are about 0.71 mm from the bottom edge and J1 1.27 mm from the top.
-  The enclosure and screw-head clearance are mechanical check items; the
-  measured table is in QUALIFICATION.md.
+  The enclosure and screw-head clearance are mechanical check items.
 - The KiCad ERC library-name warnings remain (see above). They do not affect
   the netlist.
 
@@ -261,5 +255,4 @@ component review.
 - ESD, surge, reverse polarity and USB-C compliance.
 - Mechanical fit, connector and header orientation, mounting-hole clearance.
 - Any fabrication or assembly check. Nothing was sent to a fab house.
-- Any part was bought or measured. Part-level registry reviews exist (see
-  QUALIFICATION.md); the HRO and Tech Public datasheets were read as scans.
+- Any part was bought or measured. Part-level registry reviews exist; the HRO and Tech Public datasheets were read as scans.
