@@ -1,0 +1,43 @@
+id = "ldo_ams1117_3v3"
+module = "LdoAms1117"
+version = "1.0.0"
+title = "AMS1117-3.3 LDO"
+description = "AMS1117-3.3 fixed 3.3 V LDO in SOT-223 with the data sheet's 10 uF input and 22 uF output capacitor, and a second 10 uF on each side."
+tags = ["power", "ldo", "regulator", "3v3"]
+notes = [
+  "C3 and C4 (10 uF each) meet the registry part's two-capacitor decoupling rule; they add to the data sheet minimum and never replace C2.","Dropout is about 1.1 V at 800 mA; a 5 V input leaves margin, a 3.7 V cell does not."]
+
+[provenance]
+source = "Advanced Monolithic Systems AMS1117 data sheet"
+section = "Application Hints: Stability (22 uF tantalum output capacitor) and the typical application circuit (10 uF input)"
+reference_design = "AMS1117 data sheet, Fixed Output Voltage typical application"
+url = "http://www.advanced-monolithic.com/pdf/ds1117.pdf"
+
+[[ports]]
+name = "vin"
+type = "power"
+description = "Input, 4.75 V to 15 V for 3.3 V out."
+[[ports]]
+name = "vout"
+type = "power"
+description = "3.3 V output, up to 800 mA (thermal limits first in SOT-223)."
+[[ports]]
+name = "gnd"
+type = "ground"
+description = "Ground."
+
+[[params]]
+name = "c_in"
+default = "10uF"
+fixed = false
+range = "10uF..47uF"
+description = "Input capacitance."
+[[params]]
+name = "c_out"
+default = "22uF"
+fixed = true
+description = "The data sheet's stability requirement: 22 uF with ESR inside its stable range. A ceramic part with too little ESR can oscillate."
+
+[[validated]]
+case = "fixture.synth"
+values = { c_in = "10uF", c_out = "22uF" }

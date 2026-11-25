@@ -109,6 +109,11 @@ impl Parser {
         &self.peek().kind
     }
 
+    /// The kind of the token `n` places past the current one, if any.
+    fn peek_nth_kind(&self, n: usize) -> Option<&TokenKind> {
+        self.tokens.get(self.pos + n).map(|t| &t.kind)
+    }
+
     fn bump(&mut self) -> &Token {
         let i = self.pos;
         if self.pos < self.tokens.len() - 1 {
@@ -890,7 +895,10 @@ impl Parser {
         // design that already uses `mpn` as a name keeps parsing. Stored
         // lowercase, which never collides with the capitalised KiCad fields.
         if let TokenKind::Ident(name) = self.peek_kind()
-            && (name == "lcsc_pn" || name == "mpn")
+            && matches!(
+                name.as_str(),
+                "lcsc_pn" | "mpn" | "tempco" | "temp_range" | "vout_margin"
+            )
         {
             let key = name.clone();
             self.bump();
@@ -1528,6 +1536,7 @@ impl Parser {
     /// arm every time the language gains one.
     ///
     /// `None` when the token is not an attribute, having already reported it.
+    #[allow(clippy::too_many_lines)]
     fn parse_netclass_attribute(&mut self) -> Option<NetclassAttr> {
         match self.peek_kind() {
             TokenKind::KwTraceWidth => {
@@ -1617,6 +1626,33 @@ impl Parser {
                     None => {}
                 }
             }
+            // `voltage` is the reserved structured-value keyword; inside a
+            // netclass it takes a unit literal.
+            TokenKind::KwVoltage => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::Voltage(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "target_length" => {
+                self.bump();
+                if let Some(v) = self.expect_value() {
+                    return Some(NetclassAttr::TargetLength(v));
+                }
+            }
+            TokenKind::Ident(name) if name == "reference" => {
+                self.bump();
+                if let Some(net) =
+                    self.expect_string("E-SYNTH-PARSE-002", "expected the reference net name")
+                {
+                    return Some(NetclassAttr::Reference(net));
+                }
+            }
+            TokenKind::Ident(name) if name == "protected" || name == "unprotected" => {
+                let protected = name == "protected";
+                self.bump();
+                return Some(NetclassAttr::Protection { protected });
+            }
             TokenKind::Ident(name) if name == "color" => {
                 self.bump();
                 if let Some(hex) = self.expect_string(
@@ -1637,7 +1673,7 @@ impl Parser {
                     self.peek().span,
                     "E-SYNTH-PARSE-019",
                     "unexpected attribute inside netclass",
-                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `edge_rate slow|medium|fast`, `layers \"<layer>\", …`, `plane`, or `color \"#rrggbb\"`",
+                    "`trace_width <value><unit>`, `clearance <value><unit>`, `impedance <value><unit>`, `current <value><unit>`, `max_length <value><unit>`, `max_skew <value><unit>`, `via_diameter <value><unit>`, `via_drill <value><unit>`, `edge_rate slow|medium|fast`, `layers \"<layer>\", …`, `voltage <value><unit>`, `protected`, `unprotected`, `target_length <value><unit>`, `reference \"<net>\"`, `plane`, or `color \"#rrggbb\"`",
                     self.describe_current(),
                     None,
                 );
@@ -2513,6 +2549,7 @@ impl Parser {
     }
 
     /// `use "Module" as Label (prefix "P", param = value) { port -> target }`.
+    #[allow(clippy::too_many_lines)]
     fn parse_use(&mut self) -> Option<UseStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `use`
@@ -2534,6 +2571,7 @@ impl Parser {
         // Optional `( prefix "…", param = value )`.
         let mut prefix = None;
         let mut params = Vec::new();
+        let mut deviations = Vec::new();
         if matches!(self.peek_kind(), TokenKind::LParen) {
             self.bump();
             loop {
@@ -2549,6 +2587,24 @@ impl Parser {
                             "E-SYNTH-PARSE-002",
                             "expected refdes prefix (quoted string after `prefix`)",
                         )?);
+                    }
+                    // `deviation "reason"` on its own: an instance-level
+                    // exception to the reference.
+                    TokenKind::Ident(name)
+                        if name == "deviation"
+                            && matches!(self.peek_nth_kind(1), Some(TokenKind::StringLit(_))) =>
+                    {
+                        let span = self.peek().span;
+                        self.bump();
+                        if let Some(reason) =
+                            self.expect_string("E-SYNTH-PARSE-002", "expected the deviation reason")
+                        {
+                            deviations.push(synth_ast::DeviationAst {
+                                param: None,
+                                reason,
+                                span: Span::new(span.byte_start, self.last_offset()),
+                            });
+                        }
                     }
                     _ => {
                         let span = self.peek().span;
@@ -2571,7 +2627,22 @@ impl Parser {
                         }
                         self.bump();
                         if let Some(v) = self.expect_value() {
-                            params.push((name, v));
+                            params.push((name.clone(), v));
+                        }
+                        // `c_out = 47uF deviation "reason"`.
+                        if matches!(self.peek_kind(), TokenKind::Ident(word) if word == "deviation")
+                        {
+                            let dev_start = self.peek().span.byte_start;
+                            self.bump();
+                            if let Some(reason) = self
+                                .expect_string("E-SYNTH-PARSE-002", "expected the deviation reason")
+                            {
+                                deviations.push(synth_ast::DeviationAst {
+                                    param: Some(name),
+                                    reason,
+                                    span: Span::new(dev_start, self.last_offset()),
+                                });
+                            }
                         }
                     }
                 }
@@ -2608,6 +2679,7 @@ impl Parser {
             prefix,
             params,
             bindings,
+            deviations,
             span: Span::new(start, end),
         })
     }
@@ -2745,11 +2817,16 @@ impl Parser {
             self.bump();
             default = self.expect_value();
         }
+        let fixed = matches!(self.peek_kind(), TokenKind::Ident(word) if word == "fixed");
+        if fixed {
+            self.bump();
+        }
         let end = self.last_offset();
         Some(ParamDeclAst {
             name,
             ty,
             default,
+            fixed,
             span: Span::new(start, end),
         })
     }

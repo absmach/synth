@@ -646,6 +646,20 @@ pub struct NetClass {
     /// layers is a blocking DRC violation.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<String>,
+    /// Working voltage of the class's nets (`voltage 12v`). Overrides the
+    /// inferred rail voltage for voltage-aware clearance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voltage: Option<Voltage>,
+    /// `Some(true)` for `protected`, `Some(false)` for `unprotected`, `None`
+    /// to infer: an input-connector rail is unprotected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub protected: Option<bool>,
+    /// Length the router tunes every member to (`target_length 42mm`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_length: Option<Length>,
+    /// The member net the others are tuned to (`reference "DQS_P"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length_reference: Option<String>,
     pub source_span: Span,
 }
 

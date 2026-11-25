@@ -108,6 +108,94 @@ pub struct ConnectorDepthIssue {
     pub tolerance_nm: i64,
     /// Offset that puts the connector's courtyard flush with the edge, in nm.
     pub flush_nm: i64,
+    /// How far to move the connector outward, toward and past `edge`, to put
+    /// its mating plane in the allowed range, in nm. Negative moves it in.
+    pub move_out_nm: i64,
+    /// The part declares `mating_plane_offset_mm`, so the plane position is
+    /// the registry's, not inferred from the courtyard.
+    pub declared: bool,
+    /// The allowed overhang range `[min, max]` past the edge, in nm, when
+    /// the part declares one.
+    pub overhang_range_nm: Option<(i64, i64)>,
+}
+
+/// A connector's declared mating plane in board coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MatingPlane {
+    /// The board side the face points out of after rotation.
+    pub side: BoardEdge,
+    /// The plane's coordinate on the axis normal to `side`, in nm: `x` for
+    /// left/right, `y` for top/bottom.
+    pub coord_nm: i64,
+    /// Allowed overhang `[min, max]` past the edge, in nm.
+    pub overhang_nm: (i64, i64),
+}
+
+impl MatingPlane {
+    /// How far the plane sits past an edge of `outline` on its side, in nm.
+    /// Positive overhangs, negative is recessed.
+    #[must_use]
+    pub fn overhang_past(&self, outline: Rect) -> i64 {
+        match self.side {
+            BoardEdge::Top => outline.min.y_nm - self.coord_nm,
+            BoardEdge::Bottom => self.coord_nm - outline.max.y_nm,
+            BoardEdge::Left => outline.min.x_nm - self.coord_nm,
+            BoardEdge::Right => self.coord_nm - outline.max.x_nm,
+        }
+    }
+
+    /// Where the board edge must sit for the plane to overhang it by the
+    /// middle of its allowed range, on the plane's axis.
+    #[must_use]
+    pub fn target_edge_nm(&self) -> i64 {
+        let target = i64::midpoint(self.overhang_nm.0, self.overhang_nm.1);
+        match self.side {
+            BoardEdge::Top | BoardEdge::Left => self.coord_nm + target,
+            BoardEdge::Bottom | BoardEdge::Right => self.coord_nm - target,
+        }
+    }
+}
+
+/// The declared mating plane of a placed connector, if its part gives a
+/// `mating_face` and a `mating_plane_offset_mm`. The placement's centre is
+/// the courtyard centre; the offset is measured from the footprint origin.
+#[must_use]
+pub fn mating_plane(
+    component: &synth_ir::Component,
+    placement: &crate::ComponentPlacement,
+) -> Option<MatingPlane> {
+    let part = component.part.as_ref()?;
+    let dims = part.footprint_dimensions.as_ref()?;
+    let face = dims.mating_face?;
+    let offset_nm = synth_geometry::mm_to_nm(dims.mating_plane_offset_mm?);
+    let (lo, hi) = dims.mating_overhang_mm.map_or((0, 0), |[lo, hi]| {
+        (synth_geometry::mm_to_nm(lo), synth_geometry::mm_to_nm(hi))
+    });
+    let (ux, uy) = match face {
+        MatingFace::Top => (0_i64, -1_i64),
+        MatingFace::Right => (1, 0),
+        MatingFace::Bottom => (0, 1),
+        MatingFace::Left => (-1, 0),
+    };
+    let (dx, dy) = placement.rotation.rotate_offset(ux, uy);
+    let ((cx_mm, cy_mm), _) = synth_layout::pcb_courtyard_geometry_for_part(part);
+    let (ox, oy) = placement.rotation.rotate_offset(
+        synth_geometry::mm_to_nm(cx_mm),
+        synth_geometry::mm_to_nm(cy_mm),
+    );
+    let origin_x = placement.center.x_nm - ox;
+    let origin_y = placement.center.y_nm - oy;
+    let (side, coord_nm) = match (dx, dy) {
+        (0, -1) => (BoardEdge::Top, origin_y - offset_nm),
+        (0, _) => (BoardEdge::Bottom, origin_y + offset_nm),
+        (1, _) => (BoardEdge::Right, origin_x + offset_nm),
+        _ => (BoardEdge::Left, origin_x - offset_nm),
+    };
+    Some(MatingPlane {
+        side,
+        coord_nm,
+        overhang_nm: (lo, hi),
+    })
 }
 
 /// Smallest depth tolerance, in mm. It only absorbs grid rounding for a part
@@ -137,8 +225,35 @@ pub fn connector_depth_issues(
         if found.placement.rotation != found.expected {
             continue;
         }
+        let min_tol = synth_geometry::mm_to_nm(MIN_DEPTH_TOLERANCE_MM);
+        if let Some(component) = board.component(found.placement.id)
+            && let Some(plane) = mating_plane(component, found.placement)
+        {
+            // The registry states where the plane is and how far past the
+            // edge it may sit: judge that, not the courtyard.
+            let overhang = plane.overhang_past(outline);
+            let (lo, hi) = plane.overhang_nm;
+            let move_out_nm = if overhang < lo - min_tol {
+                lo - overhang
+            } else if overhang > hi + min_tol {
+                hi - overhang
+            } else {
+                continue;
+            };
+            issues.push(ConnectorDepthIssue {
+                refdes: found.refdes,
+                edge: found.edge,
+                offset_nm: -overhang,
+                tolerance_nm: min_tol,
+                flush_nm: 0,
+                move_out_nm,
+                declared: true,
+                overhang_range_nm: Some((lo, hi)),
+            });
+            continue;
+        }
         let margin_nm = synth_geometry::mm_to_nm(found.margin_mm);
-        let tolerance_nm = margin_nm.max(synth_geometry::mm_to_nm(MIN_DEPTH_TOLERANCE_MM));
+        let tolerance_nm = margin_nm.max(min_tol);
         let (distance, half_depth) = match found.edge {
             BoardEdge::Top => (found.placement.center.y_nm - outline.min.y_nm, found.half.1),
             BoardEdge::Bottom => (outline.max.y_nm - found.placement.center.y_nm, found.half.1),
@@ -153,6 +268,9 @@ pub fn connector_depth_issues(
                 offset_nm,
                 tolerance_nm,
                 flush_nm: margin_nm,
+                move_out_nm: offset_nm - margin_nm,
+                declared: false,
+                overhang_range_nm: None,
             });
         }
     }

@@ -49,7 +49,7 @@ pub use imports::{
     MemoryImportLoader, ResolveResult as ImportResolveResult, resolve as resolve_imports,
 };
 pub use lower::{LowerResult, lower};
-pub use modules::{BusBundle, ModuleDesc, expand as expand_modules};
+pub use modules::{BusBundle, Deviation, ModuleDesc, expand as expand_modules};
 pub use multiboard::{InterBoardPinMapping, MultiBoardProject, MultiBoardValidationResult};
 pub use power_domains::{PowerDomainKind, PowerDomainMap, infer_power_domains};
 pub use procurement::{

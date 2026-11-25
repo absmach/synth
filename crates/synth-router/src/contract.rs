@@ -529,6 +529,30 @@ impl RouteRequest {
             })
             .filter(|pair| !pair.positive.is_empty() && !pair.negative.is_empty())
             .collect();
+        // A class with a skew budget is a match group for the tuning pass.
+        // Taken here so every entry point that enforces the pairs also tunes.
+        self.match_groups = board
+            .netclasses
+            .iter()
+            .filter_map(|class| {
+                let max_skew = class.max_skew?;
+                let nets: Vec<String> = board
+                    .nets
+                    .iter()
+                    .filter(|net| net.netclass.as_deref() == Some(class.name.as_str()))
+                    .map(|net| net.name.clone())
+                    .collect();
+                (nets.len() >= 2).then(|| crate::length_tune::MatchGroupRequest {
+                    name: class.name.clone(),
+                    nets,
+                    max_skew_nm: max_skew.0,
+                    target_length_nm: class.target_length.map(|l| l.0),
+                    reference: class.length_reference.clone(),
+                })
+            })
+            .collect();
+        self.length_delay = synth_geometry::StackupProfile::declared(board)
+            .map(|stackup| crate::length_tune::delay_model(&stackup));
     }
 
     /// Adopt the fabrication floor a manufacturer profile imposes.
@@ -645,6 +669,14 @@ pub struct RouteRequest {
     /// delivered copper and blocks a pair outside its budget.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub diff_pairs: Vec<DiffPairRequest>,
+    /// Netclasses with a `max_skew`, by member net name, that the
+    /// length-tuning pass matches with meanders after routing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub match_groups: Vec<crate::length_tune::MatchGroupRequest>,
+    /// Per-layer propagation delay from a declared stackup: tuning then
+    /// matches delay instead of length.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length_delay: Option<crate::length_tune::DelayModel>,
 }
 
 /// One net's layer pin: the copper layers it may be routed on.
@@ -880,6 +912,8 @@ impl RouteRequest {
 
             declared_layers: None,
             diff_pairs: Vec::new(),
+            match_groups: Vec::new(),
+            length_delay: None,
         }
     }
 

@@ -14,6 +14,12 @@ courtyard_margin_mm = 0.25
 # Side-entry (horizontal) footprint: the housing extends toward +y from the
 # pad row and the plug enters from that end, read from the footprint outline.
 mating_face = "bottom"
+# Mating plane: the JST XH S4B-XH-A-1 body front on F.Fab, 7.6 mm from the
+# footprint origin along the mating face. The stock courtyard runs 0.5 mm
+# past it, so a courtyard-flush part has its plane 0.5 mm in. The range
+# allows that recess and up to 0.5 mm overhang; deeper recesses fail.
+mating_plane_offset_mm = 7.6
+mating_overhang_mm = [-0.5, 0.5]
 
 [operating_conditions]
 min_voltage_v = 1.8

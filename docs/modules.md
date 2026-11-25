@@ -109,6 +109,34 @@ A declared bus exports as a KiCad `(bus_alias "N" (members …))` on every sheet
 
 Verified end to end: a two-instance design with a shared `I2C0` bus exports, and `kicad-cli sch erc` reports **0 violations** while the KiCad netlist places `CH1_U1`, `CH2_U1`, both pull-ups, and the bound MCU pin on the single net `/I2C0.sda`.
 
+## Reference modules and deviations
+
+`registry/modules/` holds vetted reference subcircuits: a module copied from
+a data sheet or application note, with its provenance and a fixture. See
+`registry/modules/README.md`.
+
+A `param` marked `fixed` is part of that reference:
+
+```synth
+module "LdoAms1117" (vin: power, vout: power, gnd: ground) {
+  param c_out: capacitance = 22uF fixed
+  …
+}
+```
+
+Overriding it needs a recorded reason, `deviation "…"`, after the value. A
+bare `deviation "…"` in the parameter list records an instance-level
+exception:
+
+```synth
+use "LdoAms1117" as LDO1 (c_out = 47uF deviation "polymer part", deviation "second output cap moved") { … }
+```
+
+The deviations are kept on the board's `ModuleDesc` entries. Validate lists
+them all in one info diagnostic (`E-SYNTH-MODULE-009`). An undocumented
+override of a fixed parameter is `E-SYNTH-MODULE-008`, and a deviation on a
+parameter the instance does not set is `E-SYNTH-MODULE-010`.
+
 ## Scope
 
 Implemented here: modules with typed ports and parameters, refdes-prefix instantiation, interface bundles with one-binding connect, `bind` of a bus to a part, and bus declaration with KiCad `bus_alias` export. Deferred (documented above): complex-hierarchy file sharing, nested module instances, and bus-member wildcards.

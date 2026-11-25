@@ -132,6 +132,142 @@ pub struct ManufacturerProfile {
     /// restriction; nothing enforced it.
     #[serde(default)]
     pub supported_layers: Vec<u32>,
+    /// Clearance by voltage difference (`E-SYNTH-DRC-025`). Defaults to the
+    /// IPC-2221B Table 6-1 spacing with no coating.
+    #[serde(default)]
+    pub voltage_clearance: VoltageClearanceRules,
+}
+
+/// How the board's outer copper is protected, which picks the IPC-2221B
+/// column for external conductors.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Coating {
+    /// Bare outer copper at sea level to 3050 m (IPC-2221B column B2).
+    #[default]
+    None,
+    /// A permanent polymer coating over the conductors (column B4).
+    Polymer,
+}
+
+/// One row of a voltage-clearance table: the spacing required for a voltage
+/// difference up to `up_to_mv`, in nanometres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClearanceRow {
+    pub up_to_mv: i64,
+    /// Inner-layer conductors (IPC-2221B B1).
+    pub internal_nm: i64,
+    /// Bare outer conductors (B2).
+    pub external_nm: i64,
+    /// Coated outer conductors (B4).
+    pub coated_nm: i64,
+}
+
+/// Voltage-aware clearance rules: the spacing table, the board coating and
+/// the margin an unprotected input rail adds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VoltageClearanceRules {
+    /// Rows in ascending `up_to_mv`.
+    #[serde(default = "ipc_2221b_table")]
+    pub table: Vec<ClearanceRow>,
+    /// Spacing per volt past the last row, `(internal, external, coated)`,
+    /// in nanometres per volt of the whole difference.
+    #[serde(default = "ipc_2221b_per_volt")]
+    pub beyond_nm_per_v: (i64, i64, i64),
+    #[serde(default)]
+    pub coating: Coating,
+    /// Extra spacing round a rail that reaches the board from a connector
+    /// without passing a fuse or eFuse, in nanometres. Surge and hot-plug
+    /// transients on such a rail are not limited by anything on the board.
+    #[serde(default = "default_unprotected_margin_nm")]
+    pub unprotected_margin_nm: i64,
+    /// The margin applies to an unprotected rail at or above this voltage, in
+    /// millivolts. A 5 V USB rail is a limited-energy source; a 12 V or 24 V
+    /// adapter or vehicle input is not.
+    #[serde(default = "default_unprotected_min_mv")]
+    pub unprotected_min_mv: i64,
+}
+
+impl Default for VoltageClearanceRules {
+    fn default() -> Self {
+        Self {
+            table: ipc_2221b_table(),
+            beyond_nm_per_v: ipc_2221b_per_volt(),
+            coating: Coating::None,
+            unprotected_margin_nm: default_unprotected_margin_nm(),
+            unprotected_min_mv: default_unprotected_min_mv(),
+        }
+    }
+}
+
+impl VoltageClearanceRules {
+    /// The table spacing for a voltage difference of `delta_mv` on an inner
+    /// (`internal`) or outer layer, in nanometres.
+    #[must_use]
+    pub fn table_nm(&self, delta_mv: i64, internal: bool) -> i64 {
+        let delta_mv = delta_mv.abs();
+        let pick = |row: &ClearanceRow| {
+            if internal {
+                row.internal_nm
+            } else if self.coating == Coating::Polymer {
+                row.coated_nm
+            } else {
+                row.external_nm
+            }
+        };
+        if let Some(row) = self.table.iter().find(|row| delta_mv <= row.up_to_mv) {
+            return pick(row);
+        }
+        let (inner, outer, coated) = self.beyond_nm_per_v;
+        let rate = if internal {
+            inner
+        } else if self.coating == Coating::Polymer {
+            coated
+        } else {
+            outer
+        };
+        rate * delta_mv / 1000
+    }
+}
+
+/// IPC-2221B Table 6-1, columns B1 (internal), B2 (external, uncoated, sea
+/// level to 3050 m) and B4 (external, permanent polymer coating).
+#[must_use]
+pub fn ipc_2221b_table() -> Vec<ClearanceRow> {
+    [
+        (15, 0.05, 0.1, 0.05),
+        (30, 0.05, 0.1, 0.05),
+        (50, 0.1, 0.6, 0.13),
+        (100, 0.1, 0.6, 0.13),
+        (150, 0.2, 0.6, 0.4),
+        (170, 0.2, 1.25, 0.4),
+        (250, 0.2, 1.25, 0.4),
+        (300, 0.2, 1.25, 0.4),
+        (500, 0.25, 2.5, 0.8),
+    ]
+    .into_iter()
+    .map(|(v, b1, b2, b4)| ClearanceRow {
+        up_to_mv: v * 1000,
+        internal_nm: mm_to_nm(b1),
+        external_nm: mm_to_nm(b2),
+        coated_nm: mm_to_nm(b4),
+    })
+    .collect()
+}
+
+/// IPC-2221B Table 6-1's per-volt spacing above 500 V: 0.0025, 0.005 and
+/// 0.00305 mm/V.
+#[must_use]
+pub const fn ipc_2221b_per_volt() -> (i64, i64, i64) {
+    (2_500, 5_000, 3_050)
+}
+
+fn default_unprotected_margin_nm() -> i64 {
+    mm_to_nm(0.2)
+}
+
+const fn default_unprotected_min_mv() -> i64 {
+    6_000
 }
 
 impl ManufacturerProfile {
@@ -256,6 +392,7 @@ impl ManufacturerProfile {
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
+            voltage_clearance: VoltageClearanceRules::default(),
             via_in_pad: false,
             via_in_pad_land_extra_nm: 0,
         }
@@ -294,6 +431,7 @@ impl ManufacturerProfile {
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
+            voltage_clearance: VoltageClearanceRules::default(),
             via_in_pad: false,
             via_in_pad_land_extra_nm: 0,
         }
@@ -329,6 +467,7 @@ impl ManufacturerProfile {
             crosstalk_run_multiple: default_crosstalk_run_multiple(),
             ampacity_delta_t_milli_c: default_ampacity_delta_t_milli_c(),
             ir_drop_budget_mv: default_ir_drop_budget_mv(),
+            voltage_clearance: VoltageClearanceRules::default(),
             via_in_pad: false,
             via_in_pad_land_extra_nm: 0,
         }
@@ -511,7 +650,64 @@ impl ManufacturerProfile {
             microvia_drill_nm: mm_to_nm(raw.microvia_drill_mm),
             microvia_diameter_nm: mm_to_nm(raw.microvia_diameter_mm),
             via_in_pad_land_extra_nm: mm_to_nm(raw.via_in_pad_land_extra_mm),
+            voltage_clearance: raw.voltage_clearance.map_or_else(
+                VoltageClearanceRules::default,
+                TomlVoltageClearance::into_rules,
+            ),
         })
+    }
+}
+
+/// `[voltage_clearance]` in a profile TOML, in millimetres and volts.
+#[derive(Debug, Deserialize)]
+struct TomlVoltageClearance {
+    #[serde(default)]
+    coating: Coating,
+    unprotected_margin_mm: Option<f64>,
+    unprotected_min_v: Option<f64>,
+    /// Replaces the IPC-2221B rows when present.
+    #[serde(default)]
+    table: Vec<TomlClearanceRow>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TomlClearanceRow {
+    up_to_v: f64,
+    internal_mm: f64,
+    external_mm: f64,
+    coated_mm: f64,
+}
+
+impl TomlVoltageClearance {
+    #[allow(clippy::cast_possible_truncation)]
+    fn into_rules(self) -> VoltageClearanceRules {
+        let defaults = VoltageClearanceRules::default();
+        let mut table: Vec<ClearanceRow> = self
+            .table
+            .iter()
+            .map(|row| ClearanceRow {
+                up_to_mv: (row.up_to_v * 1000.0).round() as i64,
+                internal_nm: mm_to_nm(row.internal_mm),
+                external_nm: mm_to_nm(row.external_mm),
+                coated_nm: mm_to_nm(row.coated_mm),
+            })
+            .collect();
+        table.sort_by_key(|row| row.up_to_mv);
+        VoltageClearanceRules {
+            table: if table.is_empty() {
+                defaults.table
+            } else {
+                table
+            },
+            beyond_nm_per_v: defaults.beyond_nm_per_v,
+            coating: self.coating,
+            unprotected_margin_nm: self
+                .unprotected_margin_mm
+                .map_or(defaults.unprotected_margin_nm, mm_to_nm),
+            unprotected_min_mv: self
+                .unprotected_min_v
+                .map_or(defaults.unprotected_min_mv, |v| (v * 1000.0).round() as i64),
+        }
     }
 }
 
@@ -559,6 +755,8 @@ struct TomlProfile {
     /// what every profile written before this field meant.
     #[serde(default)]
     supported_layers: Vec<u32>,
+    #[serde(default)]
+    voltage_clearance: Option<TomlVoltageClearance>,
 }
 
 #[derive(Debug, Error)]

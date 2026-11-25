@@ -49,6 +49,11 @@ expression: board
           "height_mm": 1.6,
           "courtyard_margin_mm": 0.25,
           "mating_face": "bottom",
+          "mating_plane_offset_mm": 6.25,
+          "mating_overhang_mm": [
+            -0.5,
+            0.5
+          ],
           "label_side": null,
           "label_hidden": null
         },

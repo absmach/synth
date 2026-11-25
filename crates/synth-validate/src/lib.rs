@@ -52,6 +52,7 @@ pub mod anomaly;
 pub mod config;
 pub mod deep_erc;
 pub mod divider_tolerance;
+mod module_deviations;
 pub use anomaly::{BoardFeatureVec, GraphAnomalyDetectorRule, extract_features};
 pub use config::{ErcConfig, PinConflictTable};
 
@@ -207,6 +208,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::CeramicDcBiasDeratingRule::new(config)),
         Box::new(RegulatorFeedbackOnSwitchNodeRule),
         Box::new(divider_tolerance::FeedbackDividerToleranceRule),
+        Box::new(module_deviations::ModuleDeviationsRule),
     ]
 }
 
@@ -2428,9 +2430,15 @@ impl ErcRule for RefdesPrefixRule {
             let Some(accepted) = accepted_refdes_prefixes(&component.kind) else {
                 continue;
             };
+            // A module instance prefixes every refdes with its label
+            // (`CH1_U1`) and puts its parts on a sheet named after it, so
+            // the letter to judge follows the last `_`.
+            let local = match (&component.sheet, component.refdes.rsplit_once('_')) {
+                (Some(_), Some((_, local))) if !local.is_empty() => local,
+                _ => component.refdes.as_str(),
+            };
             // Leading letter run of the refdes (e.g. "SW3" -> "SW").
-            let prefix: String = component
-                .refdes
+            let prefix: String = local
                 .chars()
                 .take_while(char::is_ascii_alphabetic)
                 .collect();
@@ -4874,6 +4882,10 @@ mod tests {
             current: None,
             plane: false,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: Span::new(0, 0),
         }];
         board

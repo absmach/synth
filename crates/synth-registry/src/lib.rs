@@ -28,6 +28,7 @@ pub use kicad_pin_check::{kicad_pin_names, kicad_pin_numbers};
 mod loader;
 mod part;
 pub mod qualify;
+pub mod reference_modules;
 mod registry;
 pub mod vector_search;
 

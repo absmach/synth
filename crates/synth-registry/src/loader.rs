@@ -590,6 +590,27 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
         });
     }
 
+    if let Some(ref dims) = part.footprint_dimensions {
+        if dims.mating_plane_offset_mm.is_some() && dims.mating_face.is_none() {
+            return Err(LoadError::InvalidFootprintDimensions {
+                path: path.to_path_buf(),
+                message:
+                    "mating_plane_offset_mm needs mating_face: the offset is measured along it"
+                        .to_string(),
+            });
+        }
+        if let Some([lo, hi]) = dims.mating_overhang_mm
+            && (lo > hi || dims.mating_plane_offset_mm.is_none())
+        {
+            return Err(LoadError::InvalidFootprintDimensions {
+                path: path.to_path_buf(),
+                message: format!(
+                    "mating_overhang_mm [{lo}, {hi}] needs min <= max and a mating_plane_offset_mm"
+                ),
+            });
+        }
+    }
+
     for rule in &part.required_decoupling {
         for pin in std::iter::once(&rule.net).chain(rule.to.as_ref()) {
             if part.find_pin(pin).is_none() {

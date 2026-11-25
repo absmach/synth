@@ -2528,6 +2528,7 @@ dependencies = [
  "synth-ir",
  "synth-kicad",
  "synth-parser",
+ "synth-pcb",
  "synth-place",
  "synth-registry",
  "thiserror 2.0.21",

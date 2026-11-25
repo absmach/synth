@@ -3027,7 +3027,11 @@ fn polygon_contains(outline: &[Point], p: (f64, f64)) -> bool {
 }
 
 /// `text` without the track on `layer` between `ends`.
-fn remove_segment_in_text(text: &str, ends: ((f64, f64), (f64, f64)), layer: &str) -> String {
+pub(crate) fn remove_segment_in_text(
+    text: &str,
+    ends: ((f64, f64), (f64, f64)),
+    layer: &str,
+) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(i) = rest.find("(segment") {

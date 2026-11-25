@@ -1,0 +1,55 @@
+id = "buck_lmr33640_5v"
+module = "BuckLmr33640"
+version = "1.0.0"
+title = "LMR33640 buck, 5 V at 400 kHz"
+description = "TI LMR33640 synchronous step-down converter set for 5 V out at 400 kHz: 6.8 uH, 4 x 22 uF out, 100 k / 24.9 k feedback divider in 1 % parts, 10 uF + 220 nF in, 100 nF bootstrap, 1 uF VCC, power-good pull-up."
+tags = ["power", "buck", "regulator", "5v", "switching"]
+notes = [
+  "The 6.8 uH inductor (Table 9-2, 400 kHz, 5 V) is part of the body, not a parameter: a different value is a different reference.",
+  "With the 0.985 V to 1.015 V reference and 1 % resistors the output is 4.86 V to 5.18 V worst case, FB current included (E-SYNTH-POWER-013 checks it against the load).",
+  "Place RFBT and RFBB next to the FB pin (data sheet 11.1).",
+]
+
+[provenance]
+source = "TI LMR33640 data sheet (SNVSB99C)"
+section = "9.2 Typical Application, Table 9-2 Typical External Component Values (400 kHz, 5 V row); 9.2.2.2 Output Voltage Setpoint"
+reference_design = "LMR33640 data sheet Figure 9-1, Table 9-3 BOM for Typical Application Curves"
+url = "https://www.ti.com/lit/ds/symlink/lmr33640.pdf"
+
+[[ports]]
+name = "vin"
+type = "power"
+description = "Input, 6 V to 36 V for 5 V out. EN is tied to VIN."
+[[ports]]
+name = "vout"
+type = "power"
+description = "5 V output. The inductor's 3.6 A RMS rating limits the module to 3 A."
+[[ports]]
+name = "gnd"
+type = "ground"
+description = "Power ground and the exposed pad."
+[[ports]]
+name = "pg"
+type = "output"
+description = "Open-drain power good, pulled up to VOUT through 100 k."
+
+[[params]]
+name = "r_fbt"
+default = "100kohm"
+fixed = true
+description = "Top feedback resistor. VOUT = 1.0 V x (1 + RFBT / RFBB)."
+[[params]]
+name = "r_fbb"
+default = "24.9kohm"
+fixed = true
+description = "Bottom feedback resistor."
+[[params]]
+name = "c_out"
+default = "22uF"
+fixed = false
+range = "22uF..47uF"
+description = "Each of the four output capacitors. Table 9-2 gives 3 x 22 uF as the minimum bank."
+
+[[validated]]
+case = "fixture.synth"
+values = { r_fbt = "100kohm", r_fbb = "24.9kohm", c_out = "22uF" }

@@ -1,0 +1,50 @@
+// LMR33640 synchronous buck, 5 V out at 400 kHz, from the data sheet's
+// typical external component table.
+module "BuckLmr33640" (vin: power, vout: power, gnd: ground, pg: output) {
+  param r_fbt: resistance = 100kohm fixed
+  param r_fbb: resistance = 24.9kohm fixed
+  param c_out: capacitance = 22uF
+  component U1: regulator "lmr33640"
+  component C1: capacitor "c_generic_1206" value "10uF"
+  component C2: capacitor "c_generic_0603" value "220nF"
+  component C3: capacitor "c_generic_0603" value "100nF"
+  component C4: capacitor "c_generic_0603" value "1uF"
+  component L1: inductor "l_bourns_srn6045ta_6r8m" value "6.8uH"
+  component C5: capacitor "c_generic_1206" value $c_out
+  component C6: capacitor "c_generic_1206" value $c_out
+  component C7: capacitor "c_generic_1206" value $c_out
+  component C8: capacitor "c_generic_1206" value $c_out
+  component R1: resistor "r_generic_0402" value $r_fbt tolerance "1%"
+  component R2: resistor "r_generic_0402" value $r_fbb tolerance "1%"
+  component R3: resistor "r_generic_0402" value "100k"
+
+  connect U1.vin -> vin
+  connect U1.en -> vin
+  connect U1.gnd -> gnd
+  connect U1.pad -> gnd
+  connect C1.p1 -> vin
+  connect C1.p2 -> gnd
+  connect C2.p1 -> vin
+  connect C2.p2 -> gnd
+  connect U1.boot -> C3.p1
+  connect C3.p2 -> U1.sw
+  connect U1.vcc -> C4.p1
+  connect C4.p2 -> gnd
+  connect U1.sw -> L1.p1
+  connect L1.p2 -> vout
+  connect C5.p1 -> vout
+  connect C5.p2 -> gnd
+  connect C6.p1 -> vout
+  connect C6.p2 -> gnd
+  connect C7.p1 -> vout
+  connect C7.p2 -> gnd
+  connect C8.p1 -> vout
+  connect C8.p2 -> gnd
+  connect R1.p1 -> vout
+  connect R1.p2 -> U1.fb
+  connect U1.fb -> R2.p1
+  connect R2.p2 -> gnd
+  connect U1.pg -> pg
+  connect R3.p1 -> pg
+  connect R3.p2 -> vout
+}

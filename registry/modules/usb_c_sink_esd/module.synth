@@ -1,0 +1,44 @@
+// USB-C 2.0 sink (UFP) with data-line ESD protection.
+// Rd = 5.1 kOhm on each CC pin advertises a sink; the PRTR5V0U2X clamps
+// D+/D- to its VBUS-referenced rail and a single-line TVS clamps each CC
+// pin. See module.toml for provenance.
+module "UsbCSinkEsd" (vbus: power, gnd: ground, dp: bidirectional, dn: bidirectional) {
+  param r_cc: resistance = 5.1kohm fixed
+  param c_vbus: capacitance = 4.7uF
+  component J1: connector "usb_c_receptacle"
+  component R1: resistor "r_generic_0402" value $r_cc tolerance "1%"
+  component R2: resistor "r_generic_0402" value $r_cc tolerance "1%"
+  component D3: diode "prtr5v0u2x"
+  component C1: capacitor "c_generic_0805" value $c_vbus
+  component D1: diode "esd_usb"
+  component D2: diode "esd_usb"
+
+  connect J1.vbus -> vbus
+  connect J1.vbus_b4 -> vbus
+  connect J1.vbus_a9 -> vbus
+  connect J1.vbus_b9 -> vbus
+  connect J1.gnd -> gnd
+  connect J1.gnd_b12 -> gnd
+  connect J1.gnd_a12 -> gnd
+  connect J1.gnd_b1 -> gnd
+  connect J1.shld -> gnd
+  connect J1.dp -> dp
+  connect J1.dp_b6 -> dp
+  connect J1.dn -> dn
+  connect J1.dn_b7 -> dn
+  connect J1.cc1 -> R1.p1
+  connect R1.p2 -> gnd
+  connect J1.cc2 -> R2.p1
+  connect R2.p2 -> gnd
+  connect D3.io1 -> dp
+  connect D3.io2 -> dn
+  connect D3.vcc -> vbus
+  connect D3.gnd -> gnd
+  connect D1.io -> J1.cc1
+  connect D1.gnd -> gnd
+  connect D2.io -> J1.cc2
+  connect D2.gnd -> gnd
+  connect C1.p1 -> vbus
+  connect C1.p2 -> gnd
+  no_connect J1.sbu1, J1.sbu2
+}

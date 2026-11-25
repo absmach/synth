@@ -1384,6 +1384,10 @@ fn design_rules(profile: &synth_drc::ManufacturerProfile, board: &Board) -> Stri
             );
         }
     }
+    // Spacing a net's working voltage needs past the flat floors
+    // (`E-SYNTH-DRC-025`), so KiCad's zone fill and DRC keep it too. Empty
+    // for a board with no such net.
+    rules.push_str(&synth_drc::voltage_clearance::kicad_rules(board, profile));
     // Length and skew budgets have no KiCad net-class field, so they become
     // custom rules. Without these a board handed to a person carries no trace
     // of the budget the source declared.
