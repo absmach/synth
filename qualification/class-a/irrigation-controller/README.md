@@ -4,7 +4,7 @@ A two-zone irrigation controller powered from 12 V DC. It has an input fuse, a T
 
 The board answers case 1 of the Class A qualification set: a mixed power, MCU and field-wiring design. It claims only what the tables below show from the board files, the measured KiCad checks and the cited datasheets. No figure is measured on hardware.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `e0e004eb`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `e0e004eb`.
 
 ## The board
 
