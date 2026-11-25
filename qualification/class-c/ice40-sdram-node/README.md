@@ -6,7 +6,7 @@ It answers #329 under #40: a board whose memory interface is length- and impedan
 
 Case 2 is claimed for the routing of the memory lines (length, skew, impedance) only. The board uses the SDRAM's upper byte, and no controller or bitstream has run on it, so no interface timing (setup, hold, 143 MHz operation) is claimed.
 
-Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open (see [`QUALIFICATION.md`](QUALIFICATION.md), Human review).
+Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open.
 
 ## The board
 
@@ -24,7 +24,6 @@ The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040). The part model in [`regis
 
 The memory pins sit on the FPGA's left side facing the SDRAM, in the order of the SDRAM's near pin row, so the data bus runs straight across with no crossings.
 
-See [`QUALIFICATION.md`](QUALIFICATION.md) for the qualification verdict, measurements, evidence and sign-off. See [`PROVENANCE.md`](PROVENANCE.md) for how the board was made.
 
 ## Not verified by Synth
 
