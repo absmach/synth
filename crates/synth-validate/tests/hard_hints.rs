@@ -184,3 +184,149 @@ fn a_hard_near_hint_inherits_its_targets_cluster_distance() {
         "a near chain must not claim the part itself is edge-pinned: {message}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Audit: which hard hints W-SYNTH-BOARD-005 flags, and which ones still block
+// a compact placement. Measured with the placer on the same fixture, because
+// the rule's own reading is the hypothesis under test.
+// ---------------------------------------------------------------------------
+
+fn fitted_size(board: &Board) -> Option<(f64, f64)> {
+    synth_place::place(board).ok().map(|placement| {
+        (
+            synth_geometry::nm_to_mm(placement.board_outline.width_nm()),
+            synth_geometry::nm_to_mm(placement.board_outline.height_nm()),
+        )
+    })
+}
+
+fn without_hints(board: &Board) -> Board {
+    let mut bare = board.clone();
+    for component in &mut bare.components {
+        component.placement_hint = None;
+    }
+    bare
+}
+
+fn area((w, h): (f64, f64)) -> f64 {
+    w * h
+}
+
+/// Whether the hinted fixture takes a larger fitted canvas than the same
+/// parts with every hint removed. `None` when the hinted board does not place.
+fn blocks_compaction(board: &Board) -> Option<bool> {
+    let hinted = fitted_size(board)?;
+    let bare = fitted_size(&without_hints(board))?;
+    Some(area(hinted) > area(bare) + 1.0)
+}
+
+fn audit(source: &str) -> (bool, Option<bool>) {
+    let board = lower(source, "audit.synth");
+    let hinted = fitted_size(&board);
+    let bare = fitted_size(&without_hints(&board));
+    println!("    hinted canvas {hinted:?}, without hints {bare:?}");
+    (!hint_warnings(&board).is_empty(), blocks_compaction(&board))
+}
+
+/// a. A hard `near` on a decoupling part whose anchor is not edge-pinned is
+/// electrical proximity. The rule leaves it alone; the placer still pays for
+/// it because the hint moves the part out of the passive packer.
+#[test]
+fn audit_a_decoupling_near_an_unpinned_mcu_is_not_reported() {
+    let (fires, blocks) = audit(
+        r#"board "a" {
+            layers 2
+            component U1: ic "stm32g030k8_lqfp32"
+            component C1: capacitor "c_generic_0603" { placement_hint { near: "U1" priority: hard } }
+            component C2: capacitor "c_generic_0603"
+            component R1: resistor "r_generic_0603"
+            component R2: resistor "r_generic_0603"
+            connect U1.vdd -> C1.p1
+            connect U1.vdd -> C2.p1
+            connect U1.vdd -> R1.p1
+            connect U1.vdd -> R2.p1
+            connect U1.vss -> C1.p2
+            connect U1.vss -> C2.p2
+            connect U1.vss -> R1.p2
+            connect U1.vss -> R2.p2
+        }"#,
+    );
+    assert!(
+        !fires,
+        "a near chain without a span-fixing anchor is not W-005"
+    );
+    println!("a. W-005 no, blocks compaction: {blocks:?}");
+}
+
+/// b. A hard `near` on a wired test point is electrical too.
+#[test]
+fn audit_b_a_test_point_near_the_mcu_is_not_reported() {
+    let source = r#"board "b" {
+        layers 2
+        component U1: ic "stm32g030k8_lqfp32"
+        component TP1: testpoint "testpoint_pad_1_5" { placement_hint { near: "U1" priority: hard } }
+        connect U1.vdd -> TP1.p1
+    }"#;
+    let board = lower(source, "audit.synth");
+    assert!(hint_warnings(&board).is_empty());
+    let (fires, blocks) = audit(source);
+    assert!(!fires);
+    println!("b. W-005 no, blocks compaction: {blocks:?}");
+}
+
+/// c. A hard `near` on a regulator names its support capacitor: electrical.
+#[test]
+fn audit_c_a_regulator_near_its_capacitor_is_not_reported() {
+    let source = r#"board "c" {
+        layers 2
+        component U2: regulator "ams1117_3v3"
+        component C1: capacitor "c_generic_0603" { placement_hint { near: "U2" priority: hard } }
+        component C2: capacitor "c_generic_0603"
+        component R1: resistor "r_generic_0603"
+        connect U2.vin -> C1.p1
+        connect U2.vout -> C2.p1
+        connect U2.gnd -> R1.p1
+    }"#;
+    let (fires, blocks) = audit(source);
+    assert!(!fires);
+    println!("c. W-005 no, blocks compaction: {blocks:?}");
+}
+
+/// d. A hard `region: centre` fixes the part and is reported.
+#[test]
+fn audit_d_a_hard_centre_hint_is_reported() {
+    let source = r#"board "d" {
+        layers 2
+        component U1: ic "stm32g030k8_lqfp32" { placement_hint { region centre priority: hard } }
+        component C1: capacitor "c_generic_0603"
+        component C2: capacitor "c_generic_0603"
+        connect U1.vdd -> C1.p1
+        connect U1.vdd -> C2.p1
+        connect U1.vss -> C1.p2
+        connect U1.vss -> C2.p2
+    }"#;
+    let (fires, blocks) = audit(source);
+    assert!(fires, "a centre hint fixes a board span");
+    println!("d. W-005 yes, blocks compaction: {blocks:?}");
+}
+
+/// e. A connector's edge is physical by design, so the rule skips it even
+/// when the enclosure does not exist and the edge costs board area.
+#[test]
+fn audit_e_a_connector_edge_is_not_reported() {
+    let source = r#"board "e" {
+        layers 2
+        component J1: connector "header_1x4" { placement_hint { edge left priority: hard } }
+        component R1: resistor "r_generic_0603"
+        component R2: resistor "r_generic_0603"
+        connect J1.p1 -> R1.p1
+        connect R1.p2 -> R2.p1
+        connect R2.p2 -> J1.p2
+    }"#;
+    let (fires, blocks) = audit(source);
+    assert!(
+        !fires,
+        "a connector edge is treated as a physical constraint"
+    );
+    println!("e. W-005 no, blocks compaction: {blocks:?}");
+}
