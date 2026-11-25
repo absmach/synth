@@ -1,6 +1,6 @@
 # USB-C dual UART + RS-485 adapter (SYN-66)
 
-Status: design, placement and a FreeRouting route that passes Synth's release gate. The routed PCB, KiCad project and reports are in this PR. Not fabricated, not tested on hardware.
+**Not Class-B qualified**: no independent review, no hardware test, and the JLCPCB DFM record is for the previous revision. Status: design, placement and a FreeRouting route that passes Synth's release gate (which covers only Synth's routing and export gates). The routed PCB, KiCad project and reports are in this PR. Not fabricated, not tested on hardware.
 Do not call it proven or clean. The list of what is unchecked is at the bottom.
 
 Intended use: bench or lab adapter, short cables, point-to-point or last node on an RS-485 bus. Not for industrial installs, long cable runs or a node in the middle of a multidrop bus: A and B have no surge protection beyond the transceiver's built-in ESD, and the 120 ohm termination is always connected. The surge parts and a selectable termination are a later revision; the registry parts for them are in #356.
@@ -97,7 +97,7 @@ Routing (FreeRouting 2.4.1, `router: "freerouting"`, `allow_via_in_pad: true`), 
 - The routed board is 40.99 x 32.23 mm.
 - FreeRouting's escape analysis flags J1 and U1 (0.5 mm pitch) as the packages where neither a fabrication-floor via nor a minimum track fits between adjacent pads, and suggests 4 layers. The route still completes, with its only via-in-pad at U1 pin 25.
 - J3 is at x 26.0 mm and J4 at x 35.1 mm in the sidecar. Small placement changes change FreeRouting's result: shifts of 0.5 mm in J3 and J4 left DTR1, TNOW0 or +3V3 unrouted, and a 0.5 mm shift of C4 left USB_DN open. The same inputs gave the same board on three runs.
-- Via-in-pad at the U1 exposed pad (pin 25), at (23.900, 17.300) mm. The fab must fill and cap it. JLCPCB has not been asked.
+- Via-in-pad at the U1 exposed pad (pin 25), at (23.800, 17.300) mm. The fab must fill and cap it. JLCPCB has not been asked.
 - Signal-integrity pass: 23 warnings, none blocking. All 23 are layer changes with no ground return via within 1.53 mm, so the return current has to jump between the F.Cu and B.Cu pours.
 - The USB pair is not coupled. Measured on the committed board: full-speed part, pair on F.Cu only with no via (the 23 layer-change warnings are on other nets), DP 38.63 mm and DN 13.52 mm so 25.11 mm of skew (about 0.2 percent of a full-speed bit), and 91.4 percent of the length over solid B.Cu GND fill. These are my measurements, not an independent review; see `qualification.json`. FreeRouting does not couple the pair. On two layers at 1.6 mm, a 90 ohm differential pair needs about 1.18 mm traces, so the pair has no impedance target and no controlled-impedance geometry (the previous four-layer revision declared 90 ohm but never verified it).
 - No part has been reviewed (`reviewer_state` is false for every part in `release.json`).
