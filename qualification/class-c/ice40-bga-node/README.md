@@ -4,7 +4,7 @@ The board carries an iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its sup
 
 It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`. The board carries no firmware and has no USB data path. The figures below are measured on the board file or calculated from datasheets; nothing was built or measured on hardware.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `0daaed69`.
 
 ## The board
 
@@ -98,11 +98,12 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## Not verified by Synth
 
-| Area         | What is not verified                                                                       |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| USB data     | The board has no USB data path. `J1` is a power-only USB-C input.                          |
-| Return paths | The return-path rule is applied by the export gate, and no per-via check is recorded here. |
-| CC attach    | No attach test on a 3 A charger was run with the CC diodes `D8` and `D9` fitted.           |
-| ESD level    | The board is a bench programming node. No IEC 61000-4-2 level is claimed.                  |
-| Thermal      | The 3.3 V budget is calculated from datasheet figures. No temperature was measured.        |
-| DFM          | No JLCDFM or BOM-matching run is recorded.                                                 |
+| Area                 | What is not verified                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------ |
+| USB data             | The board has no USB data path. `J1` is a power-only USB-C input.                          |
+| Return paths         | The return-path rule is applied by the export gate, and no per-via check is recorded here. |
+| CC attach            | No attach test on a 3 A charger was run with the CC diodes `D8` and `D9` fitted.           |
+| ESD level            | The board is a bench programming node. No IEC 61000-4-2 level is claimed.                  |
+| Thermal              | The 3.3 V budget is calculated from datasheet figures. No temperature was measured.        |
+| DFM                  | No JLCDFM or BOM-matching run is recorded.                                                 |
+| Independent sign-off | The independent PCB review required by #40 is still open.                                  |
