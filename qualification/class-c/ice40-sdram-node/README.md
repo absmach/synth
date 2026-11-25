@@ -8,6 +8,8 @@ Case 2 is claimed for the routing of the memory lines (length, skew, impedance) 
 
 Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |
