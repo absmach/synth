@@ -4,7 +4,7 @@ An STM32F103C8 microcontroller with a 128 Mbit SPI flash and a USB-C receptacle,
 
 It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output, made by an agent driving `synth mcp`. It does not claim a case-4 pass. The items in "Not verified by Synth" are open.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `72b6f250`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `72b6f250`.
 
 ## The board
 
