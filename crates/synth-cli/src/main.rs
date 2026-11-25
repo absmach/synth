@@ -7783,6 +7783,8 @@ mod tests {
         replace_evidence(&path, b"fresh").expect("replace");
         assert_eq!(std::fs::read(&path).expect("read"), b"fresh");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn simulation_scratch(label: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
             "synth_simulation_stage_{label}_{}",
