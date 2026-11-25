@@ -18,7 +18,7 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | I/O | `J3` JXTCONN JXT-PZ2.54-1X12P-A1, 12 positions (3.3 V, ground and four FPGA I/O through 100 ohm series resistors) |
 | Indicators and test points | four LEDs in one row, test points on 5 V, 3.3 V, 1.2 V, `CDONE` and `CRESET_B`, two M2.5 mounting holes at opposite corners (bottom left and top right) |
 
-The header `J2` programs the flash in circuit. Its six pins are `CFG_SS_B`, `CFG_SCK`, `CFG_SDI`, `CFG_SDO`, `CRESET_B` and ground. Hold `CRESET_B` low with an external programmer, write the flash `U2` over SPI, then release `CRESET_B` so the FPGA loads the bitstream.
+The header `J2` programs the flash in circuit. Its six pins are `CFG_SS_B` (1, chip select), `CFG_SCK` (2), `CFG_SDI` (3), `CFG_SDO` (4), `CRESET_B` (5) and ground (6). The names are from the FPGA's side: pin 3 is the flash output, so it is MISO at the programmer, and pin 4 is the flash input, so it is MOSI. The header has no 3.3 V pin; a programmer that senses target voltage needs a tap on `TP2`, which is on the 3.3 V rail. Hold `CRESET_B` low with an external programmer, write the flash `U2` over SPI, then release `CRESET_B` so the FPGA loads the bitstream.
 
 The iCE40HX4K bitstream is 135,183 bytes (1,081,464 bits) according to Lattice's iCE40 Programming and Configuration technical note FPGA-TN-02001-3.4, Table 9.2. The 128 Mbit flash `U2` holds it. The board carries no firmware and has no USB data path.
 
@@ -28,4 +28,4 @@ The flash's package was checked against the manufacturer listings (LCSC, Arrow, 
 
 - **USB data:** the board has no USB data path. `J1` is a power-only USB-C input.
 - **Return paths:** the return-path rule is applied by the export gate, and no per-via check is recorded here.
-- **ERC and DFM:** the ERC was not re-run for this package, and no JLCDFM or BOM-matching run is recorded.
+- **ERC and DFM:** `kicad-cli sch erc` (10.0.8) reports 0 errors, 8 `lib_symbol_issues` and 5 `lib_symbol_mismatch` warnings. No JLCDFM or BOM-matching run is recorded.
