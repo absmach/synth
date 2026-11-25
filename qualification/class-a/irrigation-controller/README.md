@@ -4,7 +4,7 @@ A two-zone irrigation controller powered from 12 V DC. It has an input fuse, a T
 
 The board answers case 1 of the Class A qualification set: a mixed power, MCU and field-wiring design. It claims only what the tables below show from the board files, the measured KiCad checks and the cited datasheets. No figure is measured on hardware.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `e0e004eb`.
 
 ## The board
 
@@ -94,18 +94,19 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## Not verified by Synth
 
-| Area                | What is not verified                                                                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Hardware            | No board has been built, powered or run with firmware. Every figure here is calculated from datasheets and listings.                                                                        |
-| Valve short circuit | Firmware must read the shunt on `PA1` or `PA0` and turn the valve off above 0.1 V (1.0 A). Until it does, a shorted coil cable is cleared only when `F1` trips.                             |
-| Trip speed          | The trip depends on firmware polling, so the shunt and MOSFET carry the fault current for one polling interval. There is no hardware comparator into a GPIO interrupt or timer break input. |
-| Valve current       | The 0.5 A coil current is a stated assumption, not a measurement.                                                                                                                           |
-| Connectors          | `J1`, `J_VALVE1` and `J_VALVE2` are all 2-pin JST XH, so the 12 V input and a valve can be cross-mated. Keyed or different-pitch connectors are not fitted.                                 |
-| Surge               | The input protection holds only for a 12 V +/-5 % supply and a surge of at most 14 A peak (10/1000 us). The clamp is 1.5 V below the MP2307's 23 V recommended input.                       |
-| Fuse derating       | The `F1` hold current derates with temperature, so the board is specified to 40 C ambient.                                                                                                  |
-| Crystal stray       | The 5 pF stray capacitance is an assumption.                                                                                                                                                |
-| Crystal ESR         | The gm_crit figure uses the crystal's typical 70 kOhm ESR, because its datasheet states no maximum.                                                                                         |
-| Oscillator start-up | No oscillator start-up has been measured.                                                                                                                                                   |
-| Buck output         | The 31 uF derated output capacitance is an assumption, not a measurement.                                                                                                                   |
-| I2C speed           | The bus is specified for 100 kHz. 400 kHz holds only while the breakout and its cable add no more than 75 pF.                                                                               |
-| Fabrication checks  | No JLCPCB DFM, BOM-matching or quote run is recorded for this package.                                                                                                                      |
+| Area                 | What is not verified                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Hardware             | No board has been built, powered or run with firmware. Every figure here is calculated from datasheets and listings.                                                                        |
+| Valve short circuit  | Firmware must read the shunt on `PA1` or `PA0` and turn the valve off above 0.1 V (1.0 A). Until it does, a shorted coil cable is cleared only when `F1` trips.                             |
+| Trip speed           | The trip depends on firmware polling, so the shunt and MOSFET carry the fault current for one polling interval. There is no hardware comparator into a GPIO interrupt or timer break input. |
+| Valve current        | The 0.5 A coil current is a stated assumption, not a measurement.                                                                                                                           |
+| Connectors           | `J1`, `J_VALVE1` and `J_VALVE2` are all 2-pin JST XH, so the 12 V input and a valve can be cross-mated. Keyed or different-pitch connectors are not fitted.                                 |
+| Surge                | The input protection holds only for a 12 V +/-5 % supply and a surge of at most 14 A peak (10/1000 us). The clamp is 1.5 V below the MP2307's 23 V recommended input.                       |
+| Fuse derating        | The `F1` hold current derates with temperature, so the board is specified to 40 C ambient.                                                                                                  |
+| Crystal stray        | The 5 pF stray capacitance is an assumption.                                                                                                                                                |
+| Crystal ESR          | The gm_crit figure uses the crystal's typical 70 kOhm ESR, because its datasheet states no maximum.                                                                                         |
+| Oscillator start-up  | No oscillator start-up has been measured.                                                                                                                                                   |
+| Buck output          | The 31 uF derated output capacitance is an assumption, not a measurement.                                                                                                                   |
+| I2C speed            | The bus is specified for 100 kHz. 400 kHz holds only while the breakout and its cable add no more than 75 pF.                                                                               |
+| Fabrication checks   | No JLCPCB DFM, BOM-matching or quote run is recorded for this package.                                                                                                                      |
+| Independent sign-off | The independent PCB review required by #39 is still open.                                                                                                                                   |
