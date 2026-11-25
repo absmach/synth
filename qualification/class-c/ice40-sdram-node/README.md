@@ -4,7 +4,7 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISS
 
 It answers #329 under #40: a board whose memory interface is length- and impedance-sensitive, made by an agent driving `synth mcp`. A soft controller in the FPGA fabric drives a single-data-rate SDRAM, so there is no DQS strobe, no differential pair and no DDR claim. Case 2 is claimed for the routing of the memory lines (length, skew, impedance) only. No controller or bitstream has run on the board, so no interface timing (setup, hold, 143 MHz operation) is claimed.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `9f458a8d`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `9f458a8d`.
 
 ## The board
 
