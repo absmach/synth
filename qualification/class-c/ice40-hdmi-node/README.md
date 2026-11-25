@@ -14,7 +14,7 @@ The interface is DVI-style. The iCE40 cannot source TMDS levels, so each line is
 
 | Group | Parts |
 |---|---|
-| Power entry | `J1` JST B2B-XH-A 2-pin header (5.0 to 5.25 V in: HDMI pin 18 needs at least 4.94 V at `J1`, see QUALIFICATION.md); `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 2.2 A trip, 16 V); `D1` Nexperia PTVS6V0S1UR (6.0 V standoff above the 5.5 V maximum input, 6.67 V minimum breakdown); `Q3` Vishay SI2301CDS P-MOSFET (20 V) as the reverse-polarity stage, gate to GND through `R40` (10 k) with a 5.1 V zener `D_GZ` from gate to source; `C1`, `TP1` |
+| Power entry | `J1` JST B2B-XH-A 2-pin header (5.0 to 5.25 V in: HDMI pin 18 needs at least 4.94 V at `J1`); `F1` Bourns MF-MSMF110/16-2 (1.1 A hold, 2.2 A trip, 16 V); `D1` Nexperia PTVS6V0S1UR (6.0 V standoff above the 5.5 V maximum input, 6.67 V minimum breakdown); `Q3` Vishay SI2301CDS P-MOSFET (20 V) as the reverse-polarity stage, gate to GND through `R40` (10 k) with a 5.1 V zener `D_GZ` from gate to source; `C1`, `TP1` |
 | 3.3 V | `U1` Diodes AP7361C-33E-13 low-dropout regulator (1 A, 360 mV typical dropout at 1 A, SOT-223, stable with ceramic capacitors) with 10 uF capacitors `C2` to `C5`, behind the 1 ohm series resistor `R_SURGE` that keeps a clamp event of `D1` off the regulator input |
 | 1.2 V core | `U2` Texas Instruments TLV70012DDCR, TSOT-23-5, with `C6` and `C7`; the PLL supplies `VCCPLL0` and `VCCPLL1` through the ferrite beads `L1` and `L2` and `C21`, `C22` |
 | FPGA | `U3` Lattice iCE40HX4K-TQ144, supply decoupling 100 nF `C10` to `C20`, `C24` and `C25` to `C27`; `X1` SiTime SiT8008 25 MHz oscillator with `C23` |
@@ -24,7 +24,6 @@ The interface is DVI-style. The iCE40 cannot source TMDS levels, so each line is
 
 The iCE40HX4K-TQ144 has 107 user I/O (Lattice DS1040); the part model in `registry/parts/fpga/ice40hx4k_tq144.synth.toml` is built from KiCad's `FPGA_Lattice:ICE40HX4K-TQ144` symbol with the pin functions of that datasheet. The four lanes use the four adjacent pin pairs on the FPGA's left side (pins 1 and 2, 3 and 4, 7 and 8, 9 and 10), in the same top-to-bottom order as the connector's lanes, so no pair crosses another; the eight source resistors sit in one column between the FPGA and the connector.
 
-The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).
 
 ## Not verified by Synth
 
