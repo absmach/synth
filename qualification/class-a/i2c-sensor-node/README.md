@@ -4,7 +4,7 @@ A field sensor node: an STM32G030F6P6 microcontroller reads a Bosch BME680 (temp
 
 Case 2 is claimed for a plain default export of a protected, low-speed board: every external line has a series resistor and a 3.3 V clamp, and every net is a static or slow line. No firmware has run on the board and no board has been built.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `dcf1e328`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `dcf1e328`.
 
 ## The board
 

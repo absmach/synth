@@ -4,7 +4,7 @@ A 24 V in, 3.3 V out step-down board built around the TI LMR38010 (1 A), with a 
 
 It answers ticket #67 under #38 (Class B qualification): a switching regulator with input and output filtering, feedback, power-good and thermal copper. The board is designed, placed and routed. It is not fabricated, not powered and not tested on hardware, and no surge rating is claimed.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. No agent prompt was kept; the nearest record is the cleaned brief in `absmach/synth-website` at `public/showcase/buck/prompt.md` (`22bc5390`).
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. No agent prompt was kept; the nearest record is the cleaned brief in `absmach/synth-website` at `public/showcase/buck/prompt.md` (`22bc5390`).
 
 ## The board
 

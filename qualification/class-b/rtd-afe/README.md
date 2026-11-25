@@ -4,7 +4,7 @@ This board is a 4-wire PT100 front end with a USB readout. It uses a TI ADS124S0
 
 The board answers SYN-363: a compact mixed-signal board where a precision analog chain shares a board and a ground plane with a USB microcontroller. It is for bench or lab use, not an instrument, a product or a safety function. The board is untrusted and not release-ready. It is not fabricated and not tested on hardware. No analog accuracy is claimed.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `fc1e4639`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `fc1e4639`.
 
 ## The board
 

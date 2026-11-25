@@ -1,5 +1,5 @@
-# Design summary
+# Prompt
 
-This is a summary of the delivered board, written after the board was finished and reviewed. It is not the prompt the agent ran. The prompts the agent ran are in the history at `972cc597`.
+This prompt is written from the finished board so that someone can rerun it. It is not the text the agent was given. The prompts the agent ran are in the history at `972cc597`.
 
 Using synth mcp server design a two-layer protected power-entry board for JLCPCB, about 115 x 76 mm. Accept a 12 V input operating between 10.8 V and 13 V. Protect it with a 1.5 A resettable fuse, an SMAJ13A TVS on the fused input and an AO3401A P-MOSFET for reverse-polarity protection. Add an MP2307 buck converter providing regulated 5 V with a 44.2 k and 10 k feedback divider, a TPS22918 soft-start load switch enabled by LOAD_EN for a switched 5 V output, and an AMS1117-3.3 for the 3.3 V rail. Include JST XH outputs, an 8-pin control header with clamped sense lines, status LEDs and four corner mounting holes. Group the schematic by function and keep the design notes explicit about protection and load assumptions.

@@ -1,5 +1,5 @@
-# Design summary
+# Prompt
 
-This is a summary of the delivered board, written after the board was finished and reviewed. It is not the prompt the agent ran. The prompts the agent ran are in the history at `fc1e4639`.
+This prompt is written from the finished board so that someone can rerun it. It is not the text the agent was given. The prompts the agent ran are in the history at `fc1e4639`.
 
 Using synth mcp server design a four-layer PT100 four-wire RTD analog front end for JLCPCB, about 40 x 44 mm. Filter the inputs with 1k 0.1 % series resistors, a 100 nF differential capacitor and 10 nF common-mode capacitors, and digitise them with a TI ADS124S08 24-bit delta-sigma ADC using 1 mA IDAC excitation and a 1k bias resistor. Place a TI REF5025 2.5 V reference close to the ADC and feed the analog rail from 3.3 V through a ferrite bead. Add an RP2350 microcontroller on SPI with a W25Q128 QSPI flash and a 12 MHz crystal, a USB-C readout port with ESD protection and an LP5907 3.3 V LDO, an SWD header and M2.5 mounting holes. Use one GND plane on all four layers, with analog parts on one side and digital parts on the other. Group the schematic by function and keep the design notes explicit.

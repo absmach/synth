@@ -4,7 +4,7 @@ This is a 2-layer source-only test board with six declared components: a JST PH 
 
 The board is meant to fail. It shows what Synth reports when a design is wrong. It is useful only if the diagnostics name what is wrong and where. It is never routed and never exported, so it makes no claim about layout or fabrication.
 
-No prompt was kept. [`PROMPT.md`](PROMPT.md) summarises the design from the planted defects listed in its source header.
+No prompt was kept. [`PROMPT.md`](PROMPT.md) is written from the finished board so that someone can rerun it.
 
 ## The board
 
