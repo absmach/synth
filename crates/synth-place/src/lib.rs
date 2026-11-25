@@ -15202,6 +15202,145 @@ board "near" {
         );
     }
 
+    /// A sidecar that covers every part on a board with a declared outline is
+    /// the placement: the shortcut returns the pinned coordinates without
+    /// running the solver, so a contradicting DSL hint cannot move them.
+    #[test]
+    fn a_full_sidecar_is_placed_verbatim_and_outranks_dsl_hints() {
+        let board = board_from_source(
+            r#"board "sidecar_full" {
+                layers 2
+                outline 40mm x 30mm
+                component U1: ic "stm32g030k8_lqfp32" {
+                    placement_hint { region centre priority: hard }
+                }
+                component R1: resistor "r_generic_0603" {
+                    placement_hint { edge left priority: hard }
+                }
+            }"#,
+            "sidecar_full.synth",
+        );
+        let path = std::env::temp_dir().join(format!(
+            "synth-place-full-sidecar-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            "schema_version = 2\n\n\
+             [components.U1]\nx = 12.0\ny = 11.0\nrotation = 90\nsource = \"human_drag\"\npriority = \"hard\"\n\n\
+             [components.R1]\nx = 30.0\ny = 20.0\nrotation = 0\nsource = \"human_drag\"\npriority = \"hard\"\n",
+        )
+        .expect("sidecar TOML written");
+
+        let placement = place_with_sidecar(&board, Some(&path)).expect("place");
+        std::fs::remove_file(&path).ok();
+
+        for (refdes, x, y, rotation) in [
+            ("U1", 12.0, 11.0, Rotation::Ninety),
+            ("R1", 30.0, 20.0, Rotation::Zero),
+        ] {
+            let component = board
+                .components
+                .iter()
+                .find(|component| component.refdes == refdes)
+                .expect("component");
+            let placed = placement
+                .components
+                .iter()
+                .find(|placed| placed.id == component.id)
+                .expect("placed");
+            // The sidecar is footprint-origin millimetres; the placement
+            // stores the courtyard centre.
+            let origin = footprint_origin(
+                component.part.as_ref(),
+                &ComponentPlacement {
+                    id: component.id,
+                    center: placed.center,
+                    rotation: placed.rotation,
+                    layer: placed.layer,
+                },
+            );
+            assert_eq!(placed.rotation, rotation, "{refdes} rotation");
+            assert!(
+                (nm_to_mm(origin.x_nm) - x).abs() < 0.001
+                    && (nm_to_mm(origin.y_nm) - y).abs() < 0.001,
+                "{refdes} at ({:.3}, {:.3}) instead of ({x}, {y})",
+                nm_to_mm(origin.x_nm),
+                nm_to_mm(origin.y_nm)
+            );
+        }
+    }
+
+    /// A sidecar written before a part was added is stale: its entries still
+    /// pin, and the parts it does not name are solved normally.
+    #[test]
+    fn a_stale_sidecar_leaves_the_missing_parts_to_the_solver() {
+        let board = board_from_source(
+            r#"board "sidecar_stale" {
+                layers 2
+                outline 40mm x 30mm
+                component U1: ic "stm32g030k8_lqfp32"
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+            }"#,
+            "sidecar_stale.synth",
+        );
+        let path = std::env::temp_dir().join(format!(
+            "synth-place-stale-sidecar-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            "schema_version = 2\n\n[components.U1]\nx = 12.0\ny = 11.0\nrotation = 0\nsource = \"human_drag\"\npriority = \"hard\"\n",
+        )
+        .expect("sidecar TOML written");
+
+        let placement = place_with_sidecar(&board, Some(&path)).expect("place");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(placement.components.len(), board.components.len());
+        for refdes in ["R1", "R2"] {
+            let component = board
+                .components
+                .iter()
+                .find(|component| component.refdes == refdes)
+                .expect("component");
+            assert!(
+                placement
+                    .components
+                    .iter()
+                    .any(|placed| placed.id == component.id),
+                "{refdes} missing from the placement"
+            );
+        }
+        let u1 = board
+            .components
+            .iter()
+            .find(|component| component.refdes == "U1")
+            .expect("U1");
+        let placed = placement
+            .components
+            .iter()
+            .find(|placed| placed.id == u1.id)
+            .expect("U1 placed");
+        let origin = footprint_origin(
+            u1.part.as_ref(),
+            &ComponentPlacement {
+                id: u1.id,
+                center: placed.center,
+                rotation: placed.rotation,
+                layer: placed.layer,
+            },
+        );
+        assert!(
+            (nm_to_mm(origin.x_nm) - 12.0).abs() < 0.001
+                && (nm_to_mm(origin.y_nm) - 11.0).abs() < 0.001,
+            "the named part stays pinned at ({:.3}, {:.3})",
+            nm_to_mm(origin.x_nm),
+            nm_to_mm(origin.y_nm)
+        );
+    }
+
     const EDGES: [&str; 4] = ["left", "right", "top", "bottom"];
 
     fn with_hint(board: &Board, refdes: &str, edge: &str, priority: &str) -> Board {
