@@ -4,7 +4,7 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) with a 64 Mbit SDR SDRAM (ISS
 
 It answers #329 under #40: a board whose memory interface is length- and impedance-sensitive, made by an agent driving `synth mcp`. A soft controller in the FPGA fabric drives a single-data-rate SDRAM, so there is no DQS strobe, no differential pair and no DDR claim. Case 2 is claimed for the routing of the memory lines (length, skew, impedance) only. No controller or bitstream has run on the board, so no interface timing (setup, hold, 143 MHz operation) is claimed.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `9f458a8d`.
 
 ## The board
 
@@ -127,15 +127,16 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 
 ## Not verified by Synth
 
-| Area               | What is not verified                                                                                                                                 |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Interface timing   | No controller or bitstream has run on the board, so setup, hold and 143 MHz operation are not claimed.                                               |
-| Return paths       | Some vias on the fast clock nets are farther from a ground via than the fast-net window.                                                             |
-| 3.3 V budget       | The FPGA's dynamic current depends on the bitstream and is not counted.                                                                              |
-| 3.3 V budget       | The core and I/O figures are startup peaks for a blank pattern, and the I/O figure assumes 6.8 mA per supply.                                        |
-| 3.3 V budget       | The oscillator figure is for the SiT8008B at 20 MHz, so it is indicative for the 25 MHz AI part.                                                     |
-| Surge              | In a sustained over-voltage, `D1` holds its node near 7.0 V until `F1` opens. The regulator input then sees about 6.8 V, 0.3 V over its rating.      |
-| Surge              | The pulse rating of `R_SURGE` was not read.                                                                                                          |
-| SDRAM figures      | The IS42S16400J Rev. G figures were read from a mirror copy, because the ISSI-hosted PDF could not be retrieved. Check them against ISSI's own copy. |
-| Sourcing           | Stock is not firm.                                                                                                                                   |
-| Fabrication checks | No JLCPCB DFM or BOM-matching run is recorded for this Gerber package.                                                                               |
+| Area                 | What is not verified                                                                                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Interface timing     | No controller or bitstream has run on the board, so setup, hold and 143 MHz operation are not claimed.                                               |
+| Return paths         | Some vias on the fast clock nets are farther from a ground via than the fast-net window.                                                             |
+| 3.3 V budget         | The FPGA's dynamic current depends on the bitstream and is not counted.                                                                              |
+| 3.3 V budget         | The core and I/O figures are startup peaks for a blank pattern, and the I/O figure assumes 6.8 mA per supply.                                        |
+| 3.3 V budget         | The oscillator figure is for the SiT8008B at 20 MHz, so it is indicative for the 25 MHz AI part.                                                     |
+| Surge                | In a sustained over-voltage, `D1` holds its node near 7.0 V until `F1` opens. The regulator input then sees about 6.8 V, 0.3 V over its rating.      |
+| Surge                | The pulse rating of `R_SURGE` was not read.                                                                                                          |
+| SDRAM figures        | The IS42S16400J Rev. G figures were read from a mirror copy, because the ISSI-hosted PDF could not be retrieved. Check them against ISSI's own copy. |
+| Sourcing             | Stock is not firm.                                                                                                                                   |
+| Fabrication checks   | No JLCPCB DFM or BOM-matching run is recorded for this Gerber package.                                                                               |
+| Independent sign-off | The independent PCB review required by #40 is still open.                                                                                            |
