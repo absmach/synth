@@ -7,6 +7,8 @@ An STM32F103C8 microcontroller on four copper layers, with a 128 Mbit SPI flash 
 
 It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output, made by an agent driving `synth mcp`. Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |
