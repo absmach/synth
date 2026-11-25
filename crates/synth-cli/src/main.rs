@@ -2107,6 +2107,11 @@ fn check_gates(
     let source_failed = stages.get("source").is_some_and(|s| s["status"] == "fail");
     for (name, stage) in stages {
         let status = stage["status"].as_str().unwrap_or("unknown");
+        // `skipped` means the stage does not apply (no simulation sidecar, or
+        // an upstream failure); it is not evidence and must not block.
+        if status == "skipped" {
+            continue;
+        }
         // A stage skipped because the source gate failed sits behind that
         // failure; one that could not run for want of a tool is blocked.
         if name != "source" && source_failed && status == "unknown" {
