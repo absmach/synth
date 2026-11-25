@@ -8291,7 +8291,7 @@ mod tools_list_cost_tests {
 
     /// Ceiling for the serialised `tools/list` result, in bytes. Lower it
     /// when the catalogue shrinks. Raise it only on purpose, in its own commit.
-    const TOOLS_LIST_BYTES_CEILING: usize = 44_500;
+    const TOOLS_LIST_BYTES_CEILING: usize = 45_700;
 
     /// Token estimate: bytes / 4. A rough rule of thumb, not a tokenizer count.
     fn approx_tokens(bytes: usize) -> usize {
