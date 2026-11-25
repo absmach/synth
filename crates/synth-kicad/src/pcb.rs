@@ -1667,6 +1667,7 @@ fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> 
 /// fabrication clearance from every pad, so a connector at the edge midpoint
 /// does not take the via onto its own copper. A via that is already clear, or
 /// that has no clear spot on its edge, is returned as it is.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
 fn clear_of_pads(
     via: Point,
     outline: synth_geometry::Rect,
