@@ -391,13 +391,8 @@ fn export_inner(
         String::new(),
     ]];
     if sheets.len() > 1 {
-        for sheet in &sheets {
-            if let Some(name) = sheet.name.as_deref() {
-                sheet_entries.push(vec![
-                    crate::multisheet::sheet_uuid(&project_namespace, name).to_string(),
-                    crate::multisheet::sheet_filename(&stem, name),
-                ]);
-            }
+        for (_, uuid, file) in crate::multisheet::sheet_files(&stem, &project_namespace, &sheets) {
+            sheet_entries.push(vec![uuid.to_string(), file]);
         }
     }
     // Design variants (KiCad 10): the project file carries the variant
@@ -708,13 +703,8 @@ pub fn export_schematic_only(
         String::new(),
     ]];
     if sheets.len() > 1 {
-        for sheet in &sheets {
-            if let Some(name) = sheet.name.as_deref() {
-                sheet_entries.push(vec![
-                    crate::multisheet::sheet_uuid(&project_namespace, name).to_string(),
-                    crate::multisheet::sheet_filename(&stem, name),
-                ]);
-            }
+        for (_, uuid, file) in crate::multisheet::sheet_files(&stem, &project_namespace, &sheets) {
+            sheet_entries.push(vec![uuid.to_string(), file]);
         }
     }
     let variant_entries: Vec<serde_json::Value> = board
