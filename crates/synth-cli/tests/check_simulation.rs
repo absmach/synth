@@ -358,6 +358,24 @@ fn a_sidecar_directory_is_fail_not_skipped() {
 }
 
 #[test]
+fn an_ngspice_error_is_unknown_not_fail() {
+    let dir = Scratch::new("ngspice-error");
+    let design = design_with_sidecar(&dir);
+    let stub = stub_ngspice(&dir, "error");
+
+    let output = run_check(&design, &stub);
+    let report = report(&output);
+
+    assert_eq!(simulation(&report)["status"], "unknown", "{report:#}");
+    assert_eq!(
+        simulation(&report)["reason"],
+        "simulator did not finish",
+        "{report:#}"
+    );
+    assert_eq!(report["status"], "fail", "{report:#}");
+}
+
+#[test]
 fn a_timed_out_simulation_is_unknown() {
     let dir = Scratch::new("timeout");
     let design = design_with_sidecar(&dir);

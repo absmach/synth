@@ -2090,6 +2090,30 @@ fn simulation_stage(
             "stderr": invocation.stderr,
         });
     };
+    let has_code = |code: &str| {
+        result["diagnostics"].as_array().is_some_and(|diagnostics| {
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == code)
+        })
+    };
+    // E-SYNTH-SIM-006 means ngspice itself errored or the log was unreadable,
+    // so the run did not finish and is no evidence either way. A blocking
+    // diagnostic alongside it is still a real failure and stays `fail`.
+    if has_code(synth_sim::E_SYNTH_SIM_006)
+        && !result["diagnostics"].as_array().is_some_and(|diagnostics| {
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic["code"] != synth_sim::E_SYNTH_SIM_006
+                    && matches!(diagnostic["severity"].as_str(), Some("error" | "fatal"))
+            })
+        })
+    {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "simulator did not finish",
+            "result": result,
+        });
+    }
     if invocation.succeeded() && result["passed"].as_bool() == Some(true) {
         // `passed` only means no blocking diagnostic. A testbench that
         // measures without asserting a limit verified nothing, and a report
@@ -2112,13 +2136,6 @@ fn simulation_stage(
             "result": result,
         });
     }
-    let has_code = |code: &str| {
-        result["diagnostics"].as_array().is_some_and(|diagnostics| {
-            diagnostics
-                .iter()
-                .any(|diagnostic| diagnostic["code"] == code)
-        })
-    };
     if has_code(synth_sim::E_SYNTH_SIM_005) {
         return serde_json::json!({
             "status": "unknown",
@@ -7385,6 +7402,108 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(stage["status"], "unknown", "{stage:#}");
         assert_eq!(stage["reason"], "no limits checked", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_report_with_only_an_ngspice_error_is_unknown() {
+        let dir = simulation_scratch("ngspice-error");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "simulator did not finish", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_limit_violation_stays_fail() {
+        let dir = simulation_scratch("limit");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-004", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_limit_violation_wins_over_an_ngspice_error() {
+        let dir = simulation_scratch("limit-and-error");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"},
+                {"code": "E-SYNTH-SIM-004", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_measurement_wins_over_an_ngspice_error() {
+        let dir = simulation_scratch("measure-and-error");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"},
+                {"code": "E-SYNTH-SIM-003", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_ngspice_error_with_passed_true_is_still_unknown() {
+        let dir = simulation_scratch("error-passed");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": true, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "simulator did not finish", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_report_with_absent_diagnostics_is_not_a_pass() {
+        let dir = simulation_scratch("absent-diagnostics");
+        let exe = fake_sim_report(&dir, r#"{"passed": false, "limits_checked": 1}"#);
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_report_with_an_empty_diagnostic_list_is_not_a_pass() {
+        let dir = simulation_scratch("empty-diagnostics");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": []}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
     }
 
     #[test]

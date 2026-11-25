@@ -87,8 +87,8 @@ same stage.
 | ------ | ------- | --------------------- |
 | `skipped` | No sidecar, or the source gate failed. | No |
 | `pass` | The testbench ran, at least one measure had a `min` or `max`, and every blocking diagnostic is clear. | No |
-| `fail` | A blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit measure. | Yes |
-| `unknown` | The sidecar exists but the simulator could not run (ngspice is missing, it timed out, the report was unreadable, or setup failed, for example the registry did not load), or it ran but checked no limits. | Yes |
+| `fail` | A blocking `E-SYNTH-SIM-*` diagnostic other than `E-SYNTH-SIM-006`, including an out-of-limit measure. | Yes |
+| `unknown` | The sidecar exists but the simulator could not run (ngspice is missing, it timed out, ngspice reported an error, the report was unreadable, or setup failed, for example the registry did not load), or it ran but checked no limits. | Yes |
 
 An unknown stage is not a pass: install ngspice or remove the sidecar
 deliberately. A sidecar that exists but cannot run blocks the check, and so

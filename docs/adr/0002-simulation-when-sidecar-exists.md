@@ -16,8 +16,10 @@ model.
 stage. No sidecar, or a failed source gate, is `skipped` and non-blocking. A
 sidecar that cannot run — because ngspice is missing, the run timed out, the
 report was unreadable, or setup failed — is `unknown` and blocks, like the
-other unknown physical stages. A blocking
-simulation diagnostic is `fail` and blocks. A sidecar that runs but asserts
+other unknown physical stages. A limit violation, a missing measurement, or
+another blocking simulation diagnostic is `fail` and blocks. An ngspice error
+(`E-SYNTH-SIM-006`) is `unknown` instead: the run did not finish, so there is
+no evidence either way. A sidecar that runs but asserts
 nothing — every measure lacks a `min` or `max` — is `unknown` too: a testbench
 that asserts nothing is the same failure as one that cannot run.
 

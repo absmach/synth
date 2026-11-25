@@ -4,7 +4,7 @@ For CI and agent workflows, `synth check DESIGN.synth --json` is the single dete
 
 ## Simulation stage
 
-A design with a `<design>.sim.toml` sidecar gets a `simulation` stage alongside `source`, `drc` and `manufacturing`. The statuses and blocking rules are in [SPICE simulation](spice-sim.md#check-integration); in short, a missing sidecar or a failed source gate is `skipped`, a simulator that cannot run (missing, timed out, unreadable, or setup failed) is `unknown`, and a blocking simulation diagnostic is `fail`. The stage carries `testbench_sha256` so a pass is tied to the sidecar revision.
+A design with a `<design>.sim.toml` sidecar gets a `simulation` stage alongside `source`, `drc` and `manufacturing`. The statuses and blocking rules are in [SPICE simulation](spice-sim.md#check-integration); in short, a missing sidecar or a failed source gate is `skipped`, a simulator that cannot run (missing, timed out, an ngspice error, unreadable, or setup failed) is `unknown`, and any other blocking simulation diagnostic is `fail`. The stage carries `testbench_sha256` so a pass is tied to the sidecar revision.
 
 `synth check --fab` uses the same stage. `synth sim` and `synth sim --json` remain available on their own; `validate`, `export` and `place` never run ngspice.
 

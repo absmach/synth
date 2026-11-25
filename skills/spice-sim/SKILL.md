@@ -75,11 +75,12 @@ had no limits; it is not a pass.
 - `skipped`: no sidecar, or the source gate failed.
 - `pass`: the testbench ran, at least one measure had a limit, and every
   blocking diagnostic is clear.
-- `fail`: a blocking `E-SYNTH-SIM-*` diagnostic, including an out-of-limit
-  measure.
+- `fail`: a blocking `E-SYNTH-SIM-*` diagnostic other than
+  `E-SYNTH-SIM-006`, including an out-of-limit measure.
 - `unknown`: the sidecar exists but the simulator could not run (ngspice is
-  missing, timed out, the report was unreadable, or setup failed, for example
-  the registry did not load), or it ran but checked no limits.
+  missing, timed out, reported an error, the report was unreadable, or setup
+  failed, for example the registry did not load), or it ran but checked no
+  limits.
 
 `fail` and `unknown` block the check. `skipped` and `pass` do not.
 
