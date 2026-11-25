@@ -2,6 +2,8 @@
 
 An iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its supply chain, an SPI boot flash, one 12-pin header and four status LEDs, powered from a USB-C receptacle (power only) and programmed through a 6-pin header, on six copper layers. It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |
