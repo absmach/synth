@@ -301,6 +301,16 @@ pub struct OperatingConditions {
     /// The current the breakdown voltage is specified at, in milliamps.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub breakdown_test_current_ma: Option<f64>,
+    /// Feedback reference voltage of an adjustable regulator, in volts:
+    /// the datasheet's minimum and maximum at the test conditions. A
+    /// resistor divider from the output to the `feedback` pin sets
+    /// `Vout = Vref * (1 + Rtop / Rbottom)`, so this range is what the
+    /// worst-case divider check (`E-SYNTH-POWER-013`) multiplies by. Both
+    /// must be present for the check to run; neither is ever assumed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_vref_min_v: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_vref_max_v: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

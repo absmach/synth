@@ -1179,6 +1179,7 @@ impl<'a> LowerCtx<'a> {
         Some(BoardOutline {
             width,
             height,
+            reason: st.reason.clone(),
             source_span: st.span,
         })
     }

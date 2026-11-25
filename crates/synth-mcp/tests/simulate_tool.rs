@@ -155,6 +155,52 @@ fn a_passing_measurement_returns_passed() {
 }
 
 #[test]
+fn coverage_lists_modelled_ignored_and_measured_targets() {
+    let design = design_dir_with(
+        &DIVIDER.replace(
+            "component R1",
+            "component U1: mcu \"rp2350\"\n  component R1",
+        ),
+        &DIVIDER_TB.replacen(
+            "ground = \"GND\"\n",
+            "ground = \"GND\"\nignore = [\"U1\"]\n",
+            1,
+        ),
+    );
+    let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
+
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
+        .expect("the tool returns a result");
+
+    assert_eq!(result["passed"], true, "{result}");
+    assert_eq!(result["coverage"]["modelled"], json!(["R1", "R2"]));
+    assert_eq!(result["coverage"]["ignored"], json!(["U1"]));
+    assert_eq!(result["coverage"]["unmodelled"], json!([]));
+    assert_eq!(result["coverage"]["measured"], json!(["MID"]));
+}
+
+#[test]
+fn coverage_names_unmodelled_parts_when_the_run_fails() {
+    let design = design_dir_with(
+        &DIVIDER.replace(
+            "component R1",
+            "component U1: mcu \"rp2350\"\n  component R1",
+        ),
+        DIVIDER_TB,
+    );
+    let (stub, _stub_dir) = stub_ngspice("ok");
+    use_ngspice(&stub);
+
+    let result = synth_mcp::call_tool("synth_simulate", &args(design.path()), None)
+        .expect("the tool returns a result");
+
+    assert_eq!(result["passed"], false, "{result}");
+    assert!(has_code(&result, "E-SYNTH-SIM-002"), "{result}");
+    assert_eq!(result["coverage"]["unmodelled"], json!(["U1"]));
+}
+
+#[test]
 fn an_out_of_limit_measurement_fails_with_004() {
     let design = design_dir(
         &DIVIDER_TB
@@ -254,6 +300,7 @@ fn an_unbounded_measurement_reports_measured_not_passed() {
         .expect("the tool returns a result");
 
     assert_eq!(result["passed"], true, "{result}");
+    assert_eq!(result["limits_checked"], 0, "{result}");
     assert_eq!(result["measures"][0]["value"], 6.0);
     assert!(
         result["measures"][0]["passed"].is_null(),

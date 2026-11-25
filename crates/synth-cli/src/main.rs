@@ -27,6 +27,11 @@ use tracing::{debug, error, info, warn};
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_VALIDATION_ERRORS: u8 = 1;
 const EXIT_USAGE: u8 = 2;
+/// `synth check`: a gate could not be evaluated (verdict `INCOMPLETE`), or
+/// `--evidence` no longer matches the design. Distinct from a failed gate.
+const EXIT_INCOMPLETE: u8 = 3;
+/// `synth check`: there is nothing to evaluate (verdict `EMPTY`).
+const EXIT_EMPTY: u8 = 4;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -119,6 +124,17 @@ enum Command {
         /// Overwrite an existing `<design>.sim.toml` when drafting.
         #[arg(long, requires = "suggest")]
         force: bool,
+
+        /// Write the report as one JSON object to stdout.
+        #[arg(long, conflicts_with = "suggest")]
+        json: bool,
+
+        /// Deadline for the whole `synth sim` run in seconds. Compile time is
+        /// not interrupted but counts against the deadline; an expired
+        /// deadline returns E-SYNTH-SIM-005 without starting ngspice. The
+        /// sidecar's own timeout still applies when it is shorter.
+        #[arg(long, value_name = "SECS", conflicts_with = "suggest")]
+        timeout: Option<f64>,
     },
 
     /// Parse a SynthSpec file and dump the AST as JSON to stdout.
@@ -497,14 +513,16 @@ enum Command {
     },
 
     /// Run the deterministic, network-free release/check contract. The
-    /// command composes compiler validation, DRC, and (with --fab) a complete
-    /// KiCad manufacturing export into one stable JSON result.
+    /// command composes compiler validation, the testbench when one exists,
+    /// DRC, and (with --fab) a complete KiCad manufacturing export into one
+    /// stable JSON result.
     Check {
         /// Path to a `.synth` source file.
         input: PathBuf,
         #[arg(long, value_name = "DIR")]
         registry: Option<PathBuf>,
-        /// Run the manufacturing export gate as well as source/DRC checks.
+        /// Run the manufacturing export gate as well as source, simulation and
+        /// DRC checks.
         #[arg(long)]
         fab: bool,
         /// External router to use. Passed through to the `drc` and
@@ -538,6 +556,11 @@ enum Command {
         /// `--json`.
         #[arg(long)]
         json: bool,
+        /// Refuse to run when this `evidence.json` (written by `synth_export`)
+        /// was recorded for a different revision of the design. A stale file
+        /// exits 3 and lists the inputs that changed.
+        #[arg(long, value_name = "FILE")]
+        evidence: Option<PathBuf>,
     },
 
     /// Start the Synth Model Context Protocol (MCP) Server for native AI tool integration.
@@ -1077,7 +1100,9 @@ fn main() -> ExitCode {
             registry,
             suggest,
             force,
-        } => sim(&input, registry.as_deref(), suggest, force),
+            json,
+            timeout,
+        } => sim(&input, registry.as_deref(), suggest, force, json, timeout),
         Command::DumpAst { input, pretty } => dump_ast(&input, pretty),
         Command::DumpIr {
             input,
@@ -1274,6 +1299,7 @@ fn main() -> ExitCode {
             override_exception,
             authorized_by,
             json,
+            evidence,
         } => {
             let routing = CheckRouting {
                 engine: router,
@@ -1289,6 +1315,7 @@ fn main() -> ExitCode {
                         allow_unverified_parts,
                         Some(&exception),
                         json,
+                        evidence.as_deref(),
                     ),
                     Err(e) => Err(anyhow::anyhow!("{e}")),
                 },
@@ -1300,6 +1327,7 @@ fn main() -> ExitCode {
                     allow_unverified_parts,
                     None,
                     json,
+                    evidence.as_deref(),
                 ),
             }
         }
@@ -1554,6 +1582,7 @@ fn capability_descriptor() -> serde_json::Value {
             {"name": "layout", "evidence": ["layout_ir"]},
             {"name": "placement", "evidence": ["placement_ir", "placement_hash"]},
             {"name": "routing", "evidence": ["routing_ir", "routing_hash"]},
+            {"name": "simulation", "evidence": ["sim_report", "sim_status"]},
             {"name": "drc", "evidence": ["drc_report", "drc_status"]},
             {"name": "kicad_export", "evidence": ["artifact_hashes", "archive_sha256"]}
         ],
@@ -1663,7 +1692,7 @@ fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
                 println!("{command:<20} yes");
             }
             println!();
-            println!("PHYSICAL STAGES: layout, placement, routing, drc, kicad_export");
+            println!("PHYSICAL STAGES: layout, placement, routing, simulation, drc, kicad_export");
             println!(
                 "BOARD FAMILY PROFILES: {} shipped",
                 synth_place::board_family::PROFILES.len()
@@ -1770,12 +1799,63 @@ fn check(
     allow_unverified_parts: bool,
     exception: Option<&release::Exception>,
     json: bool,
+    evidence: Option<&Path>,
 ) -> anyhow::Result<u8> {
+    #![allow(clippy::too_many_lines)]
     if !input.is_file() {
         anyhow::bail!("input file {} does not exist", input.display());
     }
     let source = std::fs::read(input)?;
     let source_hash = sha256_hex(&source);
+    // One identity for the revision every gate below evaluates.
+    let (design_hash, design_empty) =
+        synth_mcp::evidence::design_hash_of(input, registry).map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    // Evidence recorded for another revision is refused before any stage runs.
+    let evidence_status = match evidence {
+        Some(path) => {
+            let recorded =
+                synth_mcp::evidence::Evidence::read(path).map_err(|e| anyhow::anyhow!("{e}"))?;
+            let staleness = recorded.staleness(&design_hash);
+            if staleness.stale {
+                let report = serde_json::json!({
+                    "schema_version": "synth.check.v1",
+                    "status": "stale_evidence",
+                    "verdict": "INCOMPLETE",
+                    "input": input.display().to_string(),
+                    "design_hash": design_hash.sha256,
+                    "evidence": {
+                        "path": path.display().to_string(),
+                        "recorded_verdict": recorded.verdict,
+                        "staleness": staleness,
+                    },
+                });
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&report)?);
+                } else {
+                    println!("STALE EVIDENCE {}", path.display());
+                    println!("  recorded for: {}", staleness.recorded_hash);
+                    println!("  design is now: {}", staleness.current_hash);
+                    for (label, paths) in [
+                        ("changed", &staleness.changed),
+                        ("added", &staleness.added),
+                        ("removed", &staleness.removed),
+                    ] {
+                        for p in paths {
+                            println!("  {label}: {p}");
+                        }
+                    }
+                }
+                return Ok(EXIT_INCOMPLETE);
+            }
+            Some(serde_json::json!({
+                "path": path.display().to_string(),
+                "stale": false,
+                "recorded_verdict": recorded.verdict,
+            }))
+        }
+        None => None,
+    };
     let exe = std::env::current_exe()?;
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1804,6 +1884,13 @@ fn check(
         .unwrap_or_else(|_| serde_json::json!({"diagnostics": [], "parse_error": true}));
     let validate_pass =
         !validate_timed_out && validate_output.status.success() && validate_parse_ok;
+    let source_status = source_stage_status(validate_timed_out, validate_pass);
+
+    let mut simulation = simulation_stage(&exe, input, registry, budget, &base, validate_pass);
+    if let Ok(bytes) = std::fs::read(synth_sim::sidecar_path(input)) {
+        simulation["testbench_sha256"] = serde_json::json!(sha256_hex(&bytes));
+    }
+    let sim_pass = matches!(simulation["status"].as_str(), Some("pass" | "skipped"));
 
     let (drc_json, drc_outcome, drc_timed_out) = if validate_pass {
         let mut drc_args = base.clone();
@@ -1828,7 +1915,14 @@ fn check(
         )
     } else {
         (
-            serde_json::json!({"status": "unknown", "reason": "source gate failed"}),
+            serde_json::json!({
+                "status": "unknown",
+                "reason": if validate_timed_out {
+                    "source stage timed out"
+                } else {
+                    "source gate failed"
+                },
+            }),
             PreFabDrc::Unknown,
             false,
         )
@@ -1838,10 +1932,11 @@ fn check(
     stages.insert(
         "source".into(),
         serde_json::json!({
-            "status": if validate_pass { "pass" } else { "fail" },
+            "status": source_status,
             "result": validate_json,
         }),
     );
+    stages.insert("simulation".into(), simulation);
     stages.insert(
         "drc".into(),
         serde_json::json!({
@@ -1967,11 +2062,22 @@ fn check(
         );
     }
 
-    let pass = validate_pass && drc_pass && (!fab || fab_pass);
+    let pass = validate_pass && sim_pass && drc_pass && (!fab || fab_pass);
     let unverified = unverified_claims(&source, input, registry);
-    let report = serde_json::json!({
+    let gates = check_gates(design_empty, &stages, &drc_json);
+    let gate_report = synth_diagnostics::GateReport::new(gates);
+    let mut report = serde_json::json!({
         "schema_version": "synth.check.v1",
         "status": if pass { "pass" } else { "fail" },
+        "verdict": gate_report.verdict,
+        "verdict_detail": {
+            "failing_gates": gate_report.failing_gates,
+            "blocked_gates": gate_report.blocked_gates,
+            "summary": gate_report.summary,
+        },
+        "gates": gate_report.gates,
+        "design_hash": design_hash.sha256,
+        "design_hash_files": design_hash.files,
         "input": input.display().to_string(),
         "source_sha256": source_hash,
         "network": "not_used",
@@ -1981,14 +2087,23 @@ fn check(
         },
         "stages": stages,
     });
+    if let Some(evidence) = evidence_status {
+        report["evidence"] = evidence;
+    }
     let _ = std::fs::remove_dir_all(&work);
 
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        println!("{} {}", if pass { "PASS" } else { "FAIL" }, input.display());
+        println!("{} {}", gate_report.verdict, input.display());
+        if gate_report.verdict != synth_diagnostics::Verdict::Ready {
+            println!("  {}", gate_report.summary);
+        }
         let manufacturing = &report["stages"]["manufacturing"];
-        for (name, stage) in report["stages"].as_object().into_iter().flatten() {
+        for name in ["source", "simulation", "drc", "manufacturing"] {
+            let Some(stage) = report["stages"].get(name) else {
+                continue;
+            };
             println!(
                 "  {name}: {}",
                 stage["status"].as_str().unwrap_or("unknown")
@@ -2033,11 +2148,76 @@ fn check(
             }
         }
     }
-    Ok(if pass {
-        EXIT_SUCCESS
-    } else {
-        EXIT_VALIDATION_ERRORS
+    Ok(match gate_report.verdict {
+        // The legacy pass flag must agree: READY never exits 0 on a failed stage.
+        synth_diagnostics::Verdict::Ready if pass => EXIT_SUCCESS,
+        synth_diagnostics::Verdict::Ready | synth_diagnostics::Verdict::NotReady => {
+            EXIT_VALIDATION_ERRORS
+        }
+        synth_diagnostics::Verdict::Incomplete => EXIT_INCOMPLETE,
+        synth_diagnostics::Verdict::Empty => EXIT_EMPTY,
     })
+}
+
+/// The `synth check` stages as gates.
+///
+/// A stage reported `unknown` — timed out, a tool missing, or skipped
+/// because an earlier stage failed — is `blocked`, never a pass.
+fn check_gates(
+    design_empty: bool,
+    stages: &serde_json::Map<String, serde_json::Value>,
+    drc_json: &serde_json::Value,
+) -> Vec<synth_diagnostics::Gate> {
+    use synth_diagnostics::Gate;
+    let mut gates: Vec<Gate> = Vec::new();
+    if design_empty {
+        gates.push(Gate::empty(
+            "design",
+            "the design has no components or nets",
+        ));
+    }
+    let source_failed = stages.get("source").is_some_and(|s| s["status"] == "fail");
+    for (name, stage) in stages {
+        let status = stage["status"].as_str().unwrap_or("unknown");
+        // `skipped` means the stage does not apply (no simulation sidecar, or
+        // an upstream failure); it is not evidence and must not block.
+        if status == "skipped" {
+            continue;
+        }
+        // A stage skipped because the source gate failed sits behind that
+        // failure; one that could not run for want of a tool is blocked.
+        if name != "source" && source_failed && status == "unknown" {
+            gates.push(
+                Gate::after_failure(name.as_str(), "source")
+                    .with_evidence(format!("stages.{name}")),
+            );
+            continue;
+        }
+        let reason = || -> String {
+            if let Some(r) = stage["reason"]
+                .as_str()
+                .or_else(|| stage["result"]["reason"].as_str())
+            {
+                return r.to_string();
+            }
+            if name == "drc" && drc_json["state"] == "router_unavailable" {
+                return format!(
+                    "router '{}' is unavailable",
+                    drc_json["engine"].as_str().unwrap_or("?")
+                );
+            }
+            format!("the {name} stage could not be evaluated")
+        };
+        gates.push(
+            match status {
+                "pass" => Gate::pass(name.as_str()),
+                "fail" => Gate::fail(name.as_str(), format!("the {name} stage failed")),
+                _ => Gate::blocked(name.as_str(), reason()),
+            }
+            .with_evidence(format!("stages.{name}")),
+        );
+    }
+    gates
 }
 
 /// What the pre-fab `synth drc` run established, before the export runs.
@@ -2075,6 +2255,159 @@ impl PreFabDrc {
             Self::Unknown => "unknown",
         }
     }
+}
+
+/// Run the sidecar, when there is one, and classify the result for `check`.
+///
+/// `skipped` is not evidence either way and does not block. `unknown` means
+/// the sidecar exists but the simulator could not run, so it blocks just like
+/// the other unknown physical stages. A spawned `synth sim` that cannot start
+/// is one of those unknowns, not an error for the whole check.
+fn simulation_stage(
+    exe: &Path,
+    input: &Path,
+    registry: Option<&Path>,
+    budget: u64,
+    base: &[String],
+    validate_pass: bool,
+) -> serde_json::Value {
+    if !validate_pass {
+        return serde_json::json!({
+            "status": "skipped",
+            "reason": "source gate failed",
+        });
+    }
+    let sidecar = synth_sim::sidecar_path(input);
+    if std::fs::symlink_metadata(&sidecar).is_err() {
+        return serde_json::json!({
+            "status": "skipped",
+            "reason": "no testbench sidecar",
+        });
+    }
+
+    // Leave enough time for the simulator's own process-tree kill to run
+    // before the supervisor's deadline; never less than 250 ms.
+    let margin = std::time::Duration::from_secs(2).min(std::time::Duration::from_secs(budget) / 4);
+    let sim_budget = std::cmp::max(
+        std::time::Duration::from_secs(budget).saturating_sub(margin),
+        std::time::Duration::from_millis(250),
+    );
+    let sim_budget = std::cmp::min(
+        sim_budget,
+        std::time::Duration::from_secs_f64(synth_sim::MAX_TIMEOUT_SECONDS),
+    );
+    let mut args = base.to_vec();
+    args.extend([
+        "sim".to_string(),
+        "--json".to_string(),
+        "--timeout".to_string(),
+        format!("{:.3}", sim_budget.as_secs_f64()),
+        input.display().to_string(),
+    ]);
+    if let Some(dir) = registry {
+        args.extend(["--registry".to_string(), dir.display().to_string()]);
+    }
+    let invocation = match synth_router::process::run_cancellable(
+        exe,
+        &args,
+        std::time::Duration::from_secs(budget),
+        CHECK_STDOUT_CAP,
+        None,
+        None,
+        synth_router::process::KillScope::ProcessTree,
+    ) {
+        Ok(invocation) => invocation,
+        Err(error) => {
+            return serde_json::json!({
+                "status": "unknown",
+                "reason": "simulation setup failed",
+                "detail": format!("could not run `synth sim`: {}", error.detail),
+            });
+        }
+    };
+    if invocation.timed_out {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "timeout",
+            "detail": "`synth sim` exceeded its stage budget",
+        });
+    }
+    if invocation.output_truncated {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "unreadable simulation report",
+            "detail": "`synth sim` output exceeded the report cap",
+        });
+    }
+
+    let Ok(result) = serde_json::from_str::<serde_json::Value>(&invocation.stdout) else {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "unreadable simulation report",
+            "stderr": invocation.stderr,
+        });
+    };
+    let has_code = |code: &str| {
+        result["diagnostics"].as_array().is_some_and(|diagnostics| {
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic["code"] == code)
+        })
+    };
+    // E-SYNTH-SIM-006 means ngspice itself errored or the log was unreadable,
+    // so the run did not finish and is no evidence either way. A blocking
+    // diagnostic alongside it is still a real failure and stays `fail`.
+    if has_code(synth_sim::E_SYNTH_SIM_006)
+        && !result["diagnostics"].as_array().is_some_and(|diagnostics| {
+            diagnostics.iter().any(|diagnostic| {
+                diagnostic["code"] != synth_sim::E_SYNTH_SIM_006
+                    && matches!(diagnostic["severity"].as_str(), Some("error" | "fatal"))
+            })
+        })
+    {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "simulator did not finish",
+            "result": result,
+        });
+    }
+    if invocation.succeeded() && result["passed"].as_bool() == Some(true) {
+        // `passed` only means no blocking diagnostic. A testbench that
+        // measures without asserting a limit verified nothing, and a report
+        // without the count cannot prove one was checked; neither is evidence.
+        if result["limits_checked"].as_u64().unwrap_or(0) == 0 {
+            return serde_json::json!({
+                "status": "unknown",
+                "reason": "no limits checked",
+                "detail": "the testbench measures values but asserts no min/max, so it is not evidence",
+                "result": result,
+            });
+        }
+        return serde_json::json!({"status": "pass", "result": result});
+    }
+    if let Some(error) = result["error"].as_str() {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "simulation setup failed",
+            "detail": error,
+            "result": result,
+        });
+    }
+    if has_code(synth_sim::E_SYNTH_SIM_005) {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "timeout",
+            "result": result,
+        });
+    }
+    if has_code(synth_sim::E_SYNTH_SIM_001) {
+        return serde_json::json!({
+            "status": "unknown",
+            "reason": "simulator unavailable",
+            "result": result,
+        });
+    }
+    serde_json::json!({"status": "fail", "result": result})
 }
 
 /// Classify a `synth drc` run record.
@@ -2300,6 +2633,19 @@ fn check_stage_budget_secs() -> u64 {
         .and_then(|v| v.trim().parse::<u64>().ok())
         .filter(|s| *s > 0)
         .unwrap_or(120)
+}
+
+/// The source stage's status. A stage that timed out did not fail the design:
+/// it did not run, so it is `unknown` and the gate folds to Incomplete (exit
+/// 3), as the documented exit table says, not ValidationErrors (exit 1).
+fn source_stage_status(timed_out: bool, passed: bool) -> &'static str {
+    if timed_out {
+        "unknown"
+    } else if passed {
+        "pass"
+    } else {
+        "fail"
+    }
 }
 
 fn run_check_child(
@@ -3546,15 +3892,47 @@ fn sim(
     registry_dir: Option<&Path>,
     suggest: bool,
     force: bool,
+    json: bool,
+    timeout_secs: Option<f64>,
 ) -> anyhow::Result<u8> {
-    let (source, file) = read_source(input)?;
+    if let Some(timeout) = timeout_secs
+        && (!timeout.is_finite() || timeout <= 0.0 || timeout > synth_sim::MAX_TIMEOUT_SECONDS)
+    {
+        let message = format!(
+            "--timeout must be greater than 0 and at most {} seconds",
+            synth_sim::MAX_TIMEOUT_SECONDS
+        );
+        if json {
+            write_sim_error_message_json(&message)?;
+        }
+        anyhow::bail!(message);
+    }
+    let deadline = timeout_secs
+        .map(|secs| std::time::Instant::now() + std::time::Duration::from_secs_f64(secs));
+    let (source, file) = match read_source(input) {
+        Ok(pair) => pair,
+        Err(error) => {
+            if json {
+                write_sim_error_message_json(&error.to_string())?;
+            }
+            return Err(error);
+        }
+    };
+    let mut all_diagnostics = Vec::new();
+    let finish_error = |diagnostics: &[synth_diagnostics::Diagnostic]| -> anyhow::Result<u8> {
+        if json {
+            write_sim_error_json(diagnostics)?;
+        }
+        Ok(EXIT_VALIDATION_ERRORS)
+    };
     let parse = synth_parser::parse(&source, file.clone());
+    all_diagnostics.extend(parse.diagnostics.iter().cloned());
     write_sim_diagnostics(&parse.diagnostics)?;
     if parse.has_errors() {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     }
     let Some(ast) = parse.ast else {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     };
 
     let import_root = input
@@ -3562,25 +3940,31 @@ fn sim(
         .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let loader = synth_ir::FsImportLoader { root: import_root };
     let resolved = synth_ir::resolve_imports(&ast, &loader, &file);
+    all_diagnostics.extend(resolved.diagnostics.iter().cloned());
     write_sim_diagnostics(&resolved.diagnostics)?;
     if resolved
         .diagnostics
         .iter()
         .any(|d| d.severity.is_blocking())
     {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     }
 
     let Some(registry) = load_registry(registry_dir) else {
-        anyhow::bail!("could not load the component registry");
+        let message = "could not load the component registry";
+        if json {
+            write_sim_error_message_json(message)?;
+        }
+        anyhow::bail!("{message}");
     };
     let lowered = synth_ir::lower(&resolved.program, &registry, &file);
+    all_diagnostics.extend(lowered.diagnostics.iter().cloned());
     write_sim_diagnostics(&lowered.diagnostics)?;
     if lowered.diagnostics.iter().any(|d| d.severity.is_blocking()) {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     }
     let Some(board) = lowered.board else {
-        return Ok(EXIT_VALIDATION_ERRORS);
+        return finish_error(&all_diagnostics);
     };
 
     if suggest {
@@ -3591,8 +3975,9 @@ fn sim(
     let testbench = match synth_sim::Testbench::from_path(&sidecar) {
         Ok(testbench) => testbench,
         Err(diagnostic) => {
-            write_sim_diagnostics(&[diagnostic])?;
-            return Ok(EXIT_VALIDATION_ERRORS);
+            all_diagnostics.push(diagnostic.clone());
+            write_sim_diagnostics(std::slice::from_ref(&diagnostic))?;
+            return finish_error(&all_diagnostics);
         }
     };
 
@@ -3614,43 +3999,95 @@ fn sim(
             design_path: Some(input.to_path_buf()),
             testbench_path: Some(sidecar.clone()),
             registry_dirs,
+            deadline,
             ..synth_sim::SimOptions::default()
         },
     );
 
-    let stdout = std::io::stdout();
-    let mut out = stdout.lock();
-    for measure in &report.measures {
-        let status = match (measure.min, measure.max) {
-            (None, None) => "MEASURED",
-            _ if measure.passed() => "PASS",
-            _ => "FAIL",
-        };
-        let limits = match (measure.min, measure.max) {
-            (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
-            (Some(min), None) => format!(" (min {min})"),
-            (None, Some(max)) => format!(" (max {max})"),
-            (None, None) => String::new(),
-        };
+    if json {
+        all_diagnostics.extend(report.diagnostics.iter().cloned());
+        write_sim_json(
+            report.passed(),
+            &report.measures,
+            &all_diagnostics,
+            &report.coverage,
+        )?;
+    } else {
+        let stdout = std::io::stdout();
+        let mut out = stdout.lock();
+        for measure in &report.measures {
+            let status = match (measure.min, measure.max) {
+                (None, None) => "MEASURED",
+                _ if measure.passed() => "PASS",
+                _ => "FAIL",
+            };
+            let limits = match (measure.min, measure.max) {
+                (Some(min), Some(max)) => format!(" (min {min}, max {max})"),
+                (Some(min), None) => format!(" (min {min})"),
+                (None, Some(max)) => format!(" (max {max})"),
+                (None, None) => String::new(),
+            };
+            writeln!(
+                out,
+                "{status} {} = {} {}{limits}",
+                measure.name, measure.value, measure.unit
+            )?;
+        }
         writeln!(
             out,
-            "{status} {} = {} {}{limits}",
-            measure.name, measure.value, measure.unit
+            "coverage: modelled=[{}] ignored=[{}] unmodelled=[{}] measured=[{}] limits_checked={}",
+            report.coverage.modelled.join(", "),
+            report.coverage.ignored.join(", "),
+            report.coverage.unmodelled.join(", "),
+            report.coverage.measured.join(", "),
+            report
+                .measures
+                .iter()
+                .filter(|measure| measure.min.is_some() || measure.max.is_some())
+                .count()
         )?;
+        let blocking: Vec<_> = report
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity.is_blocking())
+            .cloned()
+            .collect();
+        write_sim_diagnostics(&blocking)?;
     }
-    let blocking: Vec<_> = report
-        .diagnostics
-        .iter()
-        .filter(|diagnostic| diagnostic.severity.is_blocking())
-        .cloned()
-        .collect();
-    write_sim_diagnostics(&blocking)?;
 
     Ok(if report.passed() {
         EXIT_SUCCESS
     } else {
         EXIT_VALIDATION_ERRORS
     })
+}
+
+/// One stable JSON shape for `synth sim --json`.
+fn write_sim_json(
+    passed: bool,
+    measures: &[synth_sim::MeasureResult],
+    diagnostics: &[synth_diagnostics::Diagnostic],
+    coverage: &synth_sim::SimCoverage,
+) -> anyhow::Result<()> {
+    write_sim_payload_json(&synth_sim::report_json(
+        passed,
+        measures,
+        diagnostics,
+        coverage,
+    ))
+}
+
+fn write_sim_payload_json(report: &serde_json::Value) -> anyhow::Result<()> {
+    println!("{}", serde_json::to_string_pretty(report)?);
+    Ok(())
+}
+
+fn write_sim_error_json(diagnostics: &[synth_diagnostics::Diagnostic]) -> anyhow::Result<()> {
+    write_sim_json(false, &[], diagnostics, &synth_sim::SimCoverage::default())
+}
+
+fn write_sim_error_message_json(message: &str) -> anyhow::Result<()> {
+    write_sim_payload_json(&synth_sim::error_report_json(message))
 }
 
 /// Draft the sidecar from the compiled board and write it unless an existing
@@ -3762,20 +4199,24 @@ fn validate(
             writeln!(&mut out)?;
         }
         Format::Human => {
-            if diagnostics.is_empty() {
+            // An info-only report still means the design is clean; keep the
+            // `ok:` line scripts match on, then show the infos.
+            if !diagnostics
+                .iter()
+                .any(|d| d.severity != synth_diagnostics::Severity::Info)
+            {
                 writeln!(&mut out, "ok: {}", input.display())?;
-            } else {
-                for d in &diagnostics {
-                    let where_ = d.location.as_ref().map_or_else(
-                        || "?".into(),
-                        |l| format!("{}:{}-{}", l.file, l.span.byte_start, l.span.byte_end),
-                    );
-                    writeln!(
-                        &mut out,
-                        "{}: [{}] {} ({})",
-                        d.severity, d.code, d.title, where_
-                    )?;
-                }
+            }
+            for d in &diagnostics {
+                let where_ = d.location.as_ref().map_or_else(
+                    || "?".into(),
+                    |l| format!("{}:{}-{}", l.file, l.span.byte_start, l.span.byte_end),
+                );
+                writeln!(
+                    &mut out,
+                    "{}: [{}] {} ({})",
+                    d.severity, d.code, d.title, where_
+                )?;
             }
         }
     }
@@ -5177,6 +5618,14 @@ fn export_kicad(
         .write_to(out_dir)
         .map_err(|e| anyhow::anyhow!("could not write the release manifest: {e}"))?;
     info!("wrote {}", manifest_path.display());
+    write_export_evidence(
+        input,
+        registry_dir,
+        out_dir,
+        &routing,
+        &synth_violations,
+        &native,
+    );
     for note in manifest
         .routing
         .iter()
@@ -5520,6 +5969,78 @@ fn dfm_stage(
             (evidence, Some(report))
         }
     }
+}
+
+/// Write `evidence.json` beside an export: the design-state hash, the tool
+/// version, and the gates this run established, so `synth check --evidence`
+/// can tell later whether the export still describes the design.
+///
+/// Best effort: an export is not failed because its evidence could not be
+/// recorded, but it says so.
+fn write_export_evidence(
+    input: &Path,
+    registry: Option<&Path>,
+    out_dir: &Path,
+    routing: &synth_router::RouteReport,
+    signal_integrity: &[synth_drc::Violation],
+    native: &[NativeCheckEvidence],
+) {
+    use synth_diagnostics::Gate;
+    let (hash, empty) = match synth_mcp::evidence::design_hash_of(input, registry) {
+        Ok(found) => found,
+        Err(e) => {
+            warn!("evidence.json not written: {e}");
+            return;
+        }
+    };
+    let mut gates = Vec::new();
+    if empty {
+        gates.push(Gate::empty(
+            "design",
+            "the design has no components or nets",
+        ));
+    }
+    gates.extend(synth_mcp::tools::route_gates(
+        routing,
+        Some(signal_integrity),
+    ));
+    for evidence in native {
+        let name = format!("native.{}", evidence.stage);
+        let detail = evidence
+            .detail
+            .clone()
+            .unwrap_or_else(|| format!("{} via {}", evidence.stage, evidence.tool));
+        gates.push(match (evidence.status, evidence.advisory) {
+            (NativeCheckStatus::Pass, _) => Gate::pass(name),
+            (_, true) => Gate::warn(name, format!("advisory: {detail}")),
+            (NativeCheckStatus::Fail, false) => Gate::fail(name, detail),
+            (NativeCheckStatus::Unknown, false) => Gate::blocked(name, detail),
+        });
+    }
+    let report = synth_diagnostics::GateReport::new(gates);
+    let evidence = synth_mcp::evidence::Evidence::new(&hash, &report);
+    let path = out_dir.join(synth_mcp::evidence::EVIDENCE_FILE);
+    match serde_json::to_vec_pretty(&evidence) {
+        Ok(bytes) => match replace_evidence(&path, &bytes) {
+            Ok(()) => info!("wrote {} (verdict {})", path.display(), report.verdict),
+            Err(e) => warn!("evidence.json not written: {e}"),
+        },
+        Err(e) => warn!("evidence.json not written: {e}"),
+    }
+}
+
+/// Replace a previously written `evidence.json`.
+///
+/// A stale verdict must not survive a failed export: remove the old file
+/// before writing, and write atomically so an interrupted export cannot leave
+/// a half-written one.
+fn replace_evidence(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    match std::fs::remove_file(path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    synth_mcp::outcome::atomic_write(path, bytes)
 }
 
 fn write_verification_report(
@@ -7320,6 +7841,196 @@ mod tests {
         assert!(!validate_stdout_passed(
             br#"{"diagnostics": [], "parse_error": true}"#
         ));
+    }
+
+    #[test]
+    fn a_timed_out_source_stage_is_unknown_not_failed() {
+        assert_eq!(source_stage_status(true, false), "unknown");
+        assert_eq!(source_stage_status(false, true), "pass");
+        assert_eq!(source_stage_status(false, false), "fail");
+    }
+
+    #[test]
+    fn replacing_evidence_removes_the_stale_verdict() {
+        let dir =
+            std::env::temp_dir().join(format!("synth-evidence-replace-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let path = dir.join(synth_mcp::evidence::EVIDENCE_FILE);
+        std::fs::write(&path, b"stale").expect("seed");
+        replace_evidence(&path, b"fresh").expect("replace");
+        assert_eq!(std::fs::read(&path).expect("read"), b"fresh");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn simulation_scratch(label: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "synth_simulation_stage_{label}_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        std::fs::write(dir.join("d.synth"), "").expect("write design");
+        std::fs::write(dir.join("d.sim.toml"), "").expect("write sidecar");
+        dir
+    }
+
+    #[cfg(unix)]
+    fn fake_sim_report(dir: &Path, report: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = dir.join("fake-synth");
+        std::fs::write(&path, format!("#!/bin/sh\ncat <<'JSON'\n{report}\nJSON\n"))
+            .expect("write fake synth");
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755))
+            .expect("make fake synth executable");
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_report_with_one_checked_limit_passes() {
+        let dir = simulation_scratch("one-limit");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": true, "limits_checked": 1, "diagnostics": []}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "pass", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_report_without_limits_checked_is_unknown() {
+        let dir = simulation_scratch("absent-limits");
+        let exe = fake_sim_report(&dir, r#"{"passed": true, "diagnostics": []}"#);
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "no limits checked", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_report_with_only_an_ngspice_error_is_unknown() {
+        let dir = simulation_scratch("ngspice-error");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "simulator did not finish", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_simulation_limit_violation_stays_fail() {
+        let dir = simulation_scratch("limit");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-004", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_limit_violation_wins_over_an_ngspice_error() {
+        let dir = simulation_scratch("limit-and-error");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"},
+                {"code": "E-SYNTH-SIM-004", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_missing_measurement_wins_over_an_ngspice_error() {
+        let dir = simulation_scratch("measure-and-error");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"},
+                {"code": "E-SYNTH-SIM-003", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_ngspice_error_with_passed_true_is_still_unknown() {
+        let dir = simulation_scratch("error-passed");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": true, "limits_checked": 1, "diagnostics": [
+                {"code": "E-SYNTH-SIM-006", "severity": "error"}
+            ]}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "simulator did not finish", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_report_with_absent_diagnostics_is_not_a_pass() {
+        let dir = simulation_scratch("absent-diagnostics");
+        let exe = fake_sim_report(&dir, r#"{"passed": false, "limits_checked": 1}"#);
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_report_with_an_empty_diagnostic_list_is_not_a_pass() {
+        let dir = simulation_scratch("empty-diagnostics");
+        let exe = fake_sim_report(
+            &dir,
+            r#"{"passed": false, "limits_checked": 1, "diagnostics": []}"#,
+        );
+        let stage = simulation_stage(&exe, &dir.join("d.synth"), None, 10, &[], true);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "fail", "{stage:#}");
+    }
+
+    #[test]
+    fn a_simulation_that_cannot_spawn_is_unknown() {
+        let dir = simulation_scratch("spawn");
+        let stage = simulation_stage(
+            &dir.join("missing-synth"),
+            &dir.join("d.synth"),
+            None,
+            10,
+            &[],
+            true,
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(stage["status"], "unknown", "{stage:#}");
+        assert_eq!(stage["reason"], "simulation setup failed", "{stage:#}");
+        assert!(
+            stage["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("could not run `synth sim`")),
+            "{stage:#}"
+        );
     }
 }
 

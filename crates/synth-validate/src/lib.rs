@@ -51,6 +51,7 @@ pub trait ErcRule {
 pub mod anomaly;
 pub mod config;
 pub mod deep_erc;
+pub mod divider_tolerance;
 pub use anomaly::{BoardFeatureVec, GraphAnomalyDetectorRule, extract_features};
 pub use config::{ErcConfig, PinConflictTable};
 
@@ -62,6 +63,11 @@ pub mod patch_mlp;
 mod stackup;
 mod thermal;
 pub use patch_mlp::PatchMlp;
+
+pub mod board_estimate;
+pub use board_estimate::{
+    BoardEstimate, board_size_diagnostics, estimate_board_size, hard_hint_diagnostics,
+};
 
 pub mod placement;
 pub use placement::validate_placement;
@@ -103,6 +109,10 @@ pub fn run_erc_with_config(board: &Board, file: &str, config: &ErcConfig) -> Vec
 
 fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
     vec![
+        // Board-shape advisories run first so their estimate reaches the
+        // agent before the per-connection findings.
+        Box::new(board_estimate::BoardSizeEstimateRule),
+        Box::new(board_estimate::HardHintRule),
         Box::new(RequiredPinsConnectedRule),
         Box::new(SingleEndpointNetRule),
         Box::new(NoConnectMismatchRule),
@@ -196,6 +206,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::PinFunctionSupportRule),
         Box::new(deep_erc::CeramicDcBiasDeratingRule::new(config)),
         Box::new(RegulatorFeedbackOnSwitchNodeRule),
+        Box::new(divider_tolerance::FeedbackDividerToleranceRule),
     ]
 }
 
@@ -1787,7 +1798,7 @@ impl ErcRule for ClockSourceCollisionRule {
 /// A net that reaches one of these leaves the design, and what drives it on
 /// the other side is not in the source Synth is reading. `E-SYNTH-ESD-001`
 /// already uses this notion for its own reason, in `deep_erc`.
-const BOARD_EDGE_KINDS: [&str; 3] = ["connector", "jack", "receptacle"];
+pub(crate) const BOARD_EDGE_KINDS: [&str; 3] = ["connector", "jack", "receptacle"];
 
 /// Whether any endpoint of `net` is something that drives a clock: a pin
 /// declaring `clock_output`, a crystal or oscillator, or the board edge.

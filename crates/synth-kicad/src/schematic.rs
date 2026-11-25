@@ -881,6 +881,20 @@ pub(crate) fn build_sheet_schematic(
         }
     }
 
+    // The root sheet's own page belongs in a `sheet_instances` block,
+    // exactly as KiCad writes it (dev-docs: Root Sheet Instance Section).
+    // Every sub-sheet carries its page in its own `instances` block above;
+    // without this one the root's page is only implicit.
+    if render.root_furniture.is_some() {
+        children.push(Sexp::list(
+            "sheet_instances",
+            vec![Sexp::list(
+                "path",
+                vec![Sexp::str("/"), Sexp::list("page", vec![Sexp::str("1")])],
+            )],
+        ));
+    }
+
     Sexp::list("kicad_sch", children)
 }
 
@@ -1357,7 +1371,12 @@ fn build_sheet_instance(
                 Sexp::list(
                     "path",
                     vec![
-                        Sexp::str(format!("/{root_uuid}/{}", instance.uuid)),
+                        // The path names the *parent* sheet instance; the
+                        // sheet object's own uuid identifies this child.
+                        // KiCad writes top-level sheets as `/<root_uuid>`
+                        // and ignores a `(page …)` keyed to any other path,
+                        // falling back to box order for the page number.
+                        Sexp::str(format!("/{root_uuid}")),
                         Sexp::list("page", vec![Sexp::str(page.to_string())]),
                     ],
                 ),

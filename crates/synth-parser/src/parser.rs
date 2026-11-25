@@ -418,8 +418,8 @@ impl Parser {
         })
     }
 
-    /// `outline <width> x <height>` — a fixed board rectangle whose
-    /// bottom-left corner is the board origin.
+    /// `outline <width> x <height> [reason "<text>"]` — a fixed board
+    /// rectangle whose bottom-left corner is the board origin.
     fn parse_outline(&mut self) -> Option<OutlineStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `outline`
@@ -439,10 +439,39 @@ impl Parser {
         self.bump();
         let height = self.expect_value()?;
         let height = self.outline_dimension(height, "height")?;
+        let mut reason = None;
+        if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "reason") {
+            self.bump();
+            let TokenKind::StringLit(text) = self.peek_kind().clone() else {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-047",
+                    "expected a quoted, non-empty outline reason",
+                    "a quoted reason, e.g. `reason \"fits the enclosure\"`",
+                    self.describe_current(),
+                    None,
+                );
+                return None;
+            };
+            if text.trim().is_empty() {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-047",
+                    "outline reason must not be empty",
+                    "a non-empty quoted reason, e.g. `reason \"fits the enclosure\"`",
+                    "an empty string".to_string(),
+                    None,
+                );
+                return None;
+            }
+            self.bump();
+            reason = Some(text);
+        }
         let end = self.last_offset();
         Some(OutlineStmt {
             width,
             height,
+            reason,
             span: Span::new(start, end),
         })
     }

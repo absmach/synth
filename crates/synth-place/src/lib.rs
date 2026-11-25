@@ -1499,7 +1499,7 @@ fn validate_sidecar_inside_outline(
     board: &Board,
     sidecar: &synth_layout::sidecar::SidecarLayout,
 ) -> Result<(), PlaceError> {
-    let Some(outline) = board.outline else {
+    let Some(outline) = board.outline.as_ref() else {
         return Ok(());
     };
     let board_rect = Rect::new(
@@ -1932,7 +1932,7 @@ fn place_with_tuning_and_sidecar_seeded_impl<S: ::std::hash::BuildHasher>(
     // the sidecar already states every coordinate, and running the solver
     // only reproduces them more slowly. Legalisation still runs below.
     if pinned.len() == board.components.len()
-        && let Some(outline) = board.outline
+        && let Some(outline) = board.outline.as_ref()
     {
         let mut components: Vec<ComponentPlacement> = board
             .components
@@ -2952,7 +2952,7 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
     // A declared `outline` is the board: solve inside it as given, with no
     // fitting or compaction afterwards. Everything else keeps the historical
     // auto-sized path.
-    if let Some(outline) = board.outline {
+    if let Some(outline) = board.outline.as_ref() {
         return place_with_outline(
             board,
             Rect::new(
@@ -4419,27 +4419,17 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
                 courtyard_offset,
                 pad_extra_nm,
             );
-            // A functional macro's whole courtyard must clear a keepout, not
-            // just its centre: a modem wired to the antenna otherwise parks
-            // its pads inside the antenna's no-route circle. Small parts keep
-            // the centre test, where the strict one costs secure_tracker a
-            // routed net without moving the part out anyway.
-            let in_keepout = if is_macro(id) {
-                overlaps_anchored_keepout(candidate, id, board, board_outline, |pid| {
+            // Centre-only on purpose: the strict test here costs secure_tracker
+            // a routed net, and the strict gates in the passes after this one
+            // already keep a courtyard from entering a keepout.
+            if placed.iter().all(|(_, _, r)| !candidate.intersects(r))
+                && !intersects_keepout(candidate, id, board, board_outline, |pid| {
                     placed
                         .iter()
                         .find(|(placed_id, _, _)| *placed_id == pid)
                         .map(|(_, _, r)| *r)
                 })
-            } else {
-                intersects_keepout(candidate, id, board, board_outline, |pid| {
-                    placed
-                        .iter()
-                        .find(|(placed_id, _, _)| *placed_id == pid)
-                        .map(|(_, _, r)| *r)
-                })
-            };
-            if placed.iter().all(|(_, _, r)| !candidate.intersects(r)) && !in_keepout {
+            {
                 found = Some(*pt);
                 grid_start_indices[order_idx] = cell_idx;
                 break;
@@ -5222,7 +5212,6 @@ fn keepout_circles(
     board: &Board,
     board_outline: Rect,
     lookup: impl Fn(ComponentId) -> Option<Rect>,
-    anchored_only: bool,
 ) -> Vec<(Point, i64)> {
     let mut circles = Vec::new();
     for keepout in &board.keepouts {
@@ -5257,12 +5246,6 @@ fn keepout_circles(
                         board_outline.max.y_nm / 2,
                     ))
                 })
-        } else if anchored_only {
-            // A keepout with no anchor sits at the board centre by
-            // convention; that is not a place a macro's courtyard can
-            // meaningfully be held out of. Only an anchored keepout (an
-            // antenna's no-route circle) is enforced for the whole courtyard.
-            continue;
         } else {
             Some(Point::new(
                 board_outline.max.x_nm / 2,
@@ -5289,7 +5272,7 @@ pub(crate) fn intersects_keepout(
         i64::midpoint(candidate.min.x_nm, candidate.max.x_nm),
         i64::midpoint(candidate.min.y_nm, candidate.max.y_nm),
     );
-    keepout_circles(id, board, board_outline, lookup, false)
+    keepout_circles(id, board, board_outline, lookup)
         .into_iter()
         .any(|(center, radius)| {
             let dx = candidate_center.x_nm - center.x_nm;
@@ -5310,30 +5293,7 @@ pub(crate) fn overlaps_keepout(
     board_outline: Rect,
     lookup: impl Fn(ComponentId) -> Option<Rect>,
 ) -> bool {
-    keepout_circles(id, board, board_outline, lookup, false)
-        .into_iter()
-        .any(|(center, radius)| {
-            let nearest_x = center.x_nm.clamp(candidate.min.x_nm, candidate.max.x_nm);
-            let nearest_y = center.y_nm.clamp(candidate.min.y_nm, candidate.max.y_nm);
-            let dx = nearest_x - center.x_nm;
-            let dy = nearest_y - center.y_nm;
-            dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
-                < radius.saturating_mul(radius)
-        })
-}
-
-/// Like [`overlaps_keepout`], but only for keepouts anchored to a component
-/// (an antenna's no-route circle). An unanchored keepout sits at the board
-/// centre by convention, and holding every macro out of it distorts boards
-/// whose keepout is a generic RF note rather than a real part.
-fn overlaps_anchored_keepout(
-    candidate: Rect,
-    id: ComponentId,
-    board: &Board,
-    board_outline: Rect,
-    lookup: impl Fn(ComponentId) -> Option<Rect>,
-) -> bool {
-    keepout_circles(id, board, board_outline, lookup, true)
+    keepout_circles(id, board, board_outline, lookup)
         .into_iter()
         .any(|(center, radius)| {
             let nearest_x = center.x_nm.clamp(candidate.min.x_nm, candidate.max.x_nm);
@@ -13937,7 +13897,7 @@ board "near" {
             }"#,
             "fixed_outline.synth",
         );
-        let expected = board.outline.expect("declared outline");
+        let expected = board.outline.clone().expect("declared outline");
         let placement = place(&board).expect("place");
         assert_eq!(placement.board_outline.width_nm(), expected.width.0);
         assert_eq!(placement.board_outline.height_nm(), expected.height.0);
@@ -13959,7 +13919,7 @@ board "near" {
             }"#,
             "fixed_outline_sweep.synth",
         );
-        let expected = board.outline.expect("declared outline");
+        let expected = board.outline.clone().expect("declared outline");
         let placement = place_with_export_sweep(&board).expect("place");
         assert_eq!(placement.board_outline.min.x_nm, 0);
         assert_eq!(placement.board_outline.min.y_nm, 0);
@@ -13983,7 +13943,7 @@ board "near" {
             }"#,
             "fixed_outline_finish.synth",
         );
-        let expected = board.outline.expect("declared outline");
+        let expected = board.outline.clone().expect("declared outline");
         let mut placement = place(&board).expect("place");
         finish_default_placement(&board, &mut placement, false);
         assert_eq!(placement.board_outline.min.x_nm, 0);

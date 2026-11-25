@@ -1,6 +1,25 @@
 # Release checks
 
-For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic, model-free gate for compiler validation and DRC. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
+For CI and agent workflows, `synth check DESIGN.synth --json` is the single deterministic gate for compiler validation, DRC, and simulation when a testbench exists. Add `--fab` to require a complete KiCad manufacturing export and receive SHA-256 hashes for the emitted files. A timed-out or unavailable physical stage is reported as `unknown` and blocks the command; it is never treated as a pass.
+
+## Simulation stage
+
+A design with a `<design>.sim.toml` sidecar gets a `simulation` stage alongside `source`, `drc` and `manufacturing`. The statuses and blocking rules are in [SPICE simulation](spice-sim.md#check-integration); in short, a missing sidecar or a failed source gate is `skipped`, a simulator that cannot run (missing, timed out, an ngspice error, unreadable, or setup failed) is `unknown`, and any other blocking simulation diagnostic is `fail`. The stage carries `testbench_sha256` so a pass is tied to the sidecar revision.
+
+`synth check --fab` uses the same stage. `synth sim` and `synth sim --json` remain available on their own; `validate`, `export` and `place` never run ngspice.
+
+The report carries a `verdict` folded from its `gates` (precedence `empty > blocked > fail > warn > pass`), and the exit code follows it:
+
+| Exit | Verdict | Meaning |
+|---|---|---|
+| 0 | `READY` | Every gate ran and passed. |
+| 1 | `NOT_READY` | A gate ran and failed (`verdict_detail.failing_gates`). |
+| 3 | `INCOMPLETE` | A gate could not be evaluated: an `unknown` stage, a missing router or `kicad-cli` (`verdict_detail.blocked_gates`). |
+| 4 | `EMPTY` | The design has no components or no nets. |
+
+A stage skipped only because the source stage failed is `blocked` with `blocked_by: "source"` and does not lift the verdict above `NOT_READY`.
+
+Every report also carries `design_hash`, a SHA-256 over the `.synth` source and its imports, both layout sidecars, the registry parts the design uses, and the manufacturer profile and stackup, with `design_hash_files` listing each covered input. `synth export-kicad` and the `synth_export` MCP tool write `evidence.json` beside the artefacts (hash, tool version, verdict, gates). `synth check DESIGN.synth --evidence out/evidence.json` refuses with exit 3 when the design has changed since that evidence was recorded, and lists the changed, added and removed inputs. Writing evidence never changes the hash.
 
 ## Tri-state native stages
 

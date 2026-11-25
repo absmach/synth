@@ -113,10 +113,10 @@ const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 3503.8;
 
 /// A 1 mm part correction must not move the board 44%.
 ///
-/// Correcting one courtyard by 1 mm once took this board from 4143.9 mm2 to
+/// Correcting one courtyard by 1 mm took this board from 4143.9 mm2 to
 /// 5960.9 mm2, and nothing failed on it: the insta snapshot records whatever
-/// the placer does, so the non-monotonicity in #158 would have been baked in
-/// silently. This bounds the corrected output against silent growth.
+/// the placer does, so the non-monotonicity in #158 would be baked in
+/// silently. This bounds it against the area from before that change.
 ///
 /// The sweep in #158 had the board oscillating between 64.90 and 93.90 mm
 /// wide as one part grew in 0.2 mm steps. The cause was the canvas choice,
@@ -126,7 +126,8 @@ const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 3503.8;
 /// 0.2 mm. `choose_canvas` now requires a wider canvas to be 3% smaller
 /// before it displaces the square family; the 0.2 mm sweep is monotonic,
 /// 64.90 mm wide from 5.0 to 7.0 mm and 65.90 mm at 8.0. This guard is the
-/// regression check on the corrected placement.
+/// regression check: the corrected output must stay near the area the board
+/// had before the correction.
 #[test]
 fn secure_tracker_outline_area_stays_within_baseline_tolerance() {
     let board = load_board("fixtures/kicad-reference/secure_tracker.synth");
