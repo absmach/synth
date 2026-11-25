@@ -134,3 +134,28 @@ fn a_guard_fallback_is_reported() {
         "a board with no two-pin net must report the fallback"
     );
 }
+
+/// A hard `near` hint used to send the seam straight to the export sweep, so
+/// the solver never ran. It must now reach RePlAce, and only the solver's own
+/// refusal may report a fallback.
+#[test]
+fn a_hard_hinted_board_reaches_the_replace_solver() {
+    let mut hinted = load_board("examples/sensor_logger/sensor_logger.synth");
+    let cap = hinted
+        .components
+        .iter_mut()
+        .find(|component| component.kind == "capacitor")
+        .expect("a capacitor");
+    cap.placement_hint = Some(synth_ir::PlacementConstraint {
+        region: None,
+        edge: None,
+        near: Some("U1".into()),
+        side: None,
+        priority: synth_ir::PlacementPriority::Hard,
+    });
+    let (_placement, fell_back) = synth_place::place_with_replace(&hinted).expect("replace places");
+    assert!(
+        !fell_back,
+        "a hard near hint must not short-circuit the RePlAce solver"
+    );
+}

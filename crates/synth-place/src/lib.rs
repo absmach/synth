@@ -2240,6 +2240,26 @@ const MAX_REPLACE_COMPONENTS: usize = 200;
 /// The flag reports a guard, veto or keepout rejection. When it is set the
 /// placement is only the sweep the solve started from: the caller must use
 /// its own default export placement instead of finishing this one.
+/// The placement a refused RePlAce solve falls back to.
+///
+/// The export sweep is the historical fallback and still comes first; if it
+/// cannot pack the board, the bounded legal ladder runs so a hint or a canvas
+/// that the sweep could not use does not become a failed export.
+fn replace_fallback(board: &Board) -> Result<Placement, PlaceError> {
+    match place_with_export_sweep(board) {
+        Ok(placement) => Ok(placement),
+        Err(sweep_error) => match place_legal(board, &LegalOptions::default()) {
+            Ok(legal) => {
+                if let Some(warning) = legal.relaxation_warning() {
+                    replace_note(format_args!("REPLACE fallback: {warning}"));
+                }
+                Ok(legal.placement)
+            }
+            Err(_) => Err(sweep_error),
+        },
+    }
+}
+
 pub fn place_with_replace(board: &Board) -> Result<(Placement, bool), PlaceError> {
     let (mut placement, fell_back) = place_with_replace_unspaced(board)?;
     if !fell_back {
@@ -2258,30 +2278,35 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
     let trace_start = std::time::Instant::now();
 
     // The solve starts from the default arrangement without the group rule, so
-    // RePlAce sees the same envelope it would on an ungrouped board; the full
-    // `place()` result is what a rejected solve falls back to.
-    let fallback = place_with_export_sweep(board)?;
+    // RePlAce sees the same envelope it would on an ungrouped board.
+    // Built only when the solve is refused. Building it up front made the
+    // export sweep's failure decide the RePlAce seam's answer: a hard-hinted
+    // board the sweep could not pack never reached the solver at all, which is
+    // how the CM4 carrier failed on `TP_NEXTRST` after the sweep had boxed
+    // itself in. The sweep is the fallback, not the gate.
+    let fallback = || replace_fallback(board);
+    // The baseline seeds RePlAce and is the arrangement it must beat. When the
+    // default path cannot pack the board at all there is no seed: run the
+    // fallback and return it, rather than spending minutes in a solver whose
+    // legalizer then has to refuse the oversized arrangement anyway. The
+    // fallback is legal, which is what the caller asked for.
     let baseline =
-        place_with_default_tuning(board, true, false, &default_rotation_overrides(board))?;
+        match place_with_default_tuning(board, true, false, &default_rotation_overrides(board)) {
+            Ok(baseline) => baseline,
+            Err(error) => {
+                replace_note(format_args!("REPLACE baseline deferred: {error}"));
+                return fallback().map(|placement| (placement, true));
+            }
+        };
     if board.components.len() > MAX_REPLACE_COMPONENTS {
         replace_note(format_args!(
             "REPLACE fallback: {} components is above the {MAX_REPLACE_COMPONENTS}-component guard",
             board.components.len()
         ));
-        return Ok((fallback, true));
-    }
-    if board.components.iter().any(|component| {
-        component.placement_hint.as_ref().is_some_and(|hint| {
-            hint.priority == synth_ir::PlacementPriority::Hard && hint.near.is_some()
-        })
-    }) {
-        replace_note(format_args!(
-            "REPLACE fallback: hard near hint is anchored by the default path"
-        ));
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     }
     if !board.nets.iter().any(|net| net.endpoints.len() >= 2) {
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     }
     let outline = baseline.board_outline;
     let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
@@ -2345,7 +2370,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
             "REPLACE fallback: legalizer failed ({:?})",
             legalized.err()
         ));
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     };
     // The density force never fires on a board this sparse, so the legalised
     // arrangement still holds the seed's spread; the fitted envelope it leaves
@@ -2485,7 +2510,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
                 synth_geometry::nm_to_mm(placement_hpwl),
                 synth_geometry::nm_to_mm(baseline_hpwl)
             ));
-            return Ok((fallback, true));
+            return fallback().map(|placement| (placement, true));
         }
         break;
     }
@@ -2500,7 +2525,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
             keepout_overlaps(board, &baseline),
             keepout_overlaps(board, &placement)
         ));
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     }
     replace_note(format_args!("REPLACE used"));
     Ok((placement, false))
