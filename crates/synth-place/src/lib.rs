@@ -78,6 +78,7 @@ mod compact_gaps;
 pub use compact_gaps::{GapSpacing, compact_by_gaps, courtyard_rect_probe, hpwl_probe};
 mod alignment;
 mod analytic;
+pub mod board_estimate;
 pub mod board_family;
 pub mod cem;
 mod default_rules;
@@ -85,6 +86,7 @@ pub mod fitness;
 pub mod floorplan;
 mod fold;
 pub mod judge;
+pub mod legal;
 pub mod modules;
 pub mod outline_packer;
 mod repeats;
@@ -102,11 +104,13 @@ use thiserror::Error;
 
 mod routability;
 mod stage_trace;
+pub use board_estimate::{BoardEstimate, estimate_board_size};
 pub use default_rules::{
     RefineReport, RefineStep, compress_outline, pull_groups_inward, refine_by_feedback,
 };
 pub use fitness::{FitnessMetric, PlacementFitness, fitness};
 pub use judge::{JudgeMetric, PlacementJudgement, judge};
+pub use legal::{DroppedHint, HintLevel, LegalFailure, LegalOptions, LegalPlacement, place_legal};
 pub use routability::{RoutabilityEstimate, routability};
 
 /// Final position + orientation of a single component on the PCB.
@@ -10517,7 +10521,7 @@ mod tests {
     /// No shipped design declares a mounting hole, a fiducial or a test point,
     /// so a board carrying the furniture cannot be exercised through a fixture
     /// file without adding one to the repository for the placer's sake alone.
-    fn board_from_source(source: &str, path: &str) -> Board {
+    pub(crate) fn board_from_source(source: &str, path: &str) -> Board {
         let file = path.to_string();
         let parse = synth_parser::parse(source, file.clone());
         let ast = parse.ast.as_ref().expect("parse");
