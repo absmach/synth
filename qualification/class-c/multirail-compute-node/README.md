@@ -5,7 +5,7 @@ An STM32F103C8 microcontroller on four copper layers, with a 128 Mbit SPI flash 
 - It is powered from a 5 to 12 V DC header or from USB VBUS.
 - A 4 A buck converter, three linear rails, a load switch that sequences them and an expansion header complete the board.
 
-It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output, made by an agent driving `synth mcp`. Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open (see QUALIFICATION.md, Human review).
+It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output, made by an agent driving `synth mcp`. Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB expert sign-off required by #40 is open.
 
 ## The board
 
@@ -35,7 +35,6 @@ The processor was picked from the registry's MCUs (ATmega328P, ESP32-C3 and WROO
 - The flash is the registry's 128 Mbit W25Q128 with the 208 mil outline the JVSIQ part has.
 - The regulator is the DDC package that LCSC lists.
 
-The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).
 
 ## Not verified by Synth
 

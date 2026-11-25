@@ -82,4 +82,4 @@ path = "qualification/class-c/multirail-compute-node/multirail_compute_node.synt
 class = "C"
 status = "experimental"
 skip_reason = "not run by this job: the route takes longer than the CI budget, so no verdict is asserted here. The committed package comes from the author's own export."
-rationale = "Multi-rail compute node (STM32F103C8, USB-C, a 4 A buck and three linear rails, four layers). Its package comes from the author's `synth export-kicad` run; the route takes longer than the CI budget, so the matrix does not run it. See its QUALIFICATION.md for what is and is not claimed."
+rationale = "Multi-rail compute node (STM32F103C8, USB-C, a 4 A buck and three linear rails, four layers). Its package comes from the author's `synth export-kicad` run; the route takes longer than the CI budget, so the matrix does not run it. See its README for what is and is not claimed."
