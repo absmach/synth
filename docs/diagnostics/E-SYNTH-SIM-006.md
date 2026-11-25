@@ -12,6 +12,11 @@ of ngspice's output. A run that exits non-zero, or that reports a singular
 matrix, a failed gmin step or a failed source step, is never treated as a
 pass: ngspice can recover just enough to print a plausible number.
 
+When `E-SYNTH-SIM-006` is the only blocking diagnostic, `synth check` reports
+the simulation stage as `unknown`, not `fail`: the run did not finish, so it
+is no evidence either way. A limit violation or a missing measurement in the
+same report still makes the stage `fail`.
+
 ## Minimal reproduction
 
 A deck that references an unknown subcircuit makes ngspice exit 1:

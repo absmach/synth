@@ -2,11 +2,15 @@
 
 `synth sim` compiles a `.synth` design, emits a SPICE netlist from its
 simulated parts, runs it through [ngspice](https://ngspice.sourceforge.io/)
-and reports each named measurement against its declared limits. Simulation is
-opt-in: `validate`, `export` and `place` never run ngspice.
+and reports each named measurement against its declared limits. `synth check`
+runs the sidecar when one exists; `validate`, `export` and `place` never run
+ngspice.
 
 The engine is the external `ngspice` binary. Synth does not link libngspice
 and ships no ngspice code.
+
+Simulation does not prove power sequencing, signal integrity, EMC, thermal
+behaviour, or firmware.
 
 ## Install
 
@@ -28,6 +32,13 @@ synth sim examples/divider/divider.synth
 
 The design must have a testbench sidecar beside it, named
 `<design>.sim.toml` (for `divider.synth`, that is `divider.sim.toml`).
+`--timeout <secs>` is the deadline for the whole `synth sim` run. Compile time
+is not interrupted, but it counts against the deadline and reduces what is
+left for ngspice; an expired deadline returns `E-SYNTH-SIM-005` without
+starting the simulator. The sidecar's own `[options] timeout` still applies
+when it is shorter. `synth check` uses this cap to keep the simulation inside
+its stage budget.
+
 The command prints one line per measure:
 
 ```
@@ -41,6 +52,50 @@ fail. A blocking diagnostic (a failed or missing measurement, a missing model,
 missing ngspice, a timeout, a malformed testbench, …) makes the command exit
 non-zero. A passing limit is visible as a `PASS` line; the MCP report also
 carries it as an informational `E-SYNTH-SIM-004` diagnostic.
+
+For a machine-readable result, use `--json`:
+
+```sh
+synth sim --json examples/divider/divider.synth
+```
+
+The object has a stable `schema_version`, `passed`, `measures`, `diagnostics`
+and `coverage`. `coverage` is the list of what the run used and measured:
+
+| Field | Meaning |
+| ----- | ------- |
+| `modelled` | Refdes of components the emitter wrote into the deck. |
+| `ignored` | Refdes named by the sidecar's `ignore` list. |
+| `unmodelled` | Refdes with no usable SPICE model. |
+| `measured` | Net, element and pin targets named by measures. |
+
+The human output prints the same four lists on one coverage line. A part the
+emitter could not wire is named by its diagnostic; it is not added to
+`unmodelled`, which is specifically about unusable models. `limits_checked`
+counts the measures that had a `min` or `max`; zero means the run checked no
+limits, even if its measures are reported as `MEASURED`. `synth check` reports
+that case as `unknown`, so a sidecar that asserts nothing cannot turn the check
+green.
+
+### Check integration
+
+`synth check` runs the sidecar when `<design>.sim.toml` exists and adds a
+`simulation` stage to its JSON and human output. `synth check --fab` uses the
+same stage.
+
+| Status | Meaning | Blocks `synth check`? |
+| ------ | ------- | --------------------- |
+| `skipped` | No sidecar, or the source gate failed. | No |
+| `pass` | The testbench ran, at least one measure had a `min` or `max`, and every blocking diagnostic is clear. | No |
+| `fail` | A blocking `E-SYNTH-SIM-*` diagnostic other than `E-SYNTH-SIM-006`, including an out-of-limit measure. | Yes |
+| `unknown` | The sidecar exists but the simulator could not run (ngspice is missing, it timed out, ngspice reported an error, the report was unreadable, or setup failed, for example the registry did not load), or it ran but checked no limits. | Yes |
+
+An unknown stage is not a pass: install ngspice or remove the sidecar
+deliberately. A sidecar that exists but cannot run blocks the check, and so
+does one whose measures all lack a `min` or `max`: measuring a value is not
+evidence that it is right. The
+stage carries `testbench_sha256` so a pass is tied to the sidecar revision,
+not only the `.synth` source hash.
 
 ### Drafting a testbench (`--suggest`)
 
@@ -167,11 +222,16 @@ the tool has no argument for it, so a remote caller cannot choose a command.
                   "arguments": { "file_path": "examples/divider/divider.synth" } } }
 
 <-- { "jsonrpc": "2.0", "id": 4,
-      "result": { "passed": true,
+      "result": { "schema_version": "synth.sim.v1",
+                  "passed": true,
+                  "limits_checked": 1,
                   "measures": [ { "name": "vmid", "value": 6.0,
                                   "unit": "V", "min": 5.7, "max": 6.3,
                                   "passed": true } ],
-                  "diagnostics": [ ... ] } }
+                  "diagnostics": [ ... ],
+                  "coverage": { "modelled": ["R1", "R2"],
+                                "ignored": [], "unmodelled": [],
+                                "measured": ["MID"] } } }
 ```
 
 ## Testbench reference
@@ -576,6 +636,8 @@ Each simulation failure is a stable code with a page under
 
 ## Not covered
 
+- A `simulation: pass` is not a full-board pass. It covers the parts the deck
+  used and the measures the sidecar declared; `coverage` names both.
 - GPIO firmware: a `[pins.pwm]` block bounds what the pin may generate, but
   the firmware's actual duty cycle is software; a drafted pulse is a test
   excitation at 0.5 duty.

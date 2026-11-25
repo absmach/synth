@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use synth_diagnostics::{Diagnostic, DiagnosticBuilder, EntityRef, Location, Severity, Span};
 use synth_ir::{Board, Component, ComponentId, Net, NetId, PinId};
 use synth_registry::{SpiceDialect, SpiceModel};
@@ -1285,6 +1285,9 @@ pub struct SimOptions {
     pub testbench_path: Option<PathBuf>,
     /// Registry directories a `[spice]` model file may be resolved from.
     pub registry_dirs: Vec<PathBuf>,
+    /// Absolute wall-clock deadline for this run. The testbench's own
+    /// timeout still applies when it is shorter.
+    pub deadline: Option<std::time::Instant>,
 }
 
 impl SimOptions {
@@ -1388,17 +1391,108 @@ fn limit_outcome(min: Option<f64>, max: Option<f64>, value: f64) -> LimitOutcome
     LimitOutcome::Pass
 }
 
+/// The JSON schema version shared by `synth sim --json` and `synth_simulate`.
+pub const SIM_REPORT_SCHEMA: &str = "synth.sim.v1";
+
+/// What the simulation actually used and measured.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SimCoverage {
+    /// Components represented in the generated deck.
+    pub modelled: Vec<String>,
+    /// Components named by the sidecar's `ignore` list.
+    pub ignored: Vec<String>,
+    /// Components with no usable SPICE model that were not ignored.
+    pub unmodelled: Vec<String>,
+    /// Net, element and pin targets named by measures.
+    pub measured: Vec<String>,
+}
+
 /// What a simulation produced. Blocking diagnostics mean it did not pass.
 #[derive(Debug, Clone)]
 pub struct SimReport {
     pub measures: Vec<MeasureResult>,
     pub diagnostics: Vec<Diagnostic>,
+    pub coverage: SimCoverage,
 }
 
 impl SimReport {
     pub fn passed(&self) -> bool {
         !self.diagnostics.iter().any(|d| d.severity.is_blocking())
     }
+}
+
+/// The one JSON shape for a simulation result.
+///
+/// Callers may add compile diagnostics that predate the simulation, which is
+/// why the pieces are passed separately rather than taking a [`SimReport`].
+#[must_use]
+pub fn report_json(
+    passed: bool,
+    measures: &[MeasureResult],
+    diagnostics: &[Diagnostic],
+    coverage: &SimCoverage,
+) -> serde_json::Value {
+    let limits_checked = measures
+        .iter()
+        .filter(|measure| measure.min.is_some() || measure.max.is_some())
+        .count();
+    serde_json::json!({
+        "schema_version": SIM_REPORT_SCHEMA,
+        "passed": passed,
+        "limits_checked": limits_checked,
+        "measures": measures.iter().map(|measure| serde_json::json!({
+            "name": &measure.name,
+            "value": measure.value,
+            "unit": measure.unit,
+            "min": measure.min,
+            "max": measure.max,
+            // A measure with no limits has nothing to pass or fail; the CLI
+            // prints MEASURED, so `null` keeps agents from reading it as a pass.
+            "passed": (measure.min.is_some() || measure.max.is_some()).then(|| measure.passed()),
+        })).collect::<Vec<_>>(),
+        "diagnostics": diagnostics,
+        "coverage": coverage,
+    })
+}
+
+/// A report for an error that happened before a simulation could start.
+#[must_use]
+pub fn error_report_json(message: &str) -> serde_json::Value {
+    let mut report = report_json(false, &[], &[], &SimCoverage::default());
+    report["error"] = serde_json::Value::String(message.to_string());
+    report
+}
+
+/// Coverage known before a deck exists: the explicit ignore list and the
+/// measure targets. No component is reported as modelled until the emitter
+/// has written it.
+fn requested_coverage(testbench: &Testbench) -> SimCoverage {
+    SimCoverage {
+        modelled: Vec::new(),
+        ignored: sorted_unique(testbench.ignore.clone()),
+        unmodelled: Vec::new(),
+        measured: measured_targets(testbench),
+    }
+}
+
+fn measured_targets(testbench: &Testbench) -> Vec<String> {
+    let measured = testbench
+        .measure
+        .iter()
+        .flat_map(|measure| {
+            [&measure.node, &measure.element, &measure.pin]
+                .into_iter()
+                .flatten()
+                .cloned()
+        })
+        .collect();
+    sorted_unique(measured)
+}
+
+fn sorted_unique(mut values: Vec<String>) -> Vec<String> {
+    values.sort();
+    values.dedup();
+    values
 }
 
 /// `<design>.sim.toml` beside the design.
@@ -1418,6 +1512,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         plot,
         pin_limits,
         tran_files,
+        coverage,
     } = match emit_deck(
         design,
         testbench,
@@ -1426,7 +1521,13 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         &options.registry_dirs,
     ) {
         Ok(emitted) => emitted,
-        Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
+        Err(failure) => {
+            return failed(
+                failure.diagnostics,
+                options.testbench_path.as_deref(),
+                &failure.coverage,
+            );
+        }
     };
 
     // `wrdata` fails when the output directory is absent; create it before
@@ -1444,16 +1545,40 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
                 ),
             )],
             options.testbench_path.as_deref(),
+            &coverage,
         );
     }
 
-    let timeout = testbench
+    let testbench_timeout = testbench
         .options
         .timeout
         .map_or(DEFAULT_TIMEOUT, Duration::from_secs_f64);
-    let (run, run_dir) = match run_ngspice(&deck, dialect, options, timeout) {
+    let (timeout, timeout_source) = if let Some(deadline) = options.deadline {
+        let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        if remaining < testbench_timeout {
+            (remaining, TimeoutSource::Deadline)
+        } else {
+            (testbench_timeout, TimeoutSource::Testbench)
+        }
+    } else {
+        (testbench_timeout, TimeoutSource::Testbench)
+    };
+    if timeout.is_zero() {
+        return failed(
+            vec![deadline_error()],
+            options.testbench_path.as_deref(),
+            &coverage,
+        );
+    }
+    let (run, run_dir) = match run_ngspice(&deck, dialect, options, timeout, timeout_source) {
         Ok(run) => run,
-        Err(diagnostic) => return failed(vec![diagnostic], options.testbench_path.as_deref()),
+        Err(diagnostic) => {
+            return failed(
+                vec![diagnostic],
+                options.testbench_path.as_deref(),
+                &coverage,
+            );
+        }
     };
 
     // A capped log can hide the singular-matrix warning that would have
@@ -1464,6 +1589,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
                 "ngspice output exceeded the {MAX_OUTPUT_BYTES}-byte cap; refusing to trust a truncated log"
             ))],
             options.testbench_path.as_deref(),
+            &coverage,
         );
     }
 
@@ -1481,31 +1607,46 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
                 "ngspice exited with status {status}: {detail}"
             ))],
             options.testbench_path.as_deref(),
+            &coverage,
         );
     }
 
     // A singular matrix, including one with a missing SYNTH_DONE, is a
     // broken run and must classify as `-006` before measurement parsing.
     if let Some(diagnostic) = convergence_stderr_error(&run.stderr) {
-        return failed(vec![diagnostic], options.testbench_path.as_deref());
+        return failed(
+            vec![diagnostic],
+            options.testbench_path.as_deref(),
+            &coverage,
+        );
     }
 
     // `Error: measure ...` is a measurement failure even when ngspice exits
     // 0. It runs after the singular check so a failed op that also drops a
     // vector is `-006`, not a measurement failure.
     if let Some(diagnostic) = measurement_failure_from_stderr(&run.stderr, testbench) {
-        return failed(vec![diagnostic], options.testbench_path.as_deref());
+        return failed(
+            vec![diagnostic],
+            options.testbench_path.as_deref(),
+            &coverage,
+        );
     }
 
     // Other stderr errors must classify as `-006` before sentinel parsing
     // turns the same run into a missing measurement.
     if let Some(diagnostic) = stderr_error(&run.stderr) {
-        return failed(vec![diagnostic], options.testbench_path.as_deref());
+        return failed(
+            vec![diagnostic],
+            options.testbench_path.as_deref(),
+            &coverage,
+        );
     }
 
     let values = match parse_sentinels(&run.stdout, &run.stderr, testbench) {
         Ok(values) => values,
-        Err(diagnostics) => return failed(diagnostics, options.testbench_path.as_deref()),
+        Err(diagnostics) => {
+            return failed(diagnostics, options.testbench_path.as_deref(), &coverage);
+        }
     };
 
     // Transient measures read their waveforms out of the `wrdata` files
@@ -1571,6 +1712,7 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
         return SimReport {
             measures: Vec::new(),
             diagnostics,
+            coverage,
         };
     }
 
@@ -1656,14 +1798,20 @@ pub fn simulate(design: &Board, testbench: &Testbench, options: &SimOptions) -> 
     SimReport {
         measures,
         diagnostics,
+        coverage,
     }
 }
 
-fn failed(mut diagnostics: Vec<Diagnostic>, path: Option<&Path>) -> SimReport {
+fn failed(
+    mut diagnostics: Vec<Diagnostic>,
+    path: Option<&Path>,
+    coverage: &SimCoverage,
+) -> SimReport {
     locate(&mut diagnostics, path);
     SimReport {
         measures: Vec::new(),
         diagnostics,
+        coverage: coverage.clone(),
     }
 }
 
@@ -1698,8 +1846,15 @@ fn locate(diagnostics: &mut [Diagnostic], path: Option<&Path>) {
 
 /// Default wall-clock budget, overridable with `[options] timeout`.
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Upper bound on `[options] timeout`; `Instant + Duration` must not overflow.
-const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
+/// Which limit bounded the run, so a timeout names the right knob.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TimeoutSource {
+    Testbench,
+    Deadline,
+}
+/// Upper bound on `[options] timeout` and `--timeout`; `Instant + Duration`
+/// must not overflow.
+pub const MAX_TIMEOUT_SECONDS: f64 = 3600.0;
 /// Upper bound on `[analysis.tran]` output points (stop/step). A transient
 /// is the run most likely to hang or fill the disk, so the cap keeps a
 /// sidecar typo from turning into hours of wall clock and gigabytes of
@@ -1717,6 +1872,7 @@ fn run_ngspice(
     dialect: Option<SpiceDialect>,
     options: &SimOptions,
     timeout: Duration,
+    timeout_source: TimeoutSource,
 ) -> Result<(Invocation, TempDir), Diagnostic> {
     let dir = TempDir::create()
         .map_err(|e| ngspice_error(format!("could not create a temporary directory: {e}")))?;
@@ -1755,7 +1911,7 @@ fn run_ngspice(
     })?;
 
     if run.timed_out {
-        return Err(timeout_error(timeout.as_secs_f64()));
+        return Err(timeout_error(timeout.as_secs_f64(), timeout_source));
     }
     Ok((run, dir))
 }
@@ -2189,13 +2345,29 @@ fn pin_current_wrong_way(name: &str, value: f64, limit: &PinDriveLimit) -> Diagn
         .build()
 }
 
-fn timeout_error(seconds: f64) -> Diagnostic {
+fn timeout_error(seconds: f64, source: TimeoutSource) -> Diagnostic {
+    let raise = match source {
+        TimeoutSource::Testbench => "Raise `[options] timeout` or shorten the analysis.",
+        TimeoutSource::Deadline => {
+            "Raise `--timeout` or the `synth check` stage budget, or shorten the analysis."
+        }
+    };
     sim_builder(E_SYNTH_SIM_005, Severity::Error, "ngspice timed out")
-        .message(format!(
-            "ngspice was killed after {seconds}s. \
-             Raise `[options] timeout` or shorten the analysis."
-        ))
+        .message(format!("ngspice was killed after {seconds}s. {raise}"))
         .build()
+}
+
+fn deadline_error() -> Diagnostic {
+    sim_builder(
+        E_SYNTH_SIM_005,
+        Severity::Error,
+        "simulation deadline expired",
+    )
+    .message(
+        "the simulation deadline expired before ngspice started; \
+             raise `--timeout` or the `synth check` stage budget, or simplify the design",
+    )
+    .build()
 }
 
 /// A transient value is computed in Rust at full precision, but every other
@@ -2364,7 +2536,15 @@ pub fn emit_netlist_with_registry_dirs(
     testbench: &Testbench,
     registry_dirs: &[PathBuf],
 ) -> Result<String, Vec<Diagnostic>> {
-    emit_deck(design, testbench, None, None, registry_dirs).map(|emitted| emitted.deck)
+    emit_deck(design, testbench, None, None, registry_dirs)
+        .map(|emitted| emitted.deck)
+        .map_err(|failure| failure.diagnostics)
+}
+
+/// Why a deck was not emitted, with the coverage known at that point.
+struct EmitFailure {
+    diagnostics: Vec<Diagnostic>,
+    coverage: SimCoverage,
 }
 
 /// The emitted deck plus the data `simulate` needs after ngspice runs.
@@ -2377,6 +2557,8 @@ struct EmittedDeck {
     /// `wrdata` files for transient measures, keyed by measure name. The
     /// files sit in the ngspice run directory and are read after the run.
     tran_files: HashMap<String, String>,
+    /// What the emitter actually put in the deck.
+    coverage: SimCoverage,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -2386,14 +2568,23 @@ fn emit_deck(
     design_path: Option<&Path>,
     testbench_path: Option<&Path>,
     registry_dirs: &[PathBuf],
-) -> Result<EmittedDeck, Vec<Diagnostic>> {
+) -> Result<EmittedDeck, EmitFailure> {
+    let requested = requested_coverage(testbench);
     if let Err(diagnostic) = testbench.validate_at(testbench_path) {
-        return Err(vec![diagnostic]);
+        return Err(EmitFailure {
+            diagnostics: vec![diagnostic],
+            coverage: requested,
+        });
     }
     let plot_path = match &testbench.options.plot {
         Some(plot) => match resolve_plot_path(plot, testbench_path) {
             Ok(path) => Some(path),
-            Err(diagnostic) => return Err(vec![diagnostic]),
+            Err(diagnostic) => {
+                return Err(EmitFailure {
+                    diagnostics: vec![diagnostic],
+                    coverage: requested,
+                });
+            }
         },
         None => None,
     };
@@ -2401,10 +2592,13 @@ fn emit_deck(
     let tb_error = |message: String| testbench_error_at(testbench_path, message);
 
     let Some(ground) = design.nets.iter().find(|net| net.name == testbench.ground) else {
-        return Err(vec![tb_error(format!(
-            "ground net `{}` not found in design",
-            testbench.ground
-        ))]);
+        return Err(EmitFailure {
+            diagnostics: vec![tb_error(format!(
+                "ground net `{}` not found in design",
+                testbench.ground
+            ))],
+            coverage: requested,
+        });
     };
     let net_by_name: HashMap<&str, &Net> = design
         .nets
@@ -2695,6 +2889,8 @@ fn emit_deck(
     let mut dialects: Vec<(Option<SpiceDialect>, String, String)> = Vec::new();
     let mut element_lines = Vec::new();
     let mut model_lines = Vec::new();
+    let mut modelled = Vec::new();
+    let mut unmodelled = Vec::new();
     for component in &design.components {
         if ignored_ids.contains(&component.id) {
             continue;
@@ -2703,6 +2899,7 @@ fn emit_deck(
             Ok(model) => model,
             Err(message) => {
                 diagnostics.push(no_model_error(component, &message, design_path));
+                unmodelled.push(component.refdes.clone());
                 continue;
             }
         };
@@ -2719,6 +2916,7 @@ fn emit_deck(
                 Ok(indexes) => indexes,
                 Err(message) => {
                     diagnostics.push(model_error(component, &message, true, design_path));
+                    unmodelled.push(component.refdes.clone());
                     continue;
                 }
             };
@@ -2726,6 +2924,7 @@ fn emit_deck(
                 Ok(resolved) => resolved,
                 Err(message) => {
                     diagnostics.push(model_error(component, &message, true, design_path));
+                    unmodelled.push(component.refdes.clone());
                     continue;
                 }
             };
@@ -2778,6 +2977,7 @@ fn emit_deck(
                     true,
                     design_path,
                 ));
+                unmodelled.push(component.refdes.clone());
                 continue;
             }
             match connected_nodes(
@@ -2846,6 +3046,7 @@ fn emit_deck(
                 ));
             }
         }
+        modelled.push(component.refdes.clone());
     }
 
     let mut measure_lines = Vec::new();
@@ -2984,8 +3185,18 @@ fn emit_deck(
         }
     }
 
+    let coverage = SimCoverage {
+        modelled: sorted_unique(modelled),
+        ignored: sorted_unique(testbench.ignore.clone()),
+        unmodelled: sorted_unique(unmodelled),
+        measured: measured_targets(testbench),
+    };
+
     if !diagnostics.is_empty() {
-        return Err(diagnostics);
+        return Err(EmitFailure {
+            diagnostics,
+            coverage,
+        });
     }
 
     let mut deck = String::new();
@@ -3048,6 +3259,7 @@ fn emit_deck(
         plot: plot_path,
         pin_limits,
         tran_files,
+        coverage,
     })
 }
 
