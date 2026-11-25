@@ -8,6 +8,8 @@ The board is untrusted and not release-ready. The committed KiCad, fab, image an
 
 Authored by nyagamunene. The SI/PI/RF review by the designated reviewer and the issue owner's sign-off on the single ground plane are open.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |

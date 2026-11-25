@@ -6,6 +6,8 @@ is wrong, which is only useful if the diagnostics name what is wrong and where.
 Design rationale is in the source comments next to the circuits it explains;
 this file is the specification.
 
+No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
+
 ## Board
 
 | | |

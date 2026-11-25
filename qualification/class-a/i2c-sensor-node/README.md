@@ -8,6 +8,8 @@ Case 2 is claimed for a plain default export of a protected, low-speed board: ev
 
 Jeff Mboya is the author of this board and has self-reviewed it. The independent PCB review sign-off required by #39 is open.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |

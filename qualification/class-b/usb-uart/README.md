@@ -8,6 +8,8 @@ The board has not been fabricated, powered or tested. No part has been reviewed.
 
 nyagamunene is the author. The board has no independent review.
 
+No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |

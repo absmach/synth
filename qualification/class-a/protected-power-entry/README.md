@@ -8,6 +8,8 @@ The claim covers the circuit, the part choices and the routed board in `kicad/`.
 
 Jeff Mboya is the author of this pull request and has self-reviewed it. The independent PCB review sign-off is open.
 
+The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |

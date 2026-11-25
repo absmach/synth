@@ -8,6 +8,8 @@ The board is designed, placed and routed. It is not fabricated, not powered and 
 
 Authored by nyagamunene. The registry parts `lmr38010` and `ltst_c190kgkt` were reviewed by Steve Munene on 2026-10-29; no independent board review is recorded here.
 
+No prompt was recorded for this board; see [`PROMPT.md`](PROMPT.md).
+
 ## The board
 
 | Group | Parts |
