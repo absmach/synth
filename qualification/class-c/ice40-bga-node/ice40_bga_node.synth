@@ -1,6 +1,6 @@
-// iCE40HX4K BGA node with a USB-C input and a companion MCU (Class C case 1, issue #328 under #40)
+// iCE40HX4K BGA node with a USB-C input (Class C case 1, issue #328 under #40)
 //   USB-C VBUS -> polyfuse -> TVS -> +5V
-//   +5V -> AMS1117-3.3 -> +3V3 (I/O banks, SPI flash, header, MCU)
+//   +5V -> AMS1117-3.3 -> +3V3 (I/O banks, SPI flash, header)
 //   +3V3 -> TLV70012 -> +1V2 (FPGA core) -> ferrite -> VCCPLL
 //   The FPGA boots in master SPI mode from a W25Q128 flash that an external programmer writes through the 6-pin header J2.
 board "ice40_bga_node" {
@@ -182,7 +182,6 @@ board "ice40_bga_node" {
 
   // ---- Power nets ----------------------------------------------------------
   power "+5V" 5v class "PWR_5V" { F1.p2 D1.cathode C1.p1 U3.vin C2.p1 C3.p1 TP1.p1 }
-  // MCU supply additions are appended to +3V3 below
   power "+3V3" 3.3v class "PWR_3V3" {
     U3.vout C4.p1 C5.p1 U4.vin U4.en C6.p1
     U1.vccio_0 U1.vccio_1 U1.vccio_2 U1.vccio_3 U1.vccio_3_2 U1.vcc_spi U1.vpp_2v5
