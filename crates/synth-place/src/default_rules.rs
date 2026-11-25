@@ -13,7 +13,9 @@
 
 #![allow(clippy::cast_precision_loss)] // Board counts and nanometres are far below 2^53.
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use synth_geometry::{Point, Rect, Rotation, mm_to_nm, nm_to_mm};
 use synth_ir::{Board, Component};
@@ -69,6 +71,34 @@ const SPACED_TRIED_PACKINGS: usize = 80;
 
 /// How many of the best-scoring packings are tried before the group rule gives up.
 const TRIED_PACKINGS: usize = 12;
+
+/// Parts above which the rules run under a review budget.
+///
+/// A review of a dense board is expensive, and the connector and group rules
+/// call it once per candidate edge or packing. On the 121-part CM4 carrier
+/// that made `place()` run past 900 s with no output. Boards at or below this
+/// many parts keep the unbounded search they have always had, so their
+/// placements are bit-identical.
+const REVIEW_BUDGET_PARTS: usize = 96;
+
+/// Review evaluations a large board's rules may spend before they stop.
+const LARGE_BOARD_REVIEW_BUDGET: usize = 32;
+
+/// Cohesion rounds a large board's group rule may run.
+const LARGE_BOARD_COHESION_ROUNDS: usize = 1;
+
+/// Push-apart passes a large board's group rule may run per settle.
+///
+/// The clean 121-part CM4 carrier did not converge in 200 passes: one
+/// `relax()` took 86 s, and the group rule calls it once per candidate.
+const LARGE_BOARD_RELAX_PASSES: usize = 5;
+
+/// Group packings a large board tries before it keeps the current block.
+const LARGE_BOARD_TRIED_PACKINGS: usize = 2;
+
+/// `findings()` result once the budget is spent. It is never in `known`, so a
+/// rule that guards on the review reverts instead of keeping a half move.
+const REVIEW_BUDGET_SENTINEL: &str = "placement rule review budget exhausted";
 
 /// Packings within this much outline area (2% of a 2750 mm2 board) count as the
 /// same size, so the link score decides between them; a smaller one always wins.
@@ -298,6 +328,8 @@ fn largest_empty_rect(hull: Rect, boxes: &[Rect], inflate: i64) -> (i64, Rect) {
 
 struct State<'a> {
     board: &'a Board,
+    /// Review evaluations this run may spend; shared across the rule runs.
+    reviews: Rc<Cell<usize>>,
     placed: Vec<ComponentPlacement>,
     /// Parts a hint pins or names; no rule moves them.
     pinned: Vec<bool>,
@@ -380,6 +412,27 @@ fn spacing_gaps(board: &Board) -> (i64, i64, i64) {
 
 /// Apply the three rules to `placement`, refitting the outline if any moved a part.
 pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool) {
+    let _ = apply_with_budget(board, placement, with_groups, review_budget(board));
+}
+
+/// The review budget for a board: unbounded on the sizes that always finished,
+/// bounded on a dense one.
+fn review_budget(board: &Board) -> usize {
+    if board.components.len() > REVIEW_BUDGET_PARTS {
+        LARGE_BOARD_REVIEW_BUDGET
+    } else {
+        usize::MAX
+    }
+}
+
+/// [`apply`] with an explicit review budget. Returns the evaluations spent.
+pub(crate) fn apply_with_budget(
+    board: &Board,
+    placement: &mut Placement,
+    with_groups: bool,
+    budget: usize,
+) -> usize {
+    let reviews = Rc::new(Cell::new(budget));
     // A hinted part is pinned, and so is one another hint says to sit `near`.
     let near_targets: Vec<&str> = board
         .components
@@ -403,6 +456,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
     // blocked escape corridor included; the spacing does not excuse one.
     let known_state = State {
         board,
+        reviews: reviews.clone(),
         anchored: Vec::new(),
         pinned: Vec::new(),
         placed: placement.components.clone(),
@@ -423,6 +477,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
     let run = |with_usb: bool, with_groups: bool, usb_only: bool| {
         let mut state = State {
             board,
+            reviews: reviews.clone(),
             anchored: pinned.clone(),
             pinned: pinned.clone(),
             placed: placement.components.clone(),
@@ -483,7 +538,11 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
         (true, false, false),
         (false, false, false),
     ] {
-        if !state.needs_revision() && grouped.get() {
+        // A dense board's retries each cost a full group settle; the first
+        // arrangement it produced is the one it keeps.
+        if board.components.len() > REVIEW_BUDGET_PARTS
+            || (!state.needs_revision() && grouped.get())
+        {
             break;
         }
         state = run(with_usb, with_groups, usb_only);
@@ -492,6 +551,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
         // The rules are dropped, but the spacing is a promise, not a layout rule.
         state = State {
             board,
+            reviews: reviews.clone(),
             anchored: pinned.clone(),
             pinned: pinned.clone(),
             placed: placement.components.clone(),
@@ -533,6 +593,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
         placement.components = state.placed;
         fit_outline_docked(board, placement, rim);
     }
+    budget.saturating_sub(reviews.get())
 }
 
 /// Pull the edge connectors in with the outline once the arrangement is final.
@@ -588,6 +649,7 @@ fn settle_edges(board: &Board, placement: &mut Placement, push_groups: bool) {
     let rim = rim_nm(board, &placement.components, true);
     let mut state = State {
         board,
+        reviews: Rc::new(Cell::new(usize::MAX)),
         anchored: pinned.clone(),
         pinned,
         placed: placement.components.clone(),
@@ -1813,6 +1875,7 @@ fn compression_state<'a>(board: &'a Board, placement: &Placement) -> State<'a> {
     let (gap_nm, infl, group_gap_nm) = spacing_gaps(board);
     State {
         board,
+        reviews: Rc::new(Cell::new(usize::MAX)),
         anchored: pinned.clone(),
         pinned,
         placed: placement.components.clone(),
@@ -2290,6 +2353,7 @@ pub(crate) fn enforce_spacing(board: &Board, placement: &mut Placement) {
         .collect();
     let mut state = State {
         board,
+        reviews: Rc::new(Cell::new(usize::MAX)),
         anchored: pinned.clone(),
         pinned,
         placed: placement.components.clone(),
@@ -2513,6 +2577,10 @@ impl State<'_> {
 
     /// Every finding of the visual review of this arrangement.
     fn findings(&self) -> Vec<String> {
+        if self.reviews.get() == 0 {
+            return vec![REVIEW_BUDGET_SENTINEL.to_string()];
+        }
+        self.reviews.set(self.reviews.get() - 1);
         let Some(outline) = self.hull(|_| true) else {
             return Vec::new();
         };
@@ -3130,7 +3198,12 @@ impl State<'_> {
     }
 
     fn relax(&mut self) {
-        for _ in 0..RELAX_PASSES {
+        self.relax_with(RELAX_PASSES);
+    }
+
+    /// [`Self::relax`] with an explicit pass cap.
+    fn relax_with(&mut self, passes: usize) {
+        for _ in 0..passes {
             if !self.relax_pass() {
                 break;
             }
@@ -3456,6 +3529,9 @@ impl State<'_> {
         wants.sort_by_key(|w| (w.0, w.1));
         let mut taken: Vec<BoardEdge> = Vec::new();
         for (_, index, sides) in wants {
+            if self.reviews.get() == 0 {
+                return;
+            }
             // Nearest free edge first, then the next free one; a connector no
             // edge takes without a new review finding (a blocked escape
             // corridor) stays undocked where it was.
@@ -5349,11 +5425,22 @@ impl State<'_> {
         }
         let (area0, aspect0) = self.shape();
         let start = (self.placed.clone(), self.anchored.clone());
-        for _ in 0..COHESION_ROUNDS {
+        let large = self.placed.len() > REVIEW_BUDGET_PARTS;
+        let rounds = if large {
+            LARGE_BOARD_COHESION_ROUNDS
+        } else {
+            COHESION_ROUNDS
+        };
+        let passes = if large {
+            LARGE_BOARD_RELAX_PASSES
+        } else {
+            RELAX_PASSES
+        };
+        for _ in 0..rounds {
             self.cohere(&groups);
             self.relax_pass();
         }
-        self.relax();
+        self.relax_with(passes);
         let usbs: Vec<usize> = self
             .docks()
             .into_iter()
@@ -5585,11 +5672,18 @@ impl State<'_> {
             let folded = (self.placed.clone(), self.anchored.clone());
             // The best few packings are tried in turn: the one that scores best
             // can still block a connector's escape corridor.
-            for (_, _, free, spots, reserved) in cands.into_iter().take(if self.infl > 0 {
+            let tried_packings = if large {
+                LARGE_BOARD_TRIED_PACKINGS
+            } else if self.infl > 0 {
                 SPACED_TRIED_PACKINGS
             } else {
                 TRIED_PACKINGS
-            }) {
+            };
+            for (_, _, free, spots, reserved) in cands.into_iter().take(tried_packings) {
+                if self.reviews.get() == 0 {
+                    (self.placed, self.anchored) = start.clone();
+                    return;
+                }
                 (self.placed, self.anchored) = folded.clone();
                 for (members, spot) in free.iter().zip(spots) {
                     self.move_block(members, spot);
@@ -5617,7 +5711,7 @@ impl State<'_> {
                 {
                     self.anchored[i] = true;
                 }
-                self.relax();
+                self.relax_with(passes);
                 self.anchored = loose;
                 for &placed in holes.iter().chain(&usb_members) {
                     self.anchored[placed] = true;
@@ -5662,6 +5756,19 @@ mod tests {
         synth_ir::lower(&resolved.program, &registry, &file)
             .board
             .expect("board")
+    }
+
+    /// The rule review budget is a hard stop on the expensive evaluations:
+    /// the rules may still snap a hole to its corner, but they cannot spend
+    /// more reviews than they were given and they always return a placement.
+    #[test]
+    fn a_review_budget_bounds_the_rule_evaluations() {
+        let board = load_group_corner_hole();
+        let mut placement = crate::place(&board).expect("place");
+        let parts = placement.components.len();
+        let spent = apply_with_budget(&board, &mut placement, true, 3);
+        assert!(spent <= 3, "spent {spent} reviews on a budget of 3");
+        assert_eq!(placement.components.len(), parts);
     }
 
     #[test]

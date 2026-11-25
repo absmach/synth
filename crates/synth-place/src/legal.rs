@@ -195,8 +195,15 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
     // The production path first: a board that places as written must come out
     // exactly as it does today, and its auto-fitted canvas is the answer.
     attempts += 1;
+    let production_start = Instant::now();
     let mut last_error = match place(board) {
         Ok(placement) => {
+            rung_trace(
+                "production",
+                None,
+                Some(attempts),
+                production_start.elapsed(),
+            );
             let width = synth_geometry::nm_to_mm(placement.board_outline.width_nm());
             let height = synth_geometry::nm_to_mm(placement.board_outline.height_nm());
             return Ok(LegalPlacement {
@@ -210,6 +217,7 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
         }
         Err(error) => error,
     };
+    rung_trace("production", None, None, production_start.elapsed());
 
     for (width, height) in fixed_canvases(board, &needed, options.grow_canvas) {
         for level in [
@@ -231,7 +239,15 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
             attempts += 1;
             canvases.push((width, height));
             let (relaxed, dropped) = relaxed_board(board, level);
-            match place_with_dimensions(&relaxed, width, height) {
+            let rung_start = Instant::now();
+            let result = place_with_dimensions(&relaxed, width, height);
+            rung_trace(
+                &format!("{width:.1}x{height:.1}"),
+                Some(level.label()),
+                Some(attempts),
+                rung_start.elapsed(),
+            );
+            match result {
                 Ok(placement) => {
                     return Ok(LegalPlacement {
                         placement,
@@ -255,6 +271,18 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
         attempts,
         false,
     ))
+}
+
+/// Print one rung's wall clock when `SYNTH_PLACE_RUNG_TRACE` is set.
+fn rung_trace(stage: &str, level: Option<&str>, attempt: Option<usize>, elapsed: Duration) {
+    if std::env::var_os("SYNTH_PLACE_RUNG_TRACE").is_some() {
+        eprintln!(
+            "rung attempt={} stage={stage} level={} {:.2}s",
+            attempt.map_or_else(|| "-".to_string(), |n| n.to_string()),
+            level.unwrap_or("-"),
+            elapsed.as_secs_f64()
+        );
+    }
 }
 
 /// The fixed canvases the ladder tries, in order, deduplicated.
