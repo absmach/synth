@@ -72,14 +72,17 @@ pub struct SchematicGrid {
     /// Value text. [`Self::find_path`] may cross them when it is relaxed: the
     /// text moves clear of a wire afterwards, a body cannot.
     soft: BTreeSet<(i32, i32)>,
-    // Tried indexing this by row/column (HashMap<i32, Vec<WireSegment>>)
-    // to avoid scanning every segment per A* cell visited; measured
-    // *slower* in debug builds (SipHash lookup overhead per cell
-    // apparently outweighs the smaller scan for this workload's
-    // segment counts) — reverted to the flat Vec. Left as a note so
-    // a future attempt doesn't reintroduce the same regression
-    // without benchmarking first.
     wire_segments: Vec<WireSegment>,
+    /// Indices into `wire_segments`, by grid row for the horizontal ones and
+    /// by grid column for the vertical ones. A move only meets segments on
+    /// its own row or column, so [`Self::find_path`] reads these two short
+    /// lists instead of every segment on the page. Plain vectors, not a
+    /// `HashMap`: an earlier map-based index lost to the flat scan in debug
+    /// builds on hashing alone.
+    horizontal_by_row: Vec<Vec<usize>>,
+    vertical_by_column: Vec<Vec<usize>>,
+    /// Segments whose row or column falls outside the grid. Always scanned.
+    unindexed_segments: Vec<usize>,
     /// A* cost/backtrack bookkeeping, sized `width_cells *
     /// height_cells * 5` (5 = one entry per [`Direction`]).
     /// Allocated once in [`Self::new`] and reset (not reallocated)
@@ -89,6 +92,10 @@ pub struct SchematicGrid {
     /// thousands of cells × however many nets need routing).
     g_costs: Vec<f64>,
     came_from: Vec<Option<((i32, i32), Direction)>>,
+    /// The `g_costs` / `came_from` entries the last search wrote. The next
+    /// search resets only these, so a short path costs its own size and not
+    /// the size of the page.
+    touched: Vec<usize>,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -146,8 +153,12 @@ impl SchematicGrid {
             blocked: BTreeSet::new(),
             soft: BTreeSet::new(),
             wire_segments: Vec::new(),
+            horizontal_by_row: vec![Vec::new(); height_cells.max(0) as usize],
+            vertical_by_column: vec![Vec::new(); width_cells.max(0) as usize],
+            unindexed_segments: Vec::new(),
             g_costs: vec![f64::INFINITY; buffer_len],
             came_from: vec![None; buffer_len],
+            touched: Vec::new(),
         }
     }
 
@@ -228,6 +239,20 @@ impl SchematicGrid {
             p2: (g1.0.max(g2.0), g1.1.max(g2.1)),
             is_horizontal: is_horiz,
         };
+        let index = self.wire_segments.len();
+        let slot = if seg.is_horizontal {
+            usize::try_from(seg.p1.1)
+                .ok()
+                .and_then(|row| self.horizontal_by_row.get_mut(row))
+        } else {
+            usize::try_from(seg.p1.0)
+                .ok()
+                .and_then(|column| self.vertical_by_column.get_mut(column))
+        };
+        match slot {
+            Some(list) => list.push(index),
+            None => self.unindexed_segments.push(index),
+        }
         self.wire_segments.push(seg);
     }
 
@@ -318,8 +343,10 @@ impl SchematicGrid {
         // faster than BTreeMap for the dense cost bookkeeping A*
         // does. Reset in place (not reallocated) — see the doc
         // comment on the `g_costs`/`came_from` fields for why.
-        self.g_costs.fill(f64::INFINITY);
-        self.came_from.fill(None);
+        for i in self.touched.drain(..) {
+            self.g_costs[i] = f64::INFINITY;
+            self.came_from[i] = None;
+        }
         let width_cells = self.width_cells;
         let idx = |pos: (i32, i32), dir: Direction| {
             ((pos.1 as usize * width_cells as usize + pos.0 as usize) * 5) + dir.index()
@@ -333,6 +360,7 @@ impl SchematicGrid {
         };
         open_set.push(start_node);
         self.g_costs[idx(start, Direction::None)] = 0.0;
+        self.touched.push(idx(start, Direction::None));
 
         let directions = [
             Direction::North,
@@ -382,7 +410,39 @@ impl SchematicGrid {
                 let move_is_horiz = dir == Direction::East || dir == Direction::West;
                 let mut conflict = false;
 
-                for seg in &self.wire_segments {
+                // Only the segments on this move's own line and on the line it
+                // crosses can matter: collinear ones share the row (or column)
+                // of the cell it leaves, crossing ones sit on the row (or
+                // column) of the cell it enters.
+                let (same_line, crossing_line): (&[usize], &[usize]) = if move_is_horiz {
+                    (
+                        usize::try_from(current.pos.1)
+                            .ok()
+                            .and_then(|row| self.horizontal_by_row.get(row))
+                            .map_or(&[], Vec::as_slice),
+                        usize::try_from(neighbor_pos.0)
+                            .ok()
+                            .and_then(|column| self.vertical_by_column.get(column))
+                            .map_or(&[], Vec::as_slice),
+                    )
+                } else {
+                    (
+                        usize::try_from(current.pos.0)
+                            .ok()
+                            .and_then(|column| self.vertical_by_column.get(column))
+                            .map_or(&[], Vec::as_slice),
+                        usize::try_from(neighbor_pos.1)
+                            .ok()
+                            .and_then(|row| self.horizontal_by_row.get(row))
+                            .map_or(&[], Vec::as_slice),
+                    )
+                };
+                for &seg_index in same_line
+                    .iter()
+                    .chain(crossing_line)
+                    .chain(&self.unindexed_segments)
+                {
+                    let seg = &self.wire_segments[seg_index];
                     if seg.net_id == net_id {
                         continue;
                     }
@@ -439,6 +499,7 @@ impl SchematicGrid {
                 if tentative_g < self.g_costs[idx(neighbor_pos, dir)] {
                     self.g_costs[idx(neighbor_pos, dir)] = tentative_g;
                     self.came_from[idx(neighbor_pos, dir)] = Some(curr_key);
+                    self.touched.push(idx(neighbor_pos, dir));
 
                     let h = self.manhattan_dist(neighbor_pos, target);
                     open_set.push(AStarNode {
