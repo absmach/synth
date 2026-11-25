@@ -4,7 +4,7 @@ An iCE40HX4K FPGA in a 144-pin TQFP (0.5 mm pitch) drives an HDMI Type-A recepta
 
 This is the Class C case 3 attempt for #330 under #40. The board declares impedance, pair spacing and skew for its TMDS pairs, and the delivered copper is measured against those declarations. Only the skew budget is met; spacing, coupling and impedance are not (see [#447](https://github.com/absmach/synth/issues/447), open). The interface is DVI-style and no HDMI compliance is claimed.
 
-The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `45b6f93d`.
+The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from the finished board. The prompts the agent ran are in the history at `45b6f93d`.
 
 ## The board
 
