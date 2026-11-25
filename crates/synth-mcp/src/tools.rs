@@ -661,11 +661,146 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                 "properties": {}
             }),
         },
+        McpToolInfo {
+            name: "synth_load_tools".into(),
+            description: "Load a specialised tool group on demand. `core` is the design workflow (validate, ERC, DRC, export, render, layout, route, registry); `sourcing` adds cost, supply-chain and web/vector registry search; `advanced` adds simulation, thermal/SI, multiboard, multi-agent synthesis and cloud. Returns the group's tool schemas; list tools again after loading.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "group": { "type": "string", "enum": ["core", "sourcing", "advanced"], "description": "Tool group to load" }
+                },
+                "required": ["group"]
+            }),
+        },
     ]
+}
+
+/// Tool groups, smallest workflow first.
+pub const TOOL_GROUPS: [&str; 3] = ["core", "sourcing", "advanced"];
+
+/// Which group a tool belongs to. Core is the default workflow; sourcing and
+/// advanced tools are loaded on demand.
+#[must_use]
+pub fn tool_group(name: &str) -> &'static str {
+    match name {
+        "synth_cost_report"
+        | "synth_cost_budget_plan"
+        | "synth_live_supply_chain"
+        | "synth_search_registry_vector"
+        | "synth_search_registry_web" => "sourcing",
+        "synth_simulate"
+        | "synth_evaluate_thermal_si"
+        | "synth_export_multiboard"
+        | "synth_multi_agent_synthesize"
+        | "synth_cloud_mcp_endpoint" => "advanced",
+        _ => "core",
+    }
+}
+
+/// The tools in `group`, or an error naming the valid groups.
+///
+/// # Errors
+///
+/// `group` is not one of [`TOOL_GROUPS`].
+pub fn tools_in_group(group: &str) -> Result<Vec<McpToolInfo>, String> {
+    if !TOOL_GROUPS.contains(&group) {
+        return Err(format!(
+            "unknown tool group '{group}'; use one of: {}",
+            TOOL_GROUPS.join(", ")
+        ));
+    }
+    Ok(list_tools()
+        .into_iter()
+        .filter(|tool| tool_group(&tool.name) == group)
+        .collect())
+}
+
+fn execute_load_tools(args: &Value) -> Result<Value, String> {
+    let group = args["group"]
+        .as_str()
+        .ok_or_else(|| "missing required 'group'".to_string())?;
+    let tools = tools_in_group(group)?;
+    Ok(serde_json::json!({
+        "group": group,
+        "tools": tools,
+        "count": tools.len(),
+        "note": "Tools are now available; call tools/list again to refresh the catalogue.",
+    }))
 }
 
 /// Execute a named tool with arguments.
 pub fn call_tool(
+    name: &str,
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
+    let started = std::time::Instant::now();
+    let result = dispatch_tool(name, args, default_registry);
+    let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let (success, metadata) = match &result {
+        Ok(_) => (
+            true,
+            serde_json::json!({ "status": "ok", "arg_keys": arg_keys(args) }),
+        ),
+        Err(error) => {
+            let refused = error.contains("\"status\":\"refused\"")
+                || error.starts_with('{') && error.contains("refused");
+            (
+                false,
+                serde_json::json!({
+                    "status": if refused { "refused" } else { "error" },
+                    "error_kind": classify_error(error),
+                    "message": audit_message(error),
+                    "arg_keys": arg_keys(args),
+                }),
+            )
+        }
+    };
+    if let Err(error) =
+        crate::audit::AuditLogger::log_event("mcp", name, duration_ms, success, None, metadata)
+    {
+        eprintln!("audit log write failed: {error}");
+    }
+    result
+}
+
+fn audit_message(message: &str) -> String {
+    message.chars().take(500).collect()
+}
+
+fn arg_keys(args: &Value) -> Vec<String> {
+    args.as_object()
+        .map_or_else(Vec::new, |object| object.keys().cloned().collect())
+}
+
+/// Stable error taxonomy an agent can branch on.
+fn classify_error(message: &str) -> &'static str {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("parse") || lower.contains("expected") || lower.contains("unexpected token") {
+        "parse_error"
+    } else if lower.contains("unknown part")
+        || lower.contains("not found in registry")
+        || lower.contains("unknown tool")
+    {
+        "unknown_part"
+    } else if lower.contains("engine")
+        || lower.contains("router")
+        || lower.contains("unavailable")
+        || lower.contains("kicad-cli")
+    {
+        "missing_engine"
+    } else if lower.contains("missing")
+        || lower.contains("invalid")
+        || lower.contains("must be")
+        || lower.contains("required")
+    {
+        "invalid_argument"
+    } else {
+        "io_error"
+    }
+}
+
+fn dispatch_tool(
     name: &str,
     args: &Value,
     default_registry: Option<&Path>,
@@ -676,6 +811,7 @@ pub fn call_tool(
         "synth_validate" => execute_validate(args, default_registry),
         "synth_recent_calls" => crate::call_log::execute_recent_calls(args),
         "synth_server_stats" => crate::call_log::execute_server_stats(args),
+        "synth_load_tools" => execute_load_tools(args),
         "synth_erc_report" => execute_erc_report(args, default_registry),
         "synth_query_knowledge" => execute_query_knowledge(args, default_registry),
         "synth_drc_report" => execute_drc_report(args, default_registry),
@@ -7785,6 +7921,50 @@ mod routed_integrity_tests {
         assert_eq!(findings.len(), 1, "{findings:?}");
         assert_eq!(findings[0].code, "E-SYNTH-DRC-022");
         assert!(findings[0].is_blocking());
+    }
+
+    #[test]
+    fn the_tool_catalogue_stays_under_its_context_budget() {
+        let bytes = serde_json::to_vec(&list_tools()).expect("serialises");
+        assert!(
+            bytes.len() <= 120_000,
+            "tools/list grew to {} bytes; tighten descriptions or move a tool to a group",
+            bytes.len()
+        );
+        let estimate = bytes.len() / 4;
+        assert!(
+            estimate <= 30_000,
+            "tools/list is about {estimate} tokens; tighten descriptions or load a group"
+        );
+    }
+
+    #[test]
+    fn the_specialised_tools_are_in_their_groups_and_loadable() {
+        assert_eq!(tool_group("synth_validate"), "core");
+        assert_eq!(tool_group("synth_cost_report"), "sourcing");
+        assert_eq!(tool_group("synth_simulate"), "advanced");
+        for group in TOOL_GROUPS {
+            let tools = tools_in_group(group).expect(group);
+            assert!(!tools.is_empty(), "{group}");
+            assert!(tools.iter().all(|tool| tool_group(&tool.name) == group));
+        }
+        assert!(tools_in_group("nope").is_err());
+        let loaded = execute_load_tools(&serde_json::json!({"group": "sourcing"})).expect("load");
+        assert_eq!(loaded["group"], "sourcing");
+        assert!(loaded["count"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn every_error_kind_in_the_taxonomy_is_reachable() {
+        for (message, kind) in [
+            ("parse failed at line 3", "parse_error"),
+            ("unknown part 'x'", "unknown_part"),
+            ("router unavailable", "missing_engine"),
+            ("missing required 'source'", "invalid_argument"),
+            ("disk full", "io_error"),
+        ] {
+            assert_eq!(classify_error(message), kind, "{message}");
+        }
     }
 }
 
