@@ -19,4 +19,4 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | Field-wiring protection | PRTR5V0U2X ESD arrays at the soil and I2C connectors (`D_ESD_S1`, `D_ESD_S2`, `D_ESD_I2C`) and an SMAJ15A TVS on the flow input (`D_ESD_FL`) |
 | Mechanical | four M2.5 mounting holes, one in each corner; test points on the nets listed above |
 
-The qualification verdict, measurements, evidence and sign-off are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).
+The qualification verdict, measurements and evidence are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).

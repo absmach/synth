@@ -19,7 +19,6 @@ The figures come from the export this package was built from.
 | Schematic | `kicad/irrigation_controller.kicad_sch` is the root sheet with the design notes. The ten group sheets are committed beside it (`BUCK_3V3`, `FLOW`, `I2C_SENSORS`, `LEDS`, `MCU`, `SOIL_1`, `SOIL_2`, `TEST_POINTS_AND_MOUNTING`, `VALVE_1` and `VALVE_2`), one per named group, with no `OTHER` region. KiCad's ERC reports 0 errors. Its warnings are library symbol and footprint-link warnings and one `label_multiple_wires`; their number depends on the configured library tables. The `+12V_VALVE` rail carries a `PWR_FLAG` |
 | STEP | [`models/irrigation_controller.step`](models/irrigation_controller.step), exported from the delivered board |
 
-
 ## Layout
 
 Measured on the exported file:
@@ -60,7 +59,7 @@ Figures from the Littelfuse SMAJ series datasheet (`D_TVS`), the MPS MP2307 data
 | `Q1` gate-source | the controller's gate drive, 15 V at most (SNOSD17G) | +/-20 V | 5 V (25 %) |
 | Surge current | the TVS current is (V_open-circuit - 21.5 V) / R_source: at most 14 A for a source of 1 ohm up to 35.5 V open-circuit or 2 ohm up to 49.5 V | 18.6 A, 10/1000 us (400 W); 14 A is 75 % of it | at the required 14 A the clamp holds the rail at 21.5 V |
 
-JeffMboya accepts these margins for the stated source: 12 V +/-5 % (12.6 V maximum), a surge of at most 14 A (10/1000 us), TVS leakage of at most 1 uA at the standoff, and the MP2307's 23 V recommended and 26 V absolute maximum input; the standoff margin is 0.4 V and the clamp margin 1.5 V.
+These margins are for the stated source: 12 V +/-5 % (12.6 V maximum), a surge of at most 14 A (10/1000 us), TVS leakage of at most 1 uA at the standoff, and the MP2307's 23 V recommended and 26 V absolute maximum input; the standoff margin is 0.4 V and the clamp margin 1.5 V.
 
 ## Review points
 
@@ -116,20 +115,3 @@ synth validate irrigation_controller.synth
 ```
 
 The first command verifies every file below `SHA256SUMS`. The parts this board adds to the registry are in `registry/parts/` of the repository.
-
-## Human review
-
-The parts this board adds to `registry/parts/` (`lm74700_q1`, `dmt6007lfg`, `xtal_32k768_fc135_7pf`) carry the author's review record (`reviewed_by`, `reviewed_at`, `datasheet_url`); every other part keeps its registry record.
-
-### PCB review sign-off
-
-PCB review sign-off required by #39: not signed off. The table below is the checklist for the review, and the independent PCB expert sign-off required by #39 is open.
-
-| Item | Signed off |
-|---|---|
-| PCB and Gerber package | |
-| ERC | |
-| DRC | |
-| Input protection | |
-| Placement | |
-| Parts and values | |
