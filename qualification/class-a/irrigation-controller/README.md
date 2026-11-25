@@ -19,4 +19,13 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | Field-wiring protection | PRTR5V0U2X ESD arrays at the soil and I2C connectors (`D_ESD_S1`, `D_ESD_S2`, `D_ESD_I2C`) and an SMAJ15A TVS on the flow input (`D_ESD_FL`) |
 | Mechanical | four M2.5 mounting holes, one in each corner; test points on the nets listed above |
 
-The qualification verdict, measurements and evidence are in [`QUALIFICATION.md`](QUALIFICATION.md); how the board was made is in [`PROVENANCE.md`](PROVENANCE.md).
+## Not verified by Synth
+
+- **Hardware:** no board has been built, powered or run with firmware; every figure here is calculated from datasheets and listings.
+- **Valve short circuit:** firmware must read the shunt on `PA1` or `PA0` and turn the valve off above 0.1 V (1.0 A); until it does, a shorted coil cable is cleared only when `F1` trips.
+- **Valve current:** the 0.5 A coil current is a stated assumption, not a measurement.
+- **Surge:** the input protection holds only for a 12 V +/-5 % supply and a surge of at most 14 A peak (10/1000 us); the clamp is 1.5 V below the MP2307's 23 V recommended input.
+- **Fuse derating:** the `F1` hold current derates with temperature, so the board is specified to 40 C ambient.
+- **Crystal:** the 5 pF stray capacitance is an assumption, firmware must set LSEDRV to medium high, and no oscillator start-up has been measured.
+- **I2C speed:** the bus is specified for 100 kHz; 400 kHz holds only while the breakout and its cable add no more than 75 pF.
+- **Fabrication checks:** DRC and ERC results are not kept in this folder, and no JLCPCB DFM, BOM-matching or quote run is recorded for this package.
