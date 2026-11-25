@@ -4,7 +4,7 @@ An STM32F103C8 microcontroller with a 128 Mbit SPI flash and a USB-C receptacle,
 
 It answers #331 under #40: a board whose thermal paths, assembly access and DFM limits are declared and visible in the exported output, made by an agent driving `synth mcp`. It does not claim a case-4 pass. The items in "Not verified by Synth" are open.
 
-The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
+The design is summarised in [`PROMPT.md`](PROMPT.md), written after the board was finished. The prompts the agent ran are in the history at `72b6f250`.
 
 ## The board
 
@@ -119,3 +119,4 @@ The prompt used to produce the board is in [`PROMPT.md`](PROMPT.md).
 | JLCPCB reports               | No JLCPCB DFM or BOM-matching run is recorded for this package.                                            |
 | USB ESD capacitance          | The junction capacitance of the PESD5V0S1BA on D+ and D- was not read.                                     |
 | Stock                        | The stock is not firm.                                                                                     |
+| Independent sign-off         | The independent PCB review required by #40 is still open.                                                  |
