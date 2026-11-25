@@ -688,7 +688,7 @@ fn place_sheet_notes(
         keepouts: board.keepouts.clone(),
         no_connects: Vec::new(),
         stackup: board.stackup.clone(),
-        outline: board.outline,
+        outline: board.outline.clone(),
         netclasses: board.netclasses.clone(),
         buses: vec![],
         modules: vec![],

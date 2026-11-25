@@ -352,11 +352,20 @@ report --severity-error --severity-warning --refill-zones
   SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually
   look; render specific regions to check 3D-model interference.
 - **Board outline:** declare `outline <width> x <height>` when the
-  enclosure fixes the board size; Edge.Cuts is then exactly that
-  rectangle and the placer does not fit or tighten it. Without the
-  statement the exporter fits the edge round the parts; rounded or
-  chamfered corners are a manual edit. Double-sided assembly is an
-  explicit engineer decision, never a default.
+  enclosure fixes the board size, and state why on the statement
+  (`reason "fits the enclosure"`); Edge.Cuts is then exactly that
+  rectangle and the placer does not fit or tighten it. A guessed
+  outline leaves dead board and triggers `W-SYNTH-BOARD-004`. Without
+  the statement the exporter fits the edge round the parts and
+  `synth validate` reports the estimated size as an info diagnostic;
+  rounded or chamfered corners are a manual edit. Keep `priority: hard`
+  for physical and electrical proximity — a connector edge, a mounting
+  hole, or a part that must sit at a pin (decoupling, a regulator's
+  switch loop, a crystal, ESD at its connector, series terminations).
+  An `edge` or `region` hint on any other part fixes a board span and
+  triggers `W-SYNTH-BOARD-005`; make it soft unless an enclosure or
+  mating constraint fixes it. Double-sided assembly is an explicit
+  engineer decision, never a default.
 
 ### Placement JSON coordinate contract
 

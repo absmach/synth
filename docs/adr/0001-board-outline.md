@@ -38,3 +38,15 @@ Boards without the statement keep the historical fitted behaviour.
 - The per-board margin constants still govern boards without an outline.
 - Non-rectangular outlines and cutouts are out of scope; a later statement can
   extend the form without renaming this one.
+
+## Addendum (2026-11-24) — a stated reason
+
+The statement accepts an optional, non-empty reason:
+
+```synth
+outline 180mm x 120mm reason "fits the enclosure"
+```
+
+The reason is recorded on the IR (`BoardOutline::reason`) and suppresses
+`W-SYNTH-BOARD-004`, the validate warning for an outline much larger than the
+parts need. The rectangle is still authoritative: fitting stays disabled.

@@ -1,0 +1,59 @@
+// A trimmed RS-485/CAN-FD gateway, the board shape that motivated the
+// board-size estimate: 41 parts in a declared 180 x 120 mm rectangle,
+// where the parts themselves need about 86 x 57 mm at this 1.5:1 aspect
+// (~70 x 70 mm square). Only parts the shipped registry carries, so the
+// fixture lowers without a Tier-2 registry. No nets: the estimate depends
+// on courtyards, not wiring, and the netless design is not a clean
+// reference, so it is not an anomaly-model training input.
+
+board "gateway_estimate" {
+  layers 4
+  outline 180mm x 120mm
+
+  component U1: ic "stm32g030k8_lqfp32" value "STM32G030K8"
+  component U2: ic "thvd1450d" value "THVD1450"
+  component U3: ic "lan8720a" value "LAN8720A"
+  component U4: ic "ch340c" value "CH340C"
+
+  component J1: connector "rj45_hr911105a" value "HR911105A"
+  component J2: connector "usb_c_receptacle" value "USB-C"
+  component J3: connector "header_1x4"
+  component J4: connector "header_1x12"
+
+  component Y1: crystal "xtal_generic" value "25MHz"
+
+  component H1: mounting_hole "mounting_hole_m2_5"
+  component H2: mounting_hole "mounting_hole_m2_5"
+  component H3: mounting_hole "mounting_hole_m2_5"
+  component H4: mounting_hole "mounting_hole_m2_5"
+
+  component C1: capacitor "c_generic_0603"
+  component C2: capacitor "c_generic_0603"
+  component C3: capacitor "c_generic_0603"
+  component C4: capacitor "c_generic_0603"
+  component C5: capacitor "c_generic_0603"
+  component C6: capacitor "c_generic_0603"
+  component C7: capacitor "c_generic_0603"
+  component C8: capacitor "c_generic_0603"
+  component C9: capacitor "c_generic_0603"
+  component C10: capacitor "c_generic_0603"
+  component C11: capacitor "c_generic_0603"
+  component C12: capacitor "c_generic_0603"
+  component C13: capacitor "c_generic_0603"
+  component C14: capacitor "c_generic_0603"
+  component C15: capacitor "c_generic_0603"
+  component C16: capacitor "c_generic_0603"
+
+  component R1: resistor "r_generic_0603"
+  component R2: resistor "r_generic_0603"
+  component R3: resistor "r_generic_0603"
+  component R4: resistor "r_generic_0603"
+  component R5: resistor "r_generic_0603"
+  component R6: resistor "r_generic_0603"
+  component R7: resistor "r_generic_0603"
+  component R8: resistor "r_generic_0603"
+  component R9: resistor "r_generic_0603"
+  component R10: resistor "r_generic_0603"
+  component R11: resistor "r_generic_0603"
+  component R12: resistor "r_generic_0603"
+}
