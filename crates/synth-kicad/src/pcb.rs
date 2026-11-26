@@ -4226,6 +4226,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
     fn a_midpoint_fence_via_slides_off_a_pad() {
         let outline =
             synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
