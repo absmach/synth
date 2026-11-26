@@ -1,0 +1,31 @@
+C1       Capacitor_SMD:CP_Elec_8x10: only silkscreen differs
+C10      Capacitor_SMD:C_1206_3216Metric: only silkscreen differs
+C11      Capacitor_SMD:C_1206_3216Metric: only silkscreen differs
+C2       Capacitor_SMD:C_1206_3216Metric: only silkscreen differs
+C3       Capacitor_SMD:C_0603_1608Metric: only silkscreen differs
+C4       Capacitor_SMD:C_0603_1608Metric: only silkscreen differs
+C5       Capacitor_SMD:C_1206_3216Metric: only silkscreen differs
+C6       Capacitor_SMD:C_1206_3216Metric: only silkscreen differs
+C7       Capacitor_SMD:C_0603_1608Metric: only silkscreen differs
+C9       Capacitor_SMD:C_1206_3216Metric: only silkscreen differs
+D1       Diode_SMD:D_SMC: only silkscreen differs
+D2       Diode_SMD:D_SMB: only silkscreen differs
+D3       LED_SMD:LED_0603_1608Metric: only silkscreen differs
+D4       LED_SMD:LED_0603_1608Metric: only silkscreen differs
+F1       Fuse:Fuse_1812_4532Metric: only silkscreen differs
+H1       MountingHole:MountingHole_2.5mm: identical
+H2       MountingHole:MountingHole_2.5mm: identical
+J1       Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical: only silkscreen differs
+J2       Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical: only silkscreen differs
+L1       Inductor_SMD:L_Bourns_SRN6045TA: only silkscreen differs
+R_FB_B   Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_FB_T   Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_LED    Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_PG     Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_PGLED  Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_RT     Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_UV_B   Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+R_UV_T   Resistor_SMD:R_0603_1608Metric: only silkscreen differs
+U1       Package_SO:HSOP-8-1EP_3.9x4.9mm_P1.27mm_EP2.41x3.1mm: only silkscreen differs
+
+0 footprint(s) differ outside silkscreen

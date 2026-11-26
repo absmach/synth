@@ -6,7 +6,9 @@ import sys
 import pcbnew
 
 PAIRS = [("C2", "1", "U1", "3", "C2 to U1 VIN"), ("C3", "1", "U1", "3", "C3 to U1 VIN"),
+         ("C10", "1", "U1", "3", "C10 to U1 VIN"), ("C11", "1", "U1", "3", "C11 to U1 VIN"),
          ("C2", "2", "U1", "1", "C2 GND pad to U1 GND"), ("C3", "2", "U1", "1", "C3 GND pad to U1 GND"),
+         ("C10", "2", "U1", "1", "C10 GND pad to U1 GND"), ("C11", "2", "U1", "1", "C11 GND pad to U1 GND"),
          ("C4", "1", "U1", "7", "C4 to U1 BOOT"), ("C4", "2", "U1", "8", "C4 to U1 SW"),
          ("L1", "1", "U1", "8", "L1 pad 1 to U1 SW"), ("C5", "1", "L1", "2", "C5 to L1 pad 2"),
          ("C6", "1", "L1", "2", "C6 to L1 pad 2"), ("C9", "1", "L1", "2", "C9 to L1 pad 2"),

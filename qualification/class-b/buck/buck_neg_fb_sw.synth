@@ -36,6 +36,8 @@ board "buck_neg_fb_sw" {
   group "INPUT FILTER" color "#7c3aed" {
     component C1: capacitor "c_electrolytic_smd_8x10" value "47uF" voltage "50V"
     component C2: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C10: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
+    component C11: capacitor "c_generic_1206" value "10uF" dielectric "X7R" voltage "50V"
     component C3: capacitor "c_generic_0603" value "220nF" dielectric "X7R" voltage "50V"
     notes "" {
       "C1 bulk, C2 ceramic, C3 high-frequency next to the VIN pin (LMR38010 section 9.2.2.6: at least 4.7 uF + 100 to 220 nF)."
@@ -117,13 +119,13 @@ board "buck_neg_fb_sw" {
 
   net "VIN" class "PWR" {
     D1.cathode, D2.cathode,
-    C1.p1, C2.p1, C3.p1,
+    C1.p1, C2.p1, C10.p1, C11.p1, C3.p1,
     U1.vin, R_UV_T.p1
   }
 
   net "GND" class "PWR" {
     J1.p2, D2.anode,
-    C1.p2, C2.p2, C3.p2,
+    C1.p2, C2.p2, C10.p2, C11.p2, C3.p2,
     U1.gnd, U1.pad, R_UV_B.p2,
     C5.p2, C6.p2, C9.p2, R_FB_B.p2, R_RT.p2,
     J2.p2, J2.p4, D3.cathode
