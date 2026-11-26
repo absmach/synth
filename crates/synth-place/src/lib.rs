@@ -10623,8 +10623,10 @@ mod tests {
             [footprint_dimensions]\nwidth_mm = 1.6\nheight_mm = 0.8\n\
             [[pins]]\nname = \"p1\"\nnumber = \"1\"\nelectrical_type = \"passive\"\n\
             [[pins]]\nname = \"p2\"\nnumber = \"2\"\nelectrical_type = \"passive\"\n";
+        // An M2.5 hole as the irrigation board (#334) has it: a 2.7 mm drill
+        // inside a 6 mm keepout courtyard.
         let hole_part = "id = \"t_hole\"\nkind = \"mounting_hole\"\n\
-            [footprint_dimensions]\nwidth_mm = 3.0\nheight_mm = 3.0\n";
+            [footprint_dimensions]\nwidth_mm = 6.0\nheight_mm = 6.0\n";
         let registry = synth_registry::load_from_strs(&[
             ("t_conn.synth.toml", conn.as_str()),
             ("t_res.synth.toml", res),
@@ -10647,8 +10649,10 @@ mod tests {
     }
 
     /// J1 sits below R1 with its courtyard reaching y = 20 mm; H1, when
-    /// present, sits at the right with its courtyard reaching y = 21.5 mm,
-    /// more than one margin past the connector.
+    /// present, is a corner mounting hole at the right, centred 1.5 mm inside
+    /// that line. Its 2.7 mm drill ends at 19.85 mm, on the board, but its
+    /// 6 mm keepout courtyard reaches 21.5 mm, past the connector: the
+    /// irrigation board's geometry in #334.
     fn mechanical_placement(board: &Board) -> Placement {
         let at = |refdes: &str, x: f64, y: f64| {
             let component = board
@@ -10665,7 +10669,7 @@ mod tests {
         };
         let mut components = vec![at("J1", 10.0, 20.0 - 3.56), at("R1", 10.0, 5.0)];
         if board.components.iter().any(|c| c.refdes == "H1") {
-            components.push(at("H1", 25.0, 20.0));
+            components.push(at("H1", 25.0, 18.5));
         }
         Placement {
             board_outline: Rect::new(Point::new(0, 0), Point::new(mm_to_nm(30.0), mm_to_nm(30.0))),
@@ -10703,10 +10707,36 @@ mod tests {
         assert_eq!(a.board_outline, b.board_outline);
     }
 
-    /// #334: a mounting hole's rim must not hold the edge out past a
-    /// connector docked to that edge. The hole's courtyard reaches 21.5 mm and
-    /// its rim further; the connector's courtyard ends at 20 mm and that is
-    /// the edge.
+    /// A bottom-side connector has no declared plane yet: the exporter does
+    /// not mirror bottom-side footprints, so the plane is left to the
+    /// courtyard check instead of being placed on the wrong side.
+    #[test]
+    fn a_bottom_side_connector_has_no_mating_plane() {
+        let board = mechanical_board(
+            "mating_plane_offset_mm = 3.31\nmating_overhang_mm = [0.6, 1.0]",
+            false,
+        );
+        let placement = mechanical_placement(&board);
+        let j1 = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "J1")
+            .expect("J1");
+        let mut placed = placement
+            .components
+            .iter()
+            .find(|p| p.id == j1.id)
+            .copied()
+            .expect("J1 placed");
+        assert!(floorplan::mating_plane(j1, &placed).is_some());
+        placed.layer = Layer::Bottom;
+        assert!(floorplan::mating_plane(j1, &placed).is_none());
+    }
+
+    /// #334: a mounting hole's keepout must not hold the edge out past a
+    /// connector docked to that edge. The hole's courtyard reaches 21.5 mm,
+    /// its drill only 19.85 mm; the connector's courtyard ends at 20 mm and
+    /// that is the edge.
     #[test]
     fn a_mounting_hole_rim_does_not_hold_a_docked_connector_off_the_edge() {
         let mut board = mechanical_board("", true);

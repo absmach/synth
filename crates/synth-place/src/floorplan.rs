@@ -159,11 +159,20 @@ impl MatingPlane {
 /// The declared mating plane of a placed connector, if its part gives a
 /// `mating_face` and a `mating_plane_offset_mm`. The placement's centre is
 /// the courtyard centre; the offset is measured from the footprint origin.
+///
+/// Top side only. A bottom-side footprint is mirrored, which swaps a left or
+/// right face and moves the offset, and the exporter does not mirror
+/// bottom-side footprints yet (see `synth_kicad::pcb`), so no plane computed
+/// here would match the exported copper. A bottom-side connector gets `None`
+/// and keeps the courtyard-based depth check rather than a wrong plane.
 #[must_use]
 pub fn mating_plane(
     component: &synth_ir::Component,
     placement: &crate::ComponentPlacement,
 ) -> Option<MatingPlane> {
+    if placement.layer != synth_geometry::Layer::Top {
+        return None;
+    }
     let part = component.part.as_ref()?;
     let dims = part.footprint_dimensions.as_ref()?;
     let face = dims.mating_face?;

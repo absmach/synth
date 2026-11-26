@@ -591,6 +591,21 @@ fn validate_part(path: &Path, part: &Part) -> Result<(), LoadError> {
     }
 
     if let Some(ref dims) = part.footprint_dimensions {
+        // TOML accepts `nan` and `inf`; neither is a position, and NaN would
+        // compare false against every bound and pass every check below.
+        let not_finite = dims
+            .mating_plane_offset_mm
+            .into_iter()
+            .chain(dims.mating_overhang_mm.into_iter().flatten())
+            .find(|v| !v.is_finite());
+        if let Some(value) = not_finite {
+            return Err(LoadError::InvalidFootprintDimensions {
+                path: path.to_path_buf(),
+                message: format!(
+                    "mating_plane_offset_mm and mating_overhang_mm must be finite, found {value}"
+                ),
+            });
+        }
         if dims.mating_plane_offset_mm.is_some() && dims.mating_face.is_none() {
             return Err(LoadError::InvalidFootprintDimensions {
                 path: path.to_path_buf(),
@@ -1807,6 +1822,36 @@ label_side = "inside"
             assert!(
                 matches!(err, LoadError::InvalidSpiceModel { .. }),
                 "{label}: expected InvalidSpiceModel, got {err:?}"
+            );
+        }
+    }
+
+    /// TOML reads `nan` and `inf` as floats; a mating plane at either is no
+    /// position, and NaN would pass every range comparison.
+    #[test]
+    fn a_non_finite_mating_plane_is_rejected() {
+        for (key, value) in [
+            ("mating_plane_offset_mm", "nan"),
+            ("mating_plane_offset_mm", "inf"),
+            ("mating_overhang_mm", "[0.0, nan]"),
+            ("mating_overhang_mm", "[-inf, 0.5]"),
+        ] {
+            let offset = if key == "mating_plane_offset_mm" {
+                String::new()
+            } else {
+                "mating_plane_offset_mm = 3.0\n".to_string()
+            };
+            let toml = format!(
+                "id = \"t_conn\"\nkind = \"connector\"\n\
+                 [footprint_dimensions]\nwidth_mm = 9.0\nheight_mm = 7.0\n\
+                 mating_face = \"bottom\"\n{offset}{key} = {value}\n\
+                 [[pins]]\nname = \"p1\"\nnumber = \"1\"\nelectrical_type = \"passive\"\n"
+            );
+            let err = load_from_strs(&[("t_conn.synth.toml", toml.as_str())])
+                .expect_err("a non-finite mating value must not load");
+            assert!(
+                matches!(&err, LoadError::InvalidFootprintDimensions { message, .. } if message.contains("finite")),
+                "{key} = {value}: {err:?}"
             );
         }
     }

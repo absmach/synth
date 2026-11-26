@@ -2430,19 +2430,25 @@ impl ErcRule for RefdesPrefixRule {
             let Some(accepted) = accepted_refdes_prefixes(&component.kind) else {
                 continue;
             };
-            // A module instance prefixes every refdes with its label
-            // (`CH1_U1`) and puts its parts on a sheet named after it, so
-            // the letter to judge follows the last `_`.
-            let local = match (&component.sheet, component.refdes.rsplit_once('_')) {
-                (Some(_), Some((_, local))) if !local.is_empty() => local,
-                _ => component.refdes.as_str(),
-            };
             // Leading letter run of the refdes (e.g. "SW3" -> "SW").
-            let prefix: String = local
-                .chars()
-                .take_while(char::is_ascii_alphabetic)
-                .collect();
-            if accepted.contains(&prefix.as_str()) {
+            let prefix = letter_run(&component.refdes);
+            if accepted.contains(&prefix) {
+                continue;
+            }
+            // A module instance prefixes every refdes with its label
+            // (`CH1_U1`) and puts its parts on a sheet named after it, so on
+            // a sheet the run after the last `_` is judged too. Only as a
+            // second chance: a part in a user `sheet {}` block is on a sheet
+            // as well, and `J_SOIL1` there is a connector named `J`, not
+            // `SOIL`. The board does not record which sheets are module
+            // instances, and a `use` may set its own prefix, so the whole
+            // refdes cannot be told apart from an instance prefix by shape.
+            let local_accepted = component.sheet.is_some()
+                && component
+                    .refdes
+                    .rsplit_once('_')
+                    .is_some_and(|(_, local)| accepted.contains(&letter_run(local)));
+            if local_accepted {
                 continue;
             }
             out.push(
@@ -2475,6 +2481,14 @@ impl ErcRule for RefdesPrefixRule {
         }
         out
     }
+}
+
+/// The leading run of ASCII letters in a refdes (`"SW3"` gives `"SW"`).
+fn letter_run(refdes: &str) -> &str {
+    let end = refdes
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(refdes.len());
+    &refdes[..end]
 }
 
 // -----------------------------------------------------------------------------

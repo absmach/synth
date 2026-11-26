@@ -625,40 +625,112 @@ fn unfilled_zones(pcb: &PcbBoard, net_ids: &BTreeMap<&str, synth_ir::NetId>) -> 
     out
 }
 
-/// KiCad custom rules for the spacing each voltage net needs against chassis
-/// and against a 0 V conductor, outer and inner layers separately. Only nets
-/// whose requirement is past the flat floors get a rule, so a board with no
-/// such net exports exactly as before.
+/// KiCad custom rules for the spacing each voltage net needs, sized the way
+/// [`check_voltage_clearance`] sizes it, so `kicad-cli pcb drc` and KiCad's
+/// zone fill agree with `E-SYNTH-DRC-025`.
+///
+/// The requirement depends on both conductors, so there are two kinds of
+/// rule per net and layer class:
+///
+/// - against every net whose voltage is *not* known, and against a hole or the
+///   edge, the net is sized against chassis (0 V), as the checker measures an
+///   unknown net;
+/// - against each other net whose voltage is known, the pair gets its own rule
+///   sized by the real difference. 12 V beside a protected 12 V rail is 0 V
+///   apart and needs no more than the flat floor, so it gets no rule; sizing
+///   it against chassis instead would fail `kicad-cli` on spacing
+///   `E-SYNTH-DRC-025` accepts.
+///
+/// The chassis rule names every known net it excludes, so the two kinds never
+/// overlap and the result does not depend on KiCad's last-match order. No rule
+/// is lower than the net's own netclass clearance: a custom rule replaces the
+/// netclass value, so a smaller one would loosen it. Only spacings past the
+/// flat floors get a rule, so a board with no such net exports as before.
 #[must_use]
 pub fn kicad_rules(board: &Board, profile: &ManufacturerProfile) -> String {
     use std::fmt::Write as _;
+    let voltages = net_voltages(board);
+    let class_clearance = |net: &str| -> i64 {
+        board
+            .nets
+            .iter()
+            .find(|n| n.name == net)
+            .and_then(|n| n.netclass.as_deref())
+            .and_then(|class| board.netclasses.iter().find(|c| c.name == class))
+            .and_then(|c| c.clearance)
+            .map_or(0, |l| l.0)
+    };
+    let names: Vec<&str> = voltages.keys().map(String::as_str).collect();
     let mut out = String::new();
-    for (name, v) in net_voltages(board) {
-        let safe = name.replace('\'', "");
+    for (index, (name, &v)) in voltages.iter().enumerate() {
+        let a = rule_literal(name);
+        let label = sexpr_escape(name);
+        let floor_a = class_clearance(name);
+        let others_unknown = names.iter().fold(String::new(), |mut acc, other| {
+            let _ = write!(acc, " && B.NetName != '{}'", rule_literal(other));
+            acc
+        });
         for (layer, internal) in [("outer", false), ("inner", true)] {
-            let (required, _) = required_nm(profile, v, CHASSIS, internal);
-            let mm = nm_to_mm(required);
-            if required > profile.min_copper_clearance_nm {
+            let (chassis, _) = required_nm(profile, v, CHASSIS, internal);
+            let chassis = chassis.max(floor_a);
+            let mm = nm_to_mm(chassis);
+            if chassis > profile.min_copper_clearance_nm {
                 let _ = writeln!(
                     out,
-                    "(rule \"voltage {safe} clearance {layer}\"\n  (layer {layer})\n  (constraint clearance (min {mm}mm))\n  (condition \"A.NetName == '{safe}' && A.NetName != B.NetName\"))"
+                    "(rule \"voltage {label} clearance {layer}\"\n  (layer {layer})\n  (constraint clearance (min {mm}mm))\n  (condition \"A.NetName == '{a}'{others_unknown}\"))"
                 );
             }
-            if required > profile.min_drill_to_copper_nm {
+            if chassis > profile.min_drill_to_copper_nm {
                 let _ = writeln!(
                     out,
-                    "(rule \"voltage {safe} hole {layer}\"\n  (layer {layer})\n  (constraint hole_clearance (min {mm}mm))\n  (condition \"A.NetName == '{safe}'\"))"
+                    "(rule \"voltage {label} hole {layer}\"\n  (layer {layer})\n  (constraint hole_clearance (min {mm}mm))\n  (condition \"A.NetName == '{a}'{others_unknown}\"))"
                 );
             }
-            if required > profile.min_copper_to_edge_nm {
+            if chassis > profile.min_copper_to_edge_nm {
                 let _ = writeln!(
                     out,
-                    "(rule \"voltage {safe} edge {layer}\"\n  (layer {layer})\n  (constraint edge_clearance (min {mm}mm))\n  (condition \"A.NetName == '{safe}'\"))"
+                    "(rule \"voltage {label} edge {layer}\"\n  (layer {layer})\n  (constraint edge_clearance (min {mm}mm))\n  (condition \"A.NetName == '{a}'\"))"
                 );
+            }
+            // Each pair once: KiCad tries both orders of A and B.
+            for (other, &w) in voltages.iter().skip(index + 1) {
+                let (pair, _) = required_nm(profile, v, w, internal);
+                let pair = pair.max(floor_a).max(class_clearance(other));
+                let mm = nm_to_mm(pair);
+                let b = rule_literal(other);
+                let other_label = sexpr_escape(other);
+                if pair > profile.min_copper_clearance_nm {
+                    let _ = writeln!(
+                        out,
+                        "(rule \"voltage {label} to {other_label} clearance {layer}\"\n  (layer {layer})\n  (constraint clearance (min {mm}mm))\n  (condition \"A.NetName == '{a}' && B.NetName == '{b}'\"))"
+                    );
+                }
+                if pair > profile.min_drill_to_copper_nm {
+                    let _ = writeln!(
+                        out,
+                        "(rule \"voltage {label} to {other_label} hole {layer}\"\n  (layer {layer})\n  (constraint hole_clearance (min {mm}mm))\n  (condition \"A.NetName == '{a}' && B.NetName == '{b}'\"))"
+                    );
+                }
             }
         }
     }
     out
+}
+
+/// A net name as a single-quoted KiCad rule-expression literal, inside the
+/// double-quoted `condition` string.
+///
+/// The expression language has no escape for `'`, but its `==` on strings is
+/// a wildcard match, so a `'` becomes `?`: the rule still matches the net (and
+/// at worst a net differing only in that character, which errs strict). The
+/// result is then escaped for the surrounding s-expression string.
+fn rule_literal(name: &str) -> String {
+    sexpr_escape(&name.replace('\'', "?"))
+}
+
+/// Escape `\\` and `"` for a double-quoted KiCad s-expression string.
+fn sexpr_escape(text: &str) -> String {
+    text.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 #[cfg(test)]
@@ -895,6 +967,85 @@ electrical_type = "ground_reference"
             "{rules}"
         );
         assert!(rules.contains("(min 0.25mm)"), "{rules}");
-        assert!(!rules.contains("GND"), "{rules}");
+        // GND is 0 V, so against it VIN needs what it needs against chassis,
+        // from a pair rule; the chassis rule leaves GND to that pair rule.
+        assert!(
+            rules.contains("(rule \"voltage GND to VIN clearance inner\""),
+            "{rules}"
+        );
+        assert!(rules.contains("B.NetName != 'GND'"), "{rules}");
+        assert!(!rules.contains("(rule \"voltage GND clearance"), "{rules}");
+    }
+
+    /// Two 48 V rails side by side: `E-SYNTH-DRC-025` sizes the pair by its
+    /// 0 V difference (B2 0.1 mm, under the floor), so the export must not
+    /// hold them to the 0.6 mm each needs against chassis.
+    #[test]
+    fn the_export_rules_size_two_rails_by_their_difference() {
+        let class = r#"netclass "HV" { voltage 48v protected }"#;
+        let mut b = board(class);
+        let mut twin = b
+            .nets
+            .iter()
+            .find(|n| n.name == "VIN")
+            .cloned()
+            .expect("VIN");
+        twin.name = "VIN_B".to_string();
+        twin.id = synth_ir::NetId(b.nets.len() as u32);
+        b.nets.push(twin);
+        for net in &mut b.nets {
+            if net.name.starts_with("VIN") {
+                net.netclass = Some("HV".to_string());
+            }
+        }
+        let profile = ManufacturerProfile::jlc_standard();
+        let rules = kicad_rules(&b, &profile);
+        assert!(!rules.contains("VIN to VIN_B"), "{rules}");
+        let chassis = rules
+            .split("(rule ")
+            .find(|r| r.starts_with("\"voltage VIN clearance outer\""))
+            .expect("VIN has a chassis rule");
+        assert!(chassis.contains("(min 0.6mm)"), "{chassis}");
+        assert!(chassis.contains("B.NetName != 'VIN_B'"), "{chassis}");
+        assert!(
+            rules.contains("(rule \"voltage GND to VIN clearance outer\""),
+            "{rules}"
+        );
+        // The checker agrees: the pair needs only the flat floor.
+        let (pair, _) = required_nm(
+            &profile,
+            net_voltages(&b)["VIN"],
+            net_voltages(&b)["VIN_B"],
+            false,
+        );
+        assert!(pair <= profile.min_copper_clearance_nm, "{pair}");
+    }
+
+    /// A custom rule replaces the netclass clearance in KiCad, so a voltage
+    /// rule never goes below the class's own value.
+    #[test]
+    fn the_export_rules_keep_a_larger_netclass_clearance() {
+        let class = r#"netclass "WIDE" { clearance 0.4mm }"#;
+        let mut b = board(class);
+        for net in &mut b.nets {
+            if net.name == "VIN" {
+                net.netclass = Some("WIDE".to_string());
+            }
+        }
+        let rules = kicad_rules(&b, &ManufacturerProfile::jlc_standard());
+        let inner = rules
+            .split("(rule ")
+            .find(|r| r.starts_with("\"voltage VIN clearance inner\""))
+            .expect("VIN has an inner rule");
+        assert!(inner.contains("(min 0.4mm)"), "{inner}");
+    }
+
+    #[test]
+    fn net_names_are_escaped_for_the_rule_file() {
+        assert_eq!(rule_literal("VIN"), "VIN");
+        // `'` has no escape in a rule expression; `?` is its wildcard.
+        assert_eq!(rule_literal("A'B"), "A?B");
+        assert_eq!(rule_literal("A\"B"), "A\\\"B");
+        assert_eq!(sexpr_escape("A\\B\"C"), "A\\\\B\\\"C");
     }
 }

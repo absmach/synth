@@ -85,6 +85,15 @@ the same spacing into `<board>.kicad_dru` as `clearance`, `hole_clearance`
 and `edge_clearance` rules for each net that needs them, for outer and inner
 layers. KiCad's fill and `kicad-cli pcb drc` then keep it.
 
+The rules are sized the way this check sizes the spacing. A pair of nets
+whose voltages are both known gets its own rule, sized by their difference:
+two 48 V rails side by side need only the flat floor, not the 0.6 mm each
+needs against chassis. Against a net of unknown voltage, a hole and the board
+edge, a net is sized against chassis (0 V). A rule never goes below the net's
+own netclass clearance, which a KiCad custom rule would otherwise replace. A
+`'` in a net name is matched as the wildcard `?`, since KiCad's rule
+expressions have no escape for it.
+
 ## Minimal reproduction
 
 A 12 V rail from a DC jack, with an inner GND pour 0.1 mm from the jack pin:
