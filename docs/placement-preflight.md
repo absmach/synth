@@ -121,6 +121,18 @@ RePlAce: the relaxed fallback is returned directly, because it is already the
 legal placement the caller asked for, and an oversized seed only spends minutes
 in a solver whose legalizer then refuses it.
 
+## The 96-part rule budget
+
+`REVIEW_BUDGET_PARTS = 96` bounds the rule search inside `place()` itself, not
+only inside the preflight. Above 96 parts the rules run with 32 review
+evaluations, one cohesion round, five push-apart passes and two packings, and a
+rule that spends its last review reverts. That is what turns the clean
+carrier's >900 s run into 146 s. It also means **`place()` and the export can
+arrange a board above 96 parts differently from before this bound**. The three
+reference placement snapshots are 31, 25 and 62 parts, below the threshold;
+`dense_board_above_the_review_budget_snapshot` (103 synthetic parts) pins the
+bounded path. Boards at or below 96 parts are unchanged.
+
 ## What the preflight does not do
 
 - It does not replace the visual review, the judge or the fitness report; it

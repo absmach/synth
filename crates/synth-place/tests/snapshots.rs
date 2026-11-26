@@ -91,6 +91,22 @@ fn feather_m4_express_placement_snapshot() {
     insta::assert_snapshot!("feather_m4_express_placement", snapshot);
 }
 
+/// The rule review budget is keyed on 96 parts. None of the reference boards
+/// above reaches it, so this synthetic 103-part board pins the bounded path:
+/// `place()` above 96 parts may arrange parts differently from before the
+/// bound, and this snapshot is the record of what it returns now.
+#[test]
+fn dense_board_above_the_review_budget_snapshot() {
+    let board = load_board("crates/synth-place/tests/fixtures/dense_101.synth");
+    assert!(
+        board.components.len() > 96,
+        "the fixture must be above the review-budget threshold"
+    );
+    let placement = synth_place::place(&board).expect("place");
+    let snapshot = render_placement_snapshot(&board, &placement);
+    insta::assert_snapshot!("dense_101_placement", snapshot);
+}
+
 #[test]
 fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     let board = load_board("fixtures/designs/feather_m4_express.synth");

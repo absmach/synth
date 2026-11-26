@@ -1,0 +1,211 @@
+board "dense_101" {
+  layers 2
+  component U1: mcu "stm32g030k8_lqfp32"
+  component C1: capacitor "c_generic_0603" { value "100nF" }
+  component C2: capacitor "c_generic_0603" { value "100nF" }
+  component R1: resistor "r_generic_0603" { value "10k" }
+  component R2: resistor "r_generic_0603" { value "10k" }
+  component R3: resistor "r_generic_0603" { value "10k" }
+  component R4: resistor "r_generic_0603" { value "10k" }
+  component R5: resistor "r_generic_0603" { value "10k" }
+  component R6: resistor "r_generic_0603" { value "10k" }
+  component R7: resistor "r_generic_0603" { value "10k" }
+  component R8: resistor "r_generic_0603" { value "10k" }
+  component R9: resistor "r_generic_0603" { value "10k" }
+  component R10: resistor "r_generic_0603" { value "10k" }
+  component R11: resistor "r_generic_0603" { value "10k" }
+  component R12: resistor "r_generic_0603" { value "10k" }
+  component R13: resistor "r_generic_0603" { value "10k" }
+  component R14: resistor "r_generic_0603" { value "10k" }
+  component R15: resistor "r_generic_0603" { value "10k" }
+  component R16: resistor "r_generic_0603" { value "10k" }
+  component R17: resistor "r_generic_0603" { value "10k" }
+  component R18: resistor "r_generic_0603" { value "10k" }
+  component R19: resistor "r_generic_0603" { value "10k" }
+  component R20: resistor "r_generic_0603" { value "10k" }
+  component R21: resistor "r_generic_0603" { value "10k" }
+  component R22: resistor "r_generic_0603" { value "10k" }
+  component R23: resistor "r_generic_0603" { value "10k" }
+  component R24: resistor "r_generic_0603" { value "10k" }
+  component R25: resistor "r_generic_0603" { value "10k" }
+  component R26: resistor "r_generic_0603" { value "10k" }
+  component R27: resistor "r_generic_0603" { value "10k" }
+  component R28: resistor "r_generic_0603" { value "10k" }
+  component R29: resistor "r_generic_0603" { value "10k" }
+  component R30: resistor "r_generic_0603" { value "10k" }
+  component R31: resistor "r_generic_0603" { value "10k" }
+  component R32: resistor "r_generic_0603" { value "10k" }
+  component R33: resistor "r_generic_0603" { value "10k" }
+  component R34: resistor "r_generic_0603" { value "10k" }
+  component R35: resistor "r_generic_0603" { value "10k" }
+  component R36: resistor "r_generic_0603" { value "10k" }
+  component R37: resistor "r_generic_0603" { value "10k" }
+  component R38: resistor "r_generic_0603" { value "10k" }
+  component R39: resistor "r_generic_0603" { value "10k" }
+  component R40: resistor "r_generic_0603" { value "10k" }
+  component R41: resistor "r_generic_0603" { value "10k" }
+  component R42: resistor "r_generic_0603" { value "10k" }
+  component R43: resistor "r_generic_0603" { value "10k" }
+  component R44: resistor "r_generic_0603" { value "10k" }
+  component R45: resistor "r_generic_0603" { value "10k" }
+  component R46: resistor "r_generic_0603" { value "10k" }
+  component R47: resistor "r_generic_0603" { value "10k" }
+  component R48: resistor "r_generic_0603" { value "10k" }
+  component R49: resistor "r_generic_0603" { value "10k" }
+  component R50: resistor "r_generic_0603" { value "10k" }
+  component R51: resistor "r_generic_0603" { value "10k" }
+  component R52: resistor "r_generic_0603" { value "10k" }
+  component R53: resistor "r_generic_0603" { value "10k" }
+  component R54: resistor "r_generic_0603" { value "10k" }
+  component R55: resistor "r_generic_0603" { value "10k" }
+  component R56: resistor "r_generic_0603" { value "10k" }
+  component R57: resistor "r_generic_0603" { value "10k" }
+  component R58: resistor "r_generic_0603" { value "10k" }
+  component R59: resistor "r_generic_0603" { value "10k" }
+  component R60: resistor "r_generic_0603" { value "10k" }
+  component R61: resistor "r_generic_0603" { value "10k" }
+  component R62: resistor "r_generic_0603" { value "10k" }
+  component R63: resistor "r_generic_0603" { value "10k" }
+  component R64: resistor "r_generic_0603" { value "10k" }
+  component R65: resistor "r_generic_0603" { value "10k" }
+  component R66: resistor "r_generic_0603" { value "10k" }
+  component R67: resistor "r_generic_0603" { value "10k" }
+  component R68: resistor "r_generic_0603" { value "10k" }
+  component R69: resistor "r_generic_0603" { value "10k" }
+  component R70: resistor "r_generic_0603" { value "10k" }
+  component R71: resistor "r_generic_0603" { value "10k" }
+  component R72: resistor "r_generic_0603" { value "10k" }
+  component R73: resistor "r_generic_0603" { value "10k" }
+  component R74: resistor "r_generic_0603" { value "10k" }
+  component R75: resistor "r_generic_0603" { value "10k" }
+  component R76: resistor "r_generic_0603" { value "10k" }
+  component R77: resistor "r_generic_0603" { value "10k" }
+  component R78: resistor "r_generic_0603" { value "10k" }
+  component R79: resistor "r_generic_0603" { value "10k" }
+  component R80: resistor "r_generic_0603" { value "10k" }
+  component R81: resistor "r_generic_0603" { value "10k" }
+  component R82: resistor "r_generic_0603" { value "10k" }
+  component R83: resistor "r_generic_0603" { value "10k" }
+  component R84: resistor "r_generic_0603" { value "10k" }
+  component R85: resistor "r_generic_0603" { value "10k" }
+  component R86: resistor "r_generic_0603" { value "10k" }
+  component R87: resistor "r_generic_0603" { value "10k" }
+  component R88: resistor "r_generic_0603" { value "10k" }
+  component R89: resistor "r_generic_0603" { value "10k" }
+  component R90: resistor "r_generic_0603" { value "10k" }
+  component R91: resistor "r_generic_0603" { value "10k" }
+  component R92: resistor "r_generic_0603" { value "10k" }
+  component R93: resistor "r_generic_0603" { value "10k" }
+  component R94: resistor "r_generic_0603" { value "10k" }
+  component R95: resistor "r_generic_0603" { value "10k" }
+  component R96: resistor "r_generic_0603" { value "10k" }
+  component R97: resistor "r_generic_0603" { value "10k" }
+  component R98: resistor "r_generic_0603" { value "10k" }
+  component R99: resistor "r_generic_0603" { value "10k" }
+  component R100: resistor "r_generic_0603" { value "10k" }
+  connect U1.VDD -> C1.p1
+  connect U1.VSS -> C1.p2
+  connect U1.VDD -> C2.p1
+  connect U1.VSS -> C2.p2
+  connect U1.PA0 -> R1.p1
+  connect R1.p2 -> U1.VSS
+  connect R2.p2 -> U1.VSS
+  connect R3.p2 -> U1.VSS
+  connect R4.p2 -> U1.VSS
+  connect R5.p2 -> U1.VSS
+  connect R6.p2 -> U1.VSS
+  connect R7.p2 -> U1.VSS
+  connect R8.p2 -> U1.VSS
+  connect R9.p2 -> U1.VSS
+  connect R10.p2 -> U1.VSS
+  connect R11.p2 -> U1.VSS
+  connect R12.p2 -> U1.VSS
+  connect R13.p2 -> U1.VSS
+  connect R14.p2 -> U1.VSS
+  connect R15.p2 -> U1.VSS
+  connect R16.p2 -> U1.VSS
+  connect R17.p2 -> U1.VSS
+  connect R18.p2 -> U1.VSS
+  connect R19.p2 -> U1.VSS
+  connect R20.p2 -> U1.VSS
+  connect R21.p2 -> U1.VSS
+  connect R22.p2 -> U1.VSS
+  connect R23.p2 -> U1.VSS
+  connect R24.p2 -> U1.VSS
+  connect R25.p2 -> U1.VSS
+  connect R26.p2 -> U1.VSS
+  connect R27.p2 -> U1.VSS
+  connect R28.p2 -> U1.VSS
+  connect R29.p2 -> U1.VSS
+  connect R30.p2 -> U1.VSS
+  connect R31.p2 -> U1.VSS
+  connect R32.p2 -> U1.VSS
+  connect R33.p2 -> U1.VSS
+  connect R34.p2 -> U1.VSS
+  connect R35.p2 -> U1.VSS
+  connect R36.p2 -> U1.VSS
+  connect R37.p2 -> U1.VSS
+  connect R38.p2 -> U1.VSS
+  connect R39.p2 -> U1.VSS
+  connect R40.p2 -> U1.VSS
+  connect R41.p2 -> U1.VSS
+  connect R42.p2 -> U1.VSS
+  connect R43.p2 -> U1.VSS
+  connect R44.p2 -> U1.VSS
+  connect R45.p2 -> U1.VSS
+  connect R46.p2 -> U1.VSS
+  connect R47.p2 -> U1.VSS
+  connect R48.p2 -> U1.VSS
+  connect R49.p2 -> U1.VSS
+  connect R50.p2 -> U1.VSS
+  connect R51.p2 -> U1.VSS
+  connect R52.p2 -> U1.VSS
+  connect R53.p2 -> U1.VSS
+  connect R54.p2 -> U1.VSS
+  connect R55.p2 -> U1.VSS
+  connect R56.p2 -> U1.VSS
+  connect R57.p2 -> U1.VSS
+  connect R58.p2 -> U1.VSS
+  connect R59.p2 -> U1.VSS
+  connect R60.p2 -> U1.VSS
+  connect R61.p2 -> U1.VSS
+  connect R62.p2 -> U1.VSS
+  connect R63.p2 -> U1.VSS
+  connect R64.p2 -> U1.VSS
+  connect R65.p2 -> U1.VSS
+  connect R66.p2 -> U1.VSS
+  connect R67.p2 -> U1.VSS
+  connect R68.p2 -> U1.VSS
+  connect R69.p2 -> U1.VSS
+  connect R70.p2 -> U1.VSS
+  connect R71.p2 -> U1.VSS
+  connect R72.p2 -> U1.VSS
+  connect R73.p2 -> U1.VSS
+  connect R74.p2 -> U1.VSS
+  connect R75.p2 -> U1.VSS
+  connect R76.p2 -> U1.VSS
+  connect R77.p2 -> U1.VSS
+  connect R78.p2 -> U1.VSS
+  connect R79.p2 -> U1.VSS
+  connect R80.p2 -> U1.VSS
+  connect R81.p2 -> U1.VSS
+  connect R82.p2 -> U1.VSS
+  connect R83.p2 -> U1.VSS
+  connect R84.p2 -> U1.VSS
+  connect R85.p2 -> U1.VSS
+  connect R86.p2 -> U1.VSS
+  connect R87.p2 -> U1.VSS
+  connect R88.p2 -> U1.VSS
+  connect R89.p2 -> U1.VSS
+  connect R90.p2 -> U1.VSS
+  connect R91.p2 -> U1.VSS
+  connect R92.p2 -> U1.VSS
+  connect R93.p2 -> U1.VSS
+  connect R94.p2 -> U1.VSS
+  connect R95.p2 -> U1.VSS
+  connect R96.p2 -> U1.VSS
+  connect R97.p2 -> U1.VSS
+  connect R98.p2 -> U1.VSS
+  connect R99.p2 -> U1.VSS
+  connect R100.p2 -> U1.VSS
+}
