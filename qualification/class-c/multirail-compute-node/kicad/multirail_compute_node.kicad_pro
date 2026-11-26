@@ -200,6 +200,7 @@
       "/BOOT": "BUCK_SW",
       "/CC1": "SIG_SLOW",
       "/CC2": "SIG_SLOW",
+      "/CT": "SIG_SLOW",
       "/FB": "SIG_SLOW",
       "/GPIO_A": "SIG_SLOW",
       "/GPIO_B": "SIG_SLOW",
@@ -207,7 +208,6 @@
       "/LED_B": "SIG_SLOW",
       "/NRST": "SIG_SLOW",
       "/PG_3V6": "SIG_SLOW",
-      "/SEQ_ON": "SIG_SLOW",
       "/SPI_CLK": "SPI",
       "/SPI_CS": "SPI",
       "/SPI_MISO": "SPI",
@@ -217,8 +217,7 @@
       "/SWDIO": "SIG_SLOW",
       "/USB_DN": "USB",
       "/USB_DP": "USB",
-      "/VBUS_F": "PWR",
-      "/VIN_RAW": "PWR",
+      "/VCC_BUCK": "PWR_LOW",
       "/XIN": "XTAL",
       "/XOUT": "XTAL",
       "BOOT": "BUCK_SW",
@@ -266,20 +265,16 @@
     },
     "netclass_patterns": [
       {
-        "netclass": "PWR",
-        "pattern": "/*/VIN_RAW"
-      },
-      {
-        "netclass": "PWR",
-        "pattern": "/*/VBUS_F"
-      },
-      {
         "netclass": "BUCK_SW",
         "pattern": "/*/SW"
       },
       {
         "netclass": "BUCK_SW",
         "pattern": "/*/BOOT"
+      },
+      {
+        "netclass": "PWR_LOW",
+        "pattern": "/*/VCC_BUCK"
       },
       {
         "netclass": "SIG_SLOW",
@@ -291,7 +286,7 @@
       },
       {
         "netclass": "SIG_SLOW",
-        "pattern": "/*/SEQ_ON"
+        "pattern": "/*/CT"
       },
       {
         "netclass": "SIG_SLOW",

@@ -1,6 +1,7 @@
 // Multi-rail compute node: STM32F103 + SPI flash + USB-C, 5-12 V in, buck + three LDOs + load switch.
 board "multirail_compute_node" {
   layers 4
+  outline 85mm x 63mm
   manufacturer "jlc-filled-via"
   requires via_in_pad
 
@@ -139,8 +140,8 @@ board "multirail_compute_node" {
     component TP7: testpoint "testpoint_pad_1_5" { placement_hint { near: "C3" priority: hard } }
     component TP8: testpoint "testpoint_pad_1_5" { placement_hint { near: "J3" priority: hard } }
     component TP9: testpoint "testpoint_pad_1_5" { placement_hint { near: "C14" priority: hard } }
-    component H1: mounting_hole "mounting_hole_m2_5"
-    component H2: mounting_hole "mounting_hole_m2_5"
+    component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+    component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
     component FID1: fiducial "fiducial_1mm"
     component FID2: fiducial "fiducial_1mm"
     component FID3: fiducial "fiducial_1mm"
