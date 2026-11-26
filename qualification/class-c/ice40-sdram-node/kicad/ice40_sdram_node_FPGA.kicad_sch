@@ -8181,7 +8181,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
 			(at 46.99 218.44 0)
 			(effects
 				(font
@@ -8264,7 +8264,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
 			(at 46.99 307.34 0)
 			(effects
 				(font
@@ -8348,7 +8348,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
 			(at 46.99 386.08 0)
 			(effects
 				(font
@@ -8432,7 +8432,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
 			(at 46.99 464.82 0)
 			(effects
 				(font
@@ -8515,7 +8515,7 @@
 		)
 		(property
 			"Datasheet"
-			""
+			"https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
 			(at 46.99 525.78 0)
 			(effects
 				(font
@@ -10276,87 +10276,6 @@
 					(size 1.27 1.27)
 				)
 				(hide yes)
-			)
-		)
-	)
-	(wire
-		(pts
-			(xy 54.61 543.56)
-			(xy 54.61 546.1)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "7588907d-2df6-50c4-af5f-e805a47f0e80")
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 54.61 546.1 0)
-		(unit 1)
-		(in_bom no)
-		(on_board no)
-		(uuid "554a9b3d-e105-5157-b53d-320b760095fb")
-		(property
-			"Reference"
-			"#PWR4859"
-			(at 54.61 546.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property
-			"Value"
-			"GND"
-			(at 54.61 549.91 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-	)
-	(wire
-		(pts
-			(xy 57.15 543.56)
-			(xy 57.15 546.1)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "a7fd0609-5e38-599f-a756-3e763a05aff0")
-	)
-	(symbol
-		(lib_id "power:GND")
-		(at 57.15 546.1 0)
-		(unit 1)
-		(in_bom no)
-		(on_board no)
-		(uuid "121c2544-6531-52ef-af8b-4ad77fdc31bf")
-		(property
-			"Reference"
-			"#PWR7207"
-			(at 57.15 546.1 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property
-			"Value"
-			"GND"
-			(at 59.05 548.64 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
 			)
 		)
 	)
@@ -13297,6 +13216,46 @@
 	)
 	(wire
 		(pts
+			(xy 54.61 543.56)
+			(xy 54.61 546.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "039d174d-5ea6-5540-9946-137504abe3b0")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 54.61 546.1 0)
+		(unit 1)
+		(in_bom no)
+		(on_board no)
+		(uuid "122d2b85-ed13-59a1-a887-04e4c29e81d0")
+		(property
+			"Reference"
+			"#PWR2024"
+			(at 54.61 546.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property
+			"Value"
+			"GND"
+			(at 54.61 549.91 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+	)
+	(wire
+		(pts
 			(xy 44.45 508)
 			(xy 44.45 505.46)
 		)
@@ -13333,6 +13292,47 @@
 					(size 1.27 1.27)
 				)
 				(justify right)
+			)
+		)
+	)
+	(wire
+		(pts
+			(xy 57.15 543.56)
+			(xy 57.15 546.1)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "611b0fc3-c639-5fda-b802-33bb94f55173")
+	)
+	(symbol
+		(lib_id "power:GND")
+		(at 57.15 546.1 0)
+		(unit 1)
+		(in_bom no)
+		(on_board no)
+		(uuid "7d01a039-d4af-5676-89f7-939460225138")
+		(property
+			"Reference"
+			"#PWR7920"
+			(at 57.15 546.1 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property
+			"Value"
+			"GND"
+			(at 59.05 548.64 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left)
 			)
 		)
 	)

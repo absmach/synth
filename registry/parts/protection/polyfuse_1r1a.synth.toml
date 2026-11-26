@@ -1,7 +1,7 @@
 id = "polyfuse_1r1a"
 kind = "fuse"
 description = "Bourns MF-MSMF110/16-2 resettable fuse, 1.1 A hold, 16 V, 1812"
-# For a 12 V input. LCSC C210834.
+# 1.1 A hold, 16 V maximum: sized for a 5 V input. LCSC C210834.
 mpn = "MF-MSMF110/16-2"
 lcsc_pn = "C210834"
 kicad_symbol = "Device:Polyfuse"

@@ -559,6 +559,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP2]
 x = 14
@@ -568,6 +569,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP3]
 x = 19
@@ -577,6 +579,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP4]
 x = 24
@@ -586,6 +589,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP5]
 x = 29
@@ -595,6 +599,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP6]
 x = 34
@@ -604,6 +609,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP7]
 x = 3.5
@@ -613,6 +619,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.X1]
 x = 45.0
