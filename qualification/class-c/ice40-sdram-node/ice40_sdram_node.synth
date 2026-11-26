@@ -190,8 +190,8 @@ board "ice40_sdram_node" {
   }
 
   group "MECHANICAL" color "#334155" {
-    component H1: mounting_hole "mounting_hole_m2_5"
-    component H2: mounting_hole "mounting_hole_m2_5"
+    component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+    component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
   }
 
   // ---- Rails ------------------------------------------------------------------
