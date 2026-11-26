@@ -230,6 +230,87 @@ command and were not re-run; the export code is unchanged. CI
 (`.github/workflows/ci.yml`) is unchanged: the same fmt, clippy and test
 commands, run here scoped to the three touched crates.
 
+
+### Clean carrier: 121 parts, 2026-11-26
+
+**Code `a5c65fe6` (rebased onto upstream/main `31c37393`), synth 0.1.4, rustc
+1.100.0 (0ef1bc386 2026-11-09), cargo 1.100.0 (3acc79c0c 2026-11-05),
+kicad-cli 10.0.7.** The board is
+`qualification/class-d/cm4-carrier-clean/cm4_carrier.synth` from
+`origin/syn-407-clean` (e0d142fe), extracted with `git archive` into the
+scratchpad. It runs against that branch's own `registry/parts` (the nine CM4
+parts it imports from `origin/syn-407-rebased`) with `XDG_DATA_HOME` empty,
+so a user Tier-2 part cannot shadow a shipped one. 121 parts; estimate
+124.8 x 124.8 mm (15 581 mm²).
+
+| Run | Result | Time |
+| --- | --- | ---: |
+| `synth validate` | exit 1: one `E-SYNTH-PROCESS-002` (below), 49 warnings, no placement error. Preflight info: 153.7 x 114.7 mm (17 629 mm²), dead area 41.7 %, 45 gate failures, review requires revision; stopped on the production rung, attempt 1 | 183.4 s |
+| `synth place` | exit 0; 121 parts; 153.68 x 114.72 mm (17 629.4 mm²) | 146.4 s |
+
+#### Where the 900 s went
+
+The first rung is the production solve with the hints as written, and it is
+what cannot be interrupted: the 60 s ladder budget is checked between
+attempts, not inside `place()`. On this board the greedy packing itself was
+fast (about 4 500 grid cells, 0.2 s). The time was in what follows it:
+`refine_placement` took 18–32 s, and `default_rules` dominated. The review
+(`describe_placement` through `finding_keys`) runs once per candidate edge in
+`usb_to_edge` and once per packing in `groups`, and `State::groups` called its
+push-apart `relax()` (up to 200 passes) without converging: one call took
+86.5 s, and the rule retry sweep called `groups` again for every fallback. On
+the upstream build that ran past 900 s and wrote nothing.
+
+The bound (commit `a5c65fe6`) is deterministic and applies only above 96
+parts: 32 review evaluations, one cohesion round, five push-apart passes, two
+packings, and the first arrangement instead of the retry sweep. A rule that
+spends its last review sees a sentinel finding and reverts, so a half move is
+never kept. Boards at or below 96 parts keep the unbounded search; the three
+placement snapshots are byte-identical (10 snapshot tests pass).
+
+#### Test points
+
+All three are on the top side, all found a free cell, and none used the
+nearest-cell fallback.
+
+| TP | nearest pad | mm | side | free cell |
+| --- | --- | ---: | --- | --- |
+| TP1 | `C_5V8.p1` | 12.75 | Top | yes |
+| TP2 | `C_VDD5.p1` | 11.96 | Top | yes |
+| TP3 | `U_CM4_A.p74` | 4.35 | Top | yes |
+
+#### Why the carrier reported ten ERC errors
+
+`origin/syn-407-rebased`'s `cm4_carrier.synth`, run with the shipped registry
+and the default user registry, reported nine `E-SYNTH-COMP-002` and one
+`E-SYNTH-PROCESS-002`. Neither is a board defect.
+
+- **Nine undefined pins, all on `U12` (the RTC):** `scl`, `sda`, `vdd`,
+  `clkoe`, `osci`, `osco`, `int`, `vss`, `ep`. The design's part is
+  `registry/parts/ic/pcf85063atl.synth.toml`, whose pins are lower case and
+  include `vdd` and `ep`. The user Tier-2 file
+  `~/.local/share/synth/registry/parts/pcf85063atl.synth.toml` shadows it
+  with an auto-repaired copy whose pins are `OSCI`, `OSCO`, `CLKOE`, `INT`,
+  `VSS`, `SDA`, `SCL`, `NC` and `pad`: no `vdd`, no `ep`. The shadow wins and
+  the design's names do not resolve. With `XDG_DATA_HOME` empty the nine
+  diagnostics disappear.
+- **The process error:** the design declares `manufacturer "jlc-hdi"` and
+  `requires via_in_pad`; this build resolves the name to `jlc-standard` and
+  reports the requirement as unsupported. `jlc-hdi` is defined in the carrier
+  branches' own code (`crates/synth-validate/src/lib.rs`,
+  `crates/synth-drc/src/profile.rs`, `crates/synth-router/src/contract.rs`),
+  not in this branch or upstream `31c37393`, so it is the synth build, not the
+  registry or the board. A build from `syn-407-clean` carries that code; it
+  was not built here.
+
+#### After the rebase
+
+`cargo fmt --all -- --check` is clean, `cargo clippy -p synth-place
+-p synth-validate -p synth-cli --all-targets -- -D warnings` is clean, and
+the scoped suite ran 739 tests: 739 passed, 0 failed, 14 ignored across 66
+targets — synth-cli 159, synth-place 337, synth-validate 243. The rebase onto
+`31c37393` had no textual conflicts.
+
 ## See also
 
 - [`docs/diagnostics/W-SYNTH-PLACE-004.md`](diagnostics/W-SYNTH-PLACE-004.md)
