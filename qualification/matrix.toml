@@ -116,7 +116,7 @@ rationale = "Negative test and the corpus's only Class-D entry: the largest impo
 [[board]]
 id = "i2c_sensor_node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
-fixture_sha256 = "5412928222a4b4074ed57aba55e69dcc8143a977e96e7885c828cf81e700a232"
+fixture_sha256 = "8c3bc6d0741a22b1c4652367afdf50ddf9651b510f7c2a71295b2ecd72781e70"
 class = "A"
 status = "experimental"
 expect = "fail"
@@ -137,7 +137,7 @@ rationale = "Negative test, written to be wrong on purpose so the diagnostics ca
 [[board]]
 id = "protected_power_entry"
 path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
-fixture_sha256 = "9412db6609bb8a18afd0935e98c0597a961a61c2c790803fcea2919c69916909"
+fixture_sha256 = "4f745ce18c6a2fdf77350cca398ddfc30bf051b6605eedbf6c7744b6751a1749"
 class = "A"
 status = "experimental"
 expect = "pass"
