@@ -119,9 +119,9 @@ path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
 fixture_sha256 = "8c3bc6d0741a22b1c4652367afdf50ddf9651b510f7c2a71295b2ecd72781e70"
 class = "A"
 status = "experimental"
-expect = "fail"
+expect = "pass"
 expect_fab = "unestablished"
-rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin UART break-out: the Class-A single-bus envelope. Source passes; the routed copper fails DRC on the pinned run, so the gate is `fail`."
+rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin UART break-out: the Class-A single-bus envelope. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner."
 
 [[board]]
 id = "negative_broken_mcu_board"
@@ -140,9 +140,10 @@ path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
 fixture_sha256 = "4f745ce18c6a2fdf77350cca398ddfc30bf051b6605eedbf6c7744b6751a1749"
 class = "A"
 status = "experimental"
-expect = "pass"
-expect_fab = "unestablished"
-rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a 15 V TVS, a buck to 5 V, a soft-start load switch and a 3V3 rail, with no MCU: a power front end that exists to be reviewed as one. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner."
+expect = "fail"
+expect_source_codes = ["E-SYNTH-COMP-001", "E-SYNTH-COMP-002"]
+expect_fab = "unknown"
+rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a 15 V TVS, a buck to 5 V, a soft-start load switch and a 3V3 rail, with no MCU: the released 84-part power front end. Its P-FET and TVS live in the board's own reproduce/user-registry, which the gate does not load, so the source stage fails with unknown part and undefined pin. Manufacturing is never reached."
 
 [[board]]
 id = "buck"

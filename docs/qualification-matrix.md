@@ -40,8 +40,8 @@ is an **unavailable** check, not a clean one.
 | Board | Source | DRC | Fabrication | Evidence |
 |---|---|---|---|---|
 | `hello` | pass | pass (empty route, no engine needed) | unavailable without a router | `fixtures/designs/hello.synth` |
-| Class A i2c sensor node | pass | routed by KiCadRoutingTools | pass with router | `qualification/class-a/i2c-sensor-node` |
-| Class A protected power entry | pass | routed by KiCadRoutingTools | pass with router | `qualification/class-a/protected-power-entry` |
+| Class A i2c sensor node | pass | pass (source and DRC gate) | unestablished | `qualification/class-a/i2c-sensor-node` |
+| Class A protected power entry | fail (E-SYNTH-COMP-001, E-SYNTH-COMP-002) | not reached | unknown | `qualification/class-a/protected-power-entry` |
 | Class B buck | pass | routed, return-via advisories recorded | review-required | `qualification/class-b/buck` |
 | Class B USB-UART | pass | routed by KiCadRoutingTools | pass with router | `qualification/class-b/usb-uart` |
 
@@ -123,8 +123,8 @@ human record.
 | Row | Class | Runs as |
 |---|---|---|
 | `class-a/negative-broken-mcu-board` | A | negative test: the source gate must fail with the planted diagnostics |
-| `class-a/i2c-sensor-node` | A | cannot run: the route is rejected (99 blocking findings; see the row's `skip_reason`) |
-| `class-a/protected-power-entry` | A | cannot run: no route verdict re-established within budget (see the row's `skip_reason`) |
+| `class-a/i2c-sensor-node` | A | the source and DRC gate must pass; manufacturing is unestablished |
+| `class-a/protected-power-entry` | A | the source gate fails with unknown part and undefined pin: its P-FET and TVS are in the board's own `reproduce/user-registry`, which the gate does not load |
 | `class-b/buck` | B | cannot run: the DRC stage is unknown and the manufacturing gate fails on this branch (see the row's `skip_reason`) |
 | `class-b/usb-uart` | B | cannot run: the source gate rejects it with E-SYNTH-POWER-010 (see the row's `skip_reason`) |
 | `class-b/rtd-afe` | B | cannot run: the route does not validate (13 blocking findings; see the row's `skip_reason`) |
