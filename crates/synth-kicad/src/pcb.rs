@@ -662,35 +662,27 @@ pub fn build_pcb(
                 // The plane via goes in the pad first, where it fits. Only a
                 // component that declares `escape { method underpad }` may take
                 // the smaller filled and capped via, the one the DRC exempts from
-                // the plain ring; a pad anywhere else that cannot hold the plane
-                // via is refused.
-                let past_tips = || {
-                    plane_via_past_tips(
-                        pad,
-                        target.origin,
-                        placement.board_outline,
-                        &PlaneCopper {
-                            pads: &pad_rects,
-                            vias: &placed_vias,
-                        },
-                        &plane_via,
-                    )
-                };
-                let (chosen, land) = match beside {
-                    Some(at) => (Ok(at), plane_via),
-                    None if via_in_pad_allowed => {
-                        match plane_via_in_pad(&target, &plane_via, &in_pad_rules) {
-                            Ok(at) => (Ok(at), plane_via),
-                            Err(refusal) => match pad_via {
-                                Some(small) if target.underpad => {
-                                    (plane_via_in_pad(&target, &small, &in_pad_rules), small)
-                                }
-                                _ => (past_tips().ok_or(refusal), plane_via),
+                // the plain ring. A pad that holds neither is tried past the pin
+                // tips before it is refused; see `choose_plane_via`.
+                let in_pad = |land: &PlaneVia| plane_via_in_pad(&target, land, &in_pad_rules);
+                let (chosen, land) = choose_plane_via(
+                    beside,
+                    via_in_pad_allowed.then_some(&in_pad as &InPadAttempt<'_>),
+                    pad_via.filter(|_| target.underpad),
+                    plane_via,
+                    || {
+                        plane_via_past_tips(
+                            pad,
+                            target.origin,
+                            placement.board_outline,
+                            &PlaneCopper {
+                                pads: &pad_rects,
+                                vias: &placed_vias,
                             },
-                        }
-                    }
-                    None => (past_tips().ok_or(ViaRefusal::NoRoomBesidePad), plane_via),
-                };
+                            &plane_via,
+                        )
+                    },
+                );
                 let via = match chosen {
                     Ok(at) => at,
                     Err(refusal) => {
@@ -1301,6 +1293,51 @@ fn plane_via_past_tips(
     via: &PlaneVia,
 ) -> Option<synth_geometry::Point> {
     plane_via_search(pad, origin, outline, copper, via, &PLANE_VIA_FAR_NM)
+}
+
+/// Tries one land in the pad: the position it takes, or why the pad refused it.
+type InPadAttempt<'a> = dyn Fn(&PlaneVia) -> Result<synth_geometry::Point, ViaRefusal> + 'a;
+
+/// Which stitching via a power pad gets, and the land it is drawn with.
+///
+/// The order is the contract: beside the pad within 1 mm, then in the pad on a
+/// board whose process allows it (the plane via, then the small filled and
+/// capped via on a component that declares the under-pad escape), then past
+/// the pin tips. Every refusal falls through to the far positions, including
+/// the under-pad one: the far via is the ordinary through via, so it is legal
+/// whatever escape the component declared. When nothing fits, the refusal is
+/// the in-pad one where in-pad was tried, so the message names the via that
+/// was refused.
+///
+/// `in_pad` is `None` when via-in-pad is not allowed on this board, and
+/// `underpad_via` is the small land only for a component that may take it.
+fn choose_plane_via(
+    beside: Option<synth_geometry::Point>,
+    in_pad: Option<&InPadAttempt<'_>>,
+    underpad_via: Option<PlaneVia>,
+    plane_via: PlaneVia,
+    past_tips: impl FnOnce() -> Option<synth_geometry::Point>,
+) -> (Result<synth_geometry::Point, ViaRefusal>, PlaneVia) {
+    if let Some(at) = beside {
+        return (Ok(at), plane_via);
+    }
+    let Some(in_pad) = in_pad else {
+        return (past_tips().ok_or(ViaRefusal::NoRoomBesidePad), plane_via);
+    };
+    let (refusal, land) = match in_pad(&plane_via) {
+        Ok(at) => return (Ok(at), plane_via),
+        Err(refusal) => match underpad_via {
+            Some(small) => match in_pad(&small) {
+                Ok(at) => return (Ok(at), small),
+                Err(refusal) => (refusal, small),
+            },
+            None => (refusal, plane_via),
+        },
+    };
+    match past_tips() {
+        Some(at) => (Ok(at), plane_via),
+        None => (Err(refusal), land),
+    }
 }
 
 /// The distances from a pad, in nanometres, that [`plane_via_offset`] tries.
@@ -4929,7 +4966,8 @@ mod tests {
 mod plane_via_in_pad_tests {
     use super::{
         InPadRules, Layer, PLANE_VIA_DRILL_NM, PLANE_VIA_RADIUS_NM, PadRect, PlaneCopper, PlanePad,
-        PlaneVia, ViaRefusal, plane_via_in_pad, plane_via_offset, plane_via_past_tips,
+        PlaneVia, ViaRefusal, choose_plane_via, plane_via_in_pad, plane_via_offset,
+        plane_via_past_tips,
     };
     use synth_geometry::{Point, Rect};
 
@@ -5027,6 +5065,78 @@ mod plane_via_in_pad_tests {
         let at = plane_via_past_tips(pad, origin, outline(), &copper, &via())
             .expect("a legal spot exists past the pin tips");
         assert_eq!(at, Point::new(pad.x_nm + 1_500_000, pad.y_nm));
+    }
+
+    fn small_via() -> PlaneVia {
+        PlaneVia {
+            pad_radius_nm: PLANE_VIA_RADIUS_NM / 2,
+            drill_nm: PLANE_VIA_DRILL_NM / 2,
+        }
+    }
+
+    const BESIDE: Point = Point { x_nm: 1, y_nm: 0 };
+    const IN_PAD: Point = Point { x_nm: 2, y_nm: 0 };
+    const FAR: Point = Point { x_nm: 3, y_nm: 0 };
+
+    /// A board that declared via-in-pad keeps the via in the pad: the far
+    /// positions are only tried once the pad has refused it.
+    #[test]
+    fn a_via_in_pad_board_takes_the_pad_before_the_far_positions() {
+        let in_pad = |_: &PlaneVia| Ok(IN_PAD);
+        let (chosen, land) = choose_plane_via(None, Some(&in_pad), None, via(), || Some(FAR));
+        assert_eq!((chosen, land), (Ok(IN_PAD), via()));
+    }
+
+    /// A position beside the pad wins over everything else, as it did before
+    /// the far positions existed.
+    #[test]
+    fn a_position_beside_the_pad_comes_first() {
+        let in_pad = |_: &PlaneVia| Ok(IN_PAD);
+        let (chosen, _) = choose_plane_via(Some(BESIDE), Some(&in_pad), None, via(), || Some(FAR));
+        assert_eq!(chosen, Ok(BESIDE));
+    }
+
+    /// An under-pad component whose small filled via does not fit either falls
+    /// through to the far positions like every other refusal, with the plain
+    /// through via.
+    #[test]
+    fn an_underpad_refusal_falls_through_to_the_far_positions() {
+        let in_pad = |_: &PlaneVia| Err(ViaRefusal::Crowded);
+        let (chosen, land) =
+            choose_plane_via(None, Some(&in_pad), Some(small_via()), via(), || Some(FAR));
+        assert_eq!((chosen, land), (Ok(FAR), via()));
+    }
+
+    /// The small filled via is still taken before the far positions on an
+    /// under-pad component, once the plane via is refused.
+    #[test]
+    fn an_underpad_component_takes_the_small_via_before_the_far_positions() {
+        let small = small_via();
+        let in_pad = move |land: &PlaneVia| {
+            if *land == small {
+                Ok(IN_PAD)
+            } else {
+                Err(ViaRefusal::PadTooSmall {
+                    pad_nm: (0, 0),
+                    via_nm: 0,
+                })
+            }
+        };
+        let (chosen, land) =
+            choose_plane_via(None, Some(&in_pad), Some(small), via(), || Some(FAR));
+        assert_eq!((chosen, land), (Ok(IN_PAD), small));
+    }
+
+    /// When nothing fits, the refusal names the via the pad refused, so the
+    /// error still says why the filled via did not go in.
+    #[test]
+    fn a_pad_that_holds_nothing_reports_the_in_pad_refusal() {
+        let in_pad = |_: &PlaneVia| Err(ViaRefusal::Crowded);
+        let (chosen, land) =
+            choose_plane_via(None, Some(&in_pad), Some(small_via()), via(), || None);
+        assert_eq!((chosen, land), (Err(ViaRefusal::Crowded), small_via()));
+        let (chosen, land) = choose_plane_via(None, None, None, via(), || None);
+        assert_eq!((chosen, land), (Err(ViaRefusal::NoRoomBesidePad), via()));
     }
 
     /// A pad that can hold the via takes it, with the neighbours clear of its
