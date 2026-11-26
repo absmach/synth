@@ -2285,6 +2285,22 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
     // how the CM4 carrier failed on `TP_NEXTRST` after the sweep had boxed
     // itself in. The sweep is the fallback, not the gate.
     let fallback = || replace_fallback(board);
+    // RePlAce does not hold a hard `near` part: `analytic::hard_anchor_positions`
+    // anchors pinned parts, edge and jack connectors, and hard `region` parts,
+    // not a part a hard `near` names. Nothing after the legalizer checks the
+    // distance either. A hard `near` board therefore stays on the default
+    // path, which is where the hint is anchored; anchoring those parts in the
+    // solver is a separate change.
+    if board.components.iter().any(|component| {
+        component.placement_hint.as_ref().is_some_and(|hint| {
+            hint.priority == synth_ir::PlacementPriority::Hard && hint.near.is_some()
+        })
+    }) {
+        replace_note(format_args!(
+            "REPLACE fallback: hard near hint is anchored by the default path"
+        ));
+        return fallback().map(|placement| (placement, true));
+    }
     // The baseline seeds RePlAce and is the arrangement it must beat. When the
     // default path cannot pack the board at all there is no seed: run the
     // fallback and return it, rather than spending minutes in a solver whose
