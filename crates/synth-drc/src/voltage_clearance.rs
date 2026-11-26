@@ -24,8 +24,9 @@
 //!
 //! The geometry is read from the `.kicad_pcb`, because zone fills, inner
 //! layers and hole walls exist only there. A zone that has not been filled
-//! yet has no copper to measure; the exported `.kicad_dru` carries the same
-//! spacing as KiCad rules ([`kicad_rules`]), so KiCad's own fill keeps it.
+//! yet has no copper to measure, so it is reported (`W-SYNTH-DRC-025`) rather
+//! than passed; the exported `.kicad_dru` carries the same spacing as KiCad
+//! rules ([`kicad_rules`]), so KiCad's own fill keeps it.
 
 // Board coordinates are far below f64's mantissa; see `dfm.rs`.
 #![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
@@ -40,6 +41,10 @@ use crate::{ManufacturerProfile, Violation};
 
 /// Rule code.
 pub const CODE: &str = "E-SYNTH-DRC-025";
+/// A pour on a board with a voltage net that has no fill to measure: the
+/// clearance to it is unknown, not passed. A warning, because a board fresh
+/// from the export is refilled by KiCad under the `.kicad_dru` rules.
+pub const UNFILLED_CODE: &str = "W-SYNTH-DRC-025";
 
 /// Component kinds whose power pins bring a rail onto the board from outside.
 const INPUT_KINDS: &[&str] = &["connector", "jack", "terminal_block", "terminal"];
@@ -476,6 +481,11 @@ pub fn check_voltage_clearance(
         .collect();
     let net_ids: BTreeMap<&str, synth_ir::NetId> =
         board.nets.iter().map(|n| (n.name.as_str(), n.id)).collect();
+    let unfilled = if hot_nets.is_empty() {
+        Vec::new()
+    } else {
+        unfilled_zones(pcb, &net_ids)
+    };
     let mut worst: BTreeMap<Key, Worst> = BTreeMap::new();
     for &i in &hot {
         let a = &items[i];
@@ -567,7 +577,52 @@ pub fn check_voltage_clearance(
                 suggested_override: None,
             }
         })
+        .chain(unfilled)
         .collect()
+}
+
+/// One warning per pour layer that declares an outline but carries no
+/// `filled_polygon`: there is no copper to measure, so the rule cannot say
+/// the pour keeps its voltage spacing.
+fn unfilled_zones(pcb: &PcbBoard, net_ids: &BTreeMap<&str, synth_ir::NetId>) -> Vec<Violation> {
+    let mut out = Vec::new();
+    for zone in pcb.zones.iter().filter(|z| z.filled && !z.rule_area) {
+        let net = zone
+            .net_name
+            .clone()
+            .or_else(|| zone.net.and_then(|code| pcb.nets.get(&code).cloned()));
+        for (layer, outline) in &zone.outlines {
+            let poured = zone
+                .fills
+                .iter()
+                .any(|(l, polygons)| l == layer && polygons.iter().any(|p| p.len() >= 3));
+            if poured || outline.len() < 3 {
+                continue;
+            }
+            let at = outline[0];
+            let label = net.as_deref().map_or_else(
+                || "a pour with no net".to_string(),
+                |n| format!("the `{n}` pour"),
+            );
+            out.push(Violation {
+                code: UNFILLED_CODE.to_string(),
+                message: format!(
+                    "{label} on {layer} has no fill, so its voltage clearance was not measured; \
+                     refill the zones (KiCad `B`, or `kicad-cli pcb drc --refill-zones`) and rerun"
+                ),
+                witness: vec![synth_geometry::Point::new(at.x_nm, at.y_nm)],
+                nets: net
+                    .as_deref()
+                    .and_then(|n| net_ids.get(n).copied())
+                    .into_iter()
+                    .collect(),
+                components: Vec::new(),
+                pos_mm: Some((at.x_mm(), at.y_mm())),
+                suggested_override: None,
+            });
+        }
+    }
+    out
 }
 
 /// KiCad custom rules for the spacing each voltage net needs against chassis
@@ -792,6 +847,31 @@ electrical_type = "ground_reference"
             inner.iter().all(|v| v.message.contains("needs 0.250 mm")),
             "{inner:?}"
         );
+    }
+
+    /// A pour with an outline but no `filled_polygon` has no copper to
+    /// measure: it is reported as unmeasured, never read as a pass.
+    #[test]
+    fn an_unfilled_pour_is_reported_not_passed() {
+        // KiCad writes `(fill (thermal_gap …))` without `yes` until a refill.
+        let unfilled = r#"(zone (net 2) (net_name "GND") (layer "In2.Cu")
+    (fill (thermal_gap 0.5) (thermal_bridge_width 0.5))
+    (polygon (pts (xy 10.5 5) (xy 30 5) (xy 30 15) (xy 10.5 15))))
+  (zone (net 0) (net_name "") (layer "In2.Cu")
+    (keepout (tracks not_allowed) (vias not_allowed) (pads allowed) (copperpour not_allowed) (footprints allowed))
+    (fill (thermal_gap 0.5) (thermal_bridge_width 0.5))
+    (polygon (pts (xy 32 5) (xy 38 5) (xy 38 15) (xy 32 15))))"#;
+        let v = run("", 0.5, unfilled);
+        let found: Vec<_> = v.iter().filter(|v| v.code == UNFILLED_CODE).collect();
+        assert_eq!(found.len(), 1, "{v:?}");
+        assert!(
+            found[0].message.contains("`GND` pour on In2.Cu"),
+            "{}",
+            found[0].message
+        );
+        assert!(!found[0].is_blocking());
+        // The filled In1 pour is measured as before and raises nothing here.
+        assert!(v.iter().all(|v| v.code == UNFILLED_CODE), "{v:?}");
     }
 
     #[test]

@@ -14,6 +14,8 @@ evidence, not a pass.
 The message lists each missing input:
 
 - the regulator part's `feedback_vref_min_v` / `feedback_vref_max_v`;
+- a resistance on either resistor that reads as one (`value "10k"`); a value
+  such as `"DNP"` or a typo leaves the divider unanalysed;
 - a tolerance on either resistor (`tolerance "1%"`, `value "10k 1%"`, or a
   chip-resistor MPN that encodes one);
 - a supply window on a load of the output net (`voltage_min_v` /

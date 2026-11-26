@@ -106,6 +106,23 @@ fn run_with(
     tol: Option<&str>,
     value_suffix: &str,
 ) -> Vec<Diagnostic> {
+    run_values(
+        regulator,
+        regulator_id,
+        window,
+        tol,
+        (&format!("10k{value_suffix}"), &format!("20k{value_suffix}")),
+    )
+}
+
+/// Like [`run_with`], with the two leg values written out in full.
+fn run_values(
+    regulator: &str,
+    regulator_id: &str,
+    window: (f64, f64),
+    tol: Option<&str>,
+    (r1, r2): (&str, &str),
+) -> Vec<Diagnostic> {
     let load = load(window);
     let registry = synth_registry::load_from_strs(&[
         (&format!("{regulator_id}.synth.toml"), regulator),
@@ -119,8 +136,8 @@ fn run_with(
   layers 2
   component U1: regulator "{regulator_id}"
   component U2: ic "t_core_load"
-  component R1: resistor "t_res" value "10k{value_suffix}"{tol}
-  component R2: resistor "t_res" value "20k{value_suffix}"{tol}
+  component R1: resistor "t_res" value "{r1}"{tol}
+  component R2: resistor "t_res" value "{r2}"{tol}
   connect R1.p1 -> U2.vdd
   connect R1.p2 -> U1.fb
   connect U1.fb -> R2.p1
@@ -213,6 +230,26 @@ fn missing_tolerance_is_incomplete_evidence() {
     let found = d[0].found.as_deref().expect("found text");
     assert!(found.contains("a tolerance on R1"), "{found}");
     assert!(found.contains("a tolerance on R2"), "{found}");
+}
+
+/// A leg whose value does not read as a resistance leaves the divider
+/// unanalysed; that is reported as missing evidence, not skipped.
+#[test]
+fn an_unreadable_leg_value_is_incomplete_evidence() {
+    let d = run_values(
+        REGULATOR,
+        "t_adj_reg",
+        (1.188, 1.212),
+        Some("1%"),
+        ("10k", "DNP"),
+    );
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-015");
+    let found = d[0].found.as_deref().expect("found text");
+    assert!(
+        found.contains("a readable resistance on R2 (value `DNP` does not parse)"),
+        "{found}"
+    );
 }
 
 #[test]

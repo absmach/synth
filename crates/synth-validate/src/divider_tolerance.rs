@@ -211,7 +211,10 @@ pub(crate) struct FeedbackDividerToleranceRule;
 
 /// What is known about one resistor of the divider.
 struct Leg {
-    ohms: f64,
+    /// `None` when the value string does not read as a resistance: the
+    /// divider is still reported, as missing evidence (`E-SYNTH-POWER-015`).
+    ohms: Option<f64>,
+    value: Option<String>,
     tol: Option<f64>,
     tempco: Option<f64>,
     far_net: NetId,
@@ -243,11 +246,14 @@ fn resistor_tolerance(component: &Component) -> Option<f64> {
 
 fn leg(board: &Board, component: &Component, from: synth_ir::PinId) -> Option<Leg> {
     let far_net = deep_erc::other_pin_net(board, component, from)?;
-    let value = component.value.as_deref()?;
-    let (resistance, _) = split_value_tolerance(value);
-    let ohms = crate::value::parse_resistance(&resistance)?;
-    (ohms > 0.0).then(|| Leg {
+    let value = component.value.clone();
+    let ohms = value
+        .as_deref()
+        .and_then(|v| crate::value::parse_resistance(&split_value_tolerance(v).0))
+        .filter(|ohms| *ohms > 0.0);
+    Some(Leg {
         ohms,
+        value,
         tol: resistor_tolerance(component),
         tempco: component
             .properties
@@ -408,6 +414,15 @@ impl FeedbackDividerToleranceRule {
             ));
         }
         for leg in [&site.top, &site.bottom] {
+            if leg.ohms.is_none() {
+                missing.push(match &leg.value {
+                    Some(value) => format!(
+                        "a readable resistance on {} (value `{value}` does not parse)",
+                        leg.refdes
+                    ),
+                    None => format!("a resistance value on {}", leg.refdes),
+                });
+            }
             if leg.tol.is_none() {
                 missing.push(format!(
                     "a tolerance on {} (`tolerance \"1%\"`)",
@@ -461,8 +476,8 @@ impl FeedbackDividerToleranceRule {
         let divider = Divider {
             vref_min_v: vref_min,
             vref_max_v: vref_max,
-            r_top_ohm: site.top.ohms,
-            r_bottom_ohm: site.bottom.ohms,
+            r_top_ohm: site.top.ohms?,
+            r_bottom_ohm: site.bottom.ohms?,
             tol_top: with_drift(site.top.tol?, site.top.tempco, temp),
             tol_bottom: with_drift(site.bottom.tol?, site.bottom.tempco, temp),
         };

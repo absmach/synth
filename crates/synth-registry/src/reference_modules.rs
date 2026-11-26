@@ -253,6 +253,10 @@ pub enum InstantiateError {
     UnknownPort { module: String, port: String },
     #[error("port `{port}` of `{module}` is not bound")]
     UnboundPort { module: String, port: String },
+    #[error(
+        "`{value}` is not a single value for `{param}` (letters, digits and `.` `_` `+` `-` `%`, such as `22uF` or `4.7kohm`)"
+    )]
+    BadValue { param: String, value: String },
     #[error("module `{module}` has no parameter `{param}`")]
     UnknownParam { module: String, param: String },
     #[error("`{param}` is fixed by the reference; overriding it needs a deviation reason")]
@@ -299,9 +303,10 @@ pub fn instantiate(
     {
         return Err(InstantiateError::DuplicateLabel(label.clone()));
     }
+    // Ports are written into the source unquoted, so a binding must name a
+    // port exactly: `vin`, never `vin.x` or `vin -> "A"\n  connect …`.
     for (port, _) in &request.bindings {
-        let head = port.split('.').next().unwrap_or(port);
-        if !module.ports.iter().any(|p| p.name == head) {
+        if !module.ports.iter().any(|p| p.name == *port) {
             return Err(InstantiateError::UnknownPort {
                 module: module.module.clone(),
                 port: port.clone(),
@@ -309,11 +314,7 @@ pub fn instantiate(
         }
     }
     for p in &module.ports {
-        if !request
-            .bindings
-            .iter()
-            .any(|(port, _)| port.split('.').next() == Some(p.name.as_str()))
-        {
+        if !request.bindings.iter().any(|(port, _)| *port == p.name) {
             return Err(InstantiateError::UnboundPort {
                 module: module.module.clone(),
                 port: p.name.clone(),
@@ -328,6 +329,14 @@ pub fn instantiate(
                 param: name.clone(),
             });
         };
+        // Values are written into the source unquoted: one value token only.
+        let token = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '+' | '-' | '%');
+        if value.is_empty() || !value.chars().all(token) {
+            return Err(InstantiateError::BadValue {
+                param: name.clone(),
+                value: value.clone(),
+            });
+        }
         let reason = request
             .deviations
             .iter()
@@ -503,5 +512,73 @@ mod tests {
             out.contains("(c_out = 47uF deviation \"low-ESR polymer part\")"),
             "{out}"
         );
+    }
+
+    fn ldo_request() -> Instantiation {
+        Instantiation {
+            label: "LDO1".to_string(),
+            bindings: vec![
+                ("vin".to_string(), "VIN".to_string()),
+                ("vout".to_string(), "+3V3".to_string()),
+                ("gnd".to_string(), "GND".to_string()),
+            ],
+            ..Instantiation::default()
+        }
+    }
+
+    /// A value is written into the source unquoted, so anything past one
+    /// value token is refused rather than spliced into the DSL.
+    #[test]
+    fn a_param_value_cannot_inject_source() {
+        let modules = library();
+        let ldo = modules
+            .iter()
+            .find(|m| m.id == "ldo_ams1117_3v3")
+            .expect("ldo");
+        for value in [
+            "22uF) { connect A -> B } use \"X\" as Y (",
+            "22 uF",
+            "",
+            "\"22uF\"",
+        ] {
+            let request = Instantiation {
+                params: vec![("c_in".to_string(), value.to_string())],
+                ..ldo_request()
+            };
+            assert!(
+                matches!(
+                    instantiate("board \"b\" {\n}\n", ldo, &request),
+                    Err(InstantiateError::BadValue { .. })
+                ),
+                "{value:?} was accepted"
+            );
+        }
+        let request = Instantiation {
+            params: vec![("c_in".to_string(), "22uF".to_string())],
+            ..ldo_request()
+        };
+        let out = instantiate("board \"b\" {\n}\n", ldo, &request).expect("a plain value");
+        assert!(out.contains("(c_in = 22uF)"), "{out}");
+    }
+
+    /// A port is written unquoted too: only an exact port name binds.
+    #[test]
+    fn a_port_must_be_named_exactly() {
+        let modules = library();
+        let ldo = modules
+            .iter()
+            .find(|m| m.id == "ldo_ams1117_3v3")
+            .expect("ldo");
+        for port in ["vin.x", "vin -> \"A\"\n  connect B", "vin "] {
+            let mut request = ldo_request();
+            request.bindings[0].0 = port.to_string();
+            assert!(
+                matches!(
+                    instantiate("board \"b\" {\n}\n", ldo, &request),
+                    Err(InstantiateError::UnknownPort { .. })
+                ),
+                "{port:?} was accepted"
+            );
+        }
     }
 }

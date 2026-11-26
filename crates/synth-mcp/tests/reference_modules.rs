@@ -138,3 +138,22 @@ fn a_fixed_override_without_a_reason_is_refused() {
     .expect_err("refused");
     assert!(err.contains("fixed by the reference"), "{err}");
 }
+
+/// A non-string override is refused, not dropped: dropping it would
+/// instantiate the reference value and report success.
+#[test]
+fn a_non_string_param_is_refused() {
+    let err = synth_mcp::call_tool(
+        "synth_instantiate_module",
+        &json!({
+            "module_id": "ldo_ams1117_3v3",
+            "label": "LDO1",
+            "source": "board \"b\" {\n}\n",
+            "bindings": { "vin": "VIN", "vout": "+3V3", "gnd": "GND" },
+            "params": { "c_out": 47 }
+        }),
+        Some(&registry()),
+    )
+    .expect_err("refused");
+    assert!(err.contains("'params.c_out' must be a string"), "{err}");
+}

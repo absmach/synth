@@ -1345,12 +1345,30 @@ fn execute_get_module(args: &Value, default_registry: Option<&Path>) -> Result<V
     serde_json::to_value(module).map_err(|e| e.to_string())
 }
 
-fn string_map(value: &Value) -> Vec<(String, String)> {
-    value.as_object().map_or_else(Vec::new, |o| {
-        o.iter()
-            .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
-            .collect()
-    })
+/// Read the object argument `name` as string pairs. Absent or `null` is
+/// empty; anything else that is not an object of strings is an error, so a
+/// value like `{"c_out": 47}` is refused rather than silently dropped.
+fn string_map(args: &Value, name: &str) -> Result<Vec<(String, String)>, String> {
+    let value = &args[name];
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("'{name}' must be an object of strings, got {value}"))?;
+    object
+        .iter()
+        .map(|(k, v)| {
+            v.as_str()
+                .map(|s| (k.clone(), s.to_string()))
+                .ok_or_else(|| {
+                    format!(
+                        "'{name}.{k}' must be a string, got {v}; quote it, e.g. \"{k}\": \"{}\"",
+                        v.to_string().trim_matches('"')
+                    )
+                })
+        })
+        .collect()
 }
 
 fn execute_instantiate_module(
@@ -1370,14 +1388,14 @@ fn execute_instantiate_module(
         .find(|m| m.id == id)
         .ok_or_else(|| format!("No reference module `{id}`; call synth_search_modules"))?;
     let design = get_source_from_args(args)?;
-    let mut deviations = string_map(&args["deviations"]);
+    let mut deviations = string_map(args, "deviations")?;
     if let Some(reason) = args["instance_deviation"].as_str() {
         deviations.push((String::new(), reason.to_string()));
     }
     let request = Instantiation {
         label: label.to_string(),
-        bindings: string_map(&args["bindings"]),
-        params: string_map(&args["params"]),
+        bindings: string_map(args, "bindings")?,
+        params: string_map(args, "params")?,
         deviations,
     };
     let source = instantiate(&design, module, &request).map_err(|e| e.to_string())?;

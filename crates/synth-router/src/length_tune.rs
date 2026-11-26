@@ -710,7 +710,7 @@ impl Frame {
     ) -> bool {
         let la = self.local(a);
         let lb = self.local(b);
-        segment_rect_distance(la, lb, rect) < radius
+        segment_rect_distance(la, lb, rect) <= radius
     }
 }
 
@@ -812,15 +812,24 @@ fn plan(
     for pair in pairs.iter().filter(|p| p.declares_skew()) {
         let budget = to_unit(&work, pair.max_skew_nm.unwrap_or(0) as f64);
         let (lp, ln) = (work.measure(&pair.positive), work.measure(&pair.negative));
-        if lp == 0.0 || ln == 0.0 {
-            continue;
-        }
         let mut tune = GroupTune {
             name: format!("{}/{}", pair.positive, pair.negative),
             max_skew_nm: pair.max_skew_nm.unwrap_or(0),
             before_spread_nm: from_unit(&work, (lp - ln).abs()),
             ..GroupTune::default()
         };
+        if lp == 0.0 || ln == 0.0 {
+            // A half with no copper cannot be measured, so the pair is not
+            // known to match: record it unmet rather than leave it out.
+            for (net, length) in [(&pair.positive, lp), (&pair.negative, ln)] {
+                if length == 0.0 {
+                    tune.unresolved
+                        .push(format!("`{net}` has no routed copper to measure"));
+                }
+            }
+            report.pairs.push(tune);
+            continue;
+        }
         let (short, long, deficit) = if lp < ln {
             (&pair.positive, &pair.negative, ln - lp)
         } else {
@@ -870,6 +879,19 @@ fn plan(
             .cloned()
             .collect();
         if routed.len() < 2 {
+            // Fewer than two measurable members means the group's skew is
+            // unknown, not inside budget: record it unmet.
+            report.groups.push(GroupTune {
+                name: group.name.clone(),
+                max_skew_nm: group.max_skew_nm,
+                unresolved: group
+                    .nets
+                    .iter()
+                    .filter(|n| !routed.contains(n))
+                    .map(|n| format!("`{n}` has no routed copper to measure"))
+                    .collect(),
+                ..GroupTune::default()
+            });
             continue;
         }
         let before: Vec<f64> = routed.iter().map(|n| work.measure(n)).collect();
@@ -1300,6 +1322,68 @@ mod tests {
         // ~0.22 mm of bump, so 3 mm needs many bumps; it may not fit.
         let g = &report.groups[0];
         assert!(g.met || !g.unresolved.is_empty(), "{g:#?}");
+    }
+
+    /// A runs 1 mm inside the bottom edge with a neighbour 0.5 mm above it:
+    /// the only tall bump goes through the edge, which must count as a hit.
+    #[test]
+    fn a_meander_never_crosses_the_board_edge() {
+        let text = board(&[
+            ("A", 59.0, 5.0, 25.0),
+            ("C", 58.5, 5.0, 40.0),
+            ("D", 30.0, 5.0, 28.0),
+        ]);
+        let group = MatchGroupRequest {
+            name: "G".to_string(),
+            nets: vec!["A".to_string(), "D".to_string()],
+            max_skew_nm: 200_000,
+            target_length_nm: None,
+            reference: None,
+        };
+        let (out, report) = tune_text(&text, &[group], &[], &TuneRules::default()).expect("tunes");
+        let limit = 60.0 - TuneRules::default().edge_clearance_nm as f64 / 1e6 - W / 2.0;
+        let board = PcbBoard::parse(&out).expect("parses");
+        for s in &board.segments {
+            assert!(
+                s.start.y_mm() <= limit + 1e-6 && s.end.y_mm() <= limit + 1e-6,
+                "{s:?} crosses the edge clearance: {report:#?}"
+            );
+        }
+        assert_spacing(&out);
+    }
+
+    /// A group with one routed member has no measurable skew: it is recorded
+    /// unmet, so `all_met` cannot read true.
+    #[test]
+    fn a_group_with_one_routed_net_is_unmet() {
+        let text = board(&[("A", 5.0, 5.0, 25.0)]);
+        let group = MatchGroupRequest {
+            name: "G".to_string(),
+            nets: vec!["A".to_string(), "B".to_string()],
+            max_skew_nm: 200_000,
+            target_length_nm: None,
+            reference: None,
+        };
+        let (out, report) = tune_text(&text, &[group], &[], &TuneRules::default()).expect("tunes");
+        assert_eq!(out, text);
+        let g = &report.groups[0];
+        assert!(!g.met, "{g:#?}");
+        assert!(g.unresolved.iter().any(|r| r.contains("`B`")), "{g:#?}");
+        assert!(!report.all_met());
+    }
+
+    /// A pair with an unrouted half is recorded unmet, not left out.
+    #[test]
+    fn a_pair_with_an_unrouted_half_is_unmet() {
+        let text = board(&[("USB_P", 10.0, 5.0, 30.0)]);
+        let pair = crate::contract::DiffPairRequest {
+            positive: "USB_P".to_string(),
+            negative: "USB_N".to_string(),
+            max_skew_nm: Some(100_000),
+        };
+        let (_, report) = tune_text(&text, &[], &[pair], &TuneRules::default()).expect("tunes");
+        assert!(!report.pairs[0].met, "{report:#?}");
+        assert!(!report.all_met());
     }
 
     #[test]
