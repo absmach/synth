@@ -50,6 +50,8 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | USB-C placement         | `J1` sits on the left edge with its opening facing out (rotation 270). `escape { off }` is set on `J1`, which is not a ball grid.                            |
 | BGA escape              | `escape { method underpad }` on `U1`. The 19 vias at 0.35/0.2 mm are filled and capped vias in the ball pads.                                                |
 | Fab package             | `fab/gerbers.zip`, `fab/bom.csv`, `fab/cpl.csv`. `J2` and `J3` are hand-fit through-hole parts.                                                              |
+| 3D models               | `models/` holds the STEP body of every part the board references and the board model `ice40_bga_node.step`. The board file reaches them by the relative path `${KIPRJMOD}/../models/`. Mounting holes and fiducials have no body. A part that KiCad's library has no model for is a simplified box of its envelope. |
+| Schematic               | `images/schematic.pdf`: vector pages, one per sheet, plotted by `kicad-cli sch export pdf`. |
 
 ### Checks
 

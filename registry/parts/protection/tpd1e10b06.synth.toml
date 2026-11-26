@@ -27,3 +27,5 @@ electrical_type = "passive"
 [provenance]
 source = "authored"
 datasheet_url = "https://www.ti.com/lit/ds/symlink/tpd1e10b06.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-26"
