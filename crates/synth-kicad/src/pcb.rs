@@ -664,6 +664,18 @@ pub fn build_pcb(
                 // the smaller filled and capped via, the one the DRC exempts from
                 // the plain ring; a pad anywhere else that cannot hold the plane
                 // via is refused.
+                let past_tips = || {
+                    plane_via_past_tips(
+                        pad,
+                        target.origin,
+                        placement.board_outline,
+                        &PlaneCopper {
+                            pads: &pad_rects,
+                            vias: &placed_vias,
+                        },
+                        &plane_via,
+                    )
+                };
                 let (chosen, land) = match beside {
                     Some(at) => (Ok(at), plane_via),
                     None if via_in_pad_allowed => {
@@ -673,11 +685,11 @@ pub fn build_pcb(
                                 Some(small) if target.underpad => {
                                     (plane_via_in_pad(&target, &small, &in_pad_rules), small)
                                 }
-                                _ => (Err(refusal), plane_via),
+                                _ => (past_tips().ok_or(refusal), plane_via),
                             },
                         }
                     }
-                    None => (Err(ViaRefusal::NoRoomBesidePad), plane_via),
+                    None => (past_tips().ok_or(ViaRefusal::NoRoomBesidePad), plane_via),
                 };
                 let via = match chosen {
                     Ok(at) => at,
@@ -1265,15 +1277,50 @@ fn segment_to_rect_nm(
 /// and clear of every pad and already-placed via is used.
 ///
 /// `None` when no side location is legal: a pad boxed in on every side. What
-/// happens then is [`plane_via_in_pad`]'s business, and only on a board that
-/// declared the process.
-#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+/// happens then is [`plane_via_in_pad`]'s business on a board that declared the
+/// process, and [`plane_via_past_tips`] after that.
 fn plane_via_offset(
     pad: synth_geometry::Point,
     origin: synth_geometry::Point,
     outline: synth_geometry::Rect,
     copper: &PlaneCopper<'_>,
     via: &PlaneVia,
+) -> Option<synth_geometry::Point> {
+    plane_via_search(pad, origin, outline, copper, via, &PLANE_VIA_NEAR_NM)
+}
+
+/// The last resort for a pad [`plane_via_offset`] cannot place: the same four
+/// axes at 1.5 and 2 mm, past the tips of a fine-pitch package's pads, where the
+/// neighbours' copper no longer blocks the via. These come after via-in-pad, not
+/// before it, so a board that declared the process keeps the position it had.
+fn plane_via_past_tips(
+    pad: synth_geometry::Point,
+    origin: synth_geometry::Point,
+    outline: synth_geometry::Rect,
+    copper: &PlaneCopper<'_>,
+    via: &PlaneVia,
+) -> Option<synth_geometry::Point> {
+    plane_via_search(pad, origin, outline, copper, via, &PLANE_VIA_FAR_NM)
+}
+
+/// The distances from a pad, in nanometres, that [`plane_via_offset`] tries.
+const PLANE_VIA_NEAR_NM: [i64; 3] = [
+    PLANE_VIA_OFFSET_NM,
+    PLANE_VIA_OFFSET_NM * 3 / 4,
+    PLANE_VIA_OFFSET_NM / 2,
+];
+
+/// The distances [`plane_via_past_tips`] tries.
+const PLANE_VIA_FAR_NM: [i64; 2] = [PLANE_VIA_OFFSET_NM * 3 / 2, PLANE_VIA_OFFSET_NM * 2];
+
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn plane_via_search(
+    pad: synth_geometry::Point,
+    origin: synth_geometry::Point,
+    outline: synth_geometry::Rect,
+    copper: &PlaneCopper<'_>,
+    via: &PlaneVia,
+    distances: &[i64],
 ) -> Option<synth_geometry::Point> {
     let inset = PLANE_EDGE_MARGIN_NM;
     let usable = synth_geometry::Rect::new(
@@ -1290,16 +1337,6 @@ fn plane_via_offset(
     } else {
         [(0, sy), (sx, 0), (-sx, 0), (0, -sy)]
     };
-    // The near candidates come first so a board that already finds a position
-    // keeps it. The far ones reach past the tips of a fine-pitch package's
-    // pads, where the neighbours' copper no longer blocks the via.
-    let distances = [
-        PLANE_VIA_OFFSET_NM,
-        PLANE_VIA_OFFSET_NM * 3 / 4,
-        PLANE_VIA_OFFSET_NM / 2,
-        PLANE_VIA_OFFSET_NM * 3 / 2,
-        PLANE_VIA_OFFSET_NM * 2,
-    ];
     // The whole fanout stub is checked, not only the via endpoint: a stub from
     // the pad to a nearby candidate can cut across another pad even when the via
     // itself is clear. The stub body is held to its own half-width, the via at
@@ -1326,7 +1363,7 @@ fn plane_via_offset(
         });
         pads_clear && vias_clear
     };
-    for distance in distances {
+    for &distance in distances {
         for (ux, uy) in axes {
             let candidate =
                 synth_geometry::Point::new(pad.x_nm + ux * distance, pad.y_nm + uy * distance);
@@ -4892,7 +4929,7 @@ mod tests {
 mod plane_via_in_pad_tests {
     use super::{
         InPadRules, Layer, PLANE_VIA_DRILL_NM, PLANE_VIA_RADIUS_NM, PadRect, PlaneCopper, PlanePad,
-        PlaneVia, ViaRefusal, plane_via_in_pad, plane_via_offset,
+        PlaneVia, ViaRefusal, plane_via_in_pad, plane_via_offset, plane_via_past_tips,
     };
     use synth_geometry::{Point, Rect};
 
@@ -4983,7 +5020,11 @@ mod plane_via_in_pad_tests {
             pads: &pads,
             vias: &[],
         };
-        let at = plane_via_offset(pad, origin, outline(), &copper, &via())
+        assert_eq!(
+            plane_via_offset(pad, origin, outline(), &copper, &via()),
+            None
+        );
+        let at = plane_via_past_tips(pad, origin, outline(), &copper, &via())
             .expect("a legal spot exists past the pin tips");
         assert_eq!(at, Point::new(pad.x_nm + 1_500_000, pad.y_nm));
     }
