@@ -145,6 +145,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.U3]
 x = 40.66
@@ -165,8 +166,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H2]
-x = 55.86
-y = 24.49
+x = 57.55
+y = 59.39
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -217,6 +218,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C13]
 x = 32.52
@@ -253,6 +255,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C4]
 x = 34.69
@@ -316,6 +319,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.J3]
 x = 18.43
@@ -379,6 +383,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.U2]
 x = 53.69
@@ -489,8 +494,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H1]
-x = 6.36
-y = 63.02
+x = 5.66
+y = 23.54
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -560,4 +565,11 @@ priority = "hard"
 dx = 0.0
 dy = 0.0
 
-
+[components.J2]
+x = 18.36
+y = 63.5
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0

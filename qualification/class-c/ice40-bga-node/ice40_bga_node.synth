@@ -173,8 +173,8 @@ board "ice40_bga_node" {
   }
 
   group "MOUNTING" color "#737373" {
-    component H1: mounting_hole "mounting_hole_m2_5"
-    component H2: mounting_hole "mounting_hole_m2_5"
+    component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+    component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
     notes "" {
       "Two M2.5 holes at opposite corners."
     }
@@ -202,12 +202,16 @@ board "ice40_bga_node" {
     D8.p2 D9.p2 J2.p6
     U3.gnd C2.p2 C3.p2 C4.p2 C5.p2 U4.gnd C6.p2 C7.p2 C8.p2
     U1.gnd U1.gnd_2 U1.gnd_3 U1.gnd_4 U1.gnd_5 U1.gnd_6 U1.gnd_7 U1.gnd_8 U1.gnd_9 U1.gnd_10
-    U1.gndpll0 U1.gndpll1
     C9.p2 C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C21.p2 C22.p2
     U2.gnd C26.p2
     D2.cathode D4.cathode D6.cathode Q2.s X1.gnd C41.p2
     J3.p2
   }
+
+  // GNDPLL is left unconnected. Lattice DS1040 v3.4, Signal Descriptions: the
+  // PLL's DC ground connection is made on the FPGA, so GNDPLL "must NOT be
+  // connected to the board's ground". The PLL is not used on this board.
+  no_connect U1.gndpll0, U1.gndpll1
 
   // ---- Input chain nets ----------------------------------------------------
   net "VBUS" class "PWR_5V" { J1.vbus J1.vbus_a9 J1.vbus_b4 J1.vbus_b9 F1.p1 }

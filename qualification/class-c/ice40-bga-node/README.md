@@ -1,6 +1,6 @@
 # iCE40HX4K BGA node with a USB-C power input (Class C, case 1)
 
-The board carries an iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its supply chain, an SPI boot flash, one 12-pin header and four status LEDs. A USB-C receptacle powers it (power only) and a 6-pin header programs it. It has six copper layers and measures 59.9 x 45.7 mm.
+The board carries an iCE40HX4K FPGA in a 121-ball, 0.8 mm-pitch BGA with its supply chain, an SPI boot flash, one 12-pin header and four status LEDs. A USB-C receptacle powers it (power only) and a 6-pin header programs it. It has six copper layers and measures 59.9 x 43.5 mm.
 
 It answers #328 under #40: a board with a BGA part, escaped under the pads, with via and fanout rules, made by an agent driving `synth mcp`. The board carries no firmware and has no USB data path. The figures below are measured on the board file or calculated from datasheets; nothing was built or measured on hardware.
 
@@ -30,8 +30,9 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Programming procedure   | Hold `CRESET_B` low with an external programmer, write the flash `U2` over SPI, then release `CRESET_B` so the FPGA loads the bitstream.  |
 | I/O                     | `J3` JXTCONN JXT-PZ2.54-1X12P-A1, 12 positions (3.3 V, ground and four FPGA I/O through 100 ohm series resistors).                        |
 | Indicators              | Four LEDs in one row.                                                                                                                     |
-| Test points             | `TP1` to `TP5` on 5 V, 3.3 V, 1.2 V, `CDONE` and `CRESET_B`.                                                                              |
-| Mounting                | Two M2.5 mounting holes at opposite corners (bottom left and top right).                                                                  |
+| Test points             | `TP1` to `TP5` on 5 V, 3.3 V, 1.2 V, `CDONE` and `CRESET_B`, all on the bottom side of the board.                                                                              |
+| Mounting                | Two M2.5 mounting holes at opposite corners (top left and bottom right), each 4.0 mm from its two board edges.                                                                  |
+| FPGA `GNDPLL` | `gndpll0` and `gndpll1` are left unconnected. Lattice DS1040 v3.4, Signal Descriptions: the PLL ground connection is made on the FPGA, so `GNDPLL` must not be connected to the board ground. The PLL is not used. |
 
 ### Layout
 
@@ -43,9 +44,9 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Parts in the BOM        | 63 lines: 56 parts with manufacturer, MPN, rating, datasheet and order number, and 7 board features with no part identity (2 mounting holes, 5 test points). |
 | Parts placed in the CPL | 56                                                                                                                                                           |
 | Nets                    | 31, all routed                                                                                                                                               |
-| Track segments          | 372                                                                                                                                                          |
-| Vias                    | 86: 19 at 0.35/0.2 mm, 10 at 0.46/0.2 mm, 57 at 0.6/0.3 mm.                                                                                                  |
-| Track length            | 1003.8 mm                                                                                                                                                    |
+| Track segments          | 357                                                                                                                                                          |
+| Vias                    | 87: 19 at 0.35/0.2 mm, 19 at 0.46/0.2 mm, 49 at 0.6/0.3 mm.                                                                                                  |
+| Track length            | 973.2 mm                                                                                                                                                    |
 | Zones and planes        | `+3V3` is poured on the inner layers and ground on the outer layers. The 1.2 V core rail and the PLL supply are routed.                                      |
 | USB-C placement         | `J1` sits on the left edge with its opening facing out (rotation 270). `escape { off }` is set on `J1`, which is not a ball grid.                            |
 | BGA escape              | `escape { method underpad }` on `U1`. The 19 vias at 0.35/0.2 mm are filled and capped vias in the ball pads.                                                |
@@ -64,7 +65,7 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Zone fill                          | Refilled                                           | The board is committed with refilled zones, and the Gerbers are plotted from that fill.                                                                                                                                                  |
 | Dog-bone escape                    | Does not fit                                       | An export with `escape { method channel }` and without `requires via_in_pad` stopped at the plane stage: `net +3V3: no legal stitching-via position beside the pad at (38.00, 36.40) mm on Top`.                                         |
 | Routing engine policy              | `engine_policy_verdict: rejected`                  | Under its strict-size policy, with no rule below the board floor.                                                                                                                                                                        |
-| Routing engine via counts          | `claimed_total_vias: 29`, `claimed_via_in_pad: 36` | These count only the vias its own routing and fanout steps placed. Synth's later steps add plane, return and stitch vias and move vias out of pads that do not declare an under-pad escape. The Layout table gives the delivered values. |
+| Routing engine via counts          | `claimed_total_vias: 30`, `claimed_via_in_pad: 33` | These count only the vias its own routing and fanout steps placed. Synth's later steps add plane, return and stitch vias and move vias out of pads that do not declare an under-pad escape. The Layout table gives the delivered values. |
 
 ### Design figures
 

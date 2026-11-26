@@ -210,8 +210,8 @@
       "/FA4": "FPGA_IO",
       "/FA5": "FPGA_IO",
       "/FA6": "FPGA_IO",
+      "/FLASH_WPHOLD": "STATIC",
       "/FPGA_CLK": "FPGA_IO",
-      "/LED_CDONE_K": "STATIC",
       "/LED_U1_R": "FPGA_IO",
       "/LED_U2_R": "FPGA_IO",
       "/USB_CC1": "STATIC",
@@ -284,7 +284,7 @@
       },
       {
         "netclass": "STATIC",
-        "pattern": "/*/LED_CDONE_K"
+        "pattern": "/*/FLASH_WPHOLD"
       },
       {
         "netclass": "FPGA_IO",
