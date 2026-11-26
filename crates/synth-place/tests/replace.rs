@@ -135,11 +135,12 @@ fn a_guard_fallback_is_reported() {
     );
 }
 
-/// A hard `near` hint used to send the seam straight to the export sweep, so
-/// the solver never ran. It must now reach RePlAce, and only the solver's own
-/// refusal may report a fallback.
+/// The solver's `hard_anchor_positions` does not hold a part a hard `near` hint
+/// names, and nothing after the legalizer checks the distance. The seam must
+/// therefore veto the solve and report the fallback, so a hard hint is never
+/// broken silently.
 #[test]
-fn a_hard_hinted_board_reaches_the_replace_solver() {
+fn a_hard_near_hint_vetoes_the_replace_solver() {
     let mut hinted = load_board("examples/sensor_logger/sensor_logger.synth");
     let cap = hinted
         .components
@@ -153,9 +154,10 @@ fn a_hard_hinted_board_reaches_the_replace_solver() {
         side: None,
         priority: synth_ir::PlacementPriority::Hard,
     });
-    let (_placement, fell_back) = synth_place::place_with_replace(&hinted).expect("replace places");
+    let (_placement, fell_back) =
+        synth_place::place_with_replace(&hinted).expect("fallback places");
     assert!(
-        !fell_back,
-        "a hard near hint must not short-circuit the RePlAce solver"
+        fell_back,
+        "a hard near hint must veto the RePlAce solve and report the fallback"
     );
 }
