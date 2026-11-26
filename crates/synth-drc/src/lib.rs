@@ -67,6 +67,7 @@ pub mod pcb_read;
 mod profile;
 mod rules;
 mod signal_integrity;
+pub mod voltage_clearance;
 /// The IPC-2221 width a `current` needs. Re-exported so the exporter can size
 /// a high-current net's trace for the router.
 pub use signal_integrity::required_width_nm;
@@ -82,7 +83,10 @@ use synth_ir::{Board, NetId};
 use synth_pcb::Routing;
 use synth_place::Placement;
 
-pub use profile::{ManufacturerProfile, ProfileError};
+pub use profile::{
+    ClearanceRow, Coating, ManufacturerProfile, ProfileError, VoltageClearanceRules,
+    ipc_2221b_table,
+};
 pub use rules::{DRC_STAGE, DrcCounts, NativeDrcOutcome, replay, run_kicad_cli_drc};
 /// Re-exported so a DRC caller can resolve and hand in a board's physical
 /// stack without depending on `synth-geometry` directly.
@@ -834,6 +838,10 @@ mod tests {
             max_skew: None,
             edge_rate: None,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -881,6 +889,10 @@ mod tests {
             max_skew: None,
             edge_rate: None,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -1108,6 +1120,10 @@ mod tests {
             max_skew: None,
             edge_rate,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let via = |net: NetId, x: i64| synth_pcb::Via {
@@ -1200,6 +1216,10 @@ mod tests {
             max_skew: None,
             edge_rate,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         let via = |net: NetId, x: i64| synth_pcb::Via {
@@ -1283,6 +1303,10 @@ mod tests {
             max_skew: None,
             edge_rate,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         };
         board.netclasses = vec![class(None)];
@@ -1370,6 +1394,10 @@ mod tests {
             max_skew: None,
             edge_rate: None,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let stackup = StackupProfile::for_board(&board);
@@ -1447,6 +1475,10 @@ mod tests {
             max_skew: None,
             edge_rate: None,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;
@@ -1479,6 +1511,10 @@ mod tests {
             via_diameter: None,
             via_drill: None,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         }
     }
@@ -1630,6 +1666,10 @@ mod tests {
             via_diameter: None,
             via_drill: None,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: synth_diagnostics::Span::new(0, 0),
         });
         let net = board.nets[0].id;

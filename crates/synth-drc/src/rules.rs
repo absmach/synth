@@ -132,8 +132,9 @@ pub fn check_connector_depth(board: &synth_ir::Board, placement: &Placement) -> 
     )
     .into_iter()
     .map(|issue| {
-        // Moving the connector by this much puts its courtyard flush with the edge.
-        let move_out_mm = nm_to_mm(issue.offset_nm - issue.flush_nm);
+        // Moving the connector by this much puts its mating plane in range:
+        // flush with the courtyard, or inside the declared overhang range.
+        let move_out_mm = nm_to_mm(issue.move_out_nm);
         let (delta_x_mm, delta_y_mm) = match issue.edge {
             BoardEdge::Top => (0.0, -move_out_mm),
             BoardEdge::Bottom => (0.0, move_out_mm),
@@ -151,9 +152,18 @@ pub fn check_connector_depth(board: &synth_ir::Board, placement: &Placement) -> 
         } else {
             format!("{:.2} mm beyond", -offset_mm)
         };
-        Violation {
-            code: "E-SYNTH-DRC-024".to_string(),
-            message: format!(
+        let message = match issue.overhang_range_nm {
+            Some((lo, hi)) => format!(
+                "connector {} mating plane is {} the {:?} board edge; its footprint requires an overhang of {:.2} to {:.2} mm past the edge, so move it {:.2} mm {}",
+                issue.refdes,
+                where_,
+                issue.edge,
+                nm_to_mm(lo),
+                nm_to_mm(hi),
+                move_out_mm.abs(),
+                if move_out_mm >= 0.0 { "outward" } else { "inward" },
+            ),
+            None => format!(
                 "connector {} mating plane is {} the {:?} board edge; it must be within {:.2} mm of flush (courtyard flush is {:.2} mm inside)",
                 issue.refdes,
                 where_,
@@ -161,6 +171,10 @@ pub fn check_connector_depth(board: &synth_ir::Board, placement: &Placement) -> 
                 nm_to_mm(issue.tolerance_nm),
                 nm_to_mm(issue.flush_nm),
             ),
+        };
+        Violation {
+            code: "E-SYNTH-DRC-024".to_string(),
+            message,
             witness: Vec::new(),
             nets: Vec::new(),
             components: vec![issue.refdes.clone()],
@@ -1105,6 +1119,69 @@ mod tests {
             }],
         };
         check_connector_depth(&board, &placement)
+    }
+
+    /// A mid-mount USB-C-like part that declares its mating plane at the body
+    /// front (3.31 mm from the origin) and needs 0 to 0.6 mm of overhang. The
+    /// plane sits `overhang_mm` past the bottom edge of a 40 mm board.
+    fn declared_usb_c(overhang_mm: f64) -> Vec<Violation> {
+        use synth_place::{ComponentPlacement, Placement};
+        let part = "id = \"usb_c_mid\"\nkind = \"connector\"\n\
+            [footprint_dimensions]\nwidth_mm = 9.64\nheight_mm = 6.62\n\
+            courtyard_margin_mm = 0.25\nmating_face = \"bottom\"\n\
+            mating_plane_offset_mm = 3.31\nmating_overhang_mm = [0.0, 0.6]\n\
+            [[pins]]\nname = \"vbus\"\nnumber = \"1\"\nelectrical_type = \"power_input\"\n";
+        let registry = synth_registry::load_from_strs(&[("usb_c_mid.synth.toml", part)])
+            .expect("test part must load");
+        let source = "board \"b\" {\n  layers 2\n  component J1: connector \"usb_c_mid\"\n}\n";
+        let parsed = synth_parser::parse(source, "depth.synth");
+        let board = synth_ir::lower(&parsed.ast.expect("ast"), &registry, "depth.synth")
+            .board
+            .expect("board");
+        let component = board.components.first().expect("J1");
+        let outline = Rect::new(Point::new(0, 0), Point::new(mm_to_nm(40.0), mm_to_nm(40.0)));
+        // No KiCad footprint, so the origin is the courtyard centre and the
+        // plane is 3.31 mm below it.
+        let centre_y = mm_to_nm(40.0 + overhang_mm - 3.31);
+        let placement = Placement {
+            board_outline: outline,
+            components: vec![ComponentPlacement {
+                id: component.id,
+                center: Point::new(mm_to_nm(20.0), centre_y),
+                rotation: Rotation::Zero,
+                layer: Layer::Top,
+            }],
+        };
+        check_connector_depth(&board, &placement)
+    }
+
+    #[test]
+    fn a_declared_plane_recessed_1_46_mm_fails_with_the_exact_delta() {
+        let violations = declared_usb_c(-1.46);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert!(
+            violations[0].message.contains("1.46 mm inside"),
+            "{violations:?}"
+        );
+        let fix = violations[0].suggested_override.as_ref().expect("fix");
+        assert!((fix.delta_y_mm - 1.46).abs() < 1e-6, "{fix:?}");
+    }
+
+    #[test]
+    fn a_declared_plane_inside_its_overhang_range_passes() {
+        assert!(declared_usb_c(0.0).is_empty());
+        assert!(declared_usb_c(0.3).is_empty());
+        assert!(declared_usb_c(0.6).is_empty());
+    }
+
+    #[test]
+    fn a_declared_plane_hanging_too_far_is_pulled_back() {
+        let violations = declared_usb_c(1.0);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        let fix = violations[0].suggested_override.as_ref().expect("fix");
+        // Back to the 0.6 mm limit: 0.4 mm inward, which is -y at the bottom.
+        assert!((fix.delta_y_mm + 0.4).abs() < 1e-6, "{fix:?}");
+        assert!(violations[0].message.contains("inward"), "{violations:?}");
     }
 
     #[test]

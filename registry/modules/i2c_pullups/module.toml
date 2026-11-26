@@ -1,0 +1,37 @@
+id = "i2c_pullups"
+module = "I2cPullups"
+version = "1.0.0"
+title = "I2C pull-up pair"
+description = "One pull-up resistor per I2C line to the bus supply. Place one pair per bus, not per device."
+tags = ["i2c", "bus", "pull-up"]
+notes = ["Fast-mode Plus or a long bus needs a smaller value; compute Rp(max) from the bus capacitance."]
+
+[provenance]
+source = "NXP UM10204 I2C-bus specification and user manual, Rev. 7.0"
+section = "7.1 Pull-up resistor sizing: Rp(min) = (VDD - VOL(max)) / IOL, Rp(max) = tr / (0.8473 x Cb)"
+reference_design = "UM10204 Figure 3 (Standard-mode and Fast-mode devices connected to the I2C bus)"
+url = "https://www.nxp.com/docs/en/user-guide/UM10204.pdf"
+
+[[ports]]
+name = "vdd"
+type = "power"
+description = "The bus supply the lines pull up to."
+[[ports]]
+name = "sda"
+type = "bidirectional"
+description = "Serial data."
+[[ports]]
+name = "scl"
+type = "bidirectional"
+description = "Serial clock."
+
+[[params]]
+name = "r_pull"
+default = "4.7kohm"
+fixed = false
+range = "1kohm..10kohm"
+description = "At 3.3 V and 3 mA sink, Rp(min) is 967 Ohm. 4.7 k meets the 300 ns Fast-mode rise time up to about 75 pF of bus capacitance."
+
+[[validated]]
+case = "fixture.synth"
+values = { r_pull = "4.7kohm" }

@@ -1262,6 +1262,17 @@ fn an_unknown_engine_name_is_refused_rather_than_defaulted() {
 /// style of `ROUTED_BOARD` so the verdict under test does not depend on the
 /// exporter's output.
 fn diff_pair_board(dn_end: &str) -> String {
+    diff_pair_board_with(dn_end, "")
+}
+
+/// A copper fence beside `USB_DP`, on the side away from its partner, at
+/// exactly the clearance the policy allows plus 23 µm: the smallest meander
+/// bump (50 µm) would break it, so length tuning has nowhere to put the
+/// short half's bumps.
+const DP_FENCE: &str = r#"(net 3 "GND")
+  (segment (start 10.2 19.6) (end 19.8 19.6) (width 0.25) (layer "F.Cu") (net 3))"#;
+
+fn diff_pair_board_with(dn_end: &str, extra: &str) -> String {
     format!(
         r#"(kicad_pcb
   (version 20260206)
@@ -1292,6 +1303,7 @@ fn diff_pair_board(dn_end: &str) -> String {
       (layers "F.Cu" "F.Paste" "F.Mask") (net 2 "USB_DN")))
   (segment (start 9.175 20) (end 20.825 20) (width 0.25) (layer "F.Cu") (net 1))
   (segment (start 9.175 22) (end {dn_end} 22) (width 0.25) (layer "F.Cu") (net 2))
+  {extra}
   (gr_line (start 0 0) (end 30 0) (layer "Edge.Cuts") (width 0.1))
   (gr_line (start 30 0) (end 30 30) (layer "Edge.Cuts") (width 0.1))
   (gr_line (start 30 30) (end 0 30) (layer "Edge.Cuts") (width 0.1))
@@ -1319,14 +1331,15 @@ fn diff_pair_request(scratch: &Scratch, board: &str, max_skew_nm: i64) -> RouteR
     request
 }
 
-/// A pair delivering more skew than its declared budget blocks the release,
-/// with a finding naming the pair — in the same verdict pipeline as the
-/// return-via blockers, not a silent release (absmach/synth#447).
+/// A pair the length tuner cannot bring into its declared budget blocks the
+/// release, with a finding naming the pair — in the same verdict pipeline as
+/// the return-via blockers, not a silent release (absmach/synth#447).
 #[test]
 fn a_declared_pair_outside_its_skew_budget_blocks_the_release() {
     let scratch = Scratch::new("skewed-pair");
-    // 12.05 mm against 11.65 mm: 0.4 mm of skew on a 0.15 mm budget.
-    let board = diff_pair_board("21.225");
+    // 12.05 mm against 11.65 mm: 0.4 mm of skew on a 0.15 mm budget, with
+    // the short half fenced in so tuning cannot close it.
+    let board = diff_pair_board_with("21.225", DP_FENCE);
     // The board is built at run time, so the stub copies the baseline back
     // as its candidate: the same copper the request was built from.
     let router = StubRouter::new("skewed_router", Behaviour::CopyBaseline);
@@ -1353,6 +1366,32 @@ fn a_declared_pair_outside_its_skew_budget_blocks_the_release() {
         board,
         "a blocked board must not be promoted"
     );
+}
+
+/// A pair outside its budget with room beside the short half is meandered
+/// before validation, and the tuned copper releases (absmach/synth#482).
+#[test]
+fn a_declared_pair_outside_its_skew_budget_is_tuned_before_release() {
+    let scratch = Scratch::new("tuned-pair");
+    let board = diff_pair_board("21.225");
+    let router = StubRouter::new("tuned_router", Behaviour::CopyBaseline);
+    let (jar, java) = stub_engine_files(&scratch);
+    let tools = router.activate(&jar, &java);
+
+    let mut request = diff_pair_request(&scratch, &board, 150_000);
+    request.tools = tools;
+    let report = synth_router::route(&request);
+    let tuning = report.length_tuning.as_ref().expect("the pair was tuned");
+    assert!(tuning.all_met(), "{tuning:?}");
+    let blocking = report
+        .validation
+        .as_ref()
+        .map_or_default(|v| v.blocking_reasons.clone());
+    assert!(
+        !blocking.iter().any(|r| r.contains("E-SYNTH-DRC-014")),
+        "tuned copper must clear the skew rule: {blocking:?}"
+    );
+    assert_eq!(report.state, RouteState::Routed, "{blocking:?}");
 }
 
 /// A pair inside its budget releases exactly as a board without a declared

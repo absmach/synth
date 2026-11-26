@@ -152,6 +152,7 @@ mod tests {
             failure: None,
             escape: Vec::new(),
             recommended_routing_order: Vec::new(),
+            length_tuning: None,
         }
     }
 

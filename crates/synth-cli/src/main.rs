@@ -652,6 +652,19 @@ enum Command {
         cmd: CapabilityCommand,
     },
 
+    /// The vetted reference-subcircuit library (`registry/modules/`): list,
+    /// inspect, and instantiate modules into a design.
+    Module {
+        #[command(subcommand)]
+        cmd: ModuleCommand,
+
+        /// Module library directory. Defaults to `registry/modules` in the
+        /// working directory or an ancestor, else the library this build
+        /// ships.
+        #[arg(long, value_name = "DIR")]
+        modules: Option<PathBuf>,
+    },
+
     /// Inspect the component registry (Phase 15, R15.2): resolve tier
     /// directories, list merged parts, and run a health check.
     Registry {
@@ -709,6 +722,47 @@ enum Command {
         /// Agent/skill directory family to remove.
         #[arg(long, value_enum, default_value_t = agent_assets::Client::Claude)]
         client: agent_assets::Client,
+    },
+}
+
+/// Subcommands of `synth module`.
+#[derive(Debug, Subcommand)]
+enum ModuleCommand {
+    /// List the modules, optionally only those matching every word of QUERY.
+    List {
+        query: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print one module: provenance, ports, parameters and source.
+    Show {
+        id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add a module to a design: its declaration once, and a `use` block.
+    ///
+    /// Example: `synth module instantiate ldo_ams1117_3v3 board.synth
+    /// --label LDO1 --bind vin=VIN --bind vout=+3V3 --bind gnd=GND`.
+    Instantiate {
+        id: String,
+        /// The design file to rewrite.
+        design: PathBuf,
+        #[arg(long)]
+        label: String,
+        /// `port=net`, once per port.
+        #[arg(long = "bind", value_name = "PORT=NET")]
+        bindings: Vec<String>,
+        /// `param=value` override.
+        #[arg(long = "param", value_name = "PARAM=VALUE")]
+        params: Vec<String>,
+        /// `param=reason` for an overridden fixed parameter, or a bare
+        /// reason for a deviation of the whole instance.
+        #[arg(long = "deviation", value_name = "PARAM=REASON")]
+        deviations: Vec<String>,
+        /// Print the new design instead of writing it.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -1378,6 +1432,7 @@ fn main() -> ExitCode {
             svg,
         ),
         Command::Capability { cmd } => capability_cmd(&cmd),
+        Command::Module { cmd, modules } => module_cmd(cmd, modules.as_deref()),
         Command::Registry {
             cmd,
             registry,
@@ -1403,7 +1458,7 @@ fn main() -> ExitCode {
     }
 }
 
-const CAPABILITY_COMMANDS: [&str; 20] = [
+const CAPABILITY_COMMANDS: [&str; 21] = [
     "validate",
     "sim",
     "dump-ast",
@@ -1424,6 +1479,7 @@ const CAPABILITY_COMMANDS: [&str; 20] = [
     "capability",
     "registry",
     "part",
+    "module",
 ];
 
 type CapabilityLimit = (&'static str, Option<&'static str>, &'static str);
@@ -1654,7 +1710,7 @@ fn capability_descriptor() -> serde_json::Value {
                 "notes": "No fabricator presets are shipped; every value is declared by the design. A diff_pair impedance derives its net class trace width (and, for a true pair, its gap) from the first copper and insulator layers."
             },
             "routing_constraints": {
-                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers"],
+                "netclass": ["trace_width", "clearance", "color", "impedance", "current", "plane", "max_length", "max_skew", "via_diameter", "via_drill", "edge_rate", "layers", "voltage", "protection", "target_length", "reference"],
                 "diff_pair": ["impedance", "max_skew", "couple"],
                 "keepout": ["radius", "anchor", "at", "layers", "allow"],
                 "component": ["placement_hint", "escape"],
@@ -1682,6 +1738,145 @@ fn capability_descriptor() -> serde_json::Value {
         "unsupported": capability_limits(UNSUPPORTED),
         "unverified": capability_limits(UNVERIFIED)
     })
+}
+
+/// The module library: `--modules`, else `registry/modules` here or in an
+/// ancestor directory, else the one this build ships.
+fn modules_dir(explicit: Option<&Path>) -> PathBuf {
+    if let Some(dir) = explicit {
+        return dir.to_path_buf();
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        for dir in cwd.ancestors() {
+            let candidate = dir.join("registry").join("modules");
+            if candidate.is_dir() {
+                return candidate;
+            }
+        }
+    }
+    synth_registry::reference_modules::default_modules_dir()
+}
+
+fn split_pair(text: &str, what: &str) -> anyhow::Result<(String, String)> {
+    text.split_once('=')
+        .map(|(a, b)| (a.trim().to_string(), b.trim().to_string()))
+        .ok_or_else(|| anyhow::anyhow!("`{text}` is not {what}"))
+}
+
+fn module_cmd(cmd: ModuleCommand, modules: Option<&Path>) -> anyhow::Result<u8> {
+    use synth_registry::reference_modules::{Instantiation, instantiate, load_modules, search};
+    let library = load_modules(&modules_dir(modules))?;
+    match cmd {
+        ModuleCommand::List { query, json } => {
+            let hits = search(&library, &query.join(" "));
+            if json {
+                serde_json::to_writer_pretty(std::io::stdout(), &hits)?;
+                println!();
+            } else {
+                for m in hits {
+                    println!("{:<22} {:<8} {}", m.id, m.version, m.title);
+                    println!("{:<22} {:<8} from {}", "", "", m.provenance.source);
+                }
+            }
+            Ok(EXIT_SUCCESS)
+        }
+        ModuleCommand::Show { id, json } => {
+            let Some(m) = library.iter().find(|m| m.id == id) else {
+                anyhow::bail!("no reference module `{id}`; `synth module list` shows them");
+            };
+            if json {
+                serde_json::to_writer_pretty(std::io::stdout(), m)?;
+                println!();
+                return Ok(EXIT_SUCCESS);
+            }
+            println!("{} {} — {}", m.id, m.version, m.title);
+            println!(
+                "{}
+",
+                m.description
+            );
+            println!("source:    {}", m.provenance.source);
+            println!("section:   {}", m.provenance.section);
+            println!(
+                "reference: {}
+",
+                m.provenance.reference_design
+            );
+            println!("ports:");
+            for p in &m.ports {
+                println!("  {:<8} {:<14} {}", p.name, p.ty, p.description);
+            }
+            println!("params:");
+            for p in &m.params {
+                let range = p.range.as_deref().unwrap_or("");
+                let fixed = if p.fixed { "fixed" } else { range };
+                println!(
+                    "  {:<8} {:<10} {:<14} {}",
+                    p.name, p.default, fixed, p.description
+                );
+            }
+            for note in &m.notes {
+                println!("note: {note}");
+            }
+            println!(
+                "
+{}",
+                m.source
+            );
+            Ok(EXIT_SUCCESS)
+        }
+        ModuleCommand::Instantiate {
+            id,
+            design,
+            label,
+            bindings,
+            params,
+            deviations,
+            dry_run,
+        } => {
+            let Some(m) = library.iter().find(|m| m.id == id) else {
+                anyhow::bail!("no reference module `{id}`; `synth module list` shows them");
+            };
+            let request = Instantiation {
+                label,
+                bindings: bindings
+                    .iter()
+                    .map(|b| split_pair(b, "PORT=NET"))
+                    .collect::<anyhow::Result<_>>()?,
+                params: params
+                    .iter()
+                    .map(|p| split_pair(p, "PARAM=VALUE"))
+                    .collect::<anyhow::Result<_>>()?,
+                // `param=reason` only when the left side names a parameter;
+                // anything else is an instance-level reason, `=` and all.
+                deviations: deviations
+                    .iter()
+                    .map(|d| match d.split_once('=') {
+                        Some((param, reason))
+                            if m.params.iter().any(|p| p.name == param.trim()) =>
+                        {
+                            (param.trim().to_string(), reason.trim().to_string())
+                        }
+                        _ => (String::new(), d.clone()),
+                    })
+                    .collect(),
+            };
+            let text = std::fs::read_to_string(&design)?;
+            let out = instantiate(&text, m, &request)?;
+            if dry_run {
+                print!("{out}");
+            } else {
+                std::fs::write(&design, out)?;
+                println!(
+                    "added {} as {} to {}",
+                    m.module,
+                    request.label,
+                    design.display()
+                );
+            }
+            Ok(EXIT_SUCCESS)
+        }
+    }
 }
 
 fn capability_cmd(cmd: &CapabilityCommand) -> anyhow::Result<u8> {
@@ -6602,7 +6797,14 @@ fn synth_drc_on_routed(
     };
     let routing = routing_from_routed(board, &routed);
     let stackup = synth_geometry::StackupProfile::for_board(board);
-    synth_drc::check_signal_integrity(board, &routing, profile, Some(&stackup))
+    let mut violations =
+        synth_drc::check_signal_integrity(board, &routing, profile, Some(&stackup));
+    // Voltage-aware clearance reads zones, inner layers and hole walls, which
+    // only the board file has.
+    violations.extend(synth_drc::voltage_clearance::check_voltage_clearance(
+        board, &routed, profile,
+    ));
+    violations
 }
 
 /// Convert a board read back from disk into the copper IR the DRC rules read.

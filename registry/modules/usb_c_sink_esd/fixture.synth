@@ -1,0 +1,14 @@
+board "usb_c_sink_esd_fixture" {
+  layers 2
+  component J2: connector "header_1x4"
+  use "UsbCSinkEsd" as USB {
+    vbus -> "VBUS"
+    gnd -> "GND"
+    dp -> "USB_DP"
+    dn -> "USB_DN"
+  }
+  connect J2.p1 -> "VBUS"
+  connect J2.p2 -> "USB_DP"
+  connect J2.p3 -> "USB_DN"
+  connect J2.p4 -> "GND"
+}

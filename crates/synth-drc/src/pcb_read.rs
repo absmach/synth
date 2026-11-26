@@ -772,6 +772,8 @@ pub struct Zone {
     /// Whether the zone is a rule area that keeps vias out, `(keepout (vias
     /// not_allowed))`, such as the one under a mounting hole's screw head.
     pub keeps_vias_out: bool,
+    /// Whether the zone is a rule area (`(keepout …)`), which never pours.
+    pub rule_area: bool,
 }
 
 /// Read a zone's pour outlines, keyed by layer.
@@ -1004,6 +1006,7 @@ impl PcbBoard {
                 outlines: zone_outlines(zone),
                 fills: zone_fills(zone),
                 filled: zone_fill_enabled(zone),
+                rule_area: zone.find("keepout").is_some(),
                 keeps_vias_out: zone
                     .find("keepout")
                     .and_then(|keepout| keepout.child_atom("vias"))

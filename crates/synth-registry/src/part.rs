@@ -224,6 +224,19 @@ pub struct FootprintDimensions {
     /// physically accessible from an edge.
     #[serde(default)]
     pub mating_face: Option<MatingFace>,
+    /// Signed distance from the footprint origin to the connector's mating
+    /// plane, along [`Self::mating_face`]'s outward direction, in mm. The
+    /// mating plane is the face a cable or plug must reach; for a mid-mount
+    /// USB-C it is the shell front, not the courtyard edge. With it the
+    /// depth check (`E-SYNTH-DRC-024`) and edge docking place the plane, not
+    /// the courtyard, on the board edge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mating_plane_offset_mm: Option<f64>,
+    /// Allowed `[min, max]` overhang of the mating plane past the board
+    /// edge, in mm: `0` is flush, positive hangs past the edge, negative is
+    /// recessed. Defaults to `[0, 0]` (flush) when only the offset is given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mating_overhang_mm: Option<[f64; 2]>,
     /// Side of the part the reference label prefers on the silkscreen, in
     /// board axes after placement. Tried before the default offset; the
     /// exporter still moves the label if that side is blocked.
@@ -311,6 +324,17 @@ pub struct OperatingConditions {
     pub feedback_vref_min_v: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feedback_vref_max_v: Option<f64>,
+    /// Largest current into or out of the feedback pin, in amps (the
+    /// datasheet's `IFB` maximum). It flows through the top divider resistor
+    /// and shifts the output by up to `IFB * Rtop` either way.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback_leakage_max_a: Option<f64>,
+    /// Output change over the load range, as a percent of the output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub load_regulation_pct: Option<f64>,
+    /// Output change over the input range, as a percent of the output.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_regulation_pct: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

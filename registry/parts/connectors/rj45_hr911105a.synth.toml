@@ -13,6 +13,12 @@ courtyard_margin_mm = 0.5
 # The contacts sit at the rear (y = 0 and -2.54) and the housing runs forward
 # to y = +17.26, where the plug enters. Read from the footprint.
 mating_face = "bottom"
+# Mating plane: the Hanrun HR911105A body front on F.Fab, 17.26 mm from the
+# footprint origin along the mating face. The stock courtyard runs 0.5 mm
+# past it, so a courtyard-flush part has its plane 0.5 mm in. The range
+# allows that recess and up to 0.5 mm overhang; deeper recesses fail.
+mating_plane_offset_mm = 17.26
+mating_overhang_mm = [-0.5, 0.5]
 
 [operating_conditions]
 min_voltage_v = 0.0

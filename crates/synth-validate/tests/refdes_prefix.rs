@@ -143,3 +143,82 @@ board \"t\" {
     let flagged = name_004(&diags);
     assert!(flagged.is_empty(), "U is the FPGA letter: {flagged:?}");
 }
+
+/// A part in a user `sheet {}` block is judged on its whole refdes: `J_SOIL1`
+/// is a connector called `J`, not one called `SOIL`, and `R_FB1` a resistor.
+#[test]
+fn an_underscored_refdes_in_a_user_sheet_is_judged_whole() {
+    let src = "\
+board \"t\" {
+  sheet \"Sensors\" {
+    component J_SOIL1: connector \"header_1x4\"
+    component R_FB1: resistor \"r_generic_0603\"
+  }
+  connect J_SOIL1.p1 -> R_FB1.p1
+}
+";
+    let diags = validate(src);
+    let flagged = name_004(&diags);
+    assert!(
+        flagged.is_empty(),
+        "a user sheet's underscored refdes must not warn: {flagged:?}"
+    );
+}
+
+/// A module instance prefixes its parts (`PU_R1`): the letter after the
+/// instance prefix is the one judged.
+#[test]
+fn a_module_instance_part_is_judged_after_its_prefix() {
+    let src = "\
+board \"t\" {
+  module \"Pullups\" (vdd: power, sda: bidirectional) {
+    component R1: resistor \"r_generic_0402\"
+    connect R1.p1 -> sda
+    connect R1.p2 -> vdd
+  }
+  component J1: connector \"header_1x4\"
+  power \"+3V3\" 3.3v { J1.p1 }
+  use \"Pullups\" as PU {
+    vdd -> \"+3V3\"
+    sda -> \"I2C_SDA\"
+  }
+  connect J1.p2 -> \"I2C_SDA\"
+}
+";
+    let diags = validate(src);
+    let flagged = name_004(&diags);
+    assert!(
+        flagged.is_empty(),
+        "a module part's local refdes must be judged: {flagged:?}"
+    );
+    // The same module with a misnamed part warns, so the instance really was
+    // expanded and checked rather than skipped.
+    let misnamed = validate(&src.replace("R1", "X1"));
+    let flagged = name_004(&misnamed);
+    assert_eq!(flagged.len(), 1, "{flagged:?}");
+    assert!(
+        flagged[0]
+            .found
+            .as_deref()
+            .is_some_and(|f| f.contains("PU_X1")),
+        "{flagged:?}"
+    );
+}
+
+/// A sheet part whose letter is wrong both whole and after the last `_` still
+/// warns: the second chance does not silence a real misnaming.
+#[test]
+fn a_sheet_part_wrong_either_way_still_warns() {
+    let src = "\
+board \"t\" {
+  sheet \"Power\" {
+    component X_FB1: resistor \"r_generic_0603\"
+    component C1: capacitor \"c_generic_0603\"
+  }
+  connect X_FB1.p1 -> C1.p1
+}
+";
+    let diags = validate(src);
+    let flagged = name_004(&diags);
+    assert_eq!(flagged.len(), 1, "{flagged:?}");
+}

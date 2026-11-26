@@ -55,6 +55,7 @@ pub mod freerouting;
 pub mod island_vias;
 pub mod kicad_routing_tools;
 pub mod label_vias;
+pub mod length_tune;
 pub mod outcomes;
 pub mod process;
 pub mod quality;
@@ -70,8 +71,8 @@ use tracing::{debug, info, warn};
 
 pub use capability::{RouterCapability, discover};
 pub use contract::{
-    FabricationPolicy, FastrouteOptions, FreeroutingOptions, KiCadRoutingToolsOptions,
-    KrtEscalation, NetLayers, RouteRequest, RouterEngine, RouterLimits,
+    DiffPairRequest, FabricationPolicy, FastrouteOptions, FreeroutingOptions,
+    KiCadRoutingToolsOptions, KrtEscalation, NetLayers, RouteRequest, RouterEngine, RouterLimits,
 };
 pub use failure::{RouterFailure, RouterFailureReason, RouterStage};
 pub use quality::RouteQuality;
@@ -594,6 +595,10 @@ pub fn finalize_candidate(
     let (stub_blocking, stub_unavailable) = repair_dropped_stubs(&candidate.candidate_path);
     repair_blocking.extend(stub_blocking);
     repair_unavailable.extend(stub_unavailable);
+    // Length-match the declared groups and pairs on the routed copper, before
+    // it is judged: the meanders face the same DRC and skew checks as the
+    // engine's own tracks.
+    let length_tuning = tune_lengths(request, &candidate.candidate_path, &mut repair_unavailable);
     let mut repair_advisory: Vec<String> = Vec::new();
     let mut ground = island_vias::Ground::new(&request.ground_nets)
         .with_fine_pitch_advisory(request.fine_pitch_return_via_advisory);
@@ -716,6 +721,46 @@ pub fn finalize_candidate(
         failure: None,
         escape: Vec::new(),
         recommended_routing_order,
+        length_tuning,
+    }
+}
+
+/// Run the length-tuning pass when the request declares anything to tune.
+fn tune_lengths(
+    request: &RouteRequest,
+    candidate: &Path,
+    unavailable: &mut Vec<String>,
+) -> Option<length_tune::TuneReport> {
+    let pairs: Vec<DiffPairRequest> = request
+        .diff_pairs
+        .iter()
+        .filter(|pair| pair.declares_skew())
+        .cloned()
+        .collect();
+    if request.match_groups.is_empty() && pairs.is_empty() {
+        return None;
+    }
+    let rules = length_tune::TuneRules {
+        clearance_nm: request.policy.min_clearance_nm.max(1),
+        delay: request.length_delay.clone(),
+        ..length_tune::TuneRules::default()
+    };
+    match length_tune::tune_file(candidate, &request.match_groups, &pairs, &rules) {
+        Ok(report) => {
+            if report.added_nm() > 0 {
+                info!(
+                    "length tuning added {:.2} mm of meander; every group in budget: {}",
+                    synth_geometry::nm_to_mm(report.added_nm()),
+                    report.all_met()
+                );
+            }
+            Some(report)
+        }
+        Err(detail) => {
+            warn!("length tuning did not run: {detail}");
+            unavailable.push(format!("length tuning did not run: {detail}"));
+            None
+        }
     }
 }
 

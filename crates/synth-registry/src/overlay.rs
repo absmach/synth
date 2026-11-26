@@ -21,6 +21,7 @@ use crate::{ElectricalType, Part, Pin, PinCapability, ProvenanceSource};
 ///
 /// `header` is prepended as `#` comments; callers use it to record what
 /// produced the file, which is the first thing a reviewer wants to know.
+#[allow(clippy::too_many_lines)]
 pub fn part_to_toml(part: &Part, header: &[&str]) -> String {
     let mut out = String::new();
     for line in header {
@@ -78,6 +79,11 @@ pub fn part_to_toml(part: &Part, header: &[&str]) -> String {
             ("breakdown_voltage_min_v", c.breakdown_voltage_min_v),
             ("breakdown_voltage_max_v", c.breakdown_voltage_max_v),
             ("breakdown_test_current_ma", c.breakdown_test_current_ma),
+            ("feedback_vref_min_v", c.feedback_vref_min_v),
+            ("feedback_vref_max_v", c.feedback_vref_max_v),
+            ("feedback_leakage_max_a", c.feedback_leakage_max_a),
+            ("load_regulation_pct", c.load_regulation_pct),
+            ("line_regulation_pct", c.line_regulation_pct),
         ] {
             if let Some(v) = value {
                 let _ = writeln!(out, "{key} = {v}");

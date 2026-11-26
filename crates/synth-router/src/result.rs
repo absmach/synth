@@ -393,6 +393,11 @@ pub struct RouteReport {
     /// `routing_order`: it changes the search order, never the verdict.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recommended_routing_order: Vec<String>,
+    /// What the length-tuning pass did to the match groups and pairs: added
+    /// length, meander area, regions and corridor exits per net, before and
+    /// after spread. `None` when the board declares nothing to tune.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub length_tuning: Option<crate::length_tune::TuneReport>,
 }
 
 impl RouteReport {
@@ -424,6 +429,7 @@ impl RouteReport {
             validation: None,
             escape: Vec::new(),
             recommended_routing_order: Vec::new(),
+            length_tuning: None,
             failure: Some(failure.clone()),
         }
     }
@@ -461,6 +467,7 @@ impl RouteReport {
             validation: None,
             escape: Vec::new(),
             recommended_routing_order: Vec::new(),
+            length_tuning: None,
             failure: Some(failure),
         }
     }
@@ -711,6 +718,7 @@ mod tests {
             validation: None,
             escape: Vec::new(),
             recommended_routing_order: Vec::new(),
+            length_tuning: None,
             failure: Some(
                 RouterFailure::for_stage(
                     RouterEngine::KiCadRoutingTools,
@@ -754,6 +762,7 @@ mod tests {
             }),
             escape: Vec::new(),
             recommended_routing_order: Vec::new(),
+            length_tuning: None,
             failure: None,
         };
 
@@ -865,6 +874,7 @@ mod portfolio_tests {
             failure: None,
             escape: Vec::new(),
             recommended_routing_order: Vec::new(),
+            length_tuning: None,
         }
     }
 

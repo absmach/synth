@@ -1,0 +1,13 @@
+board "i2c_pullups_fixture" {
+  layers 2
+  component J1: connector "header_1x4"
+  power "+3V3" 3.3v { J1.p1 }
+  net "GND" { J1.p4 }
+  use "I2cPullups" as PU {
+    vdd -> "+3V3"
+    sda -> "I2C_SDA"
+    scl -> "I2C_SCL"
+  }
+  connect J1.p2 -> "I2C_SDA"
+  connect J1.p3 -> "I2C_SCL"
+}

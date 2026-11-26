@@ -96,6 +96,33 @@ fn run(
     window: (f64, f64),
     tol: Option<&str>,
 ) -> Vec<Diagnostic> {
+    run_with(regulator, regulator_id, window, tol, "")
+}
+
+fn run_with(
+    regulator: &str,
+    regulator_id: &str,
+    window: (f64, f64),
+    tol: Option<&str>,
+    value_suffix: &str,
+) -> Vec<Diagnostic> {
+    run_values(
+        regulator,
+        regulator_id,
+        window,
+        tol,
+        (&format!("10k{value_suffix}"), &format!("20k{value_suffix}")),
+    )
+}
+
+/// Like [`run_with`], with the two leg values written out in full.
+fn run_values(
+    regulator: &str,
+    regulator_id: &str,
+    window: (f64, f64),
+    tol: Option<&str>,
+    (r1, r2): (&str, &str),
+) -> Vec<Diagnostic> {
     let load = load(window);
     let registry = synth_registry::load_from_strs(&[
         (&format!("{regulator_id}.synth.toml"), regulator),
@@ -109,8 +136,8 @@ fn run(
   layers 2
   component U1: regulator "{regulator_id}"
   component U2: ic "t_core_load"
-  component R1: resistor "t_res" value "10k"{tol}
-  component R2: resistor "t_res" value "20k"{tol}
+  component R1: resistor "t_res" value "{r1}"{tol}
+  component R2: resistor "t_res" value "{r2}"{tol}
   connect R1.p1 -> U2.vdd
   connect R1.p2 -> U1.fb
   connect U1.fb -> R2.p1
@@ -125,8 +152,23 @@ fn run(
     let board = lowered.board.as_ref().expect("board must lower");
     synth_validate::run_erc(board, &filename)
         .into_iter()
-        .filter(|d| d.code == "E-SYNTH-POWER-013")
+        .filter(|d| {
+            matches!(
+                d.code.as_str(),
+                "E-SYNTH-POWER-013" | "E-SYNTH-POWER-014" | "E-SYNTH-POWER-015"
+            )
+        })
         .collect()
+}
+
+/// Like [`run`], with the tolerance written into the value string.
+fn run_value(
+    regulator: &str,
+    regulator_id: &str,
+    window: (f64, f64),
+    tol: &str,
+) -> Vec<Diagnostic> {
+    run_with(regulator, regulator_id, window, None, &format!(" {tol}"))
 }
 
 #[test]
@@ -139,33 +181,98 @@ fn a_window_that_holds_the_worst_case_gives_no_finding() {
 fn one_percent_resistors_leave_a_one_percent_window() {
     let d = run(REGULATOR, "t_adj_reg", (1.188, 1.212), Some("1%"));
     assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-013");
     let found = d[0].found.as_deref().expect("found text");
     assert!(found.contains("1.1861 V to 1.2141 V"), "{found}");
+    // 0.5 % parts: 0.796 * (1 + 9.95k / 20.1k) = 1.19004 V and
+    // 0.804 * (1 + 10.05k / 19.9k) = 1.21004 V, the loosest class that fits.
     assert!(
-        found.contains("0.1 % resistors give 1.1932 V to 1.2068 V"),
+        found.contains("0.5 % resistors give 1.1900 V to 1.2100 V"),
         "{found}"
     );
 }
 
 #[test]
 fn tenth_percent_resistors_clear_the_same_window() {
+    // 1.193205 V is 5.2 mV above 1.188 V, inside the default 0.5 % (6 mV)
+    // margin, so the error becomes a thin-margin warning.
     let d = run(REGULATOR, "t_adj_reg", (1.188, 1.212), Some("0.1%"));
-    assert!(d.is_empty(), "{d:?}");
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-014", "{d:?}");
+    assert!(!d[0].severity.is_blocking());
 }
 
 #[test]
-fn no_tolerance_data_means_no_finding() {
+fn a_wide_margin_gives_no_warning() {
+    let d = run(REGULATOR, "t_adj_reg", (1.164, 1.236), Some("0.1%"));
+    assert!(d.is_empty(), "{d:?}");
+}
+
+/// The acceptance case: a buck with 1 % parts feeding a core rail. The window
+/// is 1.2 V +/-1 % here because a +/-0.5 % reference already uses half of a
+/// tight window; the 1 % parts fail it and 0.1 % parts pass.
+#[test]
+fn switching_to_tenth_percent_clears_the_error() {
+    let one = run(REGULATOR, "t_adj_reg", (1.188, 1.212), Some("1%"));
+    assert!(one.iter().any(|d| d.code == "E-SYNTH-POWER-013"), "{one:?}");
+    let tenth = run(REGULATOR, "t_adj_reg", (1.188, 1.212), Some("0.1%"));
+    assert!(
+        tenth.iter().all(|d| d.code != "E-SYNTH-POWER-013"),
+        "{tenth:?}"
+    );
+}
+
+#[test]
+fn missing_tolerance_is_incomplete_evidence() {
     let d = run(REGULATOR, "t_adj_reg", (1.188, 1.212), None);
-    assert!(d.is_empty(), "{d:?}");
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-015");
+    let found = d[0].found.as_deref().expect("found text");
+    assert!(found.contains("a tolerance on R1"), "{found}");
+    assert!(found.contains("a tolerance on R2"), "{found}");
+}
+
+/// A leg whose value does not read as a resistance leaves the divider
+/// unanalysed; that is reported as missing evidence, not skipped.
+#[test]
+fn an_unreadable_leg_value_is_incomplete_evidence() {
+    let d = run_values(
+        REGULATOR,
+        "t_adj_reg",
+        (1.188, 1.212),
+        Some("1%"),
+        ("10k", "DNP"),
+    );
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-015");
+    let found = d[0].found.as_deref().expect("found text");
+    assert!(
+        found.contains("a readable resistance on R2 (value `DNP` does not parse)"),
+        "{found}"
+    );
 }
 
 #[test]
-fn no_reference_range_means_no_finding() {
+fn missing_reference_range_is_incomplete_evidence() {
     let d = run(
         REGULATOR_NO_VREF,
         "t_adj_reg_novref",
         (1.188, 1.212),
         Some("1%"),
     );
-    assert!(d.is_empty(), "{d:?}");
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-015");
+    assert!(
+        d[0].found
+            .as_deref()
+            .is_some_and(|f| f.contains("reference range")),
+        "{d:?}"
+    );
+}
+
+#[test]
+fn a_tolerance_in_the_value_string_counts() {
+    let d = run_value(REGULATOR, "t_adj_reg", (1.188, 1.212), "1%");
+    assert_eq!(d.len(), 1, "{d:?}");
+    assert_eq!(d[0].code, "E-SYNTH-POWER-013");
 }

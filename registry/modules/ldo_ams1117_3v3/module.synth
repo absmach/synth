@@ -1,0 +1,23 @@
+// AMS1117-3.3 fixed LDO with the data sheet's input and output capacitors,
+// plus a second 10 uF on each side for the registry's decoupling rule.
+module "LdoAms1117" (vin: power, vout: power, gnd: ground) {
+  param c_in: capacitance = 10uF
+  param c_out: capacitance = 22uF fixed
+  component U1: regulator "ams1117_3v3"
+  component C1: capacitor "c_generic_0805" value $c_in
+  component C2: capacitor "c_generic_1206" value $c_out
+  component C3: capacitor "c_generic_0805" value "10uF"
+  component C4: capacitor "c_generic_0805" value "10uF"
+
+  connect U1.vin -> vin
+  connect U1.vout -> vout
+  connect U1.gnd -> gnd
+  connect C1.p1 -> vin
+  connect C1.p2 -> gnd
+  connect C2.p1 -> vout
+  connect C2.p2 -> gnd
+  connect C3.p1 -> vin
+  connect C3.p2 -> gnd
+  connect C4.p1 -> vout
+  connect C4.p2 -> gnd
+}

@@ -12,6 +12,9 @@ height_mm = 3.9
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
+# LMR38010 datasheet SNVSBM3B, Electrical Characteristics: VREF 0.985 / 1 / 1.015 V over TJ (FPWM).
+feedback_vref_min_v = 0.985
+feedback_vref_max_v = 1.015
 min_voltage_v = 4.2
 max_voltage_v = 80.0
 max_current_ma = 1000.0

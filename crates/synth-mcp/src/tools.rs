@@ -61,6 +61,49 @@ pub fn list_tools() -> Vec<McpToolInfo> {
             }),
         },
         McpToolInfo {
+            name: "synth_search_modules".into(),
+            description: "Search the vetted reference-subcircuit library (registry/modules): circuits copied 1:1 from a data sheet or application note, each with provenance and a fixture that validates clean. Returns id, title, tags and the reference each one copies. Prefer a reference module over drawing a power stage, USB port or crystal circuit by hand.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Words to match against id, title, description and tags; every word must match. Empty lists every module." },
+                    "modules_path": { "type": "string", "description": "Optional module library directory" }
+                }
+            }),
+        },
+        McpToolInfo {
+            name: "synth_get_module".into(),
+            description: "Get one reference module: ports, parameters (which are fixed by the reference and which may vary, with ranges), validated values, notes, provenance, and the .synth source. Overriding a fixed parameter needs a recorded deviation.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "module_id": { "type": "string", "description": "Module id from synth_search_modules" },
+                    "modules_path": { "type": "string", "description": "Optional module library directory" }
+                },
+                "required": ["module_id"]
+            }),
+        },
+        McpToolInfo {
+            name: "synth_instantiate_module".into(),
+            description: "Instantiate a reference module in a design: adds the module declaration once (stamped with its id and version) and a `use` block binding every port to a net. Refuses an unbound or unknown port, an unknown parameter, and a fixed parameter overridden without a deviation reason. Writes the file when file_path is given; returns the new source either way. Every deviation then appears in synth_validate as E-SYNTH-MODULE-009.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "module_id": { "type": "string" },
+                    "label": { "type": "string", "description": "Instance label; also the refdes prefix (`LDO1_`)" },
+                    "bindings": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Port name to net name, for every port" },
+                    "params": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Parameter overrides, e.g. {\"c_in\": \"22uF\"}" },
+                    "deviations": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Reason per overridden fixed parameter, e.g. {\"c_out\": \"polymer part\"}" },
+                    "instance_deviation": { "type": "string", "description": "A deviation of the instance as a whole, such as a changed topology" },
+                    "source": { "type": "string", "description": "Design source, when not reading file_path" },
+                    "file_path": { "type": "string", "description": "Design file to read and rewrite" },
+                    "dry_run": { "type": "boolean", "description": "Return the new source without writing file_path" },
+                    "modules_path": { "type": "string", "description": "Optional module library directory" }
+                },
+                "required": ["module_id", "label", "bindings"]
+            }),
+        },
+        McpToolInfo {
             name: "synth_validate".into(),
             description: "Compile and validate a SynthSpec design file or string. Returns structured diagnostics with byte spans and patch suggestions.".into(),
             input_schema: serde_json::json!({
@@ -809,6 +852,9 @@ fn dispatch_tool(
         "synth_language_reference" => Ok(execute_language_reference(args)),
         "synth_search_registry" => execute_search_registry(args, default_registry),
         "synth_validate" => execute_validate(args, default_registry),
+        "synth_search_modules" => execute_search_modules(args, default_registry),
+        "synth_get_module" => execute_get_module(args, default_registry),
+        "synth_instantiate_module" => execute_instantiate_module(args, default_registry),
         "synth_recent_calls" => crate::call_log::execute_recent_calls(args),
         "synth_server_stats" => crate::call_log::execute_server_stats(args),
         "synth_load_tools" => execute_load_tools(args),
@@ -1259,8 +1305,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "net \"I2C_SCL\" { U1.scl U2.pb6 }"
                 },
                 {
-                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [impedance <value><unit>] [current <value><unit>] [plane] [max_length <value><unit>] [max_skew <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [edge_rate <slow|medium|fast>] [layers \"<layer>\", …] [color \"#rrggbb\"] }",
-                    "description": "Routing, signal-integrity and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. `plane` asks for a copper pour, `impedance` sets the target characteristic impedance, `current` the current budget, `max_length`/`max_skew` the routed-length budgets, and `edge_rate` the return-via tier. Use `class \"<name>\"` on `connect`, `net` or `power` to join the class.",
+                    "form": "netclass \"<name>\" { [trace_width <value><unit>] [clearance <value><unit>] [impedance <value><unit>] [current <value><unit>] [plane] [max_length <value><unit>] [max_skew <value><unit>] [via_diameter <value><unit>] [via_drill <value><unit>] [edge_rate <slow|medium|fast>] [layers \"<layer>\", …] [voltage <value><unit>] [protected|unprotected] [color \"#rrggbb\"] }",
+                    "description": "Routing, signal-integrity and colour class. Nets are auto-classified (Power, Ground, I2C, SPI, UART, USB, Clock, Reset) and coloured from a fixed palette; a declared class joined with `class \"<name>\"` overrides both. `color` sets the schematic wire/label hue and the PCB net colour. `layers` pins the class's nets to KiCad copper layers (`\"F.Cu\"`, `\"In1.Cu\"`, `\"B.Cu\"`): the router keeps them there, the export writes it as a KiCad custom rule, and copper elsewhere is E-SYNTH-DRC-023. `plane` asks for a copper pour, `impedance` sets the target characteristic impedance, `current` the current budget, `max_length`/`max_skew` the routed-length budgets, `edge_rate` the return-via tier, and `voltage` the working voltage voltage-aware clearance (E-SYNTH-DRC-025) spaces the nets by. `unprotected` marks an unfused input rail for the extra clearance margin; `protected` clears it from a connector rail that is fused off-board. Use `class \"<name>\"` on `connect`, `net` or `power` to join the class.",
                     "example": "netclass \"PWR\" { trace_width 0.4mm clearance 0.25mm color \"#d55e00\" }"
                 },
                 {
@@ -1300,7 +1346,7 @@ fn execute_language_reference(_args: &Value) -> Value {
                 },
                 {
                     "form": "interface <Name> { <signal>* }   |   bus <Name> { <member>* }   |   use <Module> as <Prefix> [( <param> = <value> )]   |   bind <Prefix>.<Port> -> <target>",
-                    "description": "Module plumbing. `interface` names a signal bundle a port can carry, `bus` groups member nets under one name, `use` instantiates a module under a refdes prefix, and `bind` wires an instance port to a net or interface.",
+                    "description": "Module plumbing. `interface` names a signal bundle a port can carry, `bus` groups member nets under one name, `use` instantiates a module under a refdes prefix, and `bind` wires an instance port to a net or interface. A module `param` marked `fixed` (`param c_out: capacitance = 22uF fixed`) is part of the reference it copies: overriding it needs `deviation \"<reason>\"` after the value (`use \"LdoAms1117\" as LDO1 (c_out = 47uF deviation \"polymer part\")`), and a bare `deviation \"<reason>\"` records an instance-level exception. synth_validate lists every deviation as E-SYNTH-MODULE-009. Vetted modules: synth_search_modules / synth_instantiate_module.",
                     "example": "use LedBank as LB1 ( count = 4 )"
                 }
             ],
@@ -1379,6 +1425,129 @@ fn execute_search_registry(args: &Value, default_registry: Option<&Path>) -> Res
         "total_matches": total_matches,
         "returned_matches": matches.len(),
         "parts": matches
+    }))
+}
+
+/// The reference-module library: `modules_path`, else `modules/` beside the
+/// part registry, else the library this build ships.
+fn load_reference_modules(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Vec<synth_registry::reference_modules::ReferenceModule>, String> {
+    use synth_registry::reference_modules::{default_modules_dir, load_modules};
+    let dir = args["modules_path"]
+        .as_str()
+        .map(PathBuf::from)
+        .or_else(|| {
+            default_registry
+                .and_then(Path::parent)
+                .map(|root| root.join("modules"))
+                .filter(|d| d.is_dir())
+        })
+        .unwrap_or_else(default_modules_dir);
+    load_modules(&dir).map_err(|e| format!("Could not load the module library: {e}"))
+}
+
+fn module_summary(m: &synth_registry::reference_modules::ReferenceModule) -> Value {
+    serde_json::json!({
+        "id": m.id,
+        "module": m.module,
+        "version": m.version,
+        "title": m.title,
+        "tags": m.tags,
+        "reference": format!("{}, {}", m.provenance.source, m.provenance.section),
+    })
+}
+
+fn execute_search_modules(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    let modules = load_reference_modules(args, default_registry)?;
+    let hits =
+        synth_registry::reference_modules::search(&modules, args["query"].as_str().unwrap_or(""));
+    Ok(serde_json::json!({
+        "total_matches": hits.len(),
+        "modules": hits.iter().map(|m| module_summary(m)).collect::<Vec<_>>(),
+    }))
+}
+
+fn execute_get_module(args: &Value, default_registry: Option<&Path>) -> Result<Value, String> {
+    let id = args["module_id"]
+        .as_str()
+        .ok_or_else(|| "Missing required parameter 'module_id'".to_string())?;
+    let modules = load_reference_modules(args, default_registry)?;
+    let module = modules
+        .iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| format!("No reference module `{id}`; call synth_search_modules"))?;
+    serde_json::to_value(module).map_err(|e| e.to_string())
+}
+
+/// Read the object argument `name` as string pairs. Absent or `null` is
+/// empty; anything else that is not an object of strings is an error, so a
+/// value like `{"c_out": 47}` is refused rather than silently dropped.
+fn string_map(args: &Value, name: &str) -> Result<Vec<(String, String)>, String> {
+    let value = &args[name];
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("'{name}' must be an object of strings, got {value}"))?;
+    object
+        .iter()
+        .map(|(k, v)| {
+            v.as_str()
+                .map(|s| (k.clone(), s.to_string()))
+                .ok_or_else(|| {
+                    format!(
+                        "'{name}.{k}' must be a string, got {v}; quote it, e.g. \"{k}\": \"{}\"",
+                        v.to_string().trim_matches('"')
+                    )
+                })
+        })
+        .collect()
+}
+
+fn execute_instantiate_module(
+    args: &Value,
+    default_registry: Option<&Path>,
+) -> Result<Value, String> {
+    use synth_registry::reference_modules::{Instantiation, instantiate};
+    let id = args["module_id"]
+        .as_str()
+        .ok_or_else(|| "Missing required parameter 'module_id'".to_string())?;
+    let label = args["label"]
+        .as_str()
+        .ok_or_else(|| "Missing required parameter 'label'".to_string())?;
+    let modules = load_reference_modules(args, default_registry)?;
+    let module = modules
+        .iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| format!("No reference module `{id}`; call synth_search_modules"))?;
+    let design = get_source_from_args(args)?;
+    let mut deviations = string_map(args, "deviations")?;
+    if let Some(reason) = args["instance_deviation"].as_str() {
+        deviations.push((String::new(), reason.to_string()));
+    }
+    let request = Instantiation {
+        label: label.to_string(),
+        bindings: string_map(args, "bindings")?,
+        params: string_map(args, "params")?,
+        deviations,
+    };
+    let source = instantiate(&design, module, &request).map_err(|e| e.to_string())?;
+    let written = match args["file_path"].as_str() {
+        Some(path) if !args["dry_run"].as_bool().unwrap_or(false) => {
+            std::fs::write(path, &source).map_err(|e| format!("Could not write '{path}': {e}"))?;
+            Some(path.to_string())
+        }
+        _ => None,
+    };
+    Ok(serde_json::json!({
+        "status": "ok",
+        "module": module_summary(module),
+        "label": label,
+        "written_to": written,
+        "source": source,
     }))
 }
 
@@ -3634,6 +3803,20 @@ fn execute_review_schematic(
         "warning_count": warning_count,
         "readability_findings": readability,
         "repair_hints": repair_hints(&layout, &compiled.board),
+        // Every recorded exception to a reference module, in one list the
+        // reviewer reads first (also E-SYNTH-MODULE-009 in `diagnostics`).
+        "module_deviations": compiled
+            .board
+            .modules
+            .iter()
+            .flat_map(|m| m.deviations.iter().map(move |d| serde_json::json!({
+                "module": m.name,
+                "instance": d.instance,
+                "param": d.param,
+                "value": d.value,
+                "reason": d.reason,
+            })))
+            .collect::<Vec<_>>(),
         "diagnostics": diagnostics,
         "layout": {
             "sheet_size": format!("{:?}", layout.sheet_size),
@@ -3918,7 +4101,12 @@ fn routed_signal_integrity(board: &synth_ir::Board, pcb_path: &Path) -> Vec<synt
         board.layers,
     );
     let stackup = synth_geometry::StackupProfile::for_board(board);
-    synth_drc::check_signal_integrity(board, &routing, &profile, Some(&stackup))
+    let mut violations =
+        synth_drc::check_signal_integrity(board, &routing, &profile, Some(&stackup));
+    violations.extend(synth_drc::voltage_clearance::check_voltage_clearance(
+        board, &routed, &profile,
+    ));
+    violations
 }
 
 /// Whether an export is a release: routed, no blocking signal-integrity
@@ -5826,6 +6014,8 @@ fn ensure_footprint_dimensions(part: &mut synth_registry::Part) -> Result<(), St
         height_mm,
         courtyard_margin_mm: Some(synth_registry::footprint_svg::COURTYARD_MARGIN_MM),
         mating_face: None,
+        mating_plane_offset_mm: None,
+        mating_overhang_mm: None,
         label_side: None,
         label_hidden: None,
     });

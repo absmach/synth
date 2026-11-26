@@ -52,6 +52,7 @@ pub mod anomaly;
 pub mod config;
 pub mod deep_erc;
 pub mod divider_tolerance;
+mod module_deviations;
 pub use anomaly::{BoardFeatureVec, GraphAnomalyDetectorRule, extract_features};
 pub use config::{ErcConfig, PinConflictTable};
 
@@ -207,6 +208,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::CeramicDcBiasDeratingRule::new(config)),
         Box::new(RegulatorFeedbackOnSwitchNodeRule),
         Box::new(divider_tolerance::FeedbackDividerToleranceRule),
+        Box::new(module_deviations::ModuleDeviationsRule),
     ]
 }
 
@@ -2429,12 +2431,24 @@ impl ErcRule for RefdesPrefixRule {
                 continue;
             };
             // Leading letter run of the refdes (e.g. "SW3" -> "SW").
-            let prefix: String = component
-                .refdes
-                .chars()
-                .take_while(char::is_ascii_alphabetic)
-                .collect();
-            if accepted.contains(&prefix.as_str()) {
+            let prefix = letter_run(&component.refdes);
+            if accepted.contains(&prefix) {
+                continue;
+            }
+            // A module instance prefixes every refdes with its label
+            // (`CH1_U1`) and puts its parts on a sheet named after it, so on
+            // a sheet the run after the last `_` is judged too. Only as a
+            // second chance: a part in a user `sheet {}` block is on a sheet
+            // as well, and `J_SOIL1` there is a connector named `J`, not
+            // `SOIL`. The board does not record which sheets are module
+            // instances, and a `use` may set its own prefix, so the whole
+            // refdes cannot be told apart from an instance prefix by shape.
+            let local_accepted = component.sheet.is_some()
+                && component
+                    .refdes
+                    .rsplit_once('_')
+                    .is_some_and(|(_, local)| accepted.contains(&letter_run(local)));
+            if local_accepted {
                 continue;
             }
             out.push(
@@ -2467,6 +2481,14 @@ impl ErcRule for RefdesPrefixRule {
         }
         out
     }
+}
+
+/// The leading run of ASCII letters in a refdes (`"SW3"` gives `"SW"`).
+fn letter_run(refdes: &str) -> &str {
+    let end = refdes
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(refdes.len());
+    &refdes[..end]
 }
 
 // -----------------------------------------------------------------------------
@@ -4874,6 +4896,10 @@ mod tests {
             current: None,
             plane: false,
             layers: Vec::new(),
+            voltage: None,
+            protected: None,
+            target_length: None,
+            length_reference: None,
             source_span: Span::new(0, 0),
         }];
         board

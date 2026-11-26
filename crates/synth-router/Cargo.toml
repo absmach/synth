@@ -20,6 +20,7 @@ synth-diagnostics = { workspace = true }
 synth-drc = { workspace = true }
 synth-geometry = { workspace = true }
 synth-ir = { workspace = true }
+synth-pcb = { workspace = true }
 synth-place = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

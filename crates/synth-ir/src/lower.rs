@@ -909,6 +909,7 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn lower_netclass(&mut self, n: &NetclassStmt) -> NetClass {
         use synth_ast::NetclassAttr;
         let mut trace_width: Option<Length> = None;
@@ -923,6 +924,10 @@ impl<'a> LowerCtx<'a> {
         let mut max_skew: Option<Length> = None;
         let mut edge_rate: Option<EdgeRate> = None;
         let mut layers: Vec<String> = Vec::new();
+        let mut voltage: Option<Voltage> = None;
+        let mut protected: Option<bool> = None;
+        let mut target_length: Option<Length> = None;
+        let mut length_reference: Option<String> = None;
         for attr in &n.attrs {
             match attr {
                 NetclassAttr::TraceWidth(v) => match Length::try_from(v) {
@@ -961,6 +966,16 @@ impl<'a> LowerCtx<'a> {
                 // The parser accepts only `slow`/`fast`, so this is a
                 // belt-and-braces fallback to the unknown (fast) default.
                 NetclassAttr::EdgeRate { rate, .. } => edge_rate = EdgeRate::parse(rate),
+                NetclassAttr::Voltage(v) => match Voltage::try_from(v) {
+                    Ok(volts) => voltage = Some(volts),
+                    Err(e) => self.emit_unit_error(&e, "netclass voltage"),
+                },
+                NetclassAttr::Protection { protected: p } => protected = Some(*p),
+                NetclassAttr::TargetLength(v) => match Length::try_from(v) {
+                    Ok(l) => target_length = Some(l),
+                    Err(e) => self.emit_unit_error(&e, "netclass target_length"),
+                },
+                NetclassAttr::Reference(net) => length_reference = Some(net.clone()),
                 NetclassAttr::Layers { layers: names } => {
                     for name in names {
                         if !layers.contains(name) {
@@ -1007,6 +1022,10 @@ impl<'a> LowerCtx<'a> {
             max_skew,
             edge_rate,
             layers,
+            voltage,
+            protected,
+            target_length,
+            length_reference,
             source_span: n.span,
         }
     }

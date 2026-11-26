@@ -1,0 +1,11 @@
+// I2C bus pull-ups: one resistor from each line to the bus supply.
+module "I2cPullups" (vdd: power, sda: bidirectional, scl: bidirectional) {
+  param r_pull: resistance = 4.7kohm
+  component R1: resistor "r_generic_0402" value $r_pull
+  component R2: resistor "r_generic_0402" value $r_pull
+
+  connect R1.p1 -> sda
+  connect R1.p2 -> vdd
+  connect R2.p1 -> scl
+  connect R2.p2 -> vdd
+}

@@ -1145,7 +1145,7 @@ pub fn trim_outline_to_grid(board: &Board, placement: &mut Placement) {
             hard[3] = hard[3].max(copper.max.y_nm);
         }
         if let Some(side) = flush_edge_index(board, placed.id) {
-            let reach = connector_reach(rect, copper.unwrap_or(rect));
+            let reach = mating_reach(component, placed, rect, copper.unwrap_or(rect));
             let reach = [
                 reach.min.x_nm,
                 reach.min.y_nm,
@@ -1240,6 +1240,93 @@ fn connector_reach(real: Rect, copper: Rect) -> Rect {
     )
 }
 
+/// [`connector_reach`], with the mating side held to the connector's declared
+/// mating plane.
+///
+/// A part that declares `mating_plane_offset_mm` states how far past the edge
+/// its plane may sit. The courtyard-flush edge is kept when it already puts
+/// the plane in that range, so a part whose stock courtyard matches its range
+/// docks exactly as before; otherwise the edge moves to the nearest position
+/// in range. That is what lets a mid-mount receptacle hang past the edge by
+/// the amount its footprint asks for instead of being recessed behind its
+/// courtyard rim.
+fn mating_reach(
+    component: &synth_ir::Component,
+    placed: &ComponentPlacement,
+    real: Rect,
+    copper: Rect,
+) -> Rect {
+    let mut reach = connector_reach(real, copper);
+    let Some(plane) = floorplan::mating_plane(component, placed) else {
+        return reach;
+    };
+    let (lo, hi) = plane.overhang_nm;
+    let c = plane.coord_nm;
+    // The copper keeps its edge clearance whatever the plane asks: an edge
+    // pulled in past a pad is a fab violation, and a part whose copper sits
+    // past its own mating plane is left for E-SYNTH-DRC-024 to report.
+    let clearance = mm_to_nm(COPPER_EDGE_CLEARANCE_MM);
+    match plane.side {
+        floorplan::BoardEdge::Left => {
+            reach.min.x_nm = reach
+                .min
+                .x_nm
+                .clamp(c + lo, c + hi)
+                .min(copper.min.x_nm - clearance);
+        }
+        floorplan::BoardEdge::Top => {
+            reach.min.y_nm = reach
+                .min
+                .y_nm
+                .clamp(c + lo, c + hi)
+                .min(copper.min.y_nm - clearance);
+        }
+        floorplan::BoardEdge::Right => {
+            reach.max.x_nm = reach
+                .max
+                .x_nm
+                .clamp(c - hi, c - lo)
+                .max(copper.max.x_nm + clearance);
+        }
+        floorplan::BoardEdge::Bottom => {
+            reach.max.y_nm = reach
+                .max
+                .y_nm
+                .clamp(c - hi, c - lo)
+                .max(copper.max.y_nm + clearance);
+        }
+    }
+    reach
+}
+
+/// The side a wired connector with no hint docks on, and its reach: the side
+/// it sticks out of the body most.
+fn docked_side_and_reach(
+    board: &Board,
+    component: &synth_ir::Component,
+    placed: &ComponentPlacement,
+    body: Option<Rect>,
+) -> Option<(usize, [i64; 4])> {
+    let body = body?;
+    let real = sidecar_courtyard_rect(board, component, placed);
+    let copper = exported_pad_bounds(component, placed).unwrap_or(real);
+    let flush = mating_reach(component, placed, real, copper);
+    let flush = [
+        flush.min.x_nm,
+        flush.min.y_nm,
+        flush.max.x_nm,
+        flush.max.y_nm,
+    ];
+    let reaches = [
+        body.min.x_nm - real.min.x_nm,
+        body.min.y_nm - real.min.y_nm,
+        real.max.x_nm - body.max.x_nm,
+        real.max.y_nm - body.max.y_nm,
+    ];
+    let side = (0..4).max_by_key(|&side| reaches[side])?;
+    Some((side, flush))
+}
+
 /// The sides a flush connector's reach bounds, and the reach value on each.
 ///
 /// A connector sits where the solver or a sidecar put it, which need not be
@@ -1261,7 +1348,7 @@ fn flush_sides_and_reach(
     }
     let real = sidecar_courtyard_rect(board, component, placed);
     let copper = exported_pad_bounds(component, placed).unwrap_or(real);
-    let flush = connector_reach(real, copper);
+    let flush = mating_reach(component, placed, real, copper);
     let flush = [
         flush.min.x_nm,
         flush.min.y_nm,
@@ -1319,9 +1406,17 @@ fn outline_with_flush_connectors(
             ))
         })
         .collect();
+    // The body is the circuit the connectors dock around. A board feature (a
+    // corner mounting hole, a fiducial) sits wherever the outline's corners
+    // are, so counting it made a connector look as if it did not reach its
+    // hinted edge: a hole level with a bottom connector left "bottom" with no
+    // reach, the hint was dropped for the side the connector stuck out of
+    // most, and the hole's rim set the bottom edge past the connector (#334).
     let body = parts
         .iter()
-        .filter(|(component, _, _, _)| !is_flush(component))
+        .filter(|(component, _, _, _)| {
+            !is_flush(component) && !synth_layout::is_board_feature_kind(&component.kind)
+        })
         .map(|(_, _, rect, _)| *rect)
         .reduce(|a, b| {
             Rect::new(
@@ -1380,25 +1475,8 @@ fn outline_with_flush_connectors(
         } else if is_flush(component) {
             // A wired connector with no hint still docks flush: no hint names
             // its edge, so take the side it sticks out of most.
-            let real = sidecar_courtyard_rect(board, component, placed);
-            let copper = exported_pad_bounds(component, placed).unwrap_or(real);
-            let flush = connector_reach(real, copper);
-            let flush = [
-                flush.min.x_nm,
-                flush.min.y_nm,
-                flush.max.x_nm,
-                flush.max.y_nm,
-            ];
-            if let Some(body) = body {
-                let reaches = [
-                    body.min.x_nm - real.min.x_nm,
-                    body.min.y_nm - real.min.y_nm,
-                    real.max.x_nm - body.max.x_nm,
-                    real.max.y_nm - body.max.y_nm,
-                ];
-                if let Some(side) = (0..4).max_by_key(|&side| reaches[side]) {
-                    reach[side] = flush[side];
-                }
+            if let Some((side, flush)) = docked_side_and_reach(board, component, placed, body) {
+                reach[side] = flush[side];
             }
         } else {
             for side in 0..4 {
@@ -3489,7 +3567,7 @@ fn flush_bounds_of_placements(
         }
         let rect = sidecar_courtyard_rect(board, component, placed);
         let copper = exported_pad_bounds(component, placed).unwrap_or(rect);
-        let flush = connector_reach(rect, copper);
+        let flush = mating_reach(component, placed, rect, copper);
         let Some(side) = component
             .placement_hint
             .as_ref()
@@ -8785,7 +8863,7 @@ fn edge_overhang(
             // outline keeps from it, as in `outline_with_flush_connectors`.
             if let (Some(_), Some(component)) = (edge, component) {
                 let copper = exported_pad_bounds(component, p).unwrap_or(real);
-                return (edge, connector_reach(real, copper));
+                return (edge, mating_reach(component, p, real, copper));
             }
             let margin = component.map_or(0, |c| {
                 if synth_layout::is_board_feature_kind(&c.kind) {
@@ -10529,6 +10607,152 @@ mod tests {
         let resolved = synth_ir::resolve_imports(ast, &loader, &file);
         let lowered = synth_ir::lower(&resolved.program, &registry, &file);
         lowered.board.expect("board")
+    }
+
+    /// A board of hand-written parts: no KiCad footprint, so each courtyard
+    /// is its body plus the declared rim and centred on the origin, and no
+    /// pads join the reach.
+    fn mechanical_board(connector_extra: &str, hole: bool) -> Board {
+        let conn = format!(
+            "id = \"t_conn\"\nkind = \"connector\"\n\
+             [footprint_dimensions]\nwidth_mm = 9.64\nheight_mm = 6.62\n\
+             courtyard_margin_mm = 0.25\nmating_face = \"bottom\"\n{connector_extra}\n\
+             [[pins]]\nname = \"p1\"\nnumber = \"1\"\nelectrical_type = \"passive\"\n"
+        );
+        let res = "id = \"t_res\"\nkind = \"resistor\"\n\
+            [footprint_dimensions]\nwidth_mm = 1.6\nheight_mm = 0.8\n\
+            [[pins]]\nname = \"p1\"\nnumber = \"1\"\nelectrical_type = \"passive\"\n\
+            [[pins]]\nname = \"p2\"\nnumber = \"2\"\nelectrical_type = \"passive\"\n";
+        // An M2.5 hole as the irrigation board (#334) has it: a 2.7 mm drill
+        // inside a 6 mm keepout courtyard.
+        let hole_part = "id = \"t_hole\"\nkind = \"mounting_hole\"\n\
+            [footprint_dimensions]\nwidth_mm = 6.0\nheight_mm = 6.0\n";
+        let registry = synth_registry::load_from_strs(&[
+            ("t_conn.synth.toml", conn.as_str()),
+            ("t_res.synth.toml", res),
+            ("t_hole.synth.toml", hole_part),
+        ])
+        .expect("test parts must load");
+        let hole_line = if hole {
+            "component H1: mounting_hole \"t_hole\"\n"
+        } else {
+            ""
+        };
+        let source = format!(
+            "board \"b\" {{\n layers 2\n component J1: connector \"t_conn\"\n \
+             component R1: resistor \"t_res\"\n {hole_line} connect J1.p1 -> R1.p1\n}}\n"
+        );
+        let parsed = synth_parser::parse(&source, "mech.synth");
+        synth_ir::lower(&parsed.ast.expect("ast"), &registry, "mech.synth")
+            .board
+            .expect("board")
+    }
+
+    /// J1 sits below R1 with its courtyard reaching y = 20 mm; H1, when
+    /// present, is a corner mounting hole at the right, centred 1.5 mm inside
+    /// that line. Its 2.7 mm drill ends at 19.85 mm, on the board, but its
+    /// 6 mm keepout courtyard reaches 21.5 mm, past the connector: the
+    /// irrigation board's geometry in #334.
+    fn mechanical_placement(board: &Board) -> Placement {
+        let at = |refdes: &str, x: f64, y: f64| {
+            let component = board
+                .components
+                .iter()
+                .find(|c| c.refdes == refdes)
+                .expect(refdes);
+            ComponentPlacement {
+                id: component.id,
+                center: Point::new(mm_to_nm(x), mm_to_nm(y)),
+                rotation: Rotation::Zero,
+                layer: Layer::Top,
+            }
+        };
+        let mut components = vec![at("J1", 10.0, 20.0 - 3.56), at("R1", 10.0, 5.0)];
+        if board.components.iter().any(|c| c.refdes == "H1") {
+            components.push(at("H1", 25.0, 18.5));
+        }
+        Placement {
+            board_outline: Rect::new(Point::new(0, 0), Point::new(mm_to_nm(30.0), mm_to_nm(30.0))),
+            components,
+        }
+    }
+
+    /// A part that must overhang 0.6 to 1.0 mm docks so its plane does: the
+    /// edge comes in from the courtyard to 0.6 mm inside the plane.
+    #[test]
+    fn docking_targets_the_declared_mating_plane() {
+        let board = mechanical_board(
+            "mating_plane_offset_mm = 3.31\nmating_overhang_mm = [0.6, 1.0]",
+            false,
+        );
+        let mut placement = mechanical_placement(&board);
+        fit_outline_at(&board, &mut placement, mm_to_nm(1.0), mm_to_nm(1.0), true);
+        // Plane at 16.44 + 3.31 = 19.75 mm; the edge belongs at 19.15 mm.
+        assert_eq!(placement.board_outline.max.y_nm, mm_to_nm(19.75 - 0.6));
+    }
+
+    /// When the courtyard-flush edge already puts the plane in range the
+    /// declared plane changes nothing.
+    #[test]
+    fn a_plane_in_range_at_courtyard_flush_docks_as_before() {
+        let declared = mechanical_board(
+            "mating_plane_offset_mm = 3.31\nmating_overhang_mm = [-0.5, 0.5]",
+            false,
+        );
+        let plain = mechanical_board("", false);
+        let mut a = mechanical_placement(&declared);
+        let mut b = mechanical_placement(&plain);
+        fit_outline_at(&declared, &mut a, mm_to_nm(1.0), mm_to_nm(1.0), true);
+        fit_outline_at(&plain, &mut b, mm_to_nm(1.0), mm_to_nm(1.0), true);
+        assert_eq!(a.board_outline, b.board_outline);
+    }
+
+    /// A bottom-side connector has no declared plane yet: the exporter does
+    /// not mirror bottom-side footprints, so the plane is left to the
+    /// courtyard check instead of being placed on the wrong side.
+    #[test]
+    fn a_bottom_side_connector_has_no_mating_plane() {
+        let board = mechanical_board(
+            "mating_plane_offset_mm = 3.31\nmating_overhang_mm = [0.6, 1.0]",
+            false,
+        );
+        let placement = mechanical_placement(&board);
+        let j1 = board
+            .components
+            .iter()
+            .find(|c| c.refdes == "J1")
+            .expect("J1");
+        let mut placed = placement
+            .components
+            .iter()
+            .find(|p| p.id == j1.id)
+            .copied()
+            .expect("J1 placed");
+        assert!(floorplan::mating_plane(j1, &placed).is_some());
+        placed.layer = Layer::Bottom;
+        assert!(floorplan::mating_plane(j1, &placed).is_none());
+    }
+
+    /// #334: a mounting hole's keepout must not hold the edge out past a
+    /// connector docked to that edge. The hole's courtyard reaches 21.5 mm,
+    /// its drill only 19.85 mm; the connector's courtyard ends at 20 mm and
+    /// that is the edge.
+    #[test]
+    fn a_mounting_hole_rim_does_not_hold_a_docked_connector_off_the_edge() {
+        let mut board = mechanical_board("", true);
+        let j1 = board
+            .components
+            .iter_mut()
+            .find(|c| c.refdes == "J1")
+            .expect("J1");
+        j1.placement_hint = Some(synth_ir::PlacementConstraint {
+            edge: Some(synth_ir::PlacementEdge::Bottom),
+            priority: synth_ir::PlacementPriority::Hard,
+            ..synth_ir::PlacementConstraint::default()
+        });
+        let mut placement = mechanical_placement(&board);
+        fit_outline_at(&board, &mut placement, mm_to_nm(1.0), mm_to_nm(1.0), true);
+        assert_eq!(placement.board_outline.max.y_nm, mm_to_nm(20.0));
     }
 
     #[test]

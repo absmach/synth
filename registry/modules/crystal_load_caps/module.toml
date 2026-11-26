@@ -1,0 +1,37 @@
+id = "crystal_load_caps"
+module = "CrystalLoadCaps"
+version = "1.0.0"
+title = "Crystal with load capacitors"
+description = "A four-pad SMD3225 quartz crystal for a Pierce oscillator, with one load capacitor per pin to ground and the case pads grounded."
+tags = ["clock", "crystal", "oscillator"]
+notes = ["Keep the crystal and its capacitors within a few millimetres of the oscillator pins, over unbroken ground."]
+
+[provenance]
+source = "ST AN2867 Oscillator design guide for STM8 and STM32 microcontrollers"
+section = "3.3 Load capacitance: CL = C1 x C2 / (C1 + C2) + Cstray, so C1 = C2 = 2 x (CL - Cstray)"
+reference_design = "AN2867 Figure 5 Pierce oscillator"
+url = "https://www.st.com/resource/en/application_note/an2867-oscillator-design-guide-for-stm8afals-stm32-mcus-and-mpus-stmicroelectronics.pdf"
+
+[[ports]]
+name = "xin"
+type = "passive"
+description = "Oscillator input pin of the MCU."
+[[ports]]
+name = "xout"
+type = "passive"
+description = "Oscillator output pin of the MCU."
+[[ports]]
+name = "gnd"
+type = "ground"
+description = "Ground for the load capacitors and the crystal case."
+
+[[params]]
+name = "c_load"
+default = "15pF"
+fixed = false
+range = "4pF..33pF"
+description = "Each load capacitor: 2 x (CL - Cstray). 15 pF suits a 10 pF crystal with about 2.5 pF of stray capacitance."
+
+[[validated]]
+case = "fixture.synth"
+values = { c_load = "15pF" }

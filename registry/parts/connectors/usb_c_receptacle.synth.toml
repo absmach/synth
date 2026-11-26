@@ -14,6 +14,12 @@ courtyard_margin_mm = 0.25
 # The placer maps this physical face to the selected board edge; it must not
 # infer orientation from the courtyard rectangle alone.
 mating_face = "bottom"
+# Mating plane: the HRO TYPE-C-31-M-12 body front on F.Fab, 3.65 mm from the
+# footprint origin along the mating face. The stock courtyard runs 0.5 mm
+# past it, so a courtyard-flush part has its plane 0.5 mm in. The range
+# allows that recess and up to 0.5 mm overhang; deeper recesses fail.
+mating_plane_offset_mm = 3.65
+mating_overhang_mm = [-0.5, 0.5]
 
 [operating_conditions]
 min_voltage_v = 1.8

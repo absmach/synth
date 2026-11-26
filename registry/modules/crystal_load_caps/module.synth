@@ -1,0 +1,16 @@
+// Pierce crystal with its two load capacitors to ground.
+module "CrystalLoadCaps" (xin: passive, xout: passive, gnd: ground) {
+  param c_load: capacitance = 15pF
+  component Y1: crystal "xtal_generic"
+  component C1: capacitor "c_generic_0402" value $c_load
+  component C2: capacitor "c_generic_0402" value $c_load
+
+  connect Y1.p1 -> xin
+  connect Y1.p2 -> xout
+  connect Y1.case_1 -> gnd
+  connect Y1.case_2 -> gnd
+  connect C1.p1 -> xin
+  connect C1.p2 -> gnd
+  connect C2.p1 -> xout
+  connect C2.p2 -> gnd
+}

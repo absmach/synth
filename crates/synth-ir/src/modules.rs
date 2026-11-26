@@ -51,6 +51,27 @@ pub struct ModuleDesc {
     pub ports: Vec<(String, String)>,
     /// `(param name, default literal)`.
     pub params: Vec<(String, String)>,
+    /// Parameters declared `fixed`: part of the reference the module copies.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixed: Vec<String>,
+    /// Every recorded exception against this module, across its instances.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deviations: Vec<Deviation>,
+}
+
+/// One recorded exception to a module, from a `use`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Deviation {
+    /// The instance label (`use "LDO" as U_LDO` gives `U_LDO`).
+    pub instance: String,
+    /// The overridden parameter, or `None` for an instance-level deviation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub param: Option<String>,
+    /// The overriding value, when the deviation is on a parameter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    pub reason: String,
+    pub span: Span,
 }
 
 /// The result of expanding every `use` in a program.
@@ -81,6 +102,7 @@ pub fn expand(statements: &[StatementAst], file: &str) -> Expansion {
 
     let mut diagnostics = Vec::new();
     let mut seen_labels: HashSet<String> = HashSet::new();
+    let deviations = collect_deviations(statements, &tables, file, &mut diagnostics);
     let expanded = rewrite(
         statements,
         &tables,
@@ -119,10 +141,105 @@ pub fn expand(statements: &[StatementAst], file: &str) -> Expansion {
                         (p.name.clone(), default)
                     })
                     .collect(),
+                fixed: m
+                    .params
+                    .iter()
+                    .filter(|p| p.fixed)
+                    .map(|p| p.name.clone())
+                    .collect(),
+                deviations: deviations
+                    .iter()
+                    .filter(|(module, _)| module == &m.name)
+                    .map(|(_, d)| d.clone())
+                    .collect(),
             })
             .collect(),
         diagnostics,
     }
+}
+
+/// Every `use`'s deviations, by module name. A `fixed` parameter overridden
+/// without one is `E-SYNTH-MODULE-008`; a deviation naming a parameter the
+/// instance does not override is `E-SYNTH-MODULE-010`.
+fn collect_deviations(
+    statements: &[StatementAst],
+    tables: &Tables<'_>,
+    file: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Vec<(String, Deviation)> {
+    let mut out = Vec::new();
+    for stmt in statements {
+        match stmt {
+            StatementAst::Use(u) => {
+                let Some(module) = tables.modules.get(u.module.as_str()) else {
+                    continue;
+                };
+                for (name, value) in &u.params {
+                    let fixed = module.params.iter().any(|p| &p.name == name && p.fixed);
+                    let noted = u.deviations.iter().any(|d| d.param.as_ref() == Some(name));
+                    if fixed && !noted {
+                        diagnostics.push(
+                            diag(
+                                "E-SYNTH-MODULE-008",
+                                "fixed module parameter overridden without a deviation",
+                                value.span,
+                                file,
+                                format!(
+                                    "`{}` overrides `{name}`, which module `{}` fixes to its reference value",
+                                    u.label, module.name
+                                ),
+                                "the reference value, or `deviation \"<reason>\"` after the override",
+                            )
+                            .build(),
+                        );
+                    }
+                }
+                for d in &u.deviations {
+                    let value = d.param.as_ref().and_then(|name| {
+                        u.params
+                            .iter()
+                            .find(|(n, _)| n == name)
+                            .map(|(_, v)| literal_with_unit(Some(v)))
+                    });
+                    if d.param.is_some() && value.is_none() {
+                        diagnostics.push(
+                            diag(
+                                "E-SYNTH-MODULE-010",
+                                "deviation names a parameter the instance does not override",
+                                d.span,
+                                file,
+                                format!(
+                                    "`{}` records a deviation on `{}` but sets no value for it",
+                                    u.label,
+                                    d.param.as_deref().unwrap_or_default()
+                                ),
+                                "a deviation after the override it explains",
+                            )
+                            .build(),
+                        );
+                    }
+                    out.push((
+                        module.name.clone(),
+                        Deviation {
+                            instance: u.label.clone(),
+                            param: d.param.clone(),
+                            value,
+                            reason: d.reason.clone(),
+                            span: d.span,
+                        },
+                    ));
+                }
+            }
+            StatementAst::Group(g) => {
+                out.extend(collect_deviations(&g.statements, tables, file, diagnostics));
+            }
+            StatementAst::Sheet(s) => {
+                out.extend(collect_deviations(&s.statements, tables, file, diagnostics));
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 fn collect<'a>(statements: &'a [StatementAst], tables: &mut Tables<'a>) {

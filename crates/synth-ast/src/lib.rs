@@ -576,6 +576,21 @@ pub struct ParamDeclAst {
     pub ty: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<ValueWithUnit>,
+    /// `fixed`: the value is part of the reference the module copies.
+    /// Overriding it at a `use` needs a `deviation "reason"`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub fixed: bool,
+    pub span: Span,
+}
+
+/// A recorded exception to a reference module: `deviation "reason"`, either
+/// on one parameter override (`c_out = 47uF deviation "…"`) or on the whole
+/// instance.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviationAst {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub param: Option<String>,
+    pub reason: String,
     pub span: Span,
 }
 
@@ -630,6 +645,9 @@ pub struct UseStmt {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub params: Vec<(String, ValueWithUnit)>,
     pub bindings: Vec<PortBindingAst>,
+    /// Exceptions recorded against the module (`deviation "reason"`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deviations: Vec<DeviationAst>,
     pub span: Span,
 }
 
@@ -766,6 +784,22 @@ pub enum NetclassAttr {
     Layers {
         layers: Vec<String>,
     },
+    /// Working voltage of the class's nets (`voltage 12v`), overriding the
+    /// rail voltage power-domain inference finds. Voltage-aware clearance
+    /// (`E-SYNTH-DRC-025`) reads it.
+    Voltage(ValueWithUnit),
+    /// Whether the class's nets sit behind a fuse or eFuse: `protected` or
+    /// `unprotected`. An input-connector rail is unprotected by default and
+    /// gets the profile's extra clearance margin.
+    Protection {
+        protected: bool,
+    },
+    /// Length every net of the class is tuned to (`target_length 42mm`).
+    /// Without one the router tunes to the longest member or the reference.
+    TargetLength(ValueWithUnit),
+    /// The net the class is matched to (`reference "DQS_P"`), such as a byte
+    /// lane's strobe: the others are tuned to its length.
+    Reference(String),
 }
 
 /// `no_connect U1.L9, U1.J10`: pins that are intentionally unused. The

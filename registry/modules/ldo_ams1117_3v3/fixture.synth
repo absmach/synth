@@ -1,0 +1,13 @@
+board "ldo_ams1117_3v3_fixture" {
+  layers 2
+  component J1: connector "header_1x4"
+  power "VIN" 5v { J1.p1 }
+  power "+3V3" 3.3v { J1.p2 }
+  net "GND" { J1.p3 }
+  use "LdoAms1117" as LDO {
+    vin -> "VIN"
+    vout -> "+3V3"
+    gnd -> "GND"
+  }
+  no_connect J1.p4
+}
