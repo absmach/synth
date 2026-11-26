@@ -76,6 +76,8 @@ struct Cli {
     command: Command,
 }
 
+mod agent_assets;
+
 #[derive(Debug, Subcommand)]
 enum Command {
     /// Parse, resolve, and lower a SynthSpec file to the IR. Emits
@@ -682,6 +684,31 @@ enum Command {
         /// Path to the Tier-2 (per-user) registry directory.
         #[arg(long, value_name = "DIR")]
         user_registry: Option<PathBuf>,
+    },
+
+    /// Install Synth's design-review and design-build agents and skills.
+    Init {
+        /// Agent/skill directory family to write.
+        #[arg(long, value_enum, default_value_t = agent_assets::Client::Claude)]
+        client: agent_assets::Client,
+    },
+
+    /// Report whether Synth's installed agent/skill assets match this binary.
+    Status {
+        /// Check one client instead of both.
+        #[arg(long, value_enum)]
+        client: Option<agent_assets::Client>,
+
+        /// Emit JSON instead of a table.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Remove Synth's installed agent/skill assets.
+    Uninstall {
+        /// Agent/skill directory family to remove.
+        #[arg(long, value_enum, default_value_t = agent_assets::Client::Claude)]
+        client: agent_assets::Client,
     },
 }
 
@@ -1362,6 +1389,9 @@ fn main() -> ExitCode {
             registry,
             user_registry,
         } => part_cmd(cmd, registry.as_deref(), user_registry.as_deref()),
+        Command::Init { client } => init_agents(client),
+        Command::Status { client, json } => agent_status(client, json),
+        Command::Uninstall { client } => uninstall_agents(client),
     };
 
     match result {
@@ -2823,6 +2853,85 @@ fn registry_cmd(
 }
 
 /// Handler for `synth part import lcsc` (Phase 15, R15.4).
+fn home_dir() -> anyhow::Result<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+        .ok_or_else(|| anyhow::anyhow!("HOME is not set; cannot locate the agent directory"))
+}
+
+fn init_agents(client: agent_assets::Client) -> anyhow::Result<u8> {
+    let written = agent_assets::install(client, &home_dir()?).map_err(anyhow::Error::msg)?;
+    if written.is_empty() {
+        println!("Synth agent assets are already current.");
+    } else {
+        for path in written {
+            println!("wrote {}", path.display());
+        }
+    }
+    Ok(EXIT_SUCCESS)
+}
+
+fn uninstall_agents(client: agent_assets::Client) -> anyhow::Result<u8> {
+    let removed = agent_assets::uninstall(client, &home_dir()?).map_err(anyhow::Error::msg)?;
+    for path in removed {
+        println!("removed {}", path.display());
+    }
+    Ok(EXIT_SUCCESS)
+}
+
+fn agent_status(client: Option<agent_assets::Client>, json: bool) -> anyhow::Result<u8> {
+    let home = home_dir()?;
+    let clients = client.map_or_else(
+        || vec![agent_assets::Client::Claude, agent_assets::Client::Codex],
+        |client| vec![client],
+    );
+    let mut rows = Vec::new();
+    for client in clients {
+        for (path, state) in agent_assets::status(client, &home) {
+            rows.push((path, state));
+        }
+    }
+    if json {
+        let report: Vec<_> = rows
+            .iter()
+            .map(|(path, state)| {
+                serde_json::json!({
+                    "path": path.display().to_string(),
+                    "state": match state {
+                        agent_assets::State::Missing => "missing",
+                        agent_assets::State::Current => "current",
+                        agent_assets::State::Modified => "modified",
+                    }
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        for (path, state) in &rows {
+            println!(
+                "{:<9} {}",
+                match state {
+                    agent_assets::State::Missing => "missing",
+                    agent_assets::State::Current => "current",
+                    agent_assets::State::Modified => "modified",
+                },
+                path.display()
+            );
+        }
+    }
+    Ok(
+        if rows
+            .iter()
+            .all(|(_, state)| *state == agent_assets::State::Current)
+        {
+            EXIT_SUCCESS
+        } else {
+            EXIT_INCOMPLETE
+        },
+    )
+}
+
 fn part_cmd(
     cmd: PartCommand,
     registry_dir: Option<&Path>,
