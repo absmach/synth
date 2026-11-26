@@ -220,7 +220,10 @@ fn a_sidecar_board_reports_both_placements() {
 }
 
 #[test]
-fn synth_place_falls_back_to_the_legal_ladder() {
+fn synth_place_keeps_a_declared_outline_authoritative() {
+    // ADR 0001: a declared outline is the board's size. The ladder grows the
+    // canvas, so `synth place` must not use it for a board that states one;
+    // the original E-SYNTH-PLACE-002 stands.
     let root = workspace_root();
     let scratch = std::env::temp_dir().join(format!("synth_place_ladder_{}", std::process::id()));
     let path = write(&scratch, "ladder_only.synth", LADDER_ONLY);
@@ -232,18 +235,14 @@ fn synth_place_falls_back_to_the_legal_ladder() {
         .output()
         .expect("run synth place");
     assert!(
-        out.status.success(),
-        "the ladder must place a board the normal solve fails: {}",
-        String::from_utf8_lossy(&out.stderr)
+        !out.status.success(),
+        "a declared outline must not be grown by the ladder"
     );
-    let placement: serde_json::Value =
-        serde_json::from_slice(&out.stdout).expect("place emits JSON");
-    assert_eq!(
-        placement["components"]
-            .as_array()
-            .expect("components")
-            .len(),
-        4
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("E-SYNTH-PLACE-002"), "{stderr}");
+    assert!(
+        !stderr.contains("note:"),
+        "no relaxation note: the ladder must not have run: {stderr}"
     );
 
     let _ = std::fs::remove_dir_all(&scratch);
