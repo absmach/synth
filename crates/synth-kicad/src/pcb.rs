@@ -2868,12 +2868,12 @@ fn build_footprint_instance(
         Layer::Top => "F.Cu",
         _ => "B.Cu",
     };
-    // KiCad reads a pad's angle as its absolute orientation, so a footprint's
-    // rotation has to be added to every pad (absmach/synth#199). A bottom
-    // footprint is mirrored first (see `flip_body_to_bottom`), and KiCad stores
-    // its pads the same way: the mirrored local angle plus the footprint's own.
+    // KiCad reads a pad's angle as its absolute orientation, so a
+    // footprint's rotation has to be added to every pad (absmach/synth#199).
+    // On the bottom side the body is mirrored first, which negates its own
+    // pad angles, so the footprint rotation is subtracted instead.
     let bottom = placement.layer != Layer::Top;
-    let pad_angle = angle;
+    let pad_angle = if bottom { -angle } else { angle };
     let fp_uuid = derive_entity_uuid(project, "footprint", &component.refdes);
 
     // Resolve the bundled/user footprint body up front so we can decide whether
@@ -3087,7 +3087,7 @@ fn build_footprint_instance(
         // project's fp-lib-table and produces a spurious DRC error.
         let body = strip_footprint_head(body);
         let body = if bottom {
-            flip_body_to_bottom(&body)
+            flip_footprint_body(&body)
         } else {
             body
         };
@@ -3125,42 +3125,27 @@ fn build_footprint_instance(
                         "pad",
                         &format!("{}:{}", component.refdes, pad.number),
                     );
+                    let center = if bottom {
+                        (-pad.center_mm.0, pad.center_mm.1)
+                    } else {
+                        pad.center_mm
+                    };
+                    let (copper, paste, mask) = if bottom {
+                        ("B.Cu", "B.Paste", "B.Mask")
+                    } else {
+                        ("F.Cu", "F.Paste", "F.Mask")
+                    };
                     children.push(Sexp::list(
                         "pad",
                         vec![
                             Sexp::str(&pad.number),
                             Sexp::atom("smd"),
                             Sexp::atom("rect"),
-                            Sexp::list(
-                                "at",
-                                pad_at_args(
-                                    (
-                                        pad.center_mm.0,
-                                        if bottom {
-                                            -pad.center_mm.1
-                                        } else {
-                                            pad.center_mm.1
-                                        },
-                                    ),
-                                    pad_angle,
-                                ),
-                            ),
+                            Sexp::list("at", pad_at_args(center, pad_angle)),
                             Sexp::list("size", vec![num(pad.size_mm.0), num(pad.size_mm.1)]),
                             Sexp::list(
                                 "layers",
-                                if bottom {
-                                    vec![
-                                        Sexp::str("B.Cu"),
-                                        Sexp::str("B.Paste"),
-                                        Sexp::str("B.Mask"),
-                                    ]
-                                } else {
-                                    vec![
-                                        Sexp::str("F.Cu"),
-                                        Sexp::str("F.Paste"),
-                                        Sexp::str("F.Mask"),
-                                    ]
-                                },
+                                vec![Sexp::str(copper), Sexp::str(paste), Sexp::str(mask)],
                             ),
                             Sexp::list(
                                 "net",
@@ -3681,6 +3666,53 @@ fn pad_at_args(center_mm: (f64, f64), angle_deg: f64) -> Vec<Sexp> {
         args.push(num(angle_deg));
     }
     args
+}
+
+/// Mirror a library footprint body for a bottom-side placement.
+///
+/// KiCad flips a footprint by mirroring its geometry across the Y axis and
+/// moving every layer from the front to the back. The stored `(at x y [angle])`
+/// is footprint-local, so mirroring negates x and the angle; the instance's
+/// rotation is then subtracted from each pad by the caller.
+fn flip_footprint_body(body: &str) -> String {
+    let mut out = String::with_capacity(body.len() + 64);
+    let mut pos = 0;
+    while let Some(idx) = body[pos..].find("(at ") {
+        let start = pos + idx;
+        let Some(end) = balanced_close(body, start) else {
+            break;
+        };
+        out.push_str(&body[pos..start]);
+        let at = &body[start..end];
+        let args_start = "(at ".len();
+        let args_end = args_start + at[args_start..].find(')').unwrap_or(0);
+        let mut words: Vec<String> = at[args_start..args_end]
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
+        if let Some(x) = words.first_mut()
+            && let Ok(value) = x.parse::<f64>()
+        {
+            *x = format!("{}", -value);
+            if words.len() >= 3
+                && let Ok(angle) = words[2].parse::<f64>()
+            {
+                words[2] = format!("{}", -angle);
+            }
+            out.push_str("(at ");
+            out.push_str(&words.join(" "));
+            out.push(')');
+        } else {
+            out.push_str(at);
+        }
+        pos = end;
+    }
+    out.push_str(&body[pos..]);
+    // Swap front and back layer names in one pass; doing the two replaces
+    // in sequence would flip a name twice.
+    let out = out.replace("\"F.", "\"\u{1}.");
+    let out = out.replace("\"B.", "\"F.");
+    out.replace("\"\u{1}.", "\"B.")
 }
 
 /// Add `angle_deg` to the angle of every `(pad ...)` in a footprint body.
@@ -4329,6 +4361,65 @@ mod tests {
         assert!(
             instance.matches("(pad").count() == 2 && pad_ats.len() >= 2,
             "pads must carry the 90 degree footprint angle:\n{instance}"
+        );
+    }
+
+    #[test]
+    fn a_bottom_footprint_is_mirrored_onto_the_back_layers() {
+        let part = no_footprint_part();
+        let component = synth_ir::Component {
+            id: ComponentId(0),
+            refdes: "U1".into(),
+            kind: part.kind.clone(),
+            part: Some(part.clone()),
+            value: None,
+            dnp: false,
+            properties: std::collections::BTreeMap::new(),
+            placement_hint: None,
+            escape: None,
+            group: None,
+            sheet: None,
+            source_span: Span::new(0, 0),
+        };
+        let bottom = ComponentPlacement {
+            id: ComponentId(0),
+            center: Point { x_nm: 0, y_nm: 0 },
+            rotation: Rotation::Ninety,
+            layer: Layer::Bottom,
+        };
+        let mut pad_net_lookup: PadNetLookup = HashMap::new();
+        pad_net_lookup.insert((ComponentId(0), "1".to_string()), (1, "VDD".to_string()));
+        pad_net_lookup.insert((ComponentId(0), "2".to_string()), (2, "GND".to_string()));
+        let instance = build_footprint_instance(
+            &component,
+            &part,
+            &bottom,
+            "synth:nofp",
+            &Uuid::nil(),
+            &pad_net_lookup,
+            silk_labels::LabelPos {
+                local_x_mm: 0.0,
+                local_y_mm: -4.5,
+                angle_deg: 0.0,
+                hidden: false,
+            },
+            true,
+        )
+        .to_string_pretty();
+        assert!(
+            !instance.contains("\"F."),
+            "a bottom part has no front layer: {instance}"
+        );
+        assert!(instance.contains("\"B.Cu\""));
+        assert!(
+            instance.contains("(at -") || instance.contains("(at 0 "),
+            "the body must be mirrored across x: {instance}"
+        );
+        assert!(
+            instance
+                .lines()
+                .any(|line| line.trim_end().ends_with(" -90)")),
+            "a flipped footprint subtracts its rotation from pad angles: {instance}"
         );
     }
 

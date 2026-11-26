@@ -1102,6 +1102,58 @@ mod tests {
         assert_eq!(instances, files, "instances point at their own files");
     }
 
+    /// Nine sub-sheets must wrap into a readable block. Laid out as one row
+    /// they span 928 mm and force the root page to A0; the index is then
+    /// 94% blank and unreadable at a zoom that fits it.
+    #[test]
+    fn a_large_hierarchy_wraps_its_sheet_instances_into_rows() {
+        let names: Vec<String> = (0..9).map(|index| format!("G{index}")).collect();
+        let components: Vec<_> = names
+            .iter()
+            .enumerate()
+            .map(|(index, name)| component(u32::try_from(index).unwrap(), Some(name)))
+            .collect();
+        let b = board(components, vec![]);
+        let (ceiling_w, _) = synth_layout::max_single_sheet(&b).dims_mm();
+        let positions: Vec<_> = (0..9)
+            .map(|index| {
+                (
+                    u32::try_from(index).unwrap(),
+                    ceiling_w * 2.0 + f64::from(index) * 60.0,
+                    30.0,
+                )
+            })
+            .collect();
+        let global = layout_at(&positions);
+        let sheets = layout_sheets(&b, global, None);
+        assert_eq!(sheets.len(), 10, "root + nine named sheets");
+        let root_bounds = content_bounds(&b, &sheets[0].layout);
+        let project = crate::uuid_v5::project_namespace(&b.name);
+        let plan = plan_multisheet(&b, &project, "stem", &sheets, root_bounds);
+        let first_row = plan.furniture.instances[0].at_mm.1;
+        assert!(
+            plan.furniture
+                .instances
+                .iter()
+                .any(|instance| (instance.at_mm.1 - first_row).abs() > 1.0),
+            "nine boxes must wrap, not sit in one row"
+        );
+        let max_x = plan
+            .furniture
+            .instances
+            .iter()
+            .map(|instance| instance.at_mm.0 + instance.size_mm.0)
+            .fold(0.0_f64, f64::max);
+        // The plan wraps at the smallest ladder page that holds the rows, so
+        // the rows fit that page's width and the index never needs A0.
+        let page = plan.sheet_size.expect("nine boxes fit a ladder page");
+        assert_ne!(page, SheetSize::A0, "wrapping must not need an A0 index");
+        assert!(
+            max_x <= page.dims_mm().0,
+            "wrapped rows stay on the page: {max_x} mm on {page:?}"
+        );
+    }
+
     /// A sheet literally named with the suffix a disambiguated sheet took
     /// (`A_2`) still gets its own file.
     #[test]
