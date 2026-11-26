@@ -55,6 +55,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_SS]
 x = 36.5
@@ -73,6 +74,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.Q_V2]
 x = 62.5
@@ -91,6 +93,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP_VIN]
 x = 7.0
@@ -100,6 +103,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.R_PWR]
 x = 51.0
@@ -154,6 +158,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_BS]
 x = 25.10
@@ -235,6 +240,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_U5]
 x = 54.64
@@ -280,6 +286,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.R_D2]
 x = 33.5
@@ -352,6 +359,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP_12V]
 x = 24.0
@@ -361,10 +369,11 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.H1]
-x = 8.0
-y = 7.0
+x = 4.4
+y = 3.05
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -397,6 +406,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_SN2]
 x = 65.2
@@ -408,8 +418,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H2]
-x = 72.0
-y = 7.0
+x = 75.6
+y = 3.05
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -417,8 +427,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H3]
-x = 7.5
-y = 62.5
+x = 4.4
+y = 65.75
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -433,6 +443,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP_V1]
 x = 42.3
@@ -442,6 +453,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.Q1]
 x = 19.0
@@ -453,8 +465,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H4]
-x = 72.0
-y = 62.5
+x = 75.6
+y = 65.75
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -487,6 +499,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_IN1]
 x = 26.50
@@ -523,6 +536,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_COMP]
 x = 39.5
@@ -604,6 +618,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.U4]
 x = 50.5
@@ -703,6 +718,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.C_BULK]
 x = 38.25

@@ -25,8 +25,8 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Humidity sensor           | None on the board. A breakout attaches to the I2C header at address 0x44.                                                                                                                                                                                                                                  |
 | Field-wiring protection   | PRTR5V0U2X ESD arrays at the soil and I2C connectors (`D_ESD_S1`, `D_ESD_S2`, `D_ESD_I2C`); SMAJ15A TVS on the flow input (`D_ESD_FL`)                                                                                                                                                                     |
 | Indicators                | `D_PWR` green (Lite-On LTST-C190KGKT); `D_VALVE` and `D_N1` amber (KENTO KT-0603Y); each with a series resistor                                                                                                                                                                                            |
-| Test points               | `TP_VIN`, `TP_12V`, `TP_3V3`, `TP_GND`, `TP_NRST`, `TP_SWDIO`, `TP_SWCLK`, `TP_SDA`, `TP_SCL`, `TP_FLOW`, `TP_SOIL1`, `TP_SOIL2`, `TP_V1`, `TP_V2`, `TP_N1`, `TP_N2`                                                                                                                                       |
-| Mechanical                | Four M2.5 mounting holes `H1` to `H4`, one in each corner                                                                                                                                                                                                                                                  |
+| Test points               | `TP_VIN`, `TP_12V`, `TP_3V3`, `TP_GND`, `TP_NRST`, `TP_SWDIO`, `TP_SWCLK`, `TP_SDA`, `TP_SCL`, `TP_FLOW`, `TP_SOIL1`, `TP_SOIL2`, `TP_V1`, `TP_V2`, `TP_N1`, `TP_N2`, all on the bottom side of the board |
+| Mechanical                | Four M2.5 mounting holes `H1` to `H4`, one in each corner, each 4.0 mm from its two board edges                                                                                                                                                                                                                                                  |
 
 ### Layout
 
@@ -38,9 +38,9 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Parts in the BOM        | 107 lines: 87 parts and 20 board features (4 mounting holes, 16 test points)                                                                                                                              |
 | Parts placed in the CPL | 87                                                                                                                                                                                                        |
 | Nets                    | 51                                                                                                                                                                                                        |
-| Track segments          | 648                                                                                                                                                                                                       |
-| Vias                    | 474                                                                                                                                                                                                       |
-| Track length            | 1663.8 mm                                                                                                                                                                                                 |
+| Track segments          | 629                                                                                                                                                                                                       |
+| Vias                    | 117: 1 of 0.46/0.2 mm, 109 of 0.6/0.2 mm and 7 of 0.6/0.3 mm                                                                                                                                                                                                       |
+| Track length            | 1644.7 mm                                                                                                                                                                                                 |
 | Zones and planes        | GND pour on F.Cu and on B.Cu; four keepout zones at the screw heads of `H1` to `H4` on both layers                                                                                                        |
 | Fab package             | `fab/gerbers.zip` (copper, mask, paste, silkscreen, edge cuts, PTH and NPTH drill files and maps, job file), `fab/bom.csv`, `fab/cpl.csv`; STEP model in `models/`; images and schematic PDF in `images/` |
 | 3D models               | `models/` holds the STEP body of every part the board references and the board model `irrigation_controller.step`. The board file reaches them by the relative path `${KIPRJMOD}/../models/`. Mounting holes and fiducials have no body. A part that KiCad's library has no model for is a simplified box of its envelope. |
@@ -50,7 +50,7 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 
 | Check                              | Result                               | Notes                                                                                         |
 | ---------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------- |
-| KiCad DRC (10.0.8, --refill-zones) | 0 errors, 0 unconnected, 8 warnings  | 7 `silk_over_copper`, 1 `silk_overlap`                                                        |
+| KiCad DRC (10.0.8, --refill-zones) | 0 errors, 0 unconnected, 7 warnings  | 6 `silk_over_copper`, 1 `silk_overlap`                                                        |
 | KiCad ERC (10.0.8)                 | 0 errors, 0 unconnected, 28 warnings | 27 `lib_symbol_issues` (library symbol and footprint-link warnings), 1 `label_multiple_wires` |
 
 ### Design figures
@@ -98,6 +98,7 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 
 | Area                 | What is not verified                                                                                                                                                                        |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Return paths | The export lists 108 return-via advisories and one `GND` island on `F.Cu` near (30.9, 29.0) mm that the DRC does not flag. |
 | Hardware             | No board has been built, powered or run with firmware. Every figure here is calculated from datasheets and listings.                                                                        |
 | Valve short circuit  | Firmware must read the shunt on `PA1` or `PA0` and turn the valve off above 0.1 V (1.0 A). Until it does, a shorted coil cable is cleared only when `F1` trips.                             |
 | Trip speed           | The trip depends on firmware polling, so the shunt and MOSFET carry the fault current for one polling interval. There is no hardware comparator into a GPIO interrupt or timer break input. |

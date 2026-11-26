@@ -201,10 +201,10 @@ board "irrigation_controller" {
   group "TEST POINTS AND MOUNTING" color "#475569" {
     component TP_N1: testpoint "testpoint_pad_1_5"
     component TP_N2: testpoint "testpoint_pad_1_5"
-    component H1: mounting_hole "mounting_hole_m2_5"
-    component H2: mounting_hole "mounting_hole_m2_5"
-    component H3: mounting_hole "mounting_hole_m2_5"
-    component H4: mounting_hole "mounting_hole_m2_5"
+    component H1: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_left priority: hard } }
+    component H2: mounting_hole "mounting_hole_m2_5" { placement_hint { region: top_right priority: hard } }
+    component H3: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_left priority: hard } }
+    component H4: mounting_hole "mounting_hole_m2_5" { placement_hint { region: bottom_right priority: hard } }
     notes "" {
       "TP_N1 on +3V3, TP_N2 on GND."
       "Four M2.5 mounting holes at the corners."

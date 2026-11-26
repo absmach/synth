@@ -3,7 +3,7 @@
 	(generator "synth-eda")
 	(generator_version "10.0")
 	(uuid "33ebc9e3-0681-554a-ac8a-89a67d5a6adc")
-	(paper "User" 1210 283)
+	(paper "A0")
 	(title_block
 		(title "irrigation_controller")
 		(date "")
@@ -7988,7 +7988,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/a365cb74-ad70-5a28-8f87-b4e0801147d3"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "2")
 				)
 			)
@@ -8207,7 +8207,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/41ebd2d7-5f31-57d8-9428-38f1a3502c7d"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "3")
 				)
 			)
@@ -8272,7 +8272,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/d2f419c8-7a80-53ee-9b39-921b0a16c905"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "4")
 				)
 			)
@@ -8337,7 +8337,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/b578bf6e-5403-5b89-8c71-ba1250d113ea"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "5")
 				)
 			)
@@ -8424,7 +8424,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/2769874e-3cd6-5ee7-8714-9dc2329a265d"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "6")
 				)
 			)
@@ -8511,7 +8511,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/eb7b3459-a320-57e4-9fb2-814f6ad548e1"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "7")
 				)
 			)
@@ -8565,7 +8565,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/897de5ba-4de1-5489-ad2a-9bcd4df2a3d9"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "8")
 				)
 			)
@@ -8630,7 +8630,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/7d597d94-c00f-590a-98bc-d3576a2e0fd2"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "9")
 				)
 			)
@@ -8684,14 +8684,14 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/9b48410e-bbdd-5589-be21-31a0bbf2519e"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "10")
 				)
 			)
 		)
 	)
 	(sheet
-		(at 1101.3 177.8)
+		(at 20.32 262.89)
 		(size 80.01 59.69)
 		(stroke
 			(width 0.254)
@@ -8704,7 +8704,7 @@
 		(property
 			"Sheetname"
 			"TEST POINTS AND MOUNTING"
-			(at 1101.3 175.26 0)
+			(at 20.32 260.35 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8715,7 +8715,7 @@
 		(property
 			"Sheetfile"
 			"irrigation_controller_TEST_POINTS_AND_MOUNTING.kicad_sch"
-			(at 1101.3 175.26 0)
+			(at 20.32 260.35 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -8727,7 +8727,7 @@
 			(project
 				"irrigation_controller"
 				(path
-					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc/646407be-44d9-599f-adfc-e60b5df40aa9"
+					"/33ebc9e3-0681-554a-ac8a-89a67d5a6adc"
 					(page "11")
 				)
 			)
@@ -9436,5 +9436,11 @@
 			(justify left)
 		)
 		(uuid "cc72ee65-2413-5ecf-8cbd-266a45b683db")
+	)
+	(sheet_instances
+		(path
+			"/"
+			(page "1")
+		)
 	)
 )
