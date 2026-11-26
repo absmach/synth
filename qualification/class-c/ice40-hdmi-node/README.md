@@ -54,6 +54,8 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Track length            | 1898.0 mm                                                                                                                                      |
 | Zones and planes        | GND zone on each of the six copper layers; two keepout areas on all layers for the mounting screw heads (no tracks, vias or pour)              |
 | Fab package             | `fab/gerbers.zip`, `fab/bom.csv`, `fab/cpl.csv`                                                                                                |
+| 3D models               | `models/` holds the STEP body of every part the board references and the board model `ice40_hdmi_node.step`. The board file reaches them by the relative path `${KIPRJMOD}/../models/`. Mounting holes and fiducials have no body. A part that KiCad's library has no model for is a simplified box of its envelope. |
+| Schematic               | `images/schematic.pdf`: vector pages, one per sheet, plotted by `kicad-cli sch export pdf`. |
 
 ### Checks
 
