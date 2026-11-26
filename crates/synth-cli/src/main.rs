@@ -4413,13 +4413,14 @@ fn dump_place(
                     // places normally returns on the first attempt and never
                     // pays for the hint levels or the canvas growth.
                     None => synth_place::place(b).or_else(|normal| {
-                        // A declared outline is authoritative (ADR 0001); the
-                        // ladder grows the canvas, so it cannot be the fallback
-                        // for a board that states its size.
-                        if b.outline.is_some() {
-                            return Err(normal);
-                        }
-                        synth_place::place_legal(b, &synth_place::LegalOptions::default())
+                        // A declared outline is authoritative (ADR 0001): keep
+                        // it and never grow the canvas, but still let the hint
+                        // levels relax a hint that cannot fit it.
+                        let options = synth_place::LegalOptions {
+                            grow_canvas: b.outline.is_none(),
+                            ..synth_place::LegalOptions::default()
+                        };
+                        synth_place::place_legal(b, &options)
                             .map_err(|_| normal)
                             .map(|legal| {
                                 if let Some(warning) = legal.relaxation_warning() {

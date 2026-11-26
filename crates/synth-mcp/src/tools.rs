@@ -1288,12 +1288,17 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
                 gates.push(diagnostics_gate("schematic_readability", &schem));
                 diagnostics.extend(schem);
                 if args["placement_preflight"].as_bool().unwrap_or(false) {
-                    let preflight = synth_validate::placement_preflight(
-                        board,
-                        file_name,
-                        Path::new(file_name),
-                        &synth_validate::PreflightOptions::default(),
-                    );
+                    let options = synth_validate::PreflightOptions::default();
+                    let preflight = if args["file_path"].as_str().is_some() {
+                        synth_validate::placement_preflight(
+                            board,
+                            file_name,
+                            Path::new(file_name),
+                            &options,
+                        )
+                    } else {
+                        synth_validate::placement_preflight_unsaved(board, file_name, &options)
+                    };
                     gates.push(diagnostics_gate("placement_preflight", &preflight));
                     diagnostics.extend(preflight);
                 }

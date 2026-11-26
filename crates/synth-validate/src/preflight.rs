@@ -110,6 +110,17 @@ fn synth_place_sidecar(design: &Path) -> Option<std::path::PathBuf> {
     synth_layout::placement_sidecar_path(design)
 }
 
+/// The preflight for a design that has no file on disk (MCP `source` without
+/// `file_path`): no sidecar lookup, so a stray `<name>.placement.layout.toml`
+/// in the server's working directory is never picked up.
+pub fn placement_preflight_unsaved(
+    board: &Board,
+    file: &str,
+    options: &PreflightOptions,
+) -> Vec<Diagnostic> {
+    scratch_only(board, file, options)
+}
+
 fn scratch_only(board: &Board, file: &str, options: &PreflightOptions) -> Vec<Diagnostic> {
     let legal_options = LegalOptions {
         budget: Some(options.budget),
