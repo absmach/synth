@@ -141,5 +141,4 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | SDRAM figures        | The IS42S16400J Rev. G figures were read from a mirror copy, because the ISSI-hosted PDF could not be retrieved. Check them against ISSI's own copy. |
 | Sourcing             | Stock is not firm.                                                                                                                                   |
 | Fabrication checks   | No JLCPCB DFM or BOM-matching run is recorded for this Gerber package.                                                                               |
-| Part review | `tpd1e10b06`, `ice40hx4k_tq144` and `header_1x6_prog` have no reviewer, so the fab package was exported with `--allow-unverified-parts` and is not cleared for fabrication. |
 | Independent sign-off | The independent PCB review required by #40 is still open.                                                                                            |

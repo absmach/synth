@@ -9,8 +9,6 @@ mpn = "ICE40HX4K-TQ144"
 required_decoupling = []
 kicad_symbol = "FPGA_Lattice:ICE40HX4K-TQ144"
 kicad_footprint = "Package_QFP:TQFP-144_20x20mm_P0.5mm"
-reviewed_at = "2026-11-11"
-reviewed_by = "JeffMboya"
 lcsc_pn = "C1521989"
 # Lattice's own link for DS1040 returns 404. This is a SparkFun-hosted copy of DS1040 v3.4.
 datasheet_url = "https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
@@ -891,3 +889,9 @@ name = "iot_222"
 number = "144"
 electrical_type = "bidirectional"
 capabilities = ["gpio", "i2c_scl", "i2c_sda"]
+
+[provenance]
+source = "imported"
+datasheet_url = "https://cdn.sparkfun.com/assets/9/d/a/0/7/iCE40LPHXFamilyDataSheet.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-11"
