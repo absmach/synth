@@ -29,7 +29,7 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 
 | Item                    | Value                                                                                                                                                                         |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Outline                 | 85.0 x 63.0 mm                                                                                                                                                                |
+| Outline                 | 85.0 x 63.0 mm, declared in the source (`outline 85mm x 63mm`)                                                                                                                                                                |
 | Copper layers           | 4                                                                                                                                                                             |
 | Stackup                 | 1.59 mm total (board file); `manufacturer "jlc-filled-via"` with `requires via_in_pad` (resin-filled, capped vias for the exposed-pad vias); JLCPCB 7628 stack, 1.065 mm core |
 | Parts in the BOM        | 85 lines: 71 parts and 14 board features (test points, fiducials, mounting holes)                                                                                             |
