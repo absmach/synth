@@ -1512,6 +1512,17 @@ fn judge_metric<'a>(
         .unwrap_or_else(|| panic!("missing judge metric {key}"))
 }
 
+fn manual_placement_in(
+    board: &Board,
+    (w_mm, h_mm): (f64, f64),
+    entries: &[(&str, f64, f64)],
+) -> Placement {
+    let mut placement = manual_placement(board, entries);
+    placement.board_outline =
+        Rect::new(Point::new(0, 0), Point::new(mm_to_nm(w_mm), mm_to_nm(h_mm)));
+    placement
+}
+
 /// The cap-only fixture with a chosen outline: the tight cap box plus `slack`
 /// on the right.
 fn cap_with_right_slack(slack_mm: f64) -> (Board, Placement) {
@@ -1693,6 +1704,289 @@ fn wall_jump_closes_six_mm_of_right_slack_in_one_jump() {
     });
     assert!(kept_jump, "no kept right jump in the trace: {text}");
     let _ = std::fs::remove_file(&trace);
+}
+
+/// Two USB connectors and an RJ45 share the right wall, 46 mm apart. Centring
+/// each connector alone collapses the pair onto the RJ45; centring the group
+/// keeps the separation, so the wall jump is accepted.
+#[test]
+fn compression_centres_a_stacked_usb_group_without_overlaps() {
+    let _guard = lock_compress_env();
+    let board = load_inline(
+        r#"board "stacked-usb" {
+  layers 2
+  manufacturer "jlcpcb"
+  component J2: connector "rj45_hr911105a" value "RJ45" { placement_hint { edge: right priority: hard } }
+  component J3: connector "usb_c_receptacle" value "USB1" { placement_hint { edge: right priority: hard } }
+  component J4: connector "usb_c_receptacle" value "USB2" { placement_hint { edge: right priority: hard } }
+  component R1: resistor "r_generic_0603" value "BODY"
+}
+"#,
+    );
+    let mut placement = manual_placement_in(
+        &board,
+        (160.0, 120.0),
+        &[
+            ("J2", 160.0 - 19.0 / 2.0, 60.0),
+            ("J3", 160.0 - 10.64 / 2.0, 37.0),
+            ("J4", 160.0 - 10.64 / 2.0, 83.0),
+            ("R1", 70.0, 60.0),
+        ],
+    );
+    let before = placement.board_outline;
+    assert_no_overlap(&courtyards(&board, &placement));
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = placement.board_outline;
+    assert!(
+        after.width_nm() * after.height_nm() < before.width_nm() * before.height_nm(),
+        "outline did not shrink: {:.2} x {:.2} mm",
+        nm_to_mm(after.width_nm()),
+        nm_to_mm(after.height_nm())
+    );
+    assert_no_overlap(&courtyards(&board, &placement));
+}
+
+/// One USB on a wall keeps the single-connector rule: it ends at the wall
+/// midpoint, flush to the wall.
+#[test]
+fn compression_centres_a_lone_usb_on_its_wall() {
+    let _guard = lock_compress_env();
+    let board = load_inline(
+        r#"board "lone-usb" {
+  layers 2
+  manufacturer "jlcpcb"
+  component J1: connector "usb_c_receptacle" value "USB" { placement_hint { edge: right priority: hard } }
+  component R1: resistor "r_generic_0603" value "TOP"
+  component R2: resistor "r_generic_0603" value "BOTTOM"
+}
+"#,
+    );
+    let mut placement = manual_placement_in(
+        &board,
+        (160.0, 120.0),
+        &[
+            ("J1", 160.0 - 10.64 / 2.0, 37.0),
+            ("R1", 70.0, 0.73),
+            ("R2", 70.0, 119.27),
+        ],
+    );
+    let before = placement.board_outline;
+    assert_no_overlap(&courtyards(&board, &placement));
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = placement.board_outline;
+    assert!(
+        after.width_nm() * after.height_nm() < before.width_nm() * before.height_nm(),
+        "outline did not shrink: {:.2} x {:.2} mm",
+        nm_to_mm(after.width_nm()),
+        nm_to_mm(after.height_nm())
+    );
+    let parts = courtyards(&board, &placement);
+    let usb = *rect_of(&parts, "J1");
+    let mid = after.min.y_nm / 2 + after.max.y_nm / 2;
+    assert_eq!(usb.min.y_nm / 2 + usb.max.y_nm / 2, mid, "USB off centre");
+    assert_eq!(usb.max.x_nm, after.max.x_nm, "USB left the right wall");
+    assert_no_overlap(&parts);
+}
+
+/// A board with no USB still compresses; the USB rule is a no-op on it.
+#[test]
+fn compression_without_a_usb_still_shrinks() {
+    let _guard = lock_compress_env();
+    let board = load_inline(
+        r#"board "no-usb" {
+  layers 2
+  manufacturer "jlcpcb"
+  component R1: resistor "r_generic_0603" value "ONE"
+  component R2: resistor "r_generic_0603" value "TWO"
+}
+"#,
+    );
+    let mut placement = manual_placement_in(
+        &board,
+        (160.0, 120.0),
+        &[("R1", 70.0, 60.0), ("R2", 90.0, 70.0)],
+    );
+    let before = placement.board_outline;
+    assert_no_overlap(&courtyards(&board, &placement));
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = placement.board_outline;
+    assert!(
+        after.width_nm() * after.height_nm() < before.width_nm() * before.height_nm(),
+        "outline did not shrink: {:.2} x {:.2} mm",
+        nm_to_mm(after.width_nm()),
+        nm_to_mm(after.height_nm())
+    );
+    assert_no_overlap(&courtyards(&board, &placement));
+}
+
+/// A USB on the right wall and one on the top wall are separate groups, so
+/// each is centred on its own wall.
+#[test]
+fn compression_centres_usbs_on_different_walls_separately() {
+    let _guard = lock_compress_env();
+    let board = load_inline(
+        r#"board "two-wall-usb" {
+  layers 2
+  manufacturer "jlcpcb"
+  component J1: connector "usb_c_receptacle" value "RIGHT" { placement_hint { edge: right priority: hard } }
+  component J2: connector "usb_c_receptacle" value "TOP" { placement_hint { edge: top priority: hard } }
+  component R1: resistor "r_generic_0603" value "BODY"
+}
+"#,
+    );
+    let mut placement = manual_placement_in(
+        &board,
+        (160.0, 120.0),
+        &[
+            ("J1", 160.0 - 10.64 / 2.0, 37.0),
+            ("J2", 37.0, 9.42 / 2.0),
+            ("R1", 100.0, 80.0),
+        ],
+    );
+    let before = placement.board_outline;
+    assert_no_overlap(&courtyards(&board, &placement));
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = placement.board_outline;
+    assert!(
+        after.width_nm() * after.height_nm() < before.width_nm() * before.height_nm(),
+        "outline did not shrink: {:.2} x {:.2} mm",
+        nm_to_mm(after.width_nm()),
+        nm_to_mm(after.height_nm())
+    );
+    let parts = courtyards(&board, &placement);
+    let right = *rect_of(&parts, "J1");
+    let top = *rect_of(&parts, "J2");
+    let mid_x = after.min.x_nm / 2 + after.max.x_nm / 2;
+    let mid_y = after.min.y_nm / 2 + after.max.y_nm / 2;
+    assert_eq!(
+        right.min.y_nm / 2 + right.max.y_nm / 2,
+        mid_y,
+        "right-wall USB off centre"
+    );
+    assert_eq!(
+        top.min.x_nm / 2 + top.max.x_nm / 2,
+        mid_x,
+        "top-wall USB off centre"
+    );
+    assert_no_overlap(&parts);
+}
+
+/// A pair whose midpoint is off the wall midpoint moves as one block: both
+/// connectors take the same delta, so their 46 mm separation is kept.
+#[test]
+fn compression_translates_a_usb_group_as_a_block() {
+    let _guard = lock_compress_env();
+    let board = load_inline(
+        r#"board "offset-usb-group" {
+  layers 2
+  manufacturer "jlcpcb"
+  component J3: connector "usb_c_receptacle" value "USB1" { placement_hint { edge: right priority: hard } }
+  component J4: connector "usb_c_receptacle" value "USB2" { placement_hint { edge: right priority: hard } }
+  component R1: resistor "r_generic_0603" value "TOP"
+  component R2: resistor "r_generic_0603" value "BOTTOM"
+}
+"#,
+    );
+    let mut placement = manual_placement_in(
+        &board,
+        (160.0, 120.0),
+        &[
+            ("J3", 160.0 - 10.64 / 2.0, 25.0),
+            ("J4", 160.0 - 10.64 / 2.0, 71.0),
+            ("R1", 70.0, 0.73),
+            ("R2", 70.0, 119.27),
+        ],
+    );
+    let before = placement.board_outline;
+    assert_no_overlap(&courtyards(&board, &placement));
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = placement.board_outline;
+    assert!(
+        after.width_nm() * after.height_nm() < before.width_nm() * before.height_nm(),
+        "outline did not shrink: {:.2} x {:.2} mm",
+        nm_to_mm(after.width_nm()),
+        nm_to_mm(after.height_nm())
+    );
+    let parts = courtyards(&board, &placement);
+    let centre_y = |name: &str| {
+        let rect = *rect_of(&parts, name);
+        rect.min.y_nm / 2 + rect.max.y_nm / 2
+    };
+    let mid = after.min.y_nm / 2 + after.max.y_nm / 2;
+    assert_eq!(
+        centre_y("J3") + centre_y("J4"),
+        2 * mid,
+        "group not centred"
+    );
+    assert_eq!(
+        centre_y("J4") - centre_y("J3"),
+        mm_to_nm(46.0),
+        "group spacing changed"
+    );
+    assert_no_overlap(&parts);
+}
+
+/// The pair already spans the wall midpoint; the right wall jump must move the
+/// pair along the wall without collapsing it. Resistors flush to the top and
+/// bottom walls keep the wall length fixed, so the midpoint cannot move.
+#[test]
+fn compression_leaves_a_centred_usb_group_where_it_is() {
+    let _guard = lock_compress_env();
+    let board = load_inline(
+        r#"board "centred-usb" {
+  layers 2
+  manufacturer "jlcpcb"
+  component J2: connector "rj45_hr911105a" value "RJ45" { placement_hint { edge: right priority: hard } }
+  component J3: connector "usb_c_receptacle" value "USB1" { placement_hint { edge: right priority: hard } }
+  component J4: connector "usb_c_receptacle" value "USB2" { placement_hint { edge: right priority: hard } }
+  component R1: resistor "r_generic_0603" value "TOP"
+  component R2: resistor "r_generic_0603" value "BOTTOM"
+}
+"#,
+    );
+    let mut placement = manual_placement_in(
+        &board,
+        (160.0, 120.0),
+        &[
+            ("J2", 160.0 - 19.0 / 2.0, 60.0),
+            ("J3", 160.0 - 10.64 / 2.0, 37.0),
+            ("J4", 160.0 - 10.64 / 2.0, 83.0),
+            ("R1", 70.0, 0.73),
+            ("R2", 70.0, 119.27),
+        ],
+    );
+    let before = placement.board_outline;
+    let centres = |placement: &Placement| {
+        let parts = courtyards(&board, placement);
+        let centre = |name: &str| {
+            let rect = *rect_of(&parts, name);
+            rect.min.y_nm / 2 + rect.max.y_nm / 2
+        };
+        (centre("J3"), centre("J4"))
+    };
+    let (j3, j4) = centres(&placement);
+
+    synth_place::compress_outline(&board, &mut placement);
+
+    let after = placement.board_outline;
+    assert!(
+        after.width_nm() * after.height_nm() < before.width_nm() * before.height_nm(),
+        "outline did not shrink: {:.2} x {:.2} mm",
+        nm_to_mm(after.width_nm()),
+        nm_to_mm(after.height_nm())
+    );
+    assert_eq!(centres(&placement), (j3, j4), "a centred group moved");
+    assert_no_overlap(&courtyards(&board, &placement));
 }
 
 #[test]

@@ -22,8 +22,8 @@ For each side in left, right, top, bottom order, it tries one 0.5 mm step:
 2. Carry connectors flush on that wall, and their passive frames, by the same
    step. Re-corner the free mounting holes at 3.5 mm from the new corners.
 3. Run the existing `space_groups` (2 mm minimum), re-dock every connector on
-   its wall (or the nearest one), and slide each USB connector to the middle
-   of its wall.
+   its wall (or the nearest one), and slide each group of USB connectors flush
+   to a wall so the group's bounding box sits at the middle of that wall.
 4. Recompute the round-20 judge. Keep the step only when no gate's failure
    count increases (so a board that already fails a gate can still shrink),
    `overlaps`, `group_gap`, `outside_outline`, `hole_corner` and
