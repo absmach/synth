@@ -1,12 +1,15 @@
 # W-SYNTH-PLACE-004 — placement preflight report
 
-**Severity:** info (warning when the ladder relaxed a hint or grew the canvas, and when a placement sidecar is stale or poor)
+**Severity:** info on the default note and on a clean preflight; warning when the ladder relaxed a hint or grew the canvas, and when a placement sidecar is stale or poor
 **Stage:** validate — placement preflight
 
 ## What this means
 
-`synth validate` runs the real placer through its bounded ladder and reports
-what it got. The diagnostic carries the board size, area, dead-area ratio and
+`synth validate` does not run the placer by default. When a board carries a
+hard placement hint, the default run emits this code at info severity with
+one line: run `--placement-preflight` to test that the board places. With that
+flag (or `placement_preflight` on `synth_validate`) the real placer runs
+through its bounded ladder and reports what it got. The diagnostic carries the board size, area, dead-area ratio and
 gate failures of the placement, plus the attempts it took. When a hint had to
 be relaxed or the canvas had to grow, the message names every relaxed hint and
 every canvas tried, and the severity is warning rather than info.
@@ -47,7 +50,8 @@ names a grown canvas, either accept the size or fix the hint that forced it.
 When it reports a sidecar, compare it with the from-scratch placement and
 update or delete the sidecar.
 
-Speed only: `synth validate --no-placement-preflight`.
+Speed is the default; add `--placement-preflight` when the packing itself is
+in question.
 
 ## See also
 

@@ -68,7 +68,8 @@ board "boxed_in" {
 - **Message:** "After N grid-cell attempts on a W × H mm
   board, no position accommodates `<refdes>`..."
 
-When `synth validate` emits it from the placement preflight, the message
+`synth validate` emits it from the placement preflight only with
+`--placement-preflight` (the default stays cheap). From the preflight, the message
 carries the rest of the evidence: every canvas the bounded ladder tried (the
 declared outline, the board estimate, the grown sizes), the hand hint the
 ladder could not relax (`placement_hint { … }`), the number of solves, and the

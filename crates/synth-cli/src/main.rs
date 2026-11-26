@@ -105,11 +105,11 @@ enum Command {
         #[arg(long)]
         parse_only: bool,
 
-        /// Skip the placement preflight. `validate` otherwise runs the real
-        /// placer through its bounded ladder and reports the board it gets;
-        /// the flag keeps the fast source-and-netlist check.
+        /// Run the real placer through its bounded ladder and report the board
+        /// it gets. Off by default: the cheap checks (the board estimate and
+        /// the hard-hint warning) are what the agent loop re-runs.
         #[arg(long)]
-        no_placement_preflight: bool,
+        placement_preflight: bool,
     },
 
     /// Simulate a design against its `<design>.sim.toml` testbench
@@ -1078,7 +1078,7 @@ fn main() -> ExitCode {
             user_registry,
             strict_registry,
             parse_only,
-            no_placement_preflight,
+            placement_preflight,
         } => validate(
             &input,
             format,
@@ -1086,7 +1086,7 @@ fn main() -> ExitCode {
             user_registry.as_deref(),
             strict_registry,
             parse_only,
-            no_placement_preflight,
+            placement_preflight,
         ),
         Command::Sim {
             input,
@@ -4066,7 +4066,7 @@ fn validate(
     user_registry: Option<&Path>,
     strict_registry: bool,
     parse_only: bool,
-    no_placement_preflight: bool,
+    placement_preflight: bool,
 ) -> anyhow::Result<u8> {
     let (source, file) = read_source(input)?;
     let parse = synth_parser::parse(&source, file.clone());
@@ -4100,14 +4100,17 @@ fn validate(
                     &erc_config,
                 ));
                 // The placer is the only thing that knows whether the parts
-                // actually pack. Run it bounded, and report what it finds.
-                if !no_placement_preflight {
+                // actually pack, and it costs minutes on a dense board. It is
+                // opt-in; the cheap run points at the flag instead.
+                if placement_preflight {
                     diagnostics.extend(synth_validate::placement_preflight(
                         board,
                         &file,
                         input,
                         &synth_validate::PreflightOptions::default(),
                     ));
+                } else if let Some(hint) = synth_validate::preflight_hint(board, &file) {
+                    diagnostics.push(hint);
                 }
                 // Aesthetic schematic ERC (E-SYNTH-SCHEM-*): advisory
                 // warnings; never blocking. Per-sheet on §P26 split
@@ -4406,7 +4409,25 @@ fn dump_place(
             lowered.board.as_ref().and_then(|b| {
                 let result = match requested_dimensions {
                     Some((w, h)) => synth_place::place_with_dimensions(b, w, h),
-                    None => synth_place::place(b),
+                    // The ladder is the fallback, not the path: a board that
+                    // places normally returns on the first attempt and never
+                    // pays for the hint levels or the canvas growth.
+                    None => synth_place::place(b).or_else(|normal| {
+                        // A declared outline is authoritative (ADR 0001); the
+                        // ladder grows the canvas, so it cannot be the fallback
+                        // for a board that states its size.
+                        if b.outline.is_some() {
+                            return Err(normal);
+                        }
+                        synth_place::place_legal(b, &synth_place::LegalOptions::default())
+                            .map_err(|_| normal)
+                            .map(|legal| {
+                                if let Some(warning) = legal.relaxation_warning() {
+                                    eprintln!("note: {warning}");
+                                }
+                                legal.placement
+                            })
+                    }),
                 };
                 match result {
                     // Publish the external coordinate space (footprint origin),

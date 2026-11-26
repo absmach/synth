@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-//! `synth validate` runs the real placer through its bounded ladder: it
-//! reports the board it gets, and fails only when no canvas and no hint level
-//! inside the budget could place it.
+//! The placement preflight is opt-in: the default `validate` stays cheap and
+//! points at `--placement-preflight` when hard hints make a board worth
+//! testing. `synth place` uses the same bounded ladder as a fallback when the
+//! normal solve fails.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -59,6 +60,21 @@ const UNPLACEABLE: &str = r#"board "unplaceable" {
     }
 }"#;
 
+/// Automatic placement fails on this board (the header's hard top edge makes
+/// it wider than the board), while the ladder's hint levels place it.
+const LADDER_ONLY: &str = r#"board "ladder_only" {
+    layers 2
+    outline 40mm x 70mm
+    component J1: connector "header_1x20" {
+        placement_hint { edge: top priority: hard }
+    }
+    component U1: mcu "rp2350"
+    component C1: capacitor "c_generic_0603"
+    component R1: resistor "r_generic_0603"
+    connect J1.p1 -> U1.iovdd
+    connect U1.gnd -> C1.p2
+}"#;
+
 const PLACEABLE: &str = r#"board "placeable" {
     layers 2
     component U1: regulator "ams1117_3v3"
@@ -78,21 +94,54 @@ fn write(scratch: &Path, name: &str, source: &str) -> PathBuf {
 }
 
 #[test]
-fn validate_reports_the_placement_it_gets() {
+fn the_default_does_not_run_the_placer_and_points_at_the_flag() {
+    let root = workspace_root();
+    let scratch =
+        std::env::temp_dir().join(format!("synth_preflight_default_{}", std::process::id()));
+    let path = write(&scratch, "unplaceable.synth", UNPLACEABLE);
+
+    let run = validate(&path, &root, &[]);
+    assert!(
+        find(&run.payload, "E-SYNTH-PLACE-002").is_empty(),
+        "the default validate must not run the placer"
+    );
+    let hints = find(&run.payload, "W-SYNTH-PLACE-004");
+    assert_eq!(hints.len(), 1, "{:?}", run.payload);
+    assert_eq!(hints[0]["severity"], "info");
+    let message = hints[0]["message"].as_str().expect("message");
+    assert!(message.contains("--placement-preflight"), "{message}");
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+#[test]
+fn a_board_without_hard_hints_gets_no_preflight_note() {
+    let root = workspace_root();
+    let scratch =
+        std::env::temp_dir().join(format!("synth_preflight_quiet_{}", std::process::id()));
+    let path = write(&scratch, "placeable.synth", PLACEABLE);
+
+    let run = validate(&path, &root, &[]);
+    assert!(find(&run.payload, "W-SYNTH-PLACE-004").is_empty());
+    assert!(find(&run.payload, "E-SYNTH-PLACE-002").is_empty());
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+#[test]
+fn the_flag_reports_the_placement_it_gets() {
     let root = workspace_root();
     let scratch = std::env::temp_dir().join(format!("synth_preflight_ok_{}", std::process::id()));
     let path = write(&scratch, "placeable.synth", PLACEABLE);
 
-    let run = validate(&path, &root, &[]);
+    let run = validate(&path, &root, &["--placement-preflight"]);
     assert!(
         find(&run.payload, "E-SYNTH-PLACE-002").is_empty(),
         "a board that places must not report a placement failure"
     );
     let reports = find(&run.payload, "W-SYNTH-PLACE-004");
     assert_eq!(reports.len(), 1, "{:?}", run.payload);
-    let report = reports[0];
-    assert_eq!(report["severity"], "info");
-    let message = report["message"].as_str().expect("message");
+    let message = reports[0]["message"].as_str().expect("message");
     assert!(message.contains("legal placement"), "{message}");
     assert!(message.contains("mm2"), "{message}");
 
@@ -100,12 +149,12 @@ fn validate_reports_the_placement_it_gets() {
 }
 
 #[test]
-fn an_unplaceable_board_fails_and_names_the_part() {
+fn an_unplaceable_board_fails_with_the_flag_and_names_the_part() {
     let root = workspace_root();
     let scratch = std::env::temp_dir().join(format!("synth_preflight_bad_{}", std::process::id()));
     let path = write(&scratch, "unplaceable.synth", UNPLACEABLE);
 
-    let run = validate(&path, &root, &[]);
+    let run = validate(&path, &root, &["--placement-preflight"]);
     assert!(
         !run.success,
         "a board no canvas can hold must fail validate"
@@ -125,19 +174,6 @@ fn an_unplaceable_board_fails_and_names_the_part() {
 }
 
 #[test]
-fn the_escape_flag_skips_the_preflight() {
-    let root = workspace_root();
-    let scratch = std::env::temp_dir().join(format!("synth_preflight_skip_{}", std::process::id()));
-    let path = write(&scratch, "unplaceable.synth", UNPLACEABLE);
-
-    let run = validate(&path, &root, &["--no-placement-preflight"]);
-    assert!(find(&run.payload, "E-SYNTH-PLACE-002").is_empty());
-    assert!(find(&run.payload, "W-SYNTH-PLACE-004").is_empty());
-
-    let _ = std::fs::remove_dir_all(&scratch);
-}
-
-#[test]
 fn a_sidecar_board_reports_both_placements() {
     let root = workspace_root();
     let scratch = std::env::temp_dir().join(format!("synth_preflight_side_{}", std::process::id()));
@@ -149,7 +185,7 @@ fn a_sidecar_board_reports_both_placements() {
     )
     .expect("sidecar written");
 
-    let run = validate(&path, &root, &[]);
+    let run = validate(&path, &root, &["--placement-preflight"]);
     let reports = find(&run.payload, "W-SYNTH-PLACE-004");
     assert_eq!(
         reports.len(),
@@ -163,10 +199,6 @@ fn a_sidecar_board_reports_both_placements() {
         .collect();
     assert!(
         titles.iter().any(|title| title.contains("sidecar")),
-        "{titles:?}"
-    );
-    assert!(
-        titles.iter().any(|title| title.contains("preflight")),
         "{titles:?}"
     );
     let sidecar_report = reports
@@ -183,6 +215,36 @@ fn a_sidecar_board_reports_both_placements() {
         "a stale sidecar must say which parts it does not pin: {message}"
     );
     assert!(message.contains("dead area"), "{message}");
+
+    let _ = std::fs::remove_dir_all(&scratch);
+}
+
+#[test]
+fn synth_place_falls_back_to_the_legal_ladder() {
+    let root = workspace_root();
+    let scratch = std::env::temp_dir().join(format!("synth_place_ladder_{}", std::process::id()));
+    let path = write(&scratch, "ladder_only.synth", LADDER_ONLY);
+
+    let out = Command::new(env!("CARGO_BIN_EXE_synth"))
+        .args(["place"])
+        .arg(&path)
+        .current_dir(&root)
+        .output()
+        .expect("run synth place");
+    assert!(
+        out.status.success(),
+        "the ladder must place a board the normal solve fails: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let placement: serde_json::Value =
+        serde_json::from_slice(&out.stdout).expect("place emits JSON");
+    assert_eq!(
+        placement["components"]
+            .as_array()
+            .expect("components")
+            .len(),
+        4
+    );
 
     let _ = std::fs::remove_dir_all(&scratch);
 }

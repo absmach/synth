@@ -18,10 +18,13 @@ retried.
 
 ## What validate does now
 
-`synth validate` runs the real placer through the bounded ladder in
-`synth_place::place_legal` and reports what it finds. The search costs time on
-a dense board, so `--no-placement-preflight` restores the source-and-netlist
-check.
+`synth validate` stays cheap by default. It reports the #513 board estimate
+(`W-SYNTH-BOARD-004`) and the hard-hint warning (`W-SYNTH-BOARD-005`); when the
+board carries a hard placement hint it adds one info line saying to run
+`--placement-preflight`. That flag runs the real placer through the bounded
+ladder in `synth_place::place_legal` and reports what it finds; the search
+costs minutes on a dense board, so it is opt-in. `synth_validate` exposes the
+same option as `placement_preflight`.
 
 The ladder, in order:
 
@@ -42,7 +45,8 @@ step 3. Only the last level drops it, and the diagnostic then names it.
 
 Every attempt is bounded by a wall-clock budget (60 s) and an attempt ceiling
 (21 solves). The budget is checked between attempts: one solve cannot be
-interrupted, so a board that places slowly can overrun it.
+interrupted, so a board that places slowly can overrun it, and the first rung
+(the production solve) has no internal deadline.
 
 ### Severities
 
@@ -103,8 +107,13 @@ before it tried anything, and returned that fallback immediately when the board
 carried a hard `near` hint. A hard-hinted board therefore never reached the
 solver: the sweep's own failure was the seam's answer.
 
-The order is now the one the name promises. RePlAce runs first, with the hints
-as written. The export sweep is built only when the solve is refused, and if
+The order is now the one the name promises. A board with any hard `near` hint
+is vetoed to the default path before RePlAce runs: the solver's
+`hard_anchor_positions` does not hold a hard-`near` part, and nothing after the
+legalizer checks the distance, so running RePlAce there could break the hint
+without a diagnostic. Anchoring those parts in the solver is a separate
+change. For the boards that reach it, RePlAce runs first, with the hints as
+written. The export sweep is built only when the solve is refused, and if
 the sweep cannot pack the board either, the bounded legal ladder runs as the
 last resort. `SYNTH_PLACE_REPLACE=1` reaches the solver on hard-hinted boards.
 When the default arrangement cannot pack the board at all there is no seed for
@@ -310,6 +319,24 @@ and the default user registry, reported nine `E-SYNTH-COMP-002` and one
 the scoped suite ran 739 tests: 739 passed, 0 failed, 14 ignored across 66
 targets — synth-cli 159, synth-place 337, synth-validate 243. The rebase onto
 `31c37393` had no textual conflicts.
+
+### Preflight cost: default vs `--placement-preflight`
+
+**2026-11-26, the #520 fix round on top of `54991361`, synth 0.1.4, rustc
+1.100.0, cargo 1.100.0.** Same archives and registries as above, with
+`XDG_DATA_HOME` empty.
+
+| Board | default `synth validate` | `--placement-preflight` |
+| --- | ---: | ---: |
+| clean carrier, 121 parts | 28.3 s | 152.9 s |
+| CM4 carrier, 184 parts | 106.5 s | 390.7 s |
+
+The default run keeps the source, netlist and schematic checks plus the
+estimate and hard-hint warnings. The opt-in run adds the placer. On the clean
+carrier it reports 153.7 x 114.7 mm, dead 41.7 %, 45 gate failures, review
+requires revision. On the CM4 carrier it reports the sidecar at
+108.4 x 81.3 mm (dead 5.7 %, 112 gate failures) beside a from-scratch
+169.6 x 169.6 mm (dead 43.6 %, 101 gate failures).
 
 ## See also
 

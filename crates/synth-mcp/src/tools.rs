@@ -69,7 +69,8 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "source": { "type": "string", "description": "SynthSpec source code string" },
                     "file_path": { "type": "string", "description": "Optional path to .synth source file on disk" },
                     "registry_path": { "type": "string", "description": "Optional custom component registry path" },
-                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" }
+                    "workspace_root": { "type": "string", "description": "Optional workspace root path for auto-resolving registry" },
+                    "placement_preflight": { "type": "boolean", "description": "Run the real placer through its bounded ladder and report the board (minutes on a dense board; default false)" }
                 }
             }),
         },
@@ -1286,6 +1287,16 @@ fn execute_validate(args: &Value, default_registry: Option<&Path>) -> Result<Val
                 synth_kicad::attach_schem_erc_locations(&mut schem, board, file_name);
                 gates.push(diagnostics_gate("schematic_readability", &schem));
                 diagnostics.extend(schem);
+                if args["placement_preflight"].as_bool().unwrap_or(false) {
+                    let preflight = synth_validate::placement_preflight(
+                        board,
+                        file_name,
+                        Path::new(file_name),
+                        &synth_validate::PreflightOptions::default(),
+                    );
+                    gates.push(diagnostics_gate("placement_preflight", &preflight));
+                    diagnostics.extend(preflight);
+                }
             } else {
                 gates.extend(after_compile_gates(
                     &compile,

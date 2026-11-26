@@ -148,6 +148,40 @@ fn test_mcp_validate_reports_the_board_size_estimate() {
     );
 }
 
+/// The placement preflight is an explicit `synth_validate` option, the same
+/// as `synth validate --placement-preflight`. The default call stays cheap.
+#[test]
+fn test_mcp_validate_placement_preflight_is_opt_in() {
+    let source = "board \"preflight\" {\n  layers 2\n  component U1: regulator \"ams1117_3v3\"\n  component C1: capacitor \"c_generic_0603\"\n  component C2: capacitor \"c_generic_0603\"\n  connect U1.vin -> C1.p1\n  connect U1.vout -> C2.p1\n}\n";
+    let call = |preflight: bool| {
+        let mut arguments = json!({ "source": source });
+        if preflight {
+            arguments["placement_preflight"] = json!(true);
+        }
+        let req = json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": { "name": "synth_validate", "arguments": arguments }
+        });
+        let resp = handle_jsonrpc_request(req, None);
+        resp["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string()
+    };
+    let default = call(false);
+    assert!(
+        !default.contains("W-SYNTH-PLACE-004"),
+        "the default synth_validate must not run the placer: {default}"
+    );
+    let requested = call(true);
+    assert!(
+        requested.contains("W-SYNTH-PLACE-004"),
+        "the opt-in preflight must report: {requested}"
+    );
+}
+
 #[test]
 fn test_mcp_call_synth_validate() {
     let req = json!({

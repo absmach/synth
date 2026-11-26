@@ -57,6 +57,37 @@ impl Default for PreflightOptions {
     }
 }
 
+/// The default `synth validate` note for a board with hard placement hints.
+///
+/// It does not run the placer: it says the opt-in preflight exists, because a
+/// hard hint is exactly where a board can be unplaceable while the cheap
+/// checks are clean.
+#[must_use]
+pub fn preflight_hint(board: &Board, file: &str) -> Option<Diagnostic> {
+    let has_hard = board.components.iter().any(|component| {
+        component
+            .placement_hint
+            .as_ref()
+            .is_some_and(|hint| hint.priority == synth_ir::PlacementPriority::Hard)
+    });
+    if !has_hard {
+        return None;
+    }
+    Some(
+        DiagnosticBuilder::new(
+            PREFLIGHT_CODE,
+            Severity::Info,
+            "placement preflight not run",
+        )
+        .location(Location::from_span(file.to_string(), board.source_span))
+        .message(
+            "this board has hard placement hints; run `synth validate --placement-preflight` to test that it places",
+        )
+        .explanation_url(format!("synth.docs/diagnostics/{PREFLIGHT_CODE}"))
+        .build(),
+    )
+}
+
 /// Run the placement preflight and turn its result into diagnostics.
 ///
 /// `design` is the source path, used to resolve the placement sidecar.
