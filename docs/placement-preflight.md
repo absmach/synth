@@ -245,11 +245,21 @@ No golden was regenerated. The placement snapshots
 fitted-dimension tests (`crates/synth-validate/tests/board_estimate.rs`, 18
 passed) are unchanged; the three unstable `place()` boards have no test
 points, so the probe deferral does not move them. `fixtures/kicad-reference/`
-and `qualification/**/SHA256SUMS` are untouched. The `synth-kicad` export
-tests (`replace_seam_export`, `placement_hints_pcb`) are outside the scoped
-command and were not re-run; the export code is unchanged. CI
-(`.github/workflows/ci.yml`) is unchanged: the same fmt, clippy and test
-commands, run here scoped to the three touched crates.
+and `qualification/**/SHA256SUMS` are untouched. `timeout 1800 cargo test
+-p synth-kicad --no-fail-fast` on `3f9e7b80` reached the lib unit tests plus
+20 of the 36 test targets before the cap, so the remaining 16 were run in
+follow-up invocations: **432 passed, 2 failed, 2 ignored** across all 37
+targets. `replace_seam_export` is 3/3 and `placement_hints_pcb` 6/6, the two
+targets the export fallback touches. The two failures are
+`golden_svg::reference_schematics_match_golden_fingerprints` (local-only: the
+live sheets differ from their golden fingerprints by 29 rendered paths; not
+regenerated) and
+`schematic_paper::every_standard_paper_reaches_the_exported_schematic`
+(`paper = "A5"` exports as A4; `crates/synth-kicad/src` differs from
+upstream/main only in `export.rs`, so this is not from the export fallback).
+`placement_spacing_labels` timed out at 900 s in the debug run and passes in
+release (1 passed, 509 s). CI (`.github/workflows/ci.yml`) is unchanged: the
+same fmt, clippy and test commands, run here scoped to the touched crates.
 
 
 ### Clean carrier: 121 parts, 2026-11-26
