@@ -6019,27 +6019,37 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         }
         let label = pick_net_label(board, net).unwrap_or_else(|| format!("NET_{}", net.id.0));
         // A label whose text only repeats the pin name beside it is visual
-        // noise. When another endpoint spells the net out, label that one and
-        // leave the self-named pin unlabelled; a net whose every pin carries
-        // the net's own name keeps one, or the copper would lose its name.
+        // noise. When another endpoint spells the net out, leave the
+        // self-named pins unlabelled and flag that endpoint instead. A net
+        // whose every pin is self-named still needs one flag: `wired_subnets`
+        // wires the remaining pins to it, so dropping every label would
+        // disconnect them. `pick_net_label` uppercases pin-derived names, so
+        // compare case-insensitively.
         let spells_net = |endpoint: &synth_ir::NetEndpoint| {
             board
                 .pin(endpoint.component, endpoint.pin)
-                .is_some_and(|pin| pin.name == label)
+                .is_some_and(|pin| pin.name.eq_ignore_ascii_case(&label))
         };
         let has_other_name = net.endpoints.iter().any(|endpoint| !spells_net(endpoint));
         // A net that leaves its region is wired inside each region it touches
         // (see [`wired_subnets`]) and flagged once there, where it leaves.
+        // The self-name suppression below only applies to a net contained in
+        // one region: a regional flag may be the only label in that region.
         let mut flagged_regions: Vec<Option<&str>> = Vec::new();
+        let mut kept_self_named = false;
         for ep in &net.endpoints {
+            let self_named = spells_net(ep);
             if crosses {
                 let region = region_of(ep.component);
                 if flagged_regions.contains(&region) {
                     continue;
                 }
                 flagged_regions.push(region);
-            } else if has_other_name && spells_net(ep) {
-                continue;
+            } else if self_named {
+                if has_other_name || kept_self_named {
+                    continue;
+                }
+                kept_self_named = true;
             }
             labels.push(NetLabel {
                 net: net.id,
@@ -9690,6 +9700,60 @@ mod documentation_tests {
             labels,
             vec![ComponentId(1)],
             "label the pin that spells the net out"
+        );
+    }
+
+    #[test]
+    fn an_all_self_named_net_keeps_one_flag_and_wires_the_rest() {
+        let part = |name: &str| part("resistor", vec![pin(name), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", part("USB_DP"), None),
+                component(1, "R2", part("USB_DP"), None),
+                component(2, "R3", part("USB_DP"), None),
+            ],
+            vec![net(0, "USB_DP", &[(0, 0), (1, 0), (2, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        let labels: Vec<ComponentId> = layout
+            .net_labels
+            .iter()
+            .filter(|label| label.net == NetId(0))
+            .map(|label| label.component)
+            .collect();
+        assert_eq!(labels, vec![ComponentId(0)], "one flag keeps the net name");
+        assert!(
+            wired_subnets(&b, &layout)
+                .iter()
+                .any(|net| net.id == NetId(0) && net.endpoints.len() == 3),
+            "the other two pins are wired to the flag"
+        );
+    }
+
+    #[test]
+    fn a_lowercase_self_named_pin_is_suppressed_too() {
+        let part = |name: &str| part("resistor", vec![pin(name), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", part("usb_dp"), None),
+                component(1, "R2", part("D+"), None),
+                component(2, "R3", part("usb_dp"), None),
+            ],
+            vec![net(0, "USB_DP", &[(0, 0), (1, 0), (2, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        let labels: Vec<ComponentId> = layout
+            .net_labels
+            .iter()
+            .filter(|label| label.net == NetId(0))
+            .map(|label| label.component)
+            .collect();
+        assert_eq!(
+            labels,
+            vec![ComponentId(1)],
+            "pin-derived labels are uppercased, so compare case-insensitively"
         );
     }
 

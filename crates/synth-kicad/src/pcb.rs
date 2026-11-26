@@ -2864,16 +2864,19 @@ fn build_footprint_instance(
     let x = nm_to_mm(origin.x_nm);
     let y = nm_to_mm(origin.y_nm);
     let angle = f64::from(placement.rotation.degrees());
-    let layer_name = match placement.layer {
-        Layer::Top => "F.Cu",
-        _ => "B.Cu",
-    };
+    // Only a Bottom placement goes on the back of the board: the inner layers
+    // cannot hold components, and silently treating one as Bottom would emit
+    // back-side geometry with a mismatched footprint layer.
+    let bottom = placement.layer == Layer::Bottom;
+    let layer_name = if bottom { "B.Cu" } else { "F.Cu" };
     // KiCad reads a pad's angle as its absolute orientation, so a
     // footprint's rotation has to be added to every pad (absmach/synth#199).
-    // On the bottom side the body is mirrored first, which negates its own
-    // pad angles, so the footprint rotation is subtracted instead.
-    let bottom = placement.layer != Layer::Top;
+    // Flipping to the back negates the library's pad angles, so the
+    // footprint rotation is subtracted there. KiCad's flip also negates the
+    // footprint's own orientation; keep the instance and the body in the
+    // same (top-bottom) mirror representation.
     let pad_angle = if bottom { -angle } else { angle };
+    let instance_angle = normalize_angle(if bottom { -angle } else { angle });
     let fp_uuid = derive_entity_uuid(project, "footprint", &component.refdes);
 
     // Resolve the bundled/user footprint body up front so we can decide whether
@@ -2883,7 +2886,7 @@ fn build_footprint_instance(
 
     let mut at_args = vec![num(x), num(y)];
     if placement.rotation != Rotation::Zero {
-        at_args.push(num(angle));
+        at_args.push(num(instance_angle));
     }
 
     let (half_w, half_h) = footprint_half_extent_mm(part);
@@ -2897,6 +2900,21 @@ fn build_footprint_instance(
         angle_deg: ref_text_angle,
         hidden: ref_hidden,
     } = ref_label;
+    // The placer works in the footprint's unflipped local frame. A
+    // top-bottom flip negates local y and the text angle, and KiCad marks
+    // back-side text as mirrored so it reads correctly from the bottom.
+    let (ref_y, ref_angle) = if bottom {
+        (mirrored(ref_local_y), mirrored(ref_text_angle))
+    } else {
+        (ref_local_y, ref_text_angle)
+    };
+    let text_effects = |font: Vec<Sexp>| {
+        let mut effects = vec![Sexp::list("font", font)];
+        if bottom {
+            effects.push(Sexp::list("justify", vec![Sexp::atom("mirror")]));
+        }
+        Sexp::list("effects", effects)
+    };
 
     let (val_local_x, val_local_y, val_text_angle) = match placement.rotation {
         Rotation::Zero => (0.0, half_h + text_margin, 0.0),
@@ -2904,16 +2922,14 @@ fn build_footprint_instance(
         Rotation::OneEighty => (0.0, -(half_h + text_margin), 180.0),
         Rotation::TwoSeventy => (-(half_w + text_margin), 0.0, 90.0),
     };
-
-    let silk_layer = match placement.layer {
-        Layer::Top => "F.SilkS",
-        _ => "B.SilkS",
+    let (val_y, val_angle) = if bottom {
+        (mirrored(val_local_y), mirrored(val_text_angle))
+    } else {
+        (val_local_y, val_text_angle)
     };
 
-    let fab_layer = match placement.layer {
-        Layer::Top => "F.Fab",
-        _ => "B.Fab",
-    };
+    let silk_layer = if bottom { "B.SilkS" } else { "F.SilkS" };
+    let fab_layer = if bottom { "B.Fab" } else { "F.Fab" };
 
     // Deterministic UUIDs for the Reference/Value text fields. Without
     // them, KiCad's `--save-board` DRC gate fills in random v4 UUIDs on
@@ -2962,13 +2978,7 @@ fn build_footprint_instance(
                 Sexp::list("layer", vec![Sexp::str(fab_layer)]),
                 Sexp::list("hide", vec![Sexp::atom("yes")]),
                 str_pair("uuid", uuid.to_string()),
-                Sexp::list(
-                    "effects",
-                    vec![Sexp::list(
-                        "font",
-                        vec![Sexp::list("size", vec![num(1.27), num(1.27)])],
-                    )],
-                ),
+                text_effects(vec![Sexp::list("size", vec![num(1.27), num(1.27)])]),
             ],
         )
     };
@@ -2985,35 +2995,23 @@ fn build_footprint_instance(
     let mut reference_property = vec![
         Sexp::str("Reference"),
         Sexp::str(&component.refdes),
-        Sexp::list(
-            "at",
-            vec![num(ref_local_x), num(ref_local_y), num(ref_text_angle)],
-        ),
+        Sexp::list("at", vec![num(ref_local_x), num(ref_y), num(ref_angle)]),
         Sexp::list("layer", vec![Sexp::str(silk_layer)]),
         str_pair("uuid", ref_prop_uuid.to_string()),
     ];
     if ref_hidden {
         reference_property.push(Sexp::list("hide", vec![Sexp::atom("yes")]));
     }
-    reference_property.push(Sexp::list(
-        "effects",
-        vec![Sexp::list(
-            "font",
+    reference_property.push(text_effects(vec![
+        Sexp::list(
+            "size",
             vec![
-                Sexp::list(
-                    "size",
-                    vec![
-                        num(silk_labels::LABEL_FONT_MM),
-                        num(silk_labels::LABEL_FONT_MM),
-                    ],
-                ),
-                Sexp::list("thickness", vec![num(silk_labels::LABEL_STROKE_MM)]),
+                num(silk_labels::LABEL_FONT_MM),
+                num(silk_labels::LABEL_FONT_MM),
             ],
-        )]
-        .into_iter()
-        .chain(bottom.then(|| Sexp::list("justify", vec![Sexp::atom("mirror")])))
-        .collect(),
-    ));
+        ),
+        Sexp::list("thickness", vec![num(silk_labels::LABEL_STROKE_MM)]),
+    ]));
 
     let mut children = vec![
         Sexp::list("layer", vec![Sexp::str(layer_name)]),
@@ -3041,20 +3039,11 @@ fn build_footprint_instance(
                         .or_else(|| component.part.as_ref().and_then(|p| p.mpn.as_deref()))
                         .unwrap_or("(no value)"),
                 ),
-                Sexp::list(
-                    "at",
-                    vec![num(val_local_x), num(val_local_y), num(val_text_angle)],
-                ),
+                Sexp::list("at", vec![num(val_local_x), num(val_y), num(val_angle)]),
                 Sexp::list("layer", vec![Sexp::str(fab_layer)]),
                 str_pair("uuid", val_prop_uuid.to_string()),
                 Sexp::list("hide", vec![Sexp::atom("yes")]),
-                Sexp::list(
-                    "effects",
-                    vec![Sexp::list(
-                        "font",
-                        vec![Sexp::list("size", vec![num(1.0), num(1.0)])],
-                    )],
-                ),
+                text_effects(vec![Sexp::list("size", vec![num(1.0), num(1.0)])]),
             ],
         ));
     }
@@ -3125,8 +3114,10 @@ fn build_footprint_instance(
                         "pad",
                         &format!("{}:{}", component.refdes, pad.number),
                     );
+                    // Match the top-bottom mirror used for library bodies:
+                    // local y is negated while x is kept.
                     let center = if bottom {
-                        (-pad.center_mm.0, pad.center_mm.1)
+                        (pad.center_mm.0, mirrored(pad.center_mm.1))
                     } else {
                         pad.center_mm
                     };
@@ -3577,86 +3568,21 @@ fn next_token(s: &str) -> &str {
     }
 }
 
-/// Turn a top-side footprint body into the body of a bottom-side one, the way
-/// KiCad stores it: every `F.` layer becomes its `B.` twin and the other way
-/// round, and the geometry is mirrored about the footprint's x axis (a y
-/// coordinate and an angle change sign). The footprint's own position and
-/// rotation are written outside the body and stay as they are. Without this a
-/// bottom footprint would keep pads on `F.Cu` (absmach/synth#201).
-fn flip_body_to_bottom(body: &str) -> String {
-    let mut text = body.to_string();
-    for layer in ["Cu", "Paste", "Mask", "SilkS", "CrtYd", "Fab", "Adhes"] {
-        let front = format!("\"F.{layer}\"");
-        let back = format!("\"B.{layer}\"");
-        let parked = format!("\"\u{1}{layer}\"");
-        text = text
-            .replace(&front, &parked)
-            .replace(&back, &front)
-            .replace(&parked, &back);
+/// Keep a footprint orientation in `(-180, 180]`, the range KiCad writes for
+/// a flipped footprint. A 90° bottom placement becomes -90°, while 180°
+/// stays 180° rather than -180°.
+fn normalize_angle(angle_deg: f64) -> f64 {
+    let turned = angle_deg.rem_euclid(360.0);
+    if turned > 180.0 {
+        turned - 360.0
+    } else {
+        turned
     }
-    // `(at x y [angle])` and the points of lines, arcs and polygons.
-    for tag in ["(at ", "(start ", "(end ", "(center ", "(mid ", "(xy "] {
-        let mut out = String::with_capacity(text.len());
-        let mut pos = 0;
-        while let Some(found) = text[pos..].find(tag) {
-            let args_start = pos + found + tag.len();
-            let Some(close) = text[args_start..].find(')') else {
-                break;
-            };
-            let args_end = args_start + close;
-            let words: Vec<&str> = text[args_start..args_end].split_whitespace().collect();
-            out.push_str(&text[pos..args_start]);
-            let flipped: Vec<String> = words
-                .iter()
-                .enumerate()
-                .map(|(i, word)| match (i, word.parse::<f64>()) {
-                    (1 | 2, Ok(value)) if value != 0.0 => format_angle(-value),
-                    _ => (*word).to_string(),
-                })
-                .collect();
-            out.push_str(&flipped.join(" "));
-            pos = args_end;
-        }
-        out.push_str(&text[pos..]);
-        text = out;
-    }
-    mirror_text_effects(&text)
 }
 
-/// Text on a back layer has to be mirrored or KiCad flags it
-/// (`nonmirrored_text_on_back_layer`): add `mirror` to the justification of
-/// every `fp_text` in a flipped body.
-fn mirror_text_effects(body: &str) -> String {
-    let mut out = String::with_capacity(body.len() + 64);
-    let mut pos = 0;
-    while let Some(idx) = body[pos..].find("(fp_text ") {
-        let start = pos + idx;
-        let Some(end) = balanced_close(body, start) else {
-            break;
-        };
-        let block = &body[start..end];
-        let mirrored = if block.contains("(justify mirror") || block.contains(" mirror)") {
-            block.to_string()
-        } else if let Some(at) = block.find("(justify ") {
-            let split = at + "(justify ".len();
-            format!("{}mirror {}", &block[..split], &block[split..])
-        } else if let Some(at) = block.find("(effects") {
-            let close = at + balanced_close(&block[at..], 0).unwrap_or(0);
-            // `close` is one past the `)` that ends `(effects ...)`.
-            format!(
-                "{} (justify mirror){}",
-                &block[..close.saturating_sub(1)],
-                &block[close.saturating_sub(1)..]
-            )
-        } else {
-            block.to_string()
-        };
-        out.push_str(&body[pos..start]);
-        out.push_str(&mirrored);
-        pos = end;
-    }
-    out.push_str(&body[pos..]);
-    out
+/// Negate a mirrored coordinate, normalising -0 to 0 for the emitter.
+fn mirrored(value: f64) -> f64 {
+    if value == 0.0 { 0.0 } else { -value }
 }
 
 /// `(at x y)` arguments for a pad, with the angle added when it is not zero.
@@ -3668,14 +3594,23 @@ fn pad_at_args(center_mm: (f64, f64), angle_deg: f64) -> Vec<Sexp> {
     args
 }
 
-/// Mirror a library footprint body for a bottom-side placement.
+/// Negate a mirrored number without producing `-0`, which KiCad's parser
+/// accepts but which would make byte-identical re-exports harder to assert.
+fn mirror_number(value: f64) -> String {
+    format!("{}", mirrored(value))
+}
+
+/// Mirror a library footprint body for a bottom-side placement, using the
+/// same representation KiCad writes for a top-bottom flip.
 ///
-/// KiCad flips a footprint by mirroring its geometry across the Y axis and
-/// moving every layer from the front to the back. The stored `(at x y [angle])`
-/// is footprint-local, so mirroring negates x and the angle; the instance's
-/// rotation is then subtracted from each pad by the caller.
+/// KiCad's `FOOTPRINT::Flip(TOP_BOTTOM)` mirrors geometry across the X axis
+/// (local y is negated), negates the footprint's orientation, and moves the
+/// layers to the back. The stored `(at x y [angle])` is footprint-local, so
+/// this negates y and the angle; the caller negates the instance orientation
+/// and subtracts it from each pad. Negating x instead would only be correct
+/// at ±90°, and would put asymmetric packages 180° out of place at 0°/180°.
 fn flip_footprint_body(body: &str) -> String {
-    let mut out = String::with_capacity(body.len() + 64);
+    let mut out = String::with_capacity(body.len() + 128);
     let mut pos = 0;
     while let Some(idx) = body[pos..].find("(at ") {
         let start = pos + idx;
@@ -3690,14 +3625,14 @@ fn flip_footprint_body(body: &str) -> String {
             .split_whitespace()
             .map(str::to_string)
             .collect();
-        if let Some(x) = words.first_mut()
-            && let Ok(value) = x.parse::<f64>()
-        {
-            *x = format!("{}", -value);
+        if words.first().is_some_and(|x| x.parse::<f64>().is_ok()) && words.len() >= 2 {
+            if let Ok(y) = words[1].parse::<f64>() {
+                words[1] = mirror_number(y);
+            }
             if words.len() >= 3
                 && let Ok(angle) = words[2].parse::<f64>()
             {
-                words[2] = format!("{}", -angle);
+                words[2] = mirror_number(angle);
             }
             out.push_str("(at ");
             out.push_str(&words.join(" "));
@@ -3708,11 +3643,132 @@ fn flip_footprint_body(body: &str) -> String {
         pos = end;
     }
     out.push_str(&body[pos..]);
+    // The `(at …)` pass above covers pads and text. Silk lines, arcs,
+    // courtyards and polygons carry bare coordinate pairs instead, and a
+    // real flip mirrors those too.
+    let out = negate_y_in_lists(&out, &["(start ", "(end ", "(mid ", "(center ", "(xy "]);
+    let out = mirror_text_items(&out);
     // Swap front and back layer names in one pass; doing the two replaces
     // in sequence would flip a name twice.
     let out = out.replace("\"F.", "\"\u{1}.");
     let out = out.replace("\"B.", "\"F.");
     out.replace("\"\u{1}.", "\"B.")
+}
+
+/// Negate the y coordinate of every list with one of `heads` (for example
+/// `(start 1 2)` → `(start 1 -2)`). Used for the graphic primitives that
+/// carry coordinates without an `(at …)` wrapper.
+fn negate_y_in_lists(body: &str, heads: &[&str]) -> String {
+    let mut out = String::with_capacity(body.len());
+    let mut pos = 0;
+    while pos < body.len() {
+        let found = heads
+            .iter()
+            .filter_map(|head| body[pos..].find(head).map(|idx| (idx, *head)))
+            .min_by_key(|(idx, _)| *idx);
+        let Some((rel, head)) = found else {
+            out.push_str(&body[pos..]);
+            break;
+        };
+        let start = pos + rel;
+        let Some(end) = balanced_close(body, start) else {
+            out.push_str(&body[pos..]);
+            break;
+        };
+        out.push_str(&body[pos..start]);
+        let list = &body[start..end];
+        // `head` already includes the trailing space after the list name.
+        let args_start = head.len();
+        let args_end = args_start + list[args_start..].find(')').unwrap_or(0);
+        let mut words: Vec<String> = list[args_start..args_end]
+            .split_whitespace()
+            .map(str::to_string)
+            .collect();
+        if words.len() >= 2
+            && words[0].parse::<f64>().is_ok()
+            && let Ok(y) = words[1].parse::<f64>()
+        {
+            words[1] = mirror_number(y);
+            out.push_str(head);
+            out.push_str(&words.join(" "));
+            out.push(')');
+        } else {
+            out.push_str(list);
+        }
+        pos = end;
+    }
+    out
+}
+
+/// Mark every text item in a flipped library body as mirrored, the way
+/// KiCad writes back-side text. The body is kept as raw text, so the flag
+/// is spliced into each `(effects …)` instead of re-serialising the library.
+fn mirror_text_items(body: &str) -> String {
+    let mut out = String::with_capacity(body.len() + 128);
+    let mut pos = 0;
+    loop {
+        let property = body[pos..].find("(property ");
+        let text = body[pos..].find("(fp_text ");
+        let rel = match (property, text) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+        let Some(rel) = rel else {
+            break;
+        };
+        let start = pos + rel;
+        let Some(end) = balanced_close(body, start) else {
+            break;
+        };
+        out.push_str(&body[pos..start]);
+        out.push_str(&mirror_text_item(&body[start..end]));
+        pos = end;
+    }
+    out.push_str(&body[pos..]);
+    out
+}
+
+fn mirror_text_item(item: &str) -> String {
+    // Metadata properties such as `ki_fp_filters` are not drawn text.
+    if !item.contains("(layer ") {
+        return item.to_string();
+    }
+    let Some(effects_rel) = item.find("(effects") else {
+        let close = item.rfind(')').unwrap_or(item.len());
+        return format!(
+            "{} (effects (justify mirror)){}",
+            &item[..close],
+            &item[close..]
+        );
+    };
+    let Some(effects_end) = balanced_close(item, effects_rel) else {
+        return item.to_string();
+    };
+    let effects = &item[effects_rel..effects_end];
+    let mirrored = if let Some(justify_rel) = effects.find("(justify") {
+        match balanced_close(effects, justify_rel) {
+            Some(justify_end) if !effects[justify_rel..justify_end].contains("mirror") => {
+                let close = justify_end - 1;
+                format!("{} mirror{})", &effects[..close], &effects[close..])
+            }
+            _ => effects.to_string(),
+        }
+    } else {
+        let close = effects.len() - 1;
+        format!(
+            "{} (justify mirror){})",
+            &effects[..close],
+            &effects[close..]
+        )
+    };
+    format!(
+        "{}{}{}",
+        &item[..effects_rel],
+        mirrored,
+        &item[effects_end..]
+    )
 }
 
 /// Add `angle_deg` to the angle of every `(pad ...)` in a footprint body.
@@ -4049,7 +4105,7 @@ mod tests {
         let body = "(pad \"1\" smd rect (at 1 0.5 30) (size 2 1) (layers \"F.Cu\" \"F.Paste\" \"F.Mask\"))\n\
                     (fp_line (start -1 -0.25) (end 1 0.75) (layer \"F.SilkS\"))\n\
                     (fp_rect (start -1 -1) (end 1 1) (layer \"F.CrtYd\"))";
-        let flipped = flip_body_to_bottom(body);
+        let flipped = flip_footprint_body(body);
         assert!(
             flipped.contains("(at 1 -0.5 -30)"),
             "the pad is mirrored about the x axis: {flipped}"
@@ -4066,7 +4122,7 @@ mod tests {
     #[test]
     fn flipped_footprint_text_is_mirrored() {
         let body = "(fp_text user \"${REFERENCE}\" (at 0 1) (layer \"F.Fab\") (effects (font (size 1 1) (thickness 0.15))))";
-        let flipped = flip_body_to_bottom(body);
+        let flipped = flip_footprint_body(body);
         assert!(flipped.contains("(justify mirror)"), "{flipped}");
         assert!(flipped.contains("\"B.Fab\""));
     }
@@ -4364,8 +4420,28 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_bottom_footprint_is_mirrored_onto_the_back_layers() {
+    fn footprint_at_args(module: &Sexp) -> Vec<String> {
+        let Sexp::List { children, .. } = module else {
+            panic!("footprint must be a list");
+        };
+        children
+            .iter()
+            .find_map(|child| match child {
+                Sexp::List { head, children } if head == "at" => Some(
+                    children
+                        .iter()
+                        .map(|arg| match arg {
+                            Sexp::Atom(v) | Sexp::Str(v) => v.clone(),
+                            _ => String::new(),
+                        })
+                        .collect(),
+                ),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("footprint has no (at …): {module:?}"))
+    }
+
+    fn bottom_instance(rotation: Rotation) -> Sexp {
         let part = no_footprint_part();
         let component = synth_ir::Component {
             id: ComponentId(0),
@@ -4381,19 +4457,19 @@ mod tests {
             sheet: None,
             source_span: Span::new(0, 0),
         };
-        let bottom = ComponentPlacement {
+        let placement = ComponentPlacement {
             id: ComponentId(0),
             center: Point { x_nm: 0, y_nm: 0 },
-            rotation: Rotation::Ninety,
+            rotation,
             layer: Layer::Bottom,
         };
         let mut pad_net_lookup: PadNetLookup = HashMap::new();
         pad_net_lookup.insert((ComponentId(0), "1".to_string()), (1, "VDD".to_string()));
         pad_net_lookup.insert((ComponentId(0), "2".to_string()), (2, "GND".to_string()));
-        let instance = build_footprint_instance(
+        build_footprint_instance(
             &component,
             &part,
-            &bottom,
+            &placement,
             "synth:nofp",
             &Uuid::nil(),
             &pad_net_lookup,
@@ -4405,21 +4481,81 @@ mod tests {
             },
             true,
         )
-        .to_string_pretty();
+    }
+
+    #[test]
+    fn a_bottom_footprint_is_mirrored_onto_the_back_layers() {
+        let instance = bottom_instance(Rotation::Ninety).to_string_pretty();
         assert!(
             !instance.contains("\"F."),
             "a bottom part has no front layer: {instance}"
         );
         assert!(instance.contains("\"B.Cu\""));
         assert!(
-            instance.contains("(at -") || instance.contains("(at 0 "),
-            "the body must be mirrored across x: {instance}"
+            instance.contains("(justify mirror)"),
+            "back-side text must be marked mirrored: {instance}"
         );
         assert!(
             instance
                 .lines()
                 .any(|line| line.trim_end().ends_with(" -90)")),
             "a flipped footprint subtracts its rotation from pad angles: {instance}"
+        );
+    }
+
+    #[test]
+    fn a_bottom_footprint_negates_its_instance_orientation() {
+        let cases = [
+            (Rotation::Zero, None),
+            (Rotation::Ninety, Some("-90")),
+            (Rotation::OneEighty, Some("180")),
+            (Rotation::TwoSeventy, Some("90")),
+        ];
+        for (rotation, expected) in cases {
+            let at = footprint_at_args(&bottom_instance(rotation));
+            assert_eq!(at.len(), if expected.is_some() { 3 } else { 2 });
+            assert_eq!(at[0], "0");
+            assert_eq!(at[1], "0");
+            if let Some(angle) = expected {
+                assert_eq!(at[2], angle, "rotation {rotation:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn flipping_a_body_mirrors_y_coordinates_and_text() {
+        let body = r#"
+            (property "Reference" "REF**"
+                (at -1.27 -2.77 0)
+                (layer "F.SilkS")
+                (effects (font (size 1 1)))
+            )
+            (fp_line (start 1 2) (end 3 4) (layer "F.SilkS"))
+            (fp_text user "+" (at 1 2 0) (layer "F.SilkS")
+                (effects (font (size 1 1)) (justify left))
+            )
+            (fp_poly (pts (xy 1 2) (xy 3 4)) (layer "F.Fab"))
+            (pad "1" smd rect (at -0.8 1.2 30) (size 1 1) (layers "F.Cu" "F.Paste"))
+            (property ki_fp_filters "R_*")
+        "#;
+        let flipped = flip_footprint_body(body);
+        assert!(flipped.contains("(at -1.27 2.77 0)"), "{flipped}");
+        assert!(flipped.contains("(at -0.8 -1.2 -30)"), "{flipped}");
+        assert!(flipped.contains("(start 1 -2)"), "{flipped}");
+        assert!(flipped.contains("(end 3 -4)"), "{flipped}");
+        assert!(flipped.contains("(xy 1 -2)"), "{flipped}");
+        assert!(flipped.contains("\"B.Cu\""), "{flipped}");
+        assert!(!flipped.contains("\"F."), "{flipped}");
+        assert_eq!(
+            flipped.matches("mirror").count(),
+            2,
+            "both text items must be mirrored: {flipped}"
+        );
+        assert!(flipped.contains("(justify left mirror)"), "{flipped}");
+        assert!(flipped.contains("(at 1 -2 0)"), "{flipped}");
+        assert!(
+            flipped.contains("(property ki_fp_filters \"R_*\")"),
+            "metadata properties are not text: {flipped}"
         );
     }
 
