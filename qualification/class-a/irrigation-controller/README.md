@@ -43,6 +43,8 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Track length            | 1663.8 mm                                                                                                                                                                                                 |
 | Zones and planes        | GND pour on F.Cu and on B.Cu; four keepout zones at the screw heads of `H1` to `H4` on both layers                                                                                                        |
 | Fab package             | `fab/gerbers.zip` (copper, mask, paste, silkscreen, edge cuts, PTH and NPTH drill files and maps, job file), `fab/bom.csv`, `fab/cpl.csv`; STEP model in `models/`; images and schematic PDF in `images/` |
+| 3D models               | `models/` holds the STEP body of every part the board references and the board model `irrigation_controller.step`. The board file reaches them by the relative path `${KIPRJMOD}/../models/`. Mounting holes and fiducials have no body. A part that KiCad's library has no model for is a simplified box of its envelope. |
+| Schematic               | `images/schematic.pdf`: vector pages, one per sheet, plotted by `kicad-cli sch export pdf`. |
 
 ### Checks
 

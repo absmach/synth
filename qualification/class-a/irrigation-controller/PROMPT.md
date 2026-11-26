@@ -1,5 +1,3 @@
 # Prompt
 
-This prompt is written from the finished board so that someone can rerun it. It is not the text the agent was given. The prompts the agent ran are in the history at `e0e004eb`.
-
 Using synth mcp server design a two-layer two-zone irrigation controller for JLCPCB, about 79 x 71 mm. Power it from a 12 V DC input on a JST XH connector, operating between 10.8 V and 12.6 V, through a 1.5 A resettable fuse, an SMAJ13A TVS and an LM74700-Q1 ideal-diode reverse-polarity stage driving a DMT6007LFG MOSFET. Regulate 3.3 V with an MP2307 buck converter. Use an STM32G030K8T6 with a 32.768 kHz crystal, a reset button and an SWD header. Switch two 12 V solenoid-valve outputs with low-side AO3400A MOSFETs, flyback diodes and shunt current sensing. Add two soil-probe inputs with AC excitation, a flow-meter pulse input, an I2C header with an APDS-9301 light sensor and a 24LC256 EEPROM, ESD protection on the field connectors, status LEDs and test points. Group the schematic by function and keep the design notes explicit.
