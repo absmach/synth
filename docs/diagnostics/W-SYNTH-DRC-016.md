@@ -18,18 +18,20 @@ rule judges a via against the same ground the planes are built from. A board
 with no ground net is not checked, and a board without a declared `stackup` is
 not checked either, because the distance is a property of the dielectric.
 
-The router's return-via repair holds a board back for a missing return via on
-every signal net unless the design declares the net slow: a `netclass` with
-`edge_rate slow`. A generic `output` or `bidirectional` pin carries a fast SPI,
-USB or timer edge as readily as a slow GPIO, so pin type cannot prove a slow
-edge and an unclassified net stays blocking. One that is slow by declaration is
-listed in the route report's `advisories`, with the net and the position, and
-does not block.
+The router's return-via repair adds a ground via beside the layer change of
+every signal net that needs one. It never holds a board back for a missing
+return via. A layer change with no spot for a via, or one the repair rounds did
+not place, is listed in the route report's `advisories`, with the net and the
+position. A net the design declares slow (`edge_rate slow` on its `netclass`) is
+not given a return via, even where there is room for one: the via would take
+room from the nets that need it. The DRC pass still lists its layer change as
+this warning.
 
 A net class may instead declare `edge_rate medium`: edges no faster than 0.3 ns.
 The net keeps the return-via requirement, but looks for the ground via within
-6 mm of the signal via, not one dielectric height. The 6 mm is a twentieth of
-the wavelength at the knee of a 0.3 ns edge (0.35 / 0.3 ns, about 1.2 GHz, in
+6 mm of the signal via, not one dielectric height. Where no spot for one exists,
+the layer change is listed as an advisory. The
+6 mm is a twentieth of the wavelength at the knee of a 0.3 ns edge (0.35 / 0.3 ns, about 1.2 GHz, in
 FR4 of relative permittivity 4.3, about 124 mm), a rule of thumb that PCB design
 guides give as a tenth to a twentieth of the wavelength. The stackup's thickest
 dielectric still sets the floor. The declaration is the design's claim: back it
@@ -43,7 +45,8 @@ physical evidence of a fast edge, and no declaration replaces them.
 
 A `slow` declaration cannot downgrade a net whose own pins prove a fast edge: a
 differential pin or declared `diff_pair` on a class that does not declare
-`medium`, a clock pin, an RF or analog pin, a bare crystal's terminal, or a switching node at an inductor stays blocking.
+`medium`, a clock pin, an RF or analog pin, a bare crystal's terminal, or a
+switching node at an inductor keeps its return-via requirement.
 
 The rule is advisory: whether a discontinuity matters depends on the edge rate
 and the signalling scheme, which geometry alone cannot decide. As a `W-` code it

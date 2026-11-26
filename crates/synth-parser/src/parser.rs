@@ -18,10 +18,10 @@ use synth_ast::{
     DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
     KeepoutAttr, KeepoutStmt, LabelsStmt, LayersStmt, LegendsStmt, ManufacturerStmt,
     ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt, NoConnectStmt, NotesDeclAst,
-    OutlineStmt, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PortBindingAst, PortDeclAst,
-    PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt, SchematicOverflowAst, SchematicPaperAst,
-    SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit,
-    VariantDeclStmt,
+    OutlineStmt, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PlacementStmt, PortBindingAst,
+    PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt, SchematicOverflowAst,
+    SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst,
+    UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -330,6 +330,10 @@ impl Parser {
             TokenKind::KwSheet => self.parse_sheet().map(StatementAst::Sheet),
             TokenKind::KwSchematic => self.parse_schematic().map(StatementAst::Schematic),
             TokenKind::KwStackup => self.parse_stackup().map(StatementAst::Stackup),
+            // Contextual, not reserved, so `placement` stays usable as a name.
+            TokenKind::Ident(name) if name == "placement" => {
+                self.parse_placement().map(StatementAst::Placement)
+            }
             TokenKind::KwRequires => self.parse_requires().map(StatementAst::Requires),
             TokenKind::Ident(name) if name == "no_connect" => {
                 Some(StatementAst::NoConnect(self.parse_no_connect()))
@@ -414,8 +418,8 @@ impl Parser {
         })
     }
 
-    /// `outline <width> x <height>` — a fixed board rectangle whose
-    /// bottom-left corner is the board origin.
+    /// `outline <width> x <height> [reason "<text>"]` — a fixed board
+    /// rectangle whose bottom-left corner is the board origin.
     fn parse_outline(&mut self) -> Option<OutlineStmt> {
         let start = self.peek().span.byte_start;
         self.bump(); // consume `outline`
@@ -435,10 +439,39 @@ impl Parser {
         self.bump();
         let height = self.expect_value()?;
         let height = self.outline_dimension(height, "height")?;
+        let mut reason = None;
+        if matches!(self.peek_kind(), TokenKind::Ident(name) if name == "reason") {
+            self.bump();
+            let TokenKind::StringLit(text) = self.peek_kind().clone() else {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-047",
+                    "expected a quoted, non-empty outline reason",
+                    "a quoted reason, e.g. `reason \"fits the enclosure\"`",
+                    self.describe_current(),
+                    None,
+                );
+                return None;
+            };
+            if text.trim().is_empty() {
+                self.emit(
+                    self.peek().span,
+                    "E-SYNTH-PARSE-047",
+                    "outline reason must not be empty",
+                    "a non-empty quoted reason, e.g. `reason \"fits the enclosure\"`",
+                    "an empty string".to_string(),
+                    None,
+                );
+                return None;
+            }
+            self.bump();
+            reason = Some(text);
+        }
         let end = self.last_offset();
         Some(OutlineStmt {
             width,
             height,
+            reason,
             span: Span::new(start, end),
         })
     }
@@ -1832,6 +1865,67 @@ impl Parser {
         Some(SchematicStmt {
             paper,
             overflow,
+            span: Span::new(start, end),
+        })
+    }
+
+    /// `placement { spacing = 2.0mm }`. The setting name is a bare identifier,
+    /// like the `schematic` settings.
+    fn parse_placement(&mut self) -> Option<PlacementStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `placement`
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open placement body",
+                "`placement { spacing = 2.0mm }`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut spacing = None;
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Ident(name) if name == "spacing" => {
+                    self.bump();
+                    if spacing.is_some() {
+                        self.emit(
+                            self.peek().span,
+                            "E-SYNTH-PARSE-046",
+                            "duplicate `spacing` setting",
+                            "one `spacing` setting per placement block",
+                            "a second `spacing`; the first one stands".to_string(),
+                            None,
+                        );
+                    }
+                    if self.consume_eq_after_setting() && spacing.is_none() {
+                        spacing = self.expect_value();
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-012",
+                        "unknown placement setting",
+                        "`spacing`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        let end = self.last_offset();
+        Some(PlacementStmt {
+            spacing,
             span: Span::new(start, end),
         })
     }

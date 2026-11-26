@@ -1,0 +1,468 @@
+---
+source: crates/synth-parser/tests/fixtures.rs
+expression: ast
+---
+{
+  "imports": [],
+  "board": {
+    "name": "gateway_estimate",
+    "statements": [
+      {
+        "stmt": "layers",
+        "count": 4,
+        "span": {
+          "byte_start": 521,
+          "byte_end": 529
+        }
+      },
+      {
+        "stmt": "outline",
+        "width": {
+          "literal": "180",
+          "unit": "mm",
+          "span": {
+            "byte_start": 540,
+            "byte_end": 545
+          }
+        },
+        "height": {
+          "literal": "120",
+          "unit": "mm",
+          "span": {
+            "byte_start": 548,
+            "byte_end": 553
+          }
+        },
+        "span": {
+          "byte_start": 532,
+          "byte_end": 553
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U1",
+        "kind": "ic",
+        "part": "stm32g030k8_lqfp32",
+        "value": "STM32G030K8",
+        "span": {
+          "byte_start": 557,
+          "byte_end": 614
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U2",
+        "kind": "ic",
+        "part": "thvd1450d",
+        "value": "THVD1450",
+        "span": {
+          "byte_start": 617,
+          "byte_end": 662
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U3",
+        "kind": "ic",
+        "part": "lan8720a",
+        "value": "LAN8720A",
+        "span": {
+          "byte_start": 665,
+          "byte_end": 709
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "U4",
+        "kind": "ic",
+        "part": "ch340c",
+        "value": "CH340C",
+        "span": {
+          "byte_start": 712,
+          "byte_end": 752
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J1",
+        "kind": "connector",
+        "part": "rj45_hr911105a",
+        "value": "HR911105A",
+        "span": {
+          "byte_start": 756,
+          "byte_end": 814
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J2",
+        "kind": "connector",
+        "part": "usb_c_receptacle",
+        "value": "USB-C",
+        "span": {
+          "byte_start": 817,
+          "byte_end": 873
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J3",
+        "kind": "connector",
+        "part": "header_1x4",
+        "span": {
+          "byte_start": 876,
+          "byte_end": 912
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "J4",
+        "kind": "connector",
+        "part": "header_1x12",
+        "span": {
+          "byte_start": 915,
+          "byte_end": 952
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "Y1",
+        "kind": "crystal",
+        "part": "xtal_generic",
+        "value": "25MHz",
+        "span": {
+          "byte_start": 956,
+          "byte_end": 1006
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H1",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "span": {
+          "byte_start": 1010,
+          "byte_end": 1058
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H2",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "span": {
+          "byte_start": 1061,
+          "byte_end": 1109
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H3",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "span": {
+          "byte_start": 1112,
+          "byte_end": 1160
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "H4",
+        "kind": "mounting_hole",
+        "part": "mounting_hole_m2_5",
+        "span": {
+          "byte_start": 1163,
+          "byte_end": 1211
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C1",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1215,
+          "byte_end": 1255
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C2",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1258,
+          "byte_end": 1298
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C3",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1301,
+          "byte_end": 1341
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C4",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1344,
+          "byte_end": 1384
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C5",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1387,
+          "byte_end": 1427
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C6",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1430,
+          "byte_end": 1470
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C7",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1473,
+          "byte_end": 1513
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C8",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1516,
+          "byte_end": 1556
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C9",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1559,
+          "byte_end": 1599
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C10",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1602,
+          "byte_end": 1643
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C11",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1646,
+          "byte_end": 1687
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C12",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1690,
+          "byte_end": 1731
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C13",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1734,
+          "byte_end": 1775
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C14",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1778,
+          "byte_end": 1819
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C15",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1822,
+          "byte_end": 1863
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "C16",
+        "kind": "capacitor",
+        "part": "c_generic_0603",
+        "span": {
+          "byte_start": 1866,
+          "byte_end": 1907
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R1",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 1911,
+          "byte_end": 1950
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R2",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 1953,
+          "byte_end": 1992
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R3",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 1995,
+          "byte_end": 2034
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R4",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2037,
+          "byte_end": 2076
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R5",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2079,
+          "byte_end": 2118
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R6",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2121,
+          "byte_end": 2160
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R7",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2163,
+          "byte_end": 2202
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R8",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2205,
+          "byte_end": 2244
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R9",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2247,
+          "byte_end": 2286
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R10",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2289,
+          "byte_end": 2329
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R11",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2332,
+          "byte_end": 2372
+        }
+      },
+      {
+        "stmt": "component",
+        "refdes": "R12",
+        "kind": "resistor",
+        "part": "r_generic_0603",
+        "span": {
+          "byte_start": 2375,
+          "byte_end": 2415
+        }
+      }
+    ],
+    "span": {
+      "byte_start": 492,
+      "byte_end": 2417
+    }
+  },
+  "span": {
+    "byte_start": 492,
+    "byte_end": 2417
+  }
+}

@@ -102,6 +102,52 @@ fn test_mcp_call_synth_search_registry() {
     assert!(content_text.contains("total_matches"));
 }
 
+/// A hard hint that fixes a board span must reach MCP clients too.
+#[test]
+fn test_mcp_validate_reports_non_physical_hard_hints() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_validate",
+            "arguments": {
+                "source": "board \"hint\" {\n  layers 2\n  component U1: ic \"stm32g030k8_lqfp32\" {\n    placement_hint { region centre priority: hard }\n  }\n}\n"
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content_text.contains("W-SYNTH-BOARD-005"),
+        "hard-hint check missing from synth_validate: {content_text}"
+    );
+}
+
+/// The same board-size estimate `synth validate` reports must reach MCP
+/// clients: an arbitrary 180 x 120 mm outline over one resistor leaves a huge
+/// dead board, and an agent has to see the warning.
+#[test]
+fn test_mcp_validate_reports_the_board_size_estimate() {
+    let req = json!({
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+            "name": "synth_validate",
+            "arguments": {
+                "source": "board \"test\" {\n  layers 2\n  outline 180mm x 120mm\n  component R1: resistor \"r_generic_0603\"\n}\n"
+            }
+        }
+    });
+    let resp = handle_jsonrpc_request(req, None);
+    let content_text = resp["result"]["content"][0]["text"].as_str().unwrap();
+    assert!(
+        content_text.contains("W-SYNTH-BOARD-004"),
+        "board-size estimate missing from synth_validate: {content_text}"
+    );
+}
+
 #[test]
 fn test_mcp_call_synth_validate() {
     let req = json!({
@@ -1405,4 +1451,27 @@ fn test_mcp_route_is_quiet_when_the_profile_offers_the_process() {
         !text.contains("process_warnings"),
         "a met requirement must not be reported: {text}"
     );
+}
+
+/// The standing instructions must keep an agent from pinning a board size or a
+/// placement the user never asked for: a declared `outline` that is a guess
+/// leaves dead board, and an `edge`/`region` hint with no mechanical reason
+/// fixes a board span. Electrical proximity at a pin stays hard.
+#[test]
+fn test_mcp_instructions_forbid_guessed_outlines_and_span_fixing_hard_hints() {
+    for needle in [
+        "Never declare `outline <width> x <height>`",
+        "the user gave the size or a mating constraint",
+        "state why on the statement",
+        "`priority: hard`",
+        "physical and electrical proximity",
+        "must sit at a pin",
+        "fixes a board span",
+        "enclosure or mating constraint",
+    ] {
+        assert!(
+            SERVER_INSTRUCTIONS.contains(needle),
+            "standing instruction missing: {needle}"
+        );
+    }
 }

@@ -134,13 +134,14 @@ Boxes are sized from the **text-inclusive** extents (`component_text_inclusive_h
 A board that declares `group`s lays out **by region**, not as one band of columns:
 
 - clusters partition by group; each region is laid out in its own local frame, so its true content rectangle is known before packing;
-- regions are then shelf-packed to tile the page (reference mechanism 1: _the page is a grid of titled regions_). Packing measures the **box**, not the bodies — the box reaches above its members for the caption and below them for the note block (`group_box_overhang`), and packing on body bounds alone let boxes overlap;
+- regions are then cut into a floorplan whose cells tile the page (reference mechanism 1: _the page is a grid of titled regions_), with a shelf-packed fallback when no cut tree fits. A cell's content is spread over its inner rectangle, and a bottom-row cell may run on beside the title block. Packing measures the **box**, not the bodies — the box reaches above its members for the caption and below them for the note block (`group_box_overhang`), and packing on body bounds alone let boxes overlap;
+- the page measure reserves the title-block band only for a box or placement that reaches into it (`title_block_origin`); a box that ends left of the block reaches the sheet border without asking for the band;
 - `REGION_SHELF_WIDTHS` (A4/A3/A2 content width) is swept by the fitting loop rather than fixed, because which regions share a shelf decides the stack's height and only a concrete candidate sheet can judge it;
 - `region` / `color` / `title` on the group header (Phase D1) steer the packing order and the box hue.
 
 An **ungrouped** board keeps the single-band path, with one addition: when the band is too wide for the page shape it **shelf-wraps** onto successive rows. Layers are columns, so a board with a dozen one-cluster layers used to spread ~290 mm wide and ~118 mm tall on a 420 × 297 mm page.
 
-The fitting loop ranks attempts by **`(sheet area, shelves, column pitch, aspect mismatch)`**. Shelf-wrapping and pitch-tightening are spent only on _saving a sheet size_, never on a page that already fits: wrapping costs the left-to-right power-flow reading order (a shelf break continues on the next line), and tightening pushes nets past the span threshold until they degrade into labels.
+The fitting loop ranks attempts by **`(sheet area, region area, shelves, column pitch, aspect mismatch)`**. Shelf-wrapping and pitch-tightening are spent only on _saving a sheet size_, never on a page that already fits: wrapping costs the left-to-right power-flow reading order (a shelf break continues on the next line), and tightening pushes nets past the span threshold until they degrade into labels.
 
 2. **`place_clusters` — layered placement** (run via the `Placer` trait seam; V1 ships `NativeSemanticPlacer`, `crates/synth-layout/src/placer.rs`, see §7.8.5 — output is byte-identical to the pre-trait pipeline).
 
@@ -315,6 +316,19 @@ The MCP server exposes the closed loop an agent runs to make a schematic _readab
 | `synth_mutate_layout`      | Apply one structured layout op; `persist=true` writes it through to the sidecar                                                                                                    |
 
 The gate order for a handoff is: `synth_validate` (zero blocking) → placement review → **render inspection** → `synth_export` → `kicad-cli sch erc` (zero errors).
+
+### 6.2 Inspect the call log (MCP)
+
+Two tools let an agent read the server's own audit log (`audit.jsonl`). Use them to find out which call failed before you retry it. Neither tool adds fields to the log, and neither returns tool arguments.
+
+| Tool                 | Purpose                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `synth_recent_calls` | Return the last calls, newest first: `call_id`, `tool`, `timestamp`, `duration_ms`, `status`, `error_kind`, `message` |
+| `synth_server_stats` | Return version, uptime, log path, total and error counts, per-tool counts, and time since the last call          |
+
+To list recent failures, call `synth_recent_calls` with `status` set to `error`. The other filter is `tool`. `limit` is an integer from 1 to 200 and defaults to 20. `status` is `ok`, `error` or `refused`; any other value is refused.
+
+`call_id` is the line number in the log. `error_kind`, `message` and `design_hash` are `null` or absent unless the log entry records them under `metadata`. A message is cut to 200 characters. If the log is missing or `SYNTH_AUDIT_LOG` is empty, both tools return an empty result with a `note`. They count lines they cannot parse in `malformed_lines`.
 
 ---
 

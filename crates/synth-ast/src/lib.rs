@@ -69,6 +69,7 @@ pub enum StatementAst {
     Group(GroupStmt),
     Sheet(SheetStmt),
     Schematic(SchematicStmt),
+    Placement(PlacementStmt),
     Stackup(StackupStmt),
     Requires(RequiresStmt),
     NoConnect(NoConnectStmt),
@@ -101,6 +102,7 @@ impl StatementAst {
             StatementAst::Group(s) => s.span,
             StatementAst::Sheet(s) => s.span,
             StatementAst::Schematic(s) => s.span,
+            StatementAst::Placement(s) => s.span,
             StatementAst::Stackup(s) => s.span,
             StatementAst::Requires(s) => s.span,
             StatementAst::NoConnect(s) => s.span,
@@ -166,6 +168,15 @@ pub struct SheetStmt {
     pub span: Span,
 }
 
+/// `placement { spacing = 2.0mm }` — board-level placement settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlacementStmt {
+    /// Least courtyard-to-courtyard gap between any two parts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacing: Option<ValueWithUnit>,
+    pub span: Span,
+}
+
 /// `schematic { paper = "A4" }` — page settings for the rendered sheet.
 ///
 /// A block rather than a bare `paper "A4"` statement so that further page
@@ -190,6 +201,9 @@ pub struct SchematicStmt {
 pub struct OutlineStmt {
     pub width: ValueWithUnit,
     pub height: ValueWithUnit,
+    /// The stated reason for the fixed size (`reason "<text>"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     pub span: Span,
 }
 
@@ -737,7 +751,7 @@ pub enum NetclassAttr {
     /// bus/group length-match budget.
     MaxSkew(ValueWithUnit),
     /// How fast the class's nets switch (`edge_rate slow`, `medium` or `fast`).
-    /// A slow net may lose a ground return via with an advisory; an
+    /// A slow net is not given a ground return via and its layer change is only a warning; an
     /// undeclared net is treated as fast, because a generic output or
     /// bidirectional pin carries a fast SPI, USB or timer edge too.
     EdgeRate {

@@ -64,3 +64,21 @@ fn a_failing_second_outline_does_not_undo_the_first() {
     assert_eq!(outline.width, synth_ir::Length(60_000_000));
     assert_eq!(outline.height, synth_ir::Length(30_000_000));
 }
+
+#[test]
+fn an_outline_reason_lowers_with_the_rectangle() {
+    let (board, codes) =
+        lower("board \"b\" {\n layers 4\n outline 60mm x 30mm reason \"fits the enclosure\"\n}");
+    assert!(codes.is_empty(), "{codes:?}");
+    let outline = board.unwrap().outline.expect("outline declared");
+    assert_eq!(outline.width, synth_ir::Length(60_000_000));
+    assert_eq!(outline.height, synth_ir::Length(30_000_000));
+    assert_eq!(outline.reason.as_deref(), Some("fits the enclosure"));
+}
+
+#[test]
+fn an_outline_without_a_reason_carries_none() {
+    let (board, codes) = lower("board \"b\" {\n layers 2\n outline 60mm x 30mm\n}");
+    assert!(codes.is_empty(), "{codes:?}");
+    assert!(board.unwrap().outline.unwrap().reason.is_none());
+}

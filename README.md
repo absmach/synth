@@ -122,7 +122,7 @@ synth validate examples/env_logger/env_logger.synth --format json
 
 Open exported projects in KiCad. Optional Gerber, drill, and STEP exports require `kicad-cli`; see the [KiCad workflow guide](docs/kicad-workflows.md) for export and review details.
 
-For CI and release gates, `synth check DESIGN.synth --json` is the deterministic, model-free gate for validation and DRC. A check that could not run is reported as `unknown` and blocks just as a failure does — see [release checks](docs/release-checks.md).
+For CI and release gates, `synth check DESIGN.synth --json` is the deterministic gate for validation, DRC and the testbench when one exists. A check that could not run is reported as `unknown` and blocks just as a failure does — see [release checks](docs/release-checks.md).
 
 ### Logging
 
@@ -141,7 +141,7 @@ Start the MCP server over standard input and output:
 synth mcp --stdio
 ```
 
-Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details.
+Agents can retrieve the SynthSpec language reference, search the registry, validate designs, apply fixes, and invoke compiler stages. See the [MCP guide](crates/synth-mcp/README.md) for transports and tool details. For electrical checks, the [SPICE simulation skill](skills/spice-sim/SKILL.md) covers authoring a testbench, reading `synth sim` results, and reporting coverage.
 
 ## How It Works
 
@@ -198,6 +198,7 @@ for an interactive review._
 - [Diagnostic protocol](docs/protocol-v1.0.md) — the machine-readable diagnostic format.
 - [Component registry](registry/README.md) — part definitions and registry structure.
 - [MCP server](crates/synth-mcp/README.md) — agent tools and integration.
+- [Glossary](GLOSSARY.md) — shared vocabulary for simulation and check stages.
 
 ## Contributing
 

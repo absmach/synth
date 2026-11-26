@@ -608,8 +608,9 @@ pub struct RouteRequest {
     /// they keep the return via, and look for it in the wider medium-edge window.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub return_via_medium_nets: Vec<String>,
-    /// Opt-in: a missing fast-edge return via beside a fine-pitch pad row is an
-    /// advisory instead of blocking. Off by default; needs SI-review sign-off.
+    /// Opt-in: a missing return via beside a fine-pitch pad row is listed with
+    /// the breakout wording. Every missing return via is an advisory, so this
+    /// selects the wording only and does not change the verdict.
     #[serde(default)]
     pub fine_pitch_return_via_advisory: bool,
     /// Nets the design pins to copper layers (`netclass { layers … }`), by
@@ -995,6 +996,7 @@ mod tests {
             company: None,
             schematic_paper: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             components: Vec::new(),
             nets: Vec::new(),
             diff_pairs: Vec::new(),

@@ -56,6 +56,11 @@ pub struct Board {
     /// [`SchematicOverflow::Grow`], the default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schematic_overflow: Option<SchematicOverflow>,
+    /// Least courtyard-to-courtyard gap between any two parts, in nanometres
+    /// (`placement { spacing = 2.0mm }`, or `export-kicad --spacing`). `None`
+    /// leaves the placer's own clearances untouched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_spacing_nm: Option<i64>,
     pub components: Vec<Component>,
     pub nets: Vec<Net>,
     pub diff_pairs: Vec<DiffPair>,
@@ -126,10 +131,14 @@ pub struct Board {
 }
 
 /// The board rectangle a design declares, in integer nanometres.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BoardOutline {
     pub width: Length,
     pub height: Length,
+    /// Why the size is fixed (`reason "<text>"`). `None` when the design did
+    /// not state one; a stated reason suppresses `W-SYNTH-BOARD-004`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     pub source_span: Span,
 }
 
@@ -627,8 +636,8 @@ pub struct NetClass {
     pub max_skew: Option<Length>,
     /// How fast the class's nets switch (`edge_rate slow`). `None` is the
     /// unknown case and is treated as fast: a generic output pin can carry a
-    /// fast edge, so only a class that says `slow` may lose its return via as
-    /// an advisory. Used by `synth_drc::return_path_critical_net_names`.
+    /// fast edge, so only a class that says `slow` is not given a return via, and
+    /// its layer change is a warning. Used by `synth_drc::return_path_critical_net_names`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edge_rate: Option<EdgeRate>,
     /// Copper layers the class's nets may be routed on (`layers "F.Cu"`),

@@ -11,7 +11,7 @@
 //! The split plans the page boundaries first, then lays each non-empty
 //! partition out as its own small board through the single-sheet
 //! pipeline. A page therefore chooses the smallest standard sheet its
-//! own content needs and its regions tile that page, instead of
+//! own content needs and packs its regions on that page, instead of
 //! inheriting the long strip the global layout gave them. Cross-sheet
 //! wires become [`HierarchicalLabel`] stubs, and captions, boxes,
 //! legends, and notes are recomputed per sheet. A design with
@@ -313,7 +313,7 @@ fn split_layout_with_pinned(
                     .filter(|(_, home)| home.as_deref() == partition.name.as_deref())
                     .map(|(note, _)| note.clone())
                     .collect();
-                place_design_notes(&root, &mut layout);
+                place_design_notes(&root, &mut layout, false);
             }
             // The re-laid-out page already carries this sheet's captions,
             // legends and notes: its sub-board was cut down to those notes
@@ -332,9 +332,8 @@ fn split_layout_with_pinned(
             // The re-laid-out page already went through the same sizing
             // passes, and its notes were cut down to this sheet's before it
             // was laid out, so its page is already the smallest this content
-            // needs. Re-running them here would grow it around the bottom
-            // edge `extend_boxes_to_frame_bottom` just filled, so only the
-            // annotations are clamped.
+            // needs. Re-running them here would grow it around the region
+            // boxes' bottom edge, so only the annotations are clamped.
             clamp_annotations_to_sheet(&mut layout);
             SheetLayout {
                 name: partition.name.clone(),
@@ -670,6 +669,7 @@ fn place_sheet_notes(
         labels: board.labels,
         schematic_paper: board.schematic_paper,
         schematic_overflow: board.schematic_overflow,
+        placement_spacing_nm: board.placement_spacing_nm,
         name: board.name.clone(),
         layers: board.layers,
         manufacturer: board.manufacturer.clone(),
@@ -688,7 +688,7 @@ fn place_sheet_notes(
         keepouts: board.keepouts.clone(),
         no_connects: Vec::new(),
         stackup: board.stackup.clone(),
-        outline: board.outline,
+        outline: board.outline.clone(),
         netclasses: board.netclasses.clone(),
         buses: vec![],
         modules: vec![],
@@ -698,7 +698,7 @@ fn place_sheet_notes(
     };
     // Group boxes were recomputed for this subset already, so group
     // notes resolve against page-local geometry.
-    place_design_notes(&scoped, layout);
+    place_design_notes(&scoped, layout, false);
 }
 
 /// True when point `p` lies on segment `a→b` within tolerance.
@@ -809,6 +809,7 @@ mod tests {
         Board {
             outline: None,
             schematic_overflow: None,
+            placement_spacing_nm: None,
             schematic_paper: None,
             groups: Vec::new(),
             legends: false,
@@ -1403,6 +1404,9 @@ mod tests {
             .iter()
             .find(|s| s.name.as_deref() == Some("S"))
             .expect("the S sheet");
+        // The smallest standard sheet that holds the content; A5 is not on
+        // the ladder.
+        assert_eq!(sheet.layout.sheet_size, SheetSize::A4);
         let (min_x, max_x, min_y, max_y) =
             crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
         let (sheet_w, sheet_h) = sheet.layout.sheet_size.dims_mm();
@@ -1460,10 +1464,10 @@ mod tests {
             .iter()
             .find(|s| s.name.as_deref() == Some("S"))
             .expect("the S sheet");
-        assert_ne!(
+        assert_eq!(
             sheet.layout.sheet_size,
-            SheetSize::A0,
-            "the S page is still the global strip"
+            SheetSize::A4,
+            "the S page is the smallest ladder page, not the global strip"
         );
         let (min_x, max_x, min_y, max_y) =
             crate::drawing_bounds(&b, &sheet.layout).expect("the sheet draws something");
@@ -1478,9 +1482,9 @@ mod tests {
         );
     }
 
-    /// Region boxes fill the page out to the sheet border, so a layout whose
-    /// boxes end inside the border fits the largest single page, however
-    /// close that leaves them to the edge.
+    /// A region box may reach close to the sheet border, so a layout whose box
+    /// ends inside the border must fit the largest single page rather than be
+    /// reported as overflow.
     #[test]
     fn region_boxes_out_to_the_sheet_border_do_not_overflow() {
         let two = || vec![pin("p1"), pin("p2")];
@@ -1501,6 +1505,34 @@ mod tests {
         assert!(
             !sheet_overflow(&b, &layout),
             "a box 0.5 mm inside the border fits the page"
+        );
+    }
+
+    /// The bottom row runs on beside the title block, so a box whose right
+    /// edge clears the block may reach the sheet border; that is not overflow.
+    #[test]
+    fn a_box_beside_the_title_block_reaches_the_sheet_border() {
+        let two = || vec![pin("p1"), pin("p2")];
+        let mut b = board(
+            vec![grouped_component(0, "R1", "Filter", two())],
+            Vec::new(),
+        );
+        b.schematic_overflow = Some(synth_ir::SchematicOverflow::Hierarchy);
+        let (ceiling_w, ceiling_h) = crate::max_single_sheet(&b).dims_mm();
+        let (block_x, _) = crate::title_block_origin((ceiling_w, ceiling_h));
+        // The part sits in the bottom-left corner of the frame, like a tiled
+        // region that runs on beside the title block.
+        let mut layout = layout(vec![placed(0, 40.0, ceiling_h - 30.0)], Vec::new());
+        layout.group_boxes.push(crate::GroupBox {
+            group: "Filter".to_string(),
+            min_mm: (SHEET_BORDER_MM, 60.0),
+            max_mm: (block_x - 10.0, ceiling_h - SHEET_BORDER_MM),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        assert!(
+            !sheet_overflow(&b, &layout),
+            "a box beside the title block may reach the sheet border"
         );
     }
 

@@ -311,9 +311,10 @@ Design documentation lives in the `.synth` source, not in KiCad:
 
 ### Multi-sheet export (`sheet` blocks)
 
-`sheet "Power" { … }` blocks (and `import`ed files, which lower to a sheet named after the file stem) are split boundaries. A board whose single-sheet content still fits A2 exports as one `.kicad_sch`, byte-identical to before — the split is a large-board repair, not a restructuring of small ones. Past A2, with two or more boundaries, the export becomes a hierarchy:
+`sheet "Power" { … }` blocks (and `import`ed files, which lower to a sheet named after the file stem) are split boundaries, and so are `group`s: a board whose single-sheet content still fits the page its policy allows exports as one `.kicad_sch`, byte-identical to before — the split is a large-board repair, not a restructuring of small ones. When the content overflows (`schematic { overflow = "hierarchy" }` asks at the requested page; the default `grow` climbs to A0) and there are two or more boundaries, the export becomes a hierarchy:
 
-- one `<board>_<sheet>.kicad_sch` per boundary, plus the root `<board>.kicad_sch` carrying the components declared outside any sheet and one sheet instance per sub-sheet;
+- one `<board>_<sheet>.kicad_sch` per boundary, plus the root `<board>.kicad_sch` carrying the components declared outside any sheet and one sheet instance per sub-sheet; for a grouped board the first group merges onto the root, so the root is never an empty page of sheet symbols;
+- the root page is the smallest standard sheet that holds what it draws (the merged content plus the wrapped sheet-symbol rows); a requested `schematic { paper }` is a floor, not a cap, and past A0 the root grows taller than A0 on a custom page;
 - cross-sheet **signal** nets join through hierarchical labels on sub-sheets and same-named local labels on the root (one per sheet pin and per root endpoint); cross-sheet **power** nets need no labels at all — power symbols connect globally by value;
 - a dragged component's sidecar override records the sheet it was placed on, so moving it to another sheet invalidates the stale (sheet-local) coordinates instead of misplacing it.
 
@@ -351,11 +352,20 @@ report --severity-error --severity-warning --refill-zones
   SVGs/PNGs (`kicad-cli pcb export svg`, `pcb render`) and actually
   look; render specific regions to check 3D-model interference.
 - **Board outline:** declare `outline <width> x <height>` when the
-  enclosure fixes the board size; Edge.Cuts is then exactly that
-  rectangle and the placer does not fit or tighten it. Without the
-  statement the exporter fits the edge round the parts; rounded or
-  chamfered corners are a manual edit. Double-sided assembly is an
-  explicit engineer decision, never a default.
+  enclosure fixes the board size, and state why on the statement
+  (`reason "fits the enclosure"`); Edge.Cuts is then exactly that
+  rectangle and the placer does not fit or tighten it. A guessed
+  outline leaves dead board and triggers `W-SYNTH-BOARD-004`. Without
+  the statement the exporter fits the edge round the parts and
+  `synth validate` reports the estimated size as an info diagnostic;
+  rounded or chamfered corners are a manual edit. Keep `priority: hard`
+  for physical and electrical proximity — a connector edge, a mounting
+  hole, or a part that must sit at a pin (decoupling, a regulator's
+  switch loop, a crystal, ESD at its connector, series terminations).
+  An `edge` or `region` hint on any other part fixes a board span and
+  triggers `W-SYNTH-BOARD-005`; make it soft unless an enclosure or
+  mating constraint fixes it. Double-sided assembly is an explicit
+  engineer decision, never a default.
 
 ### Placement JSON coordinate contract
 
@@ -416,10 +426,10 @@ A hidden label takes no room. A sidecar entry beats the part file, and a hard of
 ### Fine-pitch return-via advisory (opt-in)
 
 `--fine-pitch-return-via-advisory` (env `SYNTH_FINE_PITCH_RETURN_VIA_ADVISORY=1`,
-MCP `fine_pitch_return_via_advisory`) lists a missing fast-edge return via
-beside a fine-pitch pad row as an advisory instead of a blocking finding.
-Default off. It relaxes a signal-integrity gate, so use it only with
-signal-integrity review sign-off and record that sign-off with the board.
+MCP `fine_pitch_return_via_advisory`) lists a missing return via beside a
+fine-pitch pad row with the breakout wording. Default off. Every missing return
+via is an advisory, so the option selects the wording only and does not change
+the verdict.
 
 ---
 
