@@ -269,6 +269,12 @@ pub struct SidecarPlacement {
     pub dx: f64,
     #[serde(default)]
     pub dy: f64,
+    /// The board side a footprint goes on, `"top"` (the default) or
+    /// `"bottom"`. Only a placement sidecar reads it, and only for a
+    /// footprint whose pads sit on its origin (a test point): the exporter
+    /// mirrors the footprint and moves it to the `B.` layers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
 }
 
 /// A design's say over one part's silkscreen reference label.
@@ -488,6 +494,7 @@ mod tests {
         sidecar.merge_override(
             "U1".into(),
             SidecarPlacement {
+                layer: None,
                 x: 18.0,
                 y: 20.0,
                 rotation: 0,
@@ -503,6 +510,7 @@ mod tests {
         sidecar.merge_override(
             "U1".into(),
             SidecarPlacement {
+                layer: None,
                 x: 5.0,
                 y: 5.0,
                 rotation: 0,
@@ -525,6 +533,7 @@ mod tests {
         sidecar.merge_override(
             "C1".into(),
             SidecarPlacement {
+                layer: None,
                 x: 12.0,
                 y: 8.0,
                 rotation: 0,
@@ -701,6 +710,7 @@ hide = true
 
     fn override_at(sheet: Option<&str>, x: f64, y: f64) -> SidecarPlacement {
         SidecarPlacement {
+            layer: None,
             x,
             y,
             rotation: 0,
@@ -938,6 +948,7 @@ mod forced_label_tests {
         legacy.merge_override(
             "L1".into(),
             SidecarPlacement {
+                layer: None,
                 x: 63.5,
                 y: 12.0,
                 rotation: 0,
@@ -1006,6 +1017,7 @@ mod forced_label_tests {
             s.merge_override(
                 refdes.into(),
                 SidecarPlacement {
+                    layer: None,
                     x,
                     y: 12.0,
                     rotation: 0,

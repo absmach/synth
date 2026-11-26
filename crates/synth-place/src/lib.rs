@@ -208,6 +208,15 @@ pub fn courtyard_center_from_origin(
 }
 
 /// A sidecar entry's rotation in degrees as a [`Rotation`].
+/// The board side a sidecar entry names: `"bottom"` puts the footprint on the
+/// back, anything else (or nothing) on the front.
+fn sidecar_layer(layer: Option<&str>) -> Layer {
+    match layer {
+        Some(name) if name.eq_ignore_ascii_case("bottom") => Layer::Bottom,
+        _ => Layer::Top,
+    }
+}
+
 fn sidecar_rotation(degrees: u32) -> Rotation {
     match degrees {
         90 => Rotation::Ninety,
@@ -581,6 +590,7 @@ pub fn apply_sidecar_overrides(
             }
             if let Some(p) = placement.components.iter_mut().find(|c| c.id == comp.id) {
                 p.rotation = sidecar_rotation(sidecar_comp.rotation);
+                p.layer = sidecar_layer(sidecar_comp.layer.as_deref());
                 p.center = courtyard_center_from_origin(
                     comp.part.as_ref(),
                     Point::new(mm_to_nm(sidecar_comp.x), mm_to_nm(sidecar_comp.y)),
@@ -633,6 +643,7 @@ pub fn apply_sidecar_overrides(
                 }
                 p.center = center;
                 p.rotation = rotation;
+                p.layer = sidecar_layer(sidecar_comp.layer.as_deref());
             }
         }
         if !changed {
@@ -14431,6 +14442,7 @@ board "near" {
             components: [(
                 "C2".to_string(),
                 synth_layout::sidecar::SidecarPlacement {
+                    layer: None,
                     x: synth_geometry::nm_to_mm(victim.center.x_nm),
                     y: synth_geometry::nm_to_mm(victim.center.y_nm),
                     rotation: 0,
@@ -14491,6 +14503,7 @@ board "near" {
             (
                 refdes.to_string(),
                 synth_layout::sidecar::SidecarPlacement {
+                    layer: None,
                     x: synth_geometry::nm_to_mm(center.x_nm),
                     y: synth_geometry::nm_to_mm(center.y_nm),
                     rotation: 0,

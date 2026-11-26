@@ -46,6 +46,7 @@ fn sidecar_with(refdes: &str, x: f64, y: f64) -> SidecarLayout {
     s.merge_override(
         refdes.to_string(),
         SidecarPlacement {
+            layer: None,
             x,
             y,
             rotation: 0,

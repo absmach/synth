@@ -2847,6 +2847,7 @@ fn persist_layout_op(
             continue;
         };
         let intended = SidecarPlacement {
+            layer: None,
             x: placement.center_mm.0,
             y: placement.center_mm.1,
             rotation: rotation_degrees(placement.rotation),
@@ -4674,6 +4675,7 @@ fn execute_compact_layout(args: &Value, default_registry: Option<&Path>) -> Resu
                 .components
                 .entry(comp.refdes.clone())
                 .or_insert_with(|| synth_layout::sidecar::SidecarPlacement {
+                    layer: None,
                     x: 0.0,
                     y: 0.0,
                     rotation: 0,
@@ -5506,6 +5508,7 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
     sidecar.schema_version = synth_layout::sidecar::SIDECAR_SCHEMA_VERSION;
 
     let placement = synth_layout::sidecar::SidecarPlacement {
+        layer: None,
         x: x_mm,
         y: y_mm,
         rotation,
