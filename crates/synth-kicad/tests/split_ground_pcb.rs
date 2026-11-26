@@ -215,6 +215,78 @@ fn a_declared_plane_floods_a_zone_for_its_net() {
     );
 }
 
+fn top_level_blocks_at(text: &str, top: usize) -> Vec<&str> {
+    let mut depth = 0usize;
+    let mut start = None;
+    let mut out = Vec::new();
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => {
+                if depth == top {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            ')' => {
+                if depth == top + 1 {
+                    if let Some(s) = start {
+                        out.push(&text[s..=i]);
+                    }
+                    start = None;
+                }
+                depth = depth.saturating_sub(1);
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+fn xy_in(block: &str, tag: &str) -> Option<(f64, f64)> {
+    let idx = block.find(&format!("({tag} "))?;
+    let tail = &block[idx + tag.len() + 2..];
+    let close = tail.find(')')?;
+    let mut nums = tail[..close]
+        .split_whitespace()
+        .filter_map(|t| t.parse::<f64>().ok());
+    Some((nums.next()?, nums.next()?))
+}
+
+fn edge_cuts_rect(pcb: &str) -> (f64, f64, f64, f64) {
+    let mut min_x = f64::MAX;
+    let mut min_y = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut max_y = f64::MIN;
+    for block in top_level_blocks_at(pcb, 1) {
+        if !block.starts_with("(gr_line") || !block.contains("\"Edge.Cuts\"") {
+            continue;
+        }
+        for point in ["start", "end"] {
+            let (x, y) = xy_in(block, point).expect("edge cut point");
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
+        }
+    }
+    (min_x, min_y, max_x, max_y)
+}
+
+/// Compaction must not take the 1 mm rim the plane's beside-pad stitching via
+/// needs. This board's fit is 4.26 mm square; compaction would take it to 3.26
+/// and leave the VBUS pad 0.86 mm from one edge, so the export keeps the fit.
+#[test]
+fn a_declared_plane_keeps_the_fanout_rim() {
+    let pcb = export_pcb(PLANE_SOURCE, "rail-plane-rim");
+    let (min_x, min_y, max_x, max_y) = edge_cuts_rect(&pcb);
+    let (w, h) = (max_x - min_x, max_y - min_y);
+    assert!(
+        w >= 4.0 && h >= 4.0,
+        "plane rim lost: Edge.Cuts {w:.3} x {h:.3} mm"
+    );
+    assert!(pcb.contains("net_name \"VBUS\""), "VBUS plane missing");
+}
+
 #[test]
 fn a_class_without_the_plane_attribute_floods_no_zone() {
     let pcb = export_pcb(NO_PLANE_SOURCE, "rail-no-plane");

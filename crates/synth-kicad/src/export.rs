@@ -865,11 +865,23 @@ fn place_for_export_default(
         .expect("the hinted placement is always a candidate");
     if finish_after {
         synth_place::finish_default_placement(&source, &mut best, has_sidecar);
+        let placed = best.clone();
         // finish_outline runs the same tight/passive rim fit and grid trim as
         // the export's other candidates, then the refine loop and compaction.
-        // compress_outline alone was measured and does not shrink this
-        // fixture's export candidate; the refine loop is part of the finish.
         synth_place::finish_outline(&source, &mut best);
+        // A plane pad needs 1 mm of rim for its stitching via. Compaction can
+        // eat that on a small board, so keep the uncompacted fit rather than
+        // export a plane no via can reach.
+        if !pcb::plane_pad_rim_kept(&source, &best) {
+            best = placed;
+            synth_place::fit_outline_with_passive_margin_mm(
+                &source,
+                &mut best,
+                synth_place::tight_edge_margin_mm(&source),
+                synth_place::passive_edge_margin_mm(&source),
+            );
+            synth_place::trim_outline_to_grid(&source, &mut best);
+        }
     }
     Ok(best)
 }

@@ -20,6 +20,30 @@ the parts exactly as placed, but on the `rtd_afe` fixture it shrank nothing
 (2127.4 mm² with and without it), so the export would still not compact. The
 chosen path is `finish_outline`; the test below pins the compacted result.
 
+### Plane fanout rim
+
+A declared plane stitches each plane-net pad with a via placed beside it. The
+via search only considers positions at least `PLANE_EDGE_MARGIN_NM` (1 mm)
+inside Edge.Cuts. Compaction on a small plane board took the VBUS pad at
+(1.23, 2.00) from 1.36/1.38 mm inside the fitted outline to 0.86/0.88 mm, and
+the search then had no candidate: the pad was too close to two edges for any
+of the four axes to land inside the 1 mm inset, and the other cap blocked the
+remaining directions.
+
+After `finish_outline`, `pcb::plane_pad_rim_kept` checks every declared-plane
+pad against the compacted outline. When the 1 mm rim is gone, the export falls
+back to the fitted, uncompacted placement. Boards with planes still attempt
+compaction; only a board whose plane pads lose the rim falls back. Boards
+without a plane take the same path as before.
+
+The two-cap synthetic four-layer board (`PLANE_SOURCE` in
+`crates/synth-kicad/tests/split_ground_pcb.rs`) is 4.26 × 4.26 mm
+(18.15 mm²) after the fit; compaction would make it 3.26 × 3.26 mm
+(10.63 mm²), so the export keeps 4.26 × 4.26 mm and the VBUS zone and its
+stitching vias. The existing `a_declared_plane_floods_a_zone_for_its_net` test
+was the red reproducer; the new `a_declared_plane_keeps_the_fanout_rim` test
+asserts the kept outline.
+
 Boards with a declared outline or a placement sidecar take the same path as
 before.
 
@@ -33,22 +57,21 @@ export. Boards with a placement sidecar are listed as skipped.
 
 | board | before W × H | after W × H | before mm² | after mm² | area | gates before → after | time before → after |
 | --- | --- | --- | ---: | ---: | ---: | --- | --- |
-| `examples/divider` | 8.160 × 3.200 | 7.160 × 2.200 | 26.1 | 15.8 | −39.5 % | 0 → 0 | 1.33 s → 0.63-0.85 s |
-| `examples/led` | 7.960 × 3.200 | 6.960 × 2.200 | 25.5 | 15.3 | −40.0 % | 0 → 0 | 1.87 s → 0.89-1.42 s |
-| `examples/placement_and_diff_pair` | 16.460 × 25.810 | 15.460 × 25.810 | 424.8 | 399.0 | −6.1 % | 0 → 0 | 24.69 s → 30.65 s |
-| `examples/rc_filter` | 8.180 × 3.260 | 7.180 × 2.260 | 26.7 | 16.2 | −39.3 % | 0 → 0 | 1.38 s → 1.16 s |
-| `examples/sensor_logger` | 41.990 × 51.990 | 41.990 × 51.990 | 2183.1 | 2183.1 | 0 | 1 → 1 | 225.69 s → 195.92 s |
-| `qualification/class-a/negative-broken-mcu-board` | 32.990 × 20.060 | 32.990 × 18.060 | 661.8 | 595.8 | −10.0 % | 0 → 0 | 16.30 s → 13.92 s |
-| `qualification/class-b/buck/buck_neg_fb_sw` | 35.495 × 45.650 | 35.495 × 42.990 | 1620.3 | 1525.9 | −5.8 % | 0 → 0 | 356.2 / 388.1 s → 467.7 / 420.4 s |
+| `examples/divider` | 8.160 × 3.200 | 7.160 × 2.200 | 26.1 | 15.8 | −39.5 % | 0 → 0 | 1.33 s → 0.83 s |
+| `examples/led` | 7.960 × 3.200 | 6.960 × 2.200 | 25.5 | 15.3 | −40.0 % | 0 → 0 | 1.87 s → 1.13 s |
+| `examples/placement_and_diff_pair` | 16.460 × 25.810 | 15.460 × 25.810 | 424.8 | 399.0 | −6.1 % | 0 → 0 | 24.69 s → 16.47 s |
+| `examples/rc_filter` | 8.180 × 3.260 | 7.180 × 2.260 | 26.7 | 16.2 | −39.3 % | 0 → 0 | 1.38 s → 0.81 s |
+| `examples/sensor_logger` | 41.990 × 51.990 | 41.990 × 51.990 | 2183.1 | 2183.1 | 0 | 1 → 1 | 225.69 s → 150.86 s |
+| `qualification/class-a/negative-broken-mcu-board` | 32.990 × 20.060 | 32.990 × 18.060 | 661.8 | 595.8 | −10.0 % | 0 → 0 | 16.30 s → 11.09 s |
+| `qualification/class-b/buck/buck_neg_fb_sw` | 35.495 × 45.650 | 35.495 × 42.990 | 1620.3 | 1525.9 | −5.8 % | 0 → 0 | 356.2 / 388.1 s → 259.33 s |
 
-No board grew and no board gained a placement-gate failure.
-
-Time: the divider and led first AFTER runs (3.93 s, 6.49 s) were cold-start
-outliers; warm repeats are 0.63-0.85 s and 0.89-1.42 s, faster than BEFORE.
-`buck_neg_fb_sw` is the only board whose first pair crossed +30 % (+31.3 %); the
-repeat was +8.3 %, and the two-sample medians are 372.2 s → 444.1 s (+19.3 %).
-The run-to-run spread is about ±10 %, so this is not a consistent >30 % export
-time regression. `placement_and_diff_pair` is +24.1 %, under the 30 % threshold.
+No board grew and no board gained a placement-gate failure; every board exports
+faster in the final run. The three 4-layer, no-sidecar boards
+(`placement_and_diff_pair`, `sensor_logger`, `buck_neg_fb_sw`) are this table;
+none of the corpus boards declares a plane. The plane case is the synthetic
+`PLANE_SOURCE` board below. Earlier cold-cache runs showed divider, led and
+`buck_neg_fb_sw` above +30 %; the final runs do not, and no board is above the
+threshold now.
 
 ## Carrier
 

@@ -994,6 +994,37 @@ fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) 
     out
 }
 
+/// Whether every declared-plane pad keeps the rim [`plane_via_search`] needs:
+/// at least [`PLANE_EDGE_MARGIN_NM`] inside every Edge.Cuts edge. Compaction
+/// uses it after shrinking; a board that fails falls back to its fitted
+/// outline instead of exporting a plane no via can reach.
+pub(crate) fn plane_pad_rim_kept(board: &Board, placement: &Placement) -> bool {
+    if board.layers < 4 || !board.netclasses.iter().any(|class| class.plane) {
+        return true;
+    }
+    let outline = placement.board_outline;
+    let inset = PLANE_EDGE_MARGIN_NM;
+    board
+        .nets
+        .iter()
+        .filter(|net| {
+            net.netclass.as_deref().is_some_and(|name| {
+                board
+                    .netclasses
+                    .iter()
+                    .any(|class| class.plane && class.name == name)
+            })
+        })
+        .flat_map(|net| plane_pad_targets(board, placement, net))
+        .all(|pad| {
+            let centre = pad.centre;
+            centre.x_nm - outline.min.x_nm >= inset
+                && outline.max.x_nm - centre.x_nm >= inset
+                && centre.y_nm - outline.min.y_nm >= inset
+                && outline.max.y_nm - centre.y_nm >= inset
+        })
+}
+
 /// Stitching-via pad radius in nanometres (a 0.6 mm via): the least the
 /// exporter uses, raised by [`PlaneVia::for_process`] when a process needs a
 /// wider ring.
