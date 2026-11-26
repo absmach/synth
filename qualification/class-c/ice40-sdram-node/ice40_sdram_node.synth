@@ -76,7 +76,7 @@ board "ice40_sdram_node" {
 
   // ---- FPGA clock -------------------------------------------------------------
   group "FPGA CLOCK" color "#6d28d9" {
-    component X1: crystal "osc_smd_25mhz" value "25MHz" { placement_hint { near: "U3.iot_197_gbin1" priority: hard } }
+    component X1: crystal "osc_smd_25mhz_sit8008ai_33s" value "25MHz" { placement_hint { near: "U3.iot_197_gbin1" priority: hard } }
     component C41: capacitor "c_generic_0402" value "100nF" { placement_hint { near: "X1.vcc" priority: hard } }
     notes "" {
       "The iCE40HX has no internal oscillator. 25 MHz 3.3 V oscillator on global buffer input GBIN1 (iot_197_gbin1); OE tied high."

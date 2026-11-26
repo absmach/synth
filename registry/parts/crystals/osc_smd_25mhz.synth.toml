@@ -7,8 +7,6 @@ description = "25MHz SMD oscillator, 4-pad, 3.3V"
 # 1-4, with pad 1 renamed from `ne` to the symbol's `oe`.
 kicad_symbol = "Oscillator:SiT8008xx-1x-xxE"
 kicad_footprint = "Oscillator:Oscillator_SMD_SiT_PQFN-4Pin_5.0x3.2mm"
-mpn = "SiT8008AI-31-33S-25.000000"
-lcsc_pn = "C826909"
 
 [footprint_dimensions]
 # Courtyard extent of that footprint; the body is 5.0 x 3.2 mm.
@@ -17,8 +15,8 @@ height_mm = 4.32
 courtyard_margin_mm = 0.25
 
 [operating_conditions]
-min_voltage_v = 2.97
-max_voltage_v = 3.63
+min_voltage_v = 1.8
+max_voltage_v = 5.0
 max_current_ma = 100.0
 
 [[pins]]

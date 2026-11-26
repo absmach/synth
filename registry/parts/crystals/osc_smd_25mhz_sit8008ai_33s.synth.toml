@@ -1,0 +1,62 @@
+id = "osc_smd_25mhz_sit8008ai_33s"
+kind = "crystal"
+description = "25 MHz SiTime SiT8008AI-31-33S SMD oscillator, 4-pad, 3.3 V +/-10 %. Same pin map and footprint as osc_smd_25mhz, with the 2.97 to 3.63 V supply range and the sourcing."
+# `SiT8008B` and `Oscillator_SMD_SiTime_SiT8008-4Pin_5.0x3.2mm` name
+# nothing in KiCad 10.0.6. These are the stock symbol and footprint for the
+# same 4-pin 5.0 x 3.2 mm SiTime oscillator. The pin map matches it on pads
+# 1-4, with pad 1 renamed from `ne` to the symbol's `oe`.
+kicad_symbol = "Oscillator:SiT8008xx-1x-xxE"
+kicad_footprint = "Oscillator:Oscillator_SMD_SiT_PQFN-4Pin_5.0x3.2mm"
+mpn = "SiT8008AI-31-33S-25.000000"
+lcsc_pn = "C826909"
+
+[footprint_dimensions]
+# Courtyard extent of that footprint; the body is 5.0 x 3.2 mm.
+width_mm = 6.0
+height_mm = 4.32
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+min_voltage_v = 2.97
+max_voltage_v = 3.63
+max_current_ma = 100.0
+
+[[pins]]
+# `OE` on the stock symbol, and active high: driving it low tristates the
+# output. The old name here was `ne`, which reads as an active-low "not
+# enable" — the opposite sense — and was invisible while the symbol fell back
+# to a rectangle. Now that the real symbol renders, the schematic and the
+# language agree.
+name = "oe"
+number = "1"
+electrical_type = "input"
+
+[[pins]]
+name = "gnd"
+number = "2"
+electrical_type = "power_input"
+required = true
+
+[[pins]]
+name = "out"
+number = "3"
+electrical_type = "clock"
+capabilities = ["clock_output"]
+required = true
+
+[[pins]]
+name = "vcc"
+number = "4"
+electrical_type = "power_input"
+required = true
+
+[[required_decoupling]]
+net = "vcc"
+value = "100nf"
+count = 1
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.sitime.com/support/resource-library/datasheets/sit8008-datasheet"
+reviewed_by = "rodneyosodo"
+reviewed_at = "2026-11-02"
