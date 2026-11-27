@@ -18,6 +18,11 @@ rule judges a via against the same ground the planes are built from. A board
 with no ground net is not checked, and a board without a declared `stackup` is
 not checked either, because the distance is a property of the dielectric.
 
+A supply rail, found by power-domain inference, is not checked and is not given
+a return via: it is DC, and its return current is held by its decoupling, not by
+a via beside each layer change. A rail whose own pins prove a fast edge, such as
+a regulator's switching node, keeps the requirement.
+
 The router's return-via repair adds a ground via beside the layer change of
 every signal net that needs one. It never holds a board back for a missing
 return via. A layer change with no spot for a via, or one the repair rounds did

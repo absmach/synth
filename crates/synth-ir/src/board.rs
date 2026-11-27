@@ -86,6 +86,10 @@ pub struct Board {
     /// Pins declared intentionally unused (`no_connect U1.L9`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub no_connects: Vec<NoConnect>,
+    /// Declared ground domains (`ground_domain AGND { … }`), each with its
+    /// join and the signals that cross it (absmach/synth#464).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ground_domains: Vec<GroundDomain>,
     /// Declared physical layer stack (`stackup { … }`). `None` when the
     /// design does not declare one; the exported board then keeps its fixed
     /// default thickness and carries no stackup section.
@@ -492,6 +496,38 @@ pub struct Note {
     pub source_span: Span,
 }
 
+/// A declared ground domain: its ground net, the one part that joins it to
+/// another ground, and the signals that cross its boundary (absmach/synth#464).
+/// Names stay unresolved here; validation resolves and judges them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroundDomain {
+    pub net: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub crossings: Vec<GroundCrossing>,
+    pub source_span: Span,
+}
+
+/// A signal declared to cross a ground domain boundary, and how its return
+/// current crosses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroundCrossing {
+    pub net: String,
+    pub stitch: GroundStitch,
+    pub source_span: Span,
+}
+
+/// How a crossing signal's return current gets across the boundary.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "refdes", rename_all = "snake_case")]
+pub enum GroundStitch {
+    /// The signal is routed over the domain's join.
+    Join,
+    /// A part (a stitching capacitor) between the two grounds.
+    Part(String),
+}
+
 /// A pin the design declares intentionally unused (`no_connect U1.L9`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoConnect {
@@ -785,6 +821,10 @@ pub enum EscapeMethod {
     /// Drop a via inside each pad and route away underneath. The only
     /// method a fully populated fine-pitch array leaves open.
     Underpad,
+    /// For a two-row fine-pitch connector: a short stub from each pad into
+    /// the channel between the rows, to a microvia on a staggered grid there
+    /// (absmach/synth#433). No via lands in a pad.
+    ConnectorDogbone,
 }
 
 impl EscapeMethod {
@@ -794,6 +834,7 @@ impl EscapeMethod {
         match name {
             "channel" => Some(Self::Channel),
             "underpad" => Some(Self::Underpad),
+            "connector_dogbone" => Some(Self::ConnectorDogbone),
             _ => None,
         }
     }
@@ -804,11 +845,12 @@ impl EscapeMethod {
         match self {
             Self::Channel => "channel",
             Self::Underpad => "underpad",
+            Self::ConnectorDogbone => "connector_dogbone",
         }
     }
 
     /// Every method this build knows, for an unknown name's error.
-    pub const ALL: &'static [Self] = &[Self::Channel, Self::Underpad];
+    pub const ALL: &'static [Self] = &[Self::Channel, Self::Underpad, Self::ConnectorDogbone];
 }
 
 /// What a component's `escape { … }` block asked for.

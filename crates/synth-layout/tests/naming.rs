@@ -116,6 +116,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> synth_ir::Board {
         notes: vec![],
         keepouts: Vec::new(),
         no_connects: Vec::new(),
+        ground_domains: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

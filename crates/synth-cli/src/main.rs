@@ -265,6 +265,11 @@ enum Command {
         /// The default keeps vias out of SMD pads and paste openings.
         #[arg(long, default_value_t = 0.1, value_name = "MM")]
         krt_same_net_pad_clearance: f64,
+        /// Via cost for KiCadRoutingTools. Absent, the helper tries 1000
+        /// first and the engine default on a retry; set, every attempt uses
+        /// it. The route report records the requested and the used cost.
+        #[arg(long, value_name = "COST")]
+        krt_via_cost: Option<u32>,
         /// Permit via-in-pad in the KRT production gate.
         #[arg(long)]
         krt_allow_via_in_pad: bool,
@@ -438,6 +443,11 @@ enum Command {
         /// Minimum same-net pad clearance for KRT vias, in millimetres.
         #[arg(long, default_value_t = 0.1, value_name = "MM")]
         krt_same_net_pad_clearance: f64,
+        /// Via cost for KiCadRoutingTools. Absent, the helper tries 1000
+        /// first and the engine default on a retry; set, every attempt uses
+        /// it. The route report records the requested and the used cost.
+        #[arg(long, value_name = "COST")]
+        krt_via_cost: Option<u32>,
         /// Permit via-in-pad in the KRT production gate.
         #[arg(long)]
         krt_allow_via_in_pad: bool,
@@ -503,6 +513,11 @@ enum Command {
         /// Minimum same-net pad clearance for KRT vias, in millimetres.
         #[arg(long, default_value_t = 0.1, value_name = "MM")]
         krt_same_net_pad_clearance: f64,
+        /// Via cost for KiCadRoutingTools. Absent, the helper tries 1000
+        /// first and the engine default on a retry; set, every attempt uses
+        /// it. The route report records the requested and the used cost.
+        #[arg(long, value_name = "COST")]
+        krt_via_cost: Option<u32>,
         /// Permit via-in-pad in the KRT production gate.
         #[arg(long)]
         krt_allow_via_in_pad: bool,
@@ -1205,6 +1220,7 @@ fn main() -> ExitCode {
             krt_fab_tier,
             krt_fab_overrides,
             krt_same_net_pad_clearance,
+            krt_via_cost,
             krt_allow_via_in_pad,
             best_of,
             allow_incomplete,
@@ -1242,6 +1258,7 @@ fn main() -> ExitCode {
             krt_fab_tier,
             krt_fab_overrides.as_deref(),
             krt_same_net_pad_clearance,
+            krt_via_cost,
             krt_allow_via_in_pad,
             fine_pitch_advisory,
             best_of,
@@ -1291,6 +1308,7 @@ fn main() -> ExitCode {
             krt_fab_tier,
             krt_fab_overrides,
             krt_same_net_pad_clearance,
+            krt_via_cost,
             krt_allow_via_in_pad,
             router_timeout,
             best_of,
@@ -1310,6 +1328,7 @@ fn main() -> ExitCode {
                 krt_fab_tier,
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
+                krt_via_cost,
                 krt_allow_via_in_pad,
                 fine_pitch_advisory,
             )
@@ -1330,6 +1349,7 @@ fn main() -> ExitCode {
             krt_fab_tier,
             krt_fab_overrides,
             krt_same_net_pad_clearance,
+            krt_via_cost,
             krt_allow_via_in_pad,
             router_timeout,
             pretty,
@@ -1348,6 +1368,7 @@ fn main() -> ExitCode {
                 krt_fab_tier,
                 krt_fab_overrides.as_deref(),
                 krt_same_net_pad_clearance,
+                krt_via_cost,
                 krt_allow_via_in_pad,
                 fine_pitch_advisory,
             )
@@ -5204,6 +5225,7 @@ fn export_kicad(
     krt_fab_tier: KrtFabTier,
     krt_fab_overrides: Option<&Path>,
     krt_same_net_pad_clearance: f64,
+    krt_via_cost: Option<u32>,
     krt_allow_via_in_pad: bool,
     fine_pitch_advisory: bool,
     best_of: bool,
@@ -5416,6 +5438,7 @@ fn export_kicad(
         krt_fab_tier,
         krt_fab_overrides,
         krt_same_net_pad_clearance,
+        krt_via_cost,
         krt_allow_via_in_pad,
         fine_pitch_advisory,
     );
@@ -6316,6 +6339,7 @@ struct RouterOptions {
     fab_tier: KrtFabTier,
     fab_overrides: Option<PathBuf>,
     same_net_pad_clearance: f64,
+    via_cost: Option<u32>,
     allow_via_in_pad: bool,
     fine_pitch_return_via_advisory: bool,
     /// Wall-clock budget for the whole external run.
@@ -6347,6 +6371,7 @@ fn router_options(
     fab_tier: KrtFabTier,
     fab_overrides: Option<&Path>,
     same_net_pad_clearance: f64,
+    via_cost: Option<u32>,
     allow_via_in_pad: bool,
     fine_pitch_advisory: bool,
 ) -> RouterOptions {
@@ -6360,6 +6385,7 @@ fn router_options(
         fab_tier,
         fab_overrides: fab_overrides.map(Path::to_path_buf),
         same_net_pad_clearance,
+        via_cost,
         allow_via_in_pad,
         fine_pitch_return_via_advisory: fine_pitch_advisory,
         timeout_secs: default_router_timeout_secs(),
@@ -6412,6 +6438,7 @@ fn build_route_request(
     request.kicad_routing_tools.escalation = synth_router::KrtEscalation::from(options.escalation);
     request.kicad_routing_tools.fab_tier = options.fab_tier.as_str().to_string();
     request.kicad_routing_tools.same_net_pad_clearance_mm = options.same_net_pad_clearance;
+    request.kicad_routing_tools.via_cost = options.via_cost;
     request.policy.allow_via_in_pad = options.allow_via_in_pad;
     request.use_board_escapes(board);
     request.use_board_layer_pins(board);
@@ -7724,6 +7751,7 @@ mod tests {
             fab_tier: KrtFabTier::Standard,
             fab_overrides: None,
             same_net_pad_clearance: 0.1,
+            via_cost: None,
             allow_via_in_pad: false,
             fine_pitch_return_via_advisory: false,
             timeout_secs: 60,
@@ -7783,6 +7811,7 @@ mod tests {
             fab_tier: KrtFabTier::Standard,
             fab_overrides: None,
             same_net_pad_clearance: 0.1,
+            via_cost: None,
             allow_via_in_pad: false,
             fine_pitch_return_via_advisory: false,
             timeout_secs: 60,

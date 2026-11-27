@@ -33,10 +33,11 @@ pub mod units;
 pub(crate) mod test_support;
 
 pub use board::{
-    Board, Component, ComponentId, Couple, DiffPair, EdgeRate, EscapeIntent, EscapeMethod, Group,
-    Keepout, Net, NetClass, NetEndpoint, NetId, Note, PinId, PlacementConstraint, PlacementEdge,
-    PlacementPriority, PlacementRegion, PlacementSide, ProcessRequirement, SchematicOverflow,
-    SchematicPaper, Stackup, StackupLayer, Variant,
+    Board, Component, ComponentId, Couple, DiffPair, EdgeRate, EscapeIntent, EscapeMethod,
+    GroundCrossing, GroundDomain, GroundStitch, Group, Keepout, Net, NetClass, NetEndpoint, NetId,
+    Note, PinId, PlacementConstraint, PlacementEdge, PlacementPriority, PlacementRegion,
+    PlacementSide, ProcessRequirement, SchematicOverflow, SchematicPaper, Stackup, StackupLayer,
+    Variant,
 };
 pub use clusters::{
     ClusterKind, ClusterMember, FunctionalCluster, MemberBinding, MemberRole, recognize_clusters,

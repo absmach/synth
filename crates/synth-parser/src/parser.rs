@@ -15,13 +15,13 @@
 use std::collections::BTreeMap;
 use synth_ast::{
     BindStmt, BoardAst, BusDeclStmt, CompanyStmt, ComponentDeclAst, ConnectionAst, DiffPairAttr,
-    DiffPairStmt, EndpointAst, EscapeAst, GroupAttr, GroupStmt, ImportAst, InterfaceDeclStmt,
-    KeepoutAttr, KeepoutStmt, LabelsStmt, LayersStmt, LegendsStmt, ManufacturerStmt,
-    ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt, NoConnectStmt, NotesDeclAst,
-    OutlineStmt, ParamDeclAst, PlacementHintAst, PlacementHintAttr, PlacementStmt, PortBindingAst,
-    PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt, RevisionStmt, SchematicOverflowAst,
-    SchematicPaperAst, SchematicStmt, SheetStmt, StackupLayerAst, StackupStmt, StatementAst,
-    UseStmt, ValueWithUnit, VariantDeclStmt,
+    DiffPairStmt, EndpointAst, EscapeAst, GroundCrossingAst, GroundDomainStmt, GroupAttr,
+    GroupStmt, ImportAst, InterfaceDeclStmt, KeepoutAttr, KeepoutStmt, LabelsStmt, LayersStmt,
+    LegendsStmt, ManufacturerStmt, ModuleDeclStmt, NetDeclAst, NetclassAttr, NetclassStmt,
+    NoConnectStmt, NotesDeclAst, OutlineStmt, ParamDeclAst, PlacementHintAst, PlacementHintAttr,
+    PlacementStmt, PortBindingAst, PortDeclAst, PowerDeclAst, ProgramAst, RequiresStmt,
+    RevisionStmt, SchematicOverflowAst, SchematicPaperAst, SchematicStmt, SheetStmt,
+    StackupLayerAst, StackupStmt, StatementAst, UseStmt, ValueWithUnit, VariantDeclStmt,
 };
 
 use synth_diagnostics::{
@@ -342,6 +342,11 @@ impl Parser {
             TokenKind::KwRequires => self.parse_requires().map(StatementAst::Requires),
             TokenKind::Ident(name) if name == "no_connect" => {
                 Some(StatementAst::NoConnect(self.parse_no_connect()))
+            }
+            // Contextual, like `placement`: `ground_domain` stays usable as
+            // a name elsewhere (absmach/synth#464).
+            TokenKind::Ident(name) if name == "ground_domain" => {
+                self.parse_ground_domain().map(StatementAst::GroundDomain)
             }
             _ => {
                 self.emit(
@@ -2268,6 +2273,91 @@ impl Parser {
             name,
             statements,
             span: Span::new(start, end),
+        })
+    }
+
+    /// `ground_domain <net> { join <refdes> crossing <net> stitch <join|refdes> }`.
+    fn parse_ground_domain(&mut self) -> Option<GroundDomainStmt> {
+        let start = self.peek().span.byte_start;
+        self.bump(); // consume `ground_domain`
+        let net = self.expect_net_ref("expected the ground domain's net")?;
+        if !matches!(self.peek_kind(), TokenKind::LBrace) {
+            self.emit(
+                self.peek().span,
+                "E-SYNTH-PARSE-003",
+                "expected `{` to open ground_domain body",
+                "`{`",
+                self.describe_current(),
+                None,
+            );
+            return None;
+        }
+        self.bump();
+        let mut join = None;
+        let mut crossings = Vec::new();
+        loop {
+            self.skip_error_tokens();
+            match self.peek_kind().clone() {
+                TokenKind::RBrace | TokenKind::Eof => break,
+                TokenKind::Ident(word) if word == "join" => {
+                    self.bump();
+                    if let Some(refdes) =
+                        self.expect_ident("E-SYNTH-PARSE-048", "expected the join part's refdes")
+                    {
+                        join = Some(refdes);
+                    }
+                }
+                TokenKind::Ident(word) if word == "crossing" => {
+                    let item_start = self.peek().span.byte_start;
+                    self.bump();
+                    let Some(crossing) = self.expect_net_ref("expected the crossing signal's net")
+                    else {
+                        continue;
+                    };
+                    if !matches!(self.peek_kind(), TokenKind::Ident(w) if w == "stitch") {
+                        self.emit(
+                            self.peek().span,
+                            "E-SYNTH-PARSE-048",
+                            "expected `stitch` after the crossing net",
+                            "`stitch join` or `stitch <refdes>`",
+                            self.describe_current(),
+                            None,
+                        );
+                        continue;
+                    }
+                    self.bump();
+                    if let Some(stitch) = self.expect_ident(
+                        "E-SYNTH-PARSE-048",
+                        "expected `join` or the stitching part's refdes",
+                    ) {
+                        crossings.push(GroundCrossingAst {
+                            net: crossing,
+                            stitch,
+                            span: Span::new(item_start, self.last_offset()),
+                        });
+                    }
+                }
+                _ => {
+                    self.emit(
+                        self.peek().span,
+                        "E-SYNTH-PARSE-048",
+                        "unexpected item inside ground_domain",
+                        "`join <refdes>` or `crossing <net> stitch <join|refdes>`",
+                        self.describe_current(),
+                        None,
+                    );
+                    self.bump();
+                }
+            }
+        }
+        if matches!(self.peek_kind(), TokenKind::RBrace) {
+            self.bump();
+        }
+        Some(GroundDomainStmt {
+            net,
+            join,
+            crossings,
+            span: Span::new(start, self.last_offset()),
         })
     }
 

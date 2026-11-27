@@ -3077,14 +3077,10 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
     let mut last_err = None;
     let mut successes: Vec<(bool, Placement)> = Vec::new();
     let mut filled = 0;
-    for (board_w_mm, board_h_mm, square_family) in candidates {
-        let board_outline = Rect::new(
-            Point::new(0, 0),
-            Point::new(mm_to_nm(board_w_mm), mm_to_nm(board_h_mm)),
-        );
-        match place_with_outline(
+    let solve = |canvas: Rect| {
+        place_with_outline(
             board,
-            board_outline,
+            canvas,
             &courtyards_mm,
             rotation_overrides,
             true,
@@ -3092,10 +3088,30 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
             seed,
             pinned,
             seed_mode,
-        ) {
+        )
+    };
+    for (rung, (board_w_mm, board_h_mm, square_family)) in candidates.into_iter().enumerate() {
+        let board_outline = Rect::new(
+            Point::new(0, 0),
+            Point::new(mm_to_nm(board_w_mm), mm_to_nm(board_h_mm)),
+        );
+        match solve(board_outline) {
             Ok(p) => {
                 let packed = if compact {
-                    compact_and_fit(board, p)
+                    let fitted = compact_and_fit(board, p);
+                    // A fixed fallback canvas is sized for no circuit in
+                    // particular, and parts hinted to an edge sit on its edge:
+                    // when no canvas sized from the circuit packed, re-place
+                    // on the outline the parts occupied until it stops
+                    // shrinking (#233). A board that packed on a sized canvas
+                    // keeps the result it had.
+                    if rung >= FIRST_FIXED_CANVAS && filled == 0 {
+                        shrink_to_envelope(fitted, board_outline, |canvas| {
+                            solve(canvas).map(|p| compact_and_fit(board, p))
+                        })
+                    } else {
+                        fitted
+                    }
                 } else {
                     p
                 };
@@ -3116,6 +3132,58 @@ fn place_with_tuning_impl<S: ::std::hash::BuildHasher>(
         placed_mm2: total_courtyard_mm2,
         board_mm2: 230.0 * 230.0,
     }))
+}
+
+/// Index of the first fixed canvas in the ladder: the rungs before it are
+/// sized from the circuit's courtyard area, the ones from it on are not.
+const FIRST_FIXED_CANVAS: usize = 2;
+
+/// Re-placements tried on a shrinking envelope before the result is kept.
+const ENVELOPE_STEPS: usize = 4;
+
+/// How much smaller, in percent of area, the next envelope must be for
+/// another re-placement to be worth its run.
+const ENVELOPE_MIN_GAIN_PERCENT: i128 = 2;
+
+/// Re-place a board on the outline its parts occupied, until it stops
+/// shrinking (absmach/synth#233).
+///
+/// A placement solved on one of the fixed fallback canvases is fitted round
+/// parts that spread across that canvas, and a part hinted to an edge sits on
+/// the canvas edge, so the canvas sets the board's size. Once a placement has
+/// succeeded the envelope it occupied is known: solving again on a canvas cut
+/// to it converges on the size the circuit needs, at one placement run per
+/// step. `solve` places and fits on a canvas. A canvas that fails, or a
+/// result that is not smaller, ends the search with the best so far.
+fn shrink_to_envelope(
+    first: Placement,
+    canvas: Rect,
+    solve: impl Fn(Rect) -> Result<Placement, PlaceError>,
+) -> Placement {
+    let area =
+        |rect: &Rect| i128::from(rect.width_nm().max(0)) * i128::from(rect.height_nm().max(0));
+    let mut best = first;
+    let mut canvas_area = area(&canvas);
+    for _ in 0..ENVELOPE_STEPS {
+        let next = Rect::new(
+            Point::new(0, 0),
+            Point::new(
+                best.board_outline.width_nm(),
+                best.board_outline.height_nm(),
+            ),
+        );
+        if area(&next) * 100 > canvas_area * (100 - ENVELOPE_MIN_GAIN_PERCENT) {
+            break;
+        }
+        match solve(next) {
+            Ok(placed) if area(&placed.board_outline) < area(&best.board_outline) => {
+                canvas_area = area(&next);
+                best = placed;
+            }
+            _ => break,
+        }
+    }
+    best
 }
 
 /// How much smaller a wider canvas must be before it displaces the square

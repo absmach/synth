@@ -238,7 +238,10 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
             )
         current = poured
 
-    if not fanout.is_file():
+    # A two-row fine-pitch connector is escaped by Synth's own dogbone helper
+    # (#433); every other package by the engine's fanout.
+    dogbone = Path(__file__).with_name("connector_fanout.py")
+    if any(m != "connector_dogbone" for _, m, _ in plan) and not fanout.is_file():
         raise RuntimeError(
             f"escaping {escaping} needs bga_fanout.py, which is not under "
             f"{repo}; the escape cannot run"
@@ -248,24 +251,40 @@ def _fanout(python: str, repo: Path, board: Path, components: list[str],
     for index, (refdes, want_method, want_layers) in enumerate(plan):
         fanned = board.with_suffix(f".fanned{index}.kicad_pcb")
         fanned.unlink(missing_ok=True)
-        command = [
-            python, str(fanout), str(current),
-            "--component", refdes,
-            "--output", str(fanned),
-            "--escape-method", want_method,
-            "--clearance", str(clearance),
-        ]
-        if want_layers:
-            command.append("--layers")
-            command.extend(want_layers)
-        # The escape via is the one the net class declared, so a package that
-        # needs the tier's smallest via escapes with it rather than with the
-        # engine's default.
-        if via_size and via_drill:
-            command.extend(("--via-size", str(via_size), "--via-drill", str(via_drill)))
-        command.extend(("--fab-tier", fab_tier, "--escalation", escalation))
-        if strict_sizes:
-            command.append("--strict-sizes")
+        if want_method == "connector_dogbone":
+            # Microvias in the channel between the rows, then the general
+            # router takes the board. Its own sizes (0.25/0.1 mm) unless the
+            # net class declared the escape via.
+            command = [
+                sys.executable, str(dogbone), str(current),
+                "--component", refdes,
+                "--output", str(fanned),
+                "--clearance", str(clearance),
+            ]
+            if want_layers:
+                command.append("--layers")
+                command.extend(want_layers)
+            if via_size and via_drill:
+                command.extend(("--via-size", str(via_size), "--via-drill", str(via_drill)))
+        else:
+            command = [
+                python, str(fanout), str(current),
+                "--component", refdes,
+                "--output", str(fanned),
+                "--escape-method", want_method,
+                "--clearance", str(clearance),
+            ]
+            if want_layers:
+                command.append("--layers")
+                command.extend(want_layers)
+            # The escape via is the one the net class declared, so a package
+            # that needs the tier's smallest via escapes with it rather than
+            # with the engine's default.
+            if via_size and via_drill:
+                command.extend(("--via-size", str(via_size), "--via-drill", str(via_drill)))
+            command.extend(("--fab-tier", fab_tier, "--escalation", escalation))
+            if strict_sizes:
+                command.append("--strict-sizes")
         print(f"escaping {refdes}:", " ".join(command), flush=True)
         origin = "declared" if refdes in required else "grid-array"
         done = subprocess.run(command, check=False, stdout=subprocess.PIPE, text=True)
@@ -465,6 +484,12 @@ def main() -> int:
     parser.add_argument("--strict-sizes", action="store_true", default=True)
     parser.add_argument("--allow-via-in-pad", action="store_true")
     parser.add_argument(
+        "--via-cost",
+        type=int,
+        help="engine via cost for every attempt; absent, 1000 first and the "
+        "engine default on a retry",
+    )
+    parser.add_argument(
         "--fanout-component",
         action="append",
         default=[],
@@ -583,15 +608,25 @@ def main() -> int:
     # The summary and the board are the evidence for the attempt that wrote
     # them, so both are removed before each attempt: an attempt that writes
     # none is a failure rather than a pass on the previous attempt's output.
+    # An operator's via cost replaces the ladder: every attempt uses it.
     print("running KiCadRoutingTools:", " ".join(command), flush=True)
     stats.unlink(missing_ok=True)
     args.output_board.unlink(missing_ok=True)
-    completed = subprocess.run([*command, "--via-cost", str(KEEP_LAYER_VIA_COST)], check=False)
-    if completed.returncode or _failed_nets(stats):
-        print("retrying KiCadRoutingTools at its default via cost", flush=True)
-        stats.unlink(missing_ok=True)
-        args.output_board.unlink(missing_ok=True)
+    if args.via_cost is not None:
+        command.extend(("--via-cost", str(args.via_cost)))
+        via_cost = str(args.via_cost)
         completed = subprocess.run(command, check=False)
+    else:
+        via_cost = str(KEEP_LAYER_VIA_COST)
+        completed = subprocess.run(
+            [*command, "--via-cost", str(KEEP_LAYER_VIA_COST)], check=False
+        )
+        if completed.returncode or _failed_nets(stats):
+            print("retrying KiCadRoutingTools at its default via cost", flush=True)
+            stats.unlink(missing_ok=True)
+            args.output_board.unlink(missing_ok=True)
+            via_cost = "default"
+            completed = subprocess.run(command, check=False)
     # A fine-pitch package whose pads the maze router could not leave is given
     # a stub on every pad and the board is routed once more. Only after a plain
     # route has failed: a stub commits each pad's first lane, and a board that
@@ -608,6 +643,8 @@ def main() -> int:
             stats.unlink(missing_ok=True)
             args.output_board.unlink(missing_ok=True)
             command[2] = str(fanned)
+            if args.via_cost is None:
+                via_cost = "default"
             completed = subprocess.run(command, check=False)
 
     policy_ok = completed.returncode == 0
@@ -619,6 +656,11 @@ def main() -> int:
     except RuntimeError as error:
         print(f"error: {error}", file=sys.stderr)
         return completed.returncode or POLICY_REJECTED
+    # The summary records the cost that was asked for and the one the
+    # surviving attempt used, beside the engine's via count (#434).
+    report["requested_via_cost"] = args.via_cost
+    report["via_cost"] = via_cost
+    stats.write_text(json.dumps(report, indent=2))
 
     print(
         f"KRT summary: routed={report.get('successful', '?')} "

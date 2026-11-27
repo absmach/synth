@@ -120,6 +120,7 @@ fn board(components: Vec<Component>, nets: Vec<Net>) -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         no_connects: Vec::new(),
+        ground_domains: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

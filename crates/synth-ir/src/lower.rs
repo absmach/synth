@@ -163,6 +163,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
     let mut notes: Vec<Note> = Vec::new();
     let mut keepouts: Vec<Keepout> = Vec::new();
     let mut no_connects: Vec<NoConnect> = Vec::new();
+    let mut ground_domains: Vec<crate::board::GroundDomain> = Vec::new();
     let mut stackup: Option<Stackup> = None;
     let mut outline: Option<BoardOutline> = None;
     let mut netclasses: Vec<NetClass> = Vec::new();
@@ -285,6 +286,24 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
                     });
                 }
             }
+            StatementAst::GroundDomain(d) => ground_domains.push(crate::board::GroundDomain {
+                net: d.net.clone(),
+                join: d.join.clone(),
+                crossings: d
+                    .crossings
+                    .iter()
+                    .map(|c| crate::board::GroundCrossing {
+                        net: c.net.clone(),
+                        stitch: if c.stitch == "join" {
+                            crate::board::GroundStitch::Join
+                        } else {
+                            crate::board::GroundStitch::Part(c.stitch.clone())
+                        },
+                        source_span: c.span,
+                    })
+                    .collect(),
+                source_span: d.span,
+            }),
             StatementAst::Stackup(st) => stackup = Some(ctx.lower_stackup(st)),
             StatementAst::Outline(st) => {
                 // A board can declare one exact outline. A second `outline`
@@ -508,6 +527,7 @@ pub fn lower(ast: &ProgramAst, registry: &Registry, file: &str) -> LowerResult {
         notes,
         keepouts,
         no_connects,
+        ground_domains,
         stackup,
         outline,
         netclasses,

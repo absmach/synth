@@ -641,6 +641,7 @@ mod tests {
             notes: Vec::new(),
             keepouts: Vec::new(),
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
