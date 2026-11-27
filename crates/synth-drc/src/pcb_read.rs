@@ -470,6 +470,31 @@ impl Pad {
         self.distance_in_frame(p, (0.0, 0.0), size)
     }
 
+    /// Distance in nanometres from a track centreline `a`-`b` to this pad's
+    /// copper: zero or negative when the track's width reaches the pad.
+    ///
+    /// A track may land in a rectangular pad's corner rather than at its
+    /// centre. A disc of the pad's larger half-size around its centre misses
+    /// that corner, which reports a real copper join as an open net; this
+    /// measures the segment against the same rounded box
+    /// [`Self::signed_distance_nm`] describes.
+    #[must_use]
+    pub fn segment_distance_nm(&self, a: Point, b: Point) -> f64 {
+        let (sin, cos) = self.angle_deg.to_radians().sin_cos();
+        let to_pad = |p: Point| {
+            let dx = p.x_nm.saturating_sub(self.at.x_nm) as f64;
+            let dy = p.y_nm.saturating_sub(self.at.y_nm) as f64;
+            (dx * cos - dy * sin, dx * sin + dy * cos)
+        };
+        let (ax, ay) = to_pad(a);
+        let (bx, by) = to_pad(b);
+        let size = (self.size_nm.0 as f64, self.size_nm.1 as f64);
+        let (hx, hy) = (size.0 / 2.0, size.1 / 2.0);
+        let radius = self.corner_radius_nm(size);
+        let (ix, iy) = ((hx - radius).max(0.0), (hy - radius).max(0.0));
+        segment_rect_distance_nm(ax, ay, bx, by, ix, iy) - radius
+    }
+
     /// Like [`Self::signed_distance_nm`] but to the copper a fab would etch:
     /// shifted by a drill offset, and a custom or trapezoid pad measured by
     /// its bounding box. For DFM rules only.
@@ -633,6 +658,65 @@ impl Pad {
     pub fn id(&self) -> String {
         format!("{}.{}", self.footprint, self.number)
     }
+}
+
+/// Distance from the segment `a`-`b` to an axis-aligned rectangle centred on
+/// the origin with half extents `hx`, `hy`, in the plane's units.
+///
+/// Zero when the segment intersects the rectangle; otherwise the closest pair
+/// is a segment endpoint to the rectangle or a rectangle corner to the
+/// segment, so both are measured. A degenerate rectangle (an oval's spine) is
+/// handled by the same two cases.
+fn segment_rect_distance_nm(ax: f64, ay: f64, bx: f64, by: f64, hx: f64, hy: f64) -> f64 {
+    let dx = bx - ax;
+    let dy = by - ay;
+    let mut t0 = 0.0_f64;
+    let mut t1 = 1.0_f64;
+    let mut intersects = true;
+    for (p, d, h) in [(ax, dx, hx), (ay, dy, hy)] {
+        if d == 0.0 {
+            if p.abs() > h {
+                intersects = false;
+                break;
+            }
+        } else {
+            let mut near = (-h - p) / d;
+            let mut far = (h - p) / d;
+            if near > far {
+                std::mem::swap(&mut near, &mut far);
+            }
+            t0 = t0.max(near);
+            t1 = t1.min(far);
+            if t0 > t1 {
+                intersects = false;
+                break;
+            }
+        }
+    }
+    if intersects {
+        return 0.0;
+    }
+    let point_rect = |x: f64, y: f64| {
+        let ex = (x.abs() - hx).max(0.0);
+        let ey = (y.abs() - hy).max(0.0);
+        ex.hypot(ey)
+    };
+    let mut best = point_rect(ax, ay).min(point_rect(bx, by));
+    for (cx, cy) in [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)] {
+        best = best.min(point_segment_distance_nm(cx, cy, ax, ay, bx, by));
+    }
+    best
+}
+
+fn point_segment_distance_nm(px: f64, py: f64, ax: f64, ay: f64, bx: f64, by: f64) -> f64 {
+    let dx = bx - ax;
+    let dy = by - ay;
+    let length_squared = dx * dx + dy * dy;
+    if length_squared == 0.0 {
+        return (px - ax).hypot(py - ay);
+    }
+    let t = (((px - ax) * dx + (py - ay) * dy) / length_squared).clamp(0.0, 1.0);
+    (px - (ax + t * dx)).hypot(py - (ay + t * dy))
 }
 
 /// A drilled hole: the segment `a`-`b` swept by a disc of `radius_nm`. A round

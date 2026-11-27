@@ -910,15 +910,15 @@ fn items_touch(board: &PcbBoard, a: &Item, b: &Item, pads: &[&Pad]) -> bool {
             pad_layers(&pad.layers)
                 .iter()
                 .any(|l| layer_entries_match(l, &segment.layer))
-                && point_segment_distance(pad.at, segment.start, segment.end)
-                    <= pad.radius_nm() + segment.width_nm / 2 + TOUCH_TOLERANCE_NM
+                && pad.segment_distance_nm(segment.start, segment.end)
+                    <= segment.width_nm as f64 / 2.0 + TOUCH_TOLERANCE_NM as f64
         }
         (Item::Pad(x), Item::Via(v)) | (Item::Via(v), Item::Pad(x)) => {
             let pad = pads[*x];
             let via = &board.vias[*v];
             shares_layer(pad, &via.layers)
-                && point_distance(pad.at, via.at)
-                    <= pad.radius_nm() + via.size_nm / 2 + TOUCH_TOLERANCE_NM
+                && pad.signed_distance_nm(via.at)
+                    <= via.size_nm as f64 / 2.0 + TOUCH_TOLERANCE_NM as f64
         }
         (Item::Segment(x), Item::Segment(y)) => {
             let first = &board.segments[*x];
@@ -2110,6 +2110,36 @@ mod tests {
             "{reason}"
         );
         assert!(!reason.contains("and "), "{reason}");
+    }
+
+    /// A track may land in a rectangular pad's corner rather than at its
+    /// centre. The corner is copper; a disc of the pad's larger half-size
+    /// around its centre does not reach it, and the net then reads open even
+    /// though the router's own geometry check and KiCad both see the join.
+    #[test]
+    fn a_track_ending_in_a_rectangular_pads_corner_is_connected() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "") (net 1 "+12V")
+          (footprint "a:1" (layer "F.Cu") (at 8.1 41.4 -90)
+            (property "Reference" "J1" (at 0 0) (layer "F.SilkS"))
+            (pad "1" thru_hole roundrect (at 0 0 270) (size 1.7 2) (drill 1)
+              (layers "*.Cu" "*.Mask") (net 1 "+12V"))
+          )
+          (footprint "a:1" (layer "F.Cu") (at 15.3625 44.5)
+            (property "Reference" "F1" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1.125 3.4)
+              (layers "F.Cu" "F.Mask" "F.Paste") (net 1 "+12V"))
+          )
+          (segment (start 8.9 42.2) (end 9.1 42.2) (width 0.2) (layer "F.Cu") (net 1))
+          (segment (start 9.1 42.2) (end 10.3 43.4) (width 0.2) (layer "F.Cu") (net 1))
+          (segment (start 10.3 43.4) (end 15.4 43.4) (width 0.2) (layer "F.Cu") (net 1))
+          (gr_line (start 0 0) (end 20 50) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let report = check_connectivity(&board(text), &FabricationPolicy::default());
+        assert_eq!(report.open_nets, 0, "{:?}", report.open);
+        assert_eq!(report.connected_nets, 1);
     }
 }
 
