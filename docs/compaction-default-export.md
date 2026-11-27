@@ -30,11 +30,22 @@ the search then had no candidate: the pad was too close to two edges for any
 of the four axes to land inside the 1 mm inset, and the other cap blocked the
 remaining directions.
 
-After `finish_outline`, `pcb::plane_pad_rim_kept` checks every declared-plane
-pad against the compacted outline. When the 1 mm rim is gone, the export falls
-back to the fitted, uncompacted placement. Boards with planes still attempt
-compaction; only a board whose plane pads lose the rim falls back. Boards
-without a plane take the same path as before.
+After `finish_outline`, `pcb::plane_pad_rim_kept` runs the exporter's own
+stitching-via search for every declared-plane pad on the compacted placement:
+`plane_via_offset`, then via-in-pad where the board allows it, then
+`plane_via_past_tips`, in the exporter's order and against the vias already
+placed. When any pad gets no via, the export falls back to the fitted,
+uncompacted placement. The check calls the same functions as the exporter, so
+the two cannot drift. A pad close to one edge still compacts when its via can
+move inward; a pad whose neighbours block every direction no longer slips
+through. Boards without a plane take the same path as before.
+
+Limit: the fallback is all or nothing. A large plane board that loses one
+corner pad's via path falls back to the full fitted placement, discarding the
+refine loop and every compaction step, not only the step that took the room.
+Making the stitching-via room a constraint inside `compress_outline`, so a
+shrinking step that takes it is rejected like a gate regression, would keep the
+other steps. That is not done here.
 
 The two-cap synthetic four-layer board (`PLANE_SOURCE` in
 `crates/synth-kicad/tests/split_ground_pcb.rs`) is 4.26 × 4.26 mm
