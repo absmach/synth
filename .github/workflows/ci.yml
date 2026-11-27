@@ -118,7 +118,16 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Install ngspice
-        run: sudo apt-get update && sudo apt-get install -y ngspice
+        run: |
+          # The runner image carries a Microsoft apt repo that can answer 403,
+          # which makes `apt-get update` abort even though every Ubuntu index
+          # was fetched. ngspice comes from Ubuntu universe, so drop that
+          # unrelated repo and carry on with the indexes apt did fetch. The
+          # install below still fails the step when ngspice is unavailable.
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources
+          sudo apt-get update || echo "::warning::apt-get update failed; continuing with the package indexes already present"
+          sudo apt-get install -y ngspice
 
       - name: Run tests (shard ${{ matrix.shard }})
         run: |
