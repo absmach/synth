@@ -78,6 +78,7 @@ mod compact_gaps;
 pub use compact_gaps::{GapSpacing, compact_by_gaps, courtyard_rect_probe, hpwl_probe};
 mod alignment;
 mod analytic;
+pub mod board_estimate;
 pub mod board_family;
 pub mod cem;
 mod default_rules;
@@ -85,6 +86,7 @@ pub mod fitness;
 pub mod floorplan;
 mod fold;
 pub mod judge;
+pub mod legal;
 pub mod modules;
 pub mod outline_packer;
 mod repeats;
@@ -102,11 +104,13 @@ use thiserror::Error;
 
 mod routability;
 mod stage_trace;
+pub use board_estimate::{BoardEstimate, estimate_board_size};
 pub use default_rules::{
     RefineReport, RefineStep, compress_outline, pull_groups_inward, refine_by_feedback,
 };
 pub use fitness::{FitnessMetric, PlacementFitness, fitness};
 pub use judge::{JudgeMetric, PlacementJudgement, judge};
+pub use legal::{DroppedHint, HintLevel, LegalFailure, LegalOptions, LegalPlacement, place_legal};
 pub use routability::{RoutabilityEstimate, routability};
 
 /// Final position + orientation of a single component on the PCB.
@@ -2314,6 +2318,26 @@ const MAX_REPLACE_COMPONENTS: usize = 200;
 /// The flag reports a guard, veto or keepout rejection. When it is set the
 /// placement is only the sweep the solve started from: the caller must use
 /// its own default export placement instead of finishing this one.
+/// The placement a refused RePlAce solve falls back to.
+///
+/// The export sweep is the historical fallback and still comes first; if it
+/// cannot pack the board, the bounded legal ladder runs so a hint or a canvas
+/// that the sweep could not use does not become a failed export.
+fn replace_fallback(board: &Board) -> Result<Placement, PlaceError> {
+    match place_with_export_sweep(board) {
+        Ok(placement) => Ok(placement),
+        Err(sweep_error) => match place_legal(board, &LegalOptions::default()) {
+            Ok(legal) => {
+                if let Some(warning) = legal.relaxation_warning() {
+                    replace_note(format_args!("REPLACE fallback: {warning}"));
+                }
+                Ok(legal.placement)
+            }
+            Err(_) => Err(sweep_error),
+        },
+    }
+}
+
 pub fn place_with_replace(board: &Board) -> Result<(Placement, bool), PlaceError> {
     let (mut placement, fell_back) = place_with_replace_unspaced(board)?;
     if !fell_back {
@@ -2332,18 +2356,19 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
     let trace_start = std::time::Instant::now();
 
     // The solve starts from the default arrangement without the group rule, so
-    // RePlAce sees the same envelope it would on an ungrouped board; the full
-    // `place()` result is what a rejected solve falls back to.
-    let fallback = place_with_export_sweep(board)?;
-    let baseline =
-        place_with_default_tuning(board, true, false, &default_rotation_overrides(board))?;
-    if board.components.len() > MAX_REPLACE_COMPONENTS {
-        replace_note(format_args!(
-            "REPLACE fallback: {} components is above the {MAX_REPLACE_COMPONENTS}-component guard",
-            board.components.len()
-        ));
-        return Ok((fallback, true));
-    }
+    // RePlAce sees the same envelope it would on an ungrouped board.
+    // Built only when the solve is refused. Building it up front made the
+    // export sweep's failure decide the RePlAce seam's answer: a hard-hinted
+    // board the sweep could not pack never reached the solver at all, which is
+    // how the CM4 carrier failed on `TP_NEXTRST` after the sweep had boxed
+    // itself in. The sweep is the fallback, not the gate.
+    let fallback = || replace_fallback(board);
+    // RePlAce does not hold a hard `near` part: `analytic::hard_anchor_positions`
+    // anchors pinned parts, edge and jack connectors, and hard `region` parts,
+    // not a part a hard `near` names. Nothing after the legalizer checks the
+    // distance either. A hard `near` board therefore stays on the default
+    // path, which is where the hint is anchored; anchoring those parts in the
+    // solver is a separate change.
     if board.components.iter().any(|component| {
         component.placement_hint.as_ref().is_some_and(|hint| {
             hint.priority == synth_ir::PlacementPriority::Hard && hint.near.is_some()
@@ -2352,10 +2377,30 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
         replace_note(format_args!(
             "REPLACE fallback: hard near hint is anchored by the default path"
         ));
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
+    }
+    // The baseline seeds RePlAce and is the arrangement it must beat. When the
+    // default path cannot pack the board at all there is no seed: run the
+    // fallback and return it, rather than spending minutes in a solver whose
+    // legalizer then has to refuse the oversized arrangement anyway. The
+    // fallback is legal, which is what the caller asked for.
+    let baseline =
+        match place_with_default_tuning(board, true, false, &default_rotation_overrides(board)) {
+            Ok(baseline) => baseline,
+            Err(error) => {
+                replace_note(format_args!("REPLACE baseline deferred: {error}"));
+                return fallback().map(|placement| (placement, true));
+            }
+        };
+    if board.components.len() > MAX_REPLACE_COMPONENTS {
+        replace_note(format_args!(
+            "REPLACE fallback: {} components is above the {MAX_REPLACE_COMPONENTS}-component guard",
+            board.components.len()
+        ));
+        return fallback().map(|placement| (placement, true));
     }
     if !board.nets.iter().any(|net| net.endpoints.len() >= 2) {
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     }
     let outline = baseline.board_outline;
     let courtyards_mm: Vec<(ComponentId, (f64, f64), (f64, f64))> = board
@@ -2419,7 +2464,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
             "REPLACE fallback: legalizer failed ({:?})",
             legalized.err()
         ));
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     };
     // The density force never fires on a board this sparse, so the legalised
     // arrangement still holds the seed's spread; the fitted envelope it leaves
@@ -2559,7 +2604,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
                 synth_geometry::nm_to_mm(placement_hpwl),
                 synth_geometry::nm_to_mm(baseline_hpwl)
             ));
-            return Ok((fallback, true));
+            return fallback().map(|placement| (placement, true));
         }
         break;
     }
@@ -2574,7 +2619,7 @@ fn place_with_replace_unspaced(board: &Board) -> Result<(Placement, bool), Place
             keepout_overlaps(board, &baseline),
             keepout_overlaps(board, &placement)
         ));
-        return Ok((fallback, true));
+        return fallback().map(|placement| (placement, true));
     }
     replace_note(format_args!("REPLACE used"));
     Ok((placement, false))
@@ -3547,6 +3592,368 @@ fn place_board_features(
     }
 }
 
+/// Place the wired test points after every other part, nearest their net.
+///
+/// A test point is a probe: the circuit around it is settled before it gets a
+/// position. Placing probes with the circuit let a 1.5 mm pad compete for a
+/// fragmented 1 mm grid and made the whole board fail with
+/// `E-SYNTH-PLACE-002` (on the CM4 carrier the search died on `TP_NEXTRST`
+/// after 150 cells while free corners remained). A probe is therefore removed
+/// from the solver's feasibility and placed here, after the circuit and the
+/// board features.
+///
+/// A probe is never a hard failure. When no free cell exists on either side,
+/// the nearest cell to its net is used anyway: the colliding courtyard is a
+/// warning naming the probe, because the probe is still a pad on its net and
+/// dropping it would take the part out of the BOM.
+///
+/// An explicit `near`, `edge` or `region` hint is kept: the search runs inside
+/// the hint's hard region first and falls back to the whole board only when
+/// that region has no free cell. The bottom side is a second copper layer and
+/// is tried after the top; a through-hole part or a mounting hole blocks both
+/// sides.
+fn place_test_points(
+    board: &Board,
+    placements: &mut Vec<ComponentPlacement>,
+    probes: &[ComponentId],
+    courtyard_lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
+    courtyard_offset_lookup: &std::collections::HashMap<ComponentId, (f64, f64)>,
+    usable: Rect,
+    board_outline: Rect,
+) {
+    let rect_of = |placement: &ComponentPlacement| -> Rect {
+        let (w_mm, h_mm) = courtyard_lookup
+            .get(&placement.id)
+            .copied()
+            .unwrap_or((10.0, 10.0));
+        courtyard_rect_for_placement(
+            placement,
+            w_mm,
+            h_mm,
+            courtyard_offset_lookup.get(&placement.id).copied(),
+            0,
+        )
+    };
+    let pad_offsets = build_pad_offset_lookup(board);
+    let step_nm = mm_to_nm(GRID_PITCH_MM);
+    let mut ordered = probes.to_vec();
+    ordered.sort_by_key(|id| id.0);
+    let centre = Point::new(
+        i64::midpoint(usable.min.x_nm, usable.max.x_nm),
+        i64::midpoint(usable.min.y_nm, usable.max.y_nm),
+    );
+
+    for id in ordered {
+        let (w_mm, h_mm) = courtyard_lookup.get(&id).copied().unwrap_or((10.0, 10.0));
+        let half_w = mm_to_nm(w_mm) / 2;
+        let half_h = mm_to_nm(h_mm) / 2;
+        let offset = courtyard_offset_lookup
+            .get(&id)
+            .copied()
+            .unwrap_or(PLACEMENT_COURTYARD_OFFSET_MM);
+        let (off_x, off_y) = Rotation::Zero.rotate_offset(mm_to_nm(offset.0), mm_to_nm(offset.1));
+        let min_x = usable.min.x_nm + half_w - off_x;
+        let max_x = usable.max.x_nm - half_w - off_x;
+        let min_y = usable.min.y_nm + half_h - off_y;
+        let max_y = usable.max.y_nm - half_h - off_y;
+
+        let hint = board
+            .component(id)
+            .and_then(|component| component.placement_hint.clone());
+        let placed_refdes_rects: std::collections::HashMap<String, Rect> = placements
+            .iter()
+            .filter_map(|placed| {
+                board
+                    .component(placed.id)
+                    .map(|component| (component.refdes.clone(), rect_of(placed)))
+            })
+            .collect();
+        let hint_resolution = hint
+            .as_ref()
+            .map(|hint| resolve_hint_target(hint, usable, &placed_refdes_rects));
+        let pads = net_pad_points(board, placements, &pad_offsets, id);
+        let target = hint_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.target)
+            .or_else(|| {
+                pads.iter()
+                    .min_by_key(|(_, point)| {
+                        let dx = point.x_nm - centre.x_nm;
+                        let dy = point.y_nm - centre.y_nm;
+                        dx.saturating_mul(dx).saturating_add(dy.saturating_mul(dy))
+                    })
+                    .map(|(_, point)| *point)
+            })
+            .unwrap_or(centre);
+
+        let cell_distance = |point: &Point| -> i64 {
+            if hint_resolution.as_ref().is_some_and(|r| r.target.is_some()) {
+                (point.x_nm - target.x_nm).abs() + (point.y_nm - target.y_nm).abs()
+            } else if pads.is_empty() {
+                (point.x_nm - centre.x_nm).abs() + (point.y_nm - centre.y_nm).abs()
+            } else {
+                pads.iter()
+                    .map(|(_, pad)| (point.x_nm - pad.x_nm).abs() + (point.y_nm - pad.y_nm).abs())
+                    .min()
+                    .unwrap_or(i64::MAX)
+            }
+        };
+
+        let mut chosen: Option<ComponentPlacement> = None;
+        // The hint's own region first; then the whole board, so a busy edge
+        // still gets its probe.
+        let mut regions: Vec<Option<Rect>> = Vec::new();
+        if let Some(hard_region) = hint_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.hard_region)
+        {
+            regions.push(Some(hard_region));
+        }
+        regions.push(None);
+        for region in regions {
+            for layer in [Layer::Top, Layer::Bottom] {
+                let occupied: Vec<Rect> = placements
+                    .iter()
+                    .filter(|placed| placed.layer == layer || occupies_both_sides(board, placed))
+                    .map(rect_of)
+                    .collect();
+                let lookup = |pid: ComponentId| -> Option<Rect> {
+                    placements
+                        .iter()
+                        .find(|placed| placed.id == pid)
+                        .map(rect_of)
+                };
+                let mut cells: Vec<Point> = Vec::new();
+                let mut y = min_y;
+                while y <= max_y {
+                    let mut x = min_x;
+                    while x <= max_x {
+                        let point = Point::new(x, y);
+                        if region.is_none_or(|band| band.contains(point)) {
+                            cells.push(point);
+                        }
+                        x += step_nm;
+                    }
+                    y += step_nm;
+                }
+                cells.sort_by(|a, b| {
+                    cell_distance(a)
+                        .cmp(&cell_distance(b))
+                        .then(a.y_nm.cmp(&b.y_nm))
+                        .then(a.x_nm.cmp(&b.x_nm))
+                });
+                for point in cells {
+                    let courtyard =
+                        courtyard_rect_at_anchor(point, Rotation::Zero, half_w, half_h, offset, 0);
+                    if occupied.iter().any(|rect| courtyard.intersects(rect)) {
+                        continue;
+                    }
+                    if overlaps_keepout(courtyard, id, board, board_outline, lookup) {
+                        continue;
+                    }
+                    chosen = Some(ComponentPlacement {
+                        id,
+                        center: point,
+                        rotation: Rotation::Zero,
+                        layer,
+                    });
+                    break;
+                }
+                if chosen.is_some() {
+                    break;
+                }
+            }
+            if chosen.is_some() {
+                break;
+            }
+        }
+
+        let placement = chosen.unwrap_or_else(|| ComponentPlacement {
+            // No free cell anywhere. Keep the probe on the board at the cell
+            // nearest its net; the review warns about the collision instead
+            // of failing the whole placement.
+            id,
+            center: Point::new(
+                target.x_nm.clamp(min_x, max_x.max(min_x)),
+                target.y_nm.clamp(min_y, max_y.max(min_y)),
+            ),
+            rotation: Rotation::Zero,
+            layer: Layer::Top,
+        });
+        placements.push(placement);
+    }
+}
+
+/// Whether a part occupies both copper sides: a through-hole connector or a
+/// mounting hole is drilled through, so a bottom-side probe cannot share its
+/// footprint even though the courtyards are on different layers.
+fn occupies_both_sides(board: &Board, placement: &ComponentPlacement) -> bool {
+    board.component(placement.id).is_some_and(|component| {
+        matches!(
+            component.kind.as_str(),
+            "mounting_hole" | "fiducial" | "connector" | "jack" | "receptacle"
+        ) || component
+            .part
+            .as_ref()
+            .and_then(|part| part.kicad_footprint.as_deref())
+            .is_some_and(|footprint| {
+                let footprint = footprint.to_ascii_lowercase();
+                footprint.contains("pinheader")
+                    || footprint.contains("pinsocket")
+                    || footprint.contains("mountinghole")
+                    || footprint.contains("_tht")
+            })
+    })
+}
+
+/// Every pad on `id`'s nets, as `("U1.pin", point)` in board millimetres.
+fn net_pad_points(
+    board: &Board,
+    placements: &[ComponentPlacement],
+    pad_offsets: &PadOffsetLookup,
+    id: ComponentId,
+) -> Vec<(String, Point)> {
+    let mut out = Vec::new();
+    for net in &board.nets {
+        if !net
+            .endpoints
+            .iter()
+            .any(|endpoint| endpoint.component == id)
+        {
+            continue;
+        }
+        for endpoint in &net.endpoints {
+            if endpoint.component == id {
+                continue;
+            }
+            let Some(component) = board.component(endpoint.component) else {
+                continue;
+            };
+            if component.kind == "testpoint" {
+                continue;
+            }
+            let Some(placed) = placements
+                .iter()
+                .find(|placed| placed.id == endpoint.component)
+            else {
+                continue;
+            };
+            let offset = pad_offsets
+                .lookup(endpoint.component, endpoint.pin.0 as usize)
+                .unwrap_or((0, 0));
+            let point = apply_rotation(*placed, offset);
+            let pin = component
+                .part
+                .as_ref()
+                .and_then(|part| part.pins.get(endpoint.pin.0 as usize))
+                .map_or_else(|| endpoint.pin.0.to_string(), |pin| pin.name.clone());
+            out.push((format!("{}.{pin}", component.refdes), point));
+        }
+    }
+    out
+}
+
+/// One test point's stub-length read: the pad-to-pad distance to the nearest
+/// pad on its net, and the side it was placed on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TestPointStub {
+    pub refdes: String,
+    /// The nearest pin, as `U1.vdd_io`; absent when the net has no other pad.
+    pub nearest: Option<String>,
+    /// Pad-to-pad distance, millimetres. `f64::INFINITY` when there is no pad.
+    pub mm: f64,
+    pub layer: Layer,
+}
+
+/// The stub-length proxy for every placed test point.
+///
+/// A probe placed late is near its net, but the router still has to reach it;
+/// this measures the pad-to-pad distance an author would see on the board.
+#[must_use]
+pub fn test_point_stubs(board: &Board, placement: &Placement) -> Vec<TestPointStub> {
+    let pad_offsets = build_pad_offset_lookup(board);
+    let mut out = Vec::new();
+    for placed in &placement.components {
+        let Some(component) = board.component(placed.id) else {
+            continue;
+        };
+        if component.kind != "testpoint" {
+            continue;
+        }
+        let mut nearest: Option<(String, f64)> = None;
+        for net in &board.nets {
+            let Some(endpoint) = net
+                .endpoints
+                .iter()
+                .find(|endpoint| endpoint.component == placed.id)
+            else {
+                continue;
+            };
+            let probe = apply_rotation(
+                *placed,
+                pad_offsets
+                    .lookup(placed.id, endpoint.pin.0 as usize)
+                    .unwrap_or((0, 0)),
+            );
+            for other in &net.endpoints {
+                if other.component == placed.id {
+                    continue;
+                }
+                let Some(other_component) = board.component(other.component) else {
+                    continue;
+                };
+                if other_component.kind == "testpoint" {
+                    continue;
+                }
+                let Some(other_placed) = placement
+                    .components
+                    .iter()
+                    .find(|candidate| candidate.id == other.component)
+                else {
+                    continue;
+                };
+                let pad = apply_rotation(
+                    *other_placed,
+                    pad_offsets
+                        .lookup(other.component, other.pin.0 as usize)
+                        .unwrap_or((0, 0)),
+                );
+                let mm = synth_geometry::nm_to_mm(probe.x_nm - pad.x_nm)
+                    .hypot(synth_geometry::nm_to_mm(probe.y_nm - pad.y_nm));
+                let pin = other_component
+                    .part
+                    .as_ref()
+                    .and_then(|part| part.pins.get(other.pin.0 as usize))
+                    .map_or_else(|| other.pin.0.to_string(), |pin| pin.name.clone());
+                let label = format!("{}.{pin}", other_component.refdes);
+                if nearest.as_ref().is_none_or(|(_, best)| mm < *best) {
+                    nearest = Some((label, mm));
+                }
+            }
+        }
+        out.push(TestPointStub {
+            refdes: component.refdes.clone(),
+            nearest: nearest.as_ref().map(|(label, _)| label.clone()),
+            mm: nearest.map_or(f64::INFINITY, |(_, mm)| mm),
+            layer: placed.layer,
+        });
+    }
+    out
+}
+
+/// A test point with a net is a probe; a netless one is board furniture and
+/// already placed by [`place_board_features`].
+fn is_wired_test_point(board: &Board, id: ComponentId) -> bool {
+    board.component(id).is_some_and(|component| {
+        component.kind == "testpoint"
+            && board.nets.iter().any(|net| {
+                net.endpoints
+                    .iter()
+                    .any(|endpoint| endpoint.component == id)
+            })
+    })
+}
+
 /// The flush line each placed hard-hinted connector fixes on its edge.
 ///
 /// Edges 0/1 keep the smallest minimum (the line furthest out), edges 2/3 the
@@ -3775,6 +4182,65 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     pinned: &PinnedPlacements,
     seed_mode: SeedMode,
 ) -> Result<Placement, PlaceError> {
+    // Test points stay in the packing order while they fit, so a board that
+    // already places is unchanged. Only a failed solve retries with the probes
+    // deferred, which is what removes them from the board's feasibility: a
+    // probe can no longer be the reason the circuit does not place.
+    match place_with_outline_impl(
+        board,
+        board_outline,
+        courtyards_mm,
+        rotation_overrides,
+        tighten_outline,
+        usable_margin_mm,
+        seed,
+        pinned,
+        seed_mode,
+        false,
+    ) {
+        Ok(placement) => Ok(placement),
+        Err(error) => {
+            if !board
+                .components
+                .iter()
+                .any(|component| is_wired_test_point(board, component.id))
+            {
+                return Err(error);
+            }
+            place_with_outline_impl(
+                board,
+                board_outline,
+                courtyards_mm,
+                rotation_overrides,
+                tighten_outline,
+                usable_margin_mm,
+                seed,
+                pinned,
+                seed_mode,
+                true,
+            )
+        }
+    }
+}
+
+/// [`place_with_outline`], with the probe deferral chosen by the caller.
+///
+/// `defer_probes` takes every wired test point out of the solve and places it
+/// after the circuit: the retry for a board the as-written order could not
+/// pack.
+#[allow(clippy::too_many_arguments)]
+fn place_with_outline_impl<S: ::std::hash::BuildHasher>(
+    board: &Board,
+    board_outline: Rect,
+    courtyards_mm: &[(ComponentId, (f64, f64), (f64, f64))],
+    rotation_overrides: &std::collections::HashMap<ComponentId, synth_geometry::Rotation, S>,
+    tighten_outline: bool,
+    usable_margin_mm: f64,
+    seed: u64,
+    pinned: &PinnedPlacements,
+    seed_mode: SeedMode,
+    defer_probes: bool,
+) -> Result<Placement, PlaceError> {
     use synth_geometry::nm_to_mm;
     let mut resolved_rotation_overrides: std::collections::HashMap<
         ComponentId,
@@ -3903,6 +4369,17 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
     let (all_components, board_features): (Vec<ComponentId>, Vec<ComponentId>) = all_components
         .into_iter()
         .partition(|&id| !is_netless_board_feature(board, id));
+
+    // On the retry, a wired test point is a probe: placed after the circuit,
+    // on any free cell, exactly like a board feature. A pinned one stays in
+    // the solver's pinned sets, which already keep it out of both searches.
+    let (all_components, test_points): (Vec<ComponentId>, Vec<ComponentId>) = if defer_probes {
+        all_components
+            .into_iter()
+            .partition(|&id| !is_wired_test_point(board, id) || pinned.contains_key(&id))
+    } else {
+        (all_components, Vec::new())
+    };
 
     let (order, mut passives): (Vec<ComponentId>, Vec<ComponentId>) = all_components
         .into_iter()
@@ -4668,6 +5145,22 @@ fn place_with_outline<S: ::std::hash::BuildHasher>(
             &board_features,
             &courtyard_lookup,
             &courtyard_offset_lookup,
+        );
+        placements.sort_by_key(|p| p.id.0);
+    }
+
+    // The probes go last: the circuit has taken every cell it needs, so a
+    // probe can only land on what is left, and never makes the board
+    // unplaceable.
+    if !test_points.is_empty() {
+        place_test_points(
+            board,
+            &mut placements,
+            &test_points,
+            &courtyard_lookup,
+            &courtyard_offset_lookup,
+            usable,
+            board_outline,
         );
         placements.sort_by_key(|p| p.id.0);
     }
@@ -7352,6 +7845,23 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         (distance, t)
     };
     let mut functional_warnings = Vec::new();
+    // A probe on the bottom side is legal (the placer only does that when the
+    // top is full), but the author should know why it is not on top.
+    for placed in &placement.components {
+        if placed.layer == Layer::Bottom
+            && board
+                .component(placed.id)
+                .is_some_and(|component| component.kind == "testpoint")
+        {
+            let refdes = board.component(placed.id).map_or_else(
+                || format!("#{}", placed.id.0),
+                |component| component.refdes.clone(),
+            );
+            functional_warnings.push(format!(
+                "{refdes} is on the bottom side; no top-side cell was free for it"
+            ));
+        }
+    }
     let mut visual_findings = Vec::new();
     let mut recommended_actions = Vec::new();
     let rp2350_id = board.components.iter().find_map(|component| {
@@ -7442,6 +7952,8 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
     // before spending time in the router. This also catches relative sidecar
     // overrides that move a component into an otherwise legal automatic slot.
     let mut courtyard_rects = Vec::with_capacity(placement.components.len());
+    let mut courtyard_layers = Vec::with_capacity(placement.components.len());
+    let mut courtyard_is_probe = Vec::with_capacity(placement.components.len());
     for placed in &placement.components {
         let Some(component) = board.component(placed.id) else {
             continue;
@@ -7462,6 +7974,8 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
                 mm_to_nm(rotated_height) / 2,
             ),
         ));
+        courtyard_layers.push(placed.layer);
+        courtyard_is_probe.push(component.kind == "testpoint");
     }
 
     // A generic electrical-cluster shortcut may intentionally choose a
@@ -7563,10 +8077,36 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
 
     for i in 0..courtyard_rects.len() {
         for j in (i + 1)..courtyard_rects.len() {
+            // A top and a bottom courtyard occupy different copper; only the
+            // same side can collide.
+            if courtyard_layers[i] != courtyard_layers[j] {
+                continue;
+            }
             if courtyard_rects[i].1.intersects(&courtyard_rects[j].1) {
-                let overlap_warning = format!(
-                    "courtyard overlap: {} with {}; adjust placement before routing",
-                    courtyard_rects[i].0, courtyard_rects[j].0
+                let probe = (courtyard_is_probe[i] || courtyard_is_probe[j]).then_some(
+                    if courtyard_is_probe[i] {
+                        courtyard_rects[i].0
+                    } else {
+                        courtyard_rects[j].0
+                    },
+                );
+                let overlap_warning = probe.map_or_else(
+                    || {
+                        format!(
+                            "courtyard overlap: {} with {}; adjust placement before routing",
+                            courtyard_rects[i].0, courtyard_rects[j].0
+                        )
+                    },
+                    |probe| {
+                        format!(
+                            "{probe} has no free spot; its courtyard overlaps {}; move the neighbour or enlarge the board",
+                            if courtyard_is_probe[i] {
+                                courtyard_rects[j].0
+                            } else {
+                                courtyard_rects[i].0
+                            }
+                        )
+                    },
                 );
                 functional_warnings.push(overlap_warning.clone());
                 // A physical courtyard collision is not merely advisory:
@@ -7641,12 +8181,25 @@ pub fn describe_placement(board: &Board, placement: &Placement) -> PlacementDesc
         if !outside {
             continue;
         }
-        visual_findings.push(format!(
-            "courtyard for {refdes} extends outside the board outline; move it inside Edge.Cuts before routing"
-        ));
-        functional_warnings.push(format!(
-            "courtyard for {refdes} is outside the board outline"
-        ));
+        let probe = board
+            .components
+            .iter()
+            .find(|component| component.refdes == *refdes)
+            .is_some_and(|component| component.kind == "testpoint");
+        if probe {
+            let warning = format!(
+                "{refdes} has no free spot; its courtyard extends outside the board outline; enlarge the board or move the probe"
+            );
+            visual_findings.push(warning.clone());
+            functional_warnings.push(warning);
+        } else {
+            visual_findings.push(format!(
+                "courtyard for {refdes} extends outside the board outline; move it inside Edge.Cuts before routing"
+            ));
+            functional_warnings.push(format!(
+                "courtyard for {refdes} is outside the board outline"
+            ));
+        }
         let Some(component) = board.components.iter().find(|c| c.refdes == *refdes) else {
             continue;
         };
@@ -10595,7 +11148,7 @@ mod tests {
     /// No shipped design declares a mounting hole, a fiducial or a test point,
     /// so a board carrying the furniture cannot be exercised through a fixture
     /// file without adding one to the repository for the placer's sake alone.
-    fn board_from_source(source: &str, path: &str) -> Board {
+    pub(crate) fn board_from_source(source: &str, path: &str) -> Board {
         let file = path.to_string();
         let parse = synth_parser::parse(source, file.clone());
         let ast = parse.ast.as_ref().expect("parse");
@@ -14889,6 +15442,145 @@ board "near" {
         );
     }
 
+    /// A sidecar that covers every part on a board with a declared outline is
+    /// the placement: the shortcut returns the pinned coordinates without
+    /// running the solver, so a contradicting DSL hint cannot move them.
+    #[test]
+    fn a_full_sidecar_is_placed_verbatim_and_outranks_dsl_hints() {
+        let board = board_from_source(
+            r#"board "sidecar_full" {
+                layers 2
+                outline 40mm x 30mm
+                component U1: ic "stm32g030k8_lqfp32" {
+                    placement_hint { region centre priority: hard }
+                }
+                component R1: resistor "r_generic_0603" {
+                    placement_hint { edge left priority: hard }
+                }
+            }"#,
+            "sidecar_full.synth",
+        );
+        let path = std::env::temp_dir().join(format!(
+            "synth-place-full-sidecar-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            "schema_version = 2\n\n\
+             [components.U1]\nx = 12.0\ny = 11.0\nrotation = 90\nsource = \"human_drag\"\npriority = \"hard\"\n\n\
+             [components.R1]\nx = 30.0\ny = 20.0\nrotation = 0\nsource = \"human_drag\"\npriority = \"hard\"\n",
+        )
+        .expect("sidecar TOML written");
+
+        let placement = place_with_sidecar(&board, Some(&path)).expect("place");
+        std::fs::remove_file(&path).ok();
+
+        for (refdes, x, y, rotation) in [
+            ("U1", 12.0, 11.0, Rotation::Ninety),
+            ("R1", 30.0, 20.0, Rotation::Zero),
+        ] {
+            let component = board
+                .components
+                .iter()
+                .find(|component| component.refdes == refdes)
+                .expect("component");
+            let placed = placement
+                .components
+                .iter()
+                .find(|placed| placed.id == component.id)
+                .expect("placed");
+            // The sidecar is footprint-origin millimetres; the placement
+            // stores the courtyard centre.
+            let origin = footprint_origin(
+                component.part.as_ref(),
+                &ComponentPlacement {
+                    id: component.id,
+                    center: placed.center,
+                    rotation: placed.rotation,
+                    layer: placed.layer,
+                },
+            );
+            assert_eq!(placed.rotation, rotation, "{refdes} rotation");
+            assert!(
+                (nm_to_mm(origin.x_nm) - x).abs() < 0.001
+                    && (nm_to_mm(origin.y_nm) - y).abs() < 0.001,
+                "{refdes} at ({:.3}, {:.3}) instead of ({x}, {y})",
+                nm_to_mm(origin.x_nm),
+                nm_to_mm(origin.y_nm)
+            );
+        }
+    }
+
+    /// A sidecar written before a part was added is stale: its entries still
+    /// pin, and the parts it does not name are solved normally.
+    #[test]
+    fn a_stale_sidecar_leaves_the_missing_parts_to_the_solver() {
+        let board = board_from_source(
+            r#"board "sidecar_stale" {
+                layers 2
+                outline 40mm x 30mm
+                component U1: ic "stm32g030k8_lqfp32"
+                component R1: resistor "r_generic_0603"
+                component R2: resistor "r_generic_0603"
+            }"#,
+            "sidecar_stale.synth",
+        );
+        let path = std::env::temp_dir().join(format!(
+            "synth-place-stale-sidecar-{}.toml",
+            std::process::id()
+        ));
+        std::fs::write(
+            &path,
+            "schema_version = 2\n\n[components.U1]\nx = 12.0\ny = 11.0\nrotation = 0\nsource = \"human_drag\"\npriority = \"hard\"\n",
+        )
+        .expect("sidecar TOML written");
+
+        let placement = place_with_sidecar(&board, Some(&path)).expect("place");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(placement.components.len(), board.components.len());
+        for refdes in ["R1", "R2"] {
+            let component = board
+                .components
+                .iter()
+                .find(|component| component.refdes == refdes)
+                .expect("component");
+            assert!(
+                placement
+                    .components
+                    .iter()
+                    .any(|placed| placed.id == component.id),
+                "{refdes} missing from the placement"
+            );
+        }
+        let u1 = board
+            .components
+            .iter()
+            .find(|component| component.refdes == "U1")
+            .expect("U1");
+        let placed = placement
+            .components
+            .iter()
+            .find(|placed| placed.id == u1.id)
+            .expect("U1 placed");
+        let origin = footprint_origin(
+            u1.part.as_ref(),
+            &ComponentPlacement {
+                id: u1.id,
+                center: placed.center,
+                rotation: placed.rotation,
+                layer: placed.layer,
+            },
+        );
+        assert!(
+            (nm_to_mm(origin.x_nm) - 12.0).abs() < 0.001
+                && (nm_to_mm(origin.y_nm) - 11.0).abs() < 0.001,
+            "the named part stays pinned at ({:.3}, {:.3})",
+            nm_to_mm(origin.x_nm),
+            nm_to_mm(origin.y_nm)
+        );
+    }
+
     const EDGES: [&str; 4] = ["left", "right", "top", "bottom"];
 
     fn with_hint(board: &Board, refdes: &str, edge: &str, priority: &str) -> Board {
@@ -15922,5 +16614,260 @@ board "near" {
                 );
             }
         }
+    }
+
+    /// Eleven probes around a dense circuit: the probes must not compete for
+    /// the cells the circuit needs, and each must sit near its net.
+    #[test]
+    fn eleven_test_points_place_on_a_tight_canvas() {
+        let probes = (1..=11).fold(String::new(), |mut probes, n| {
+            use std::fmt::Write as _;
+            let _ = write!(
+                probes,
+                "\n        component TP{n}: testpoint \"testpoint_pad_1_5\""
+            );
+            probes
+        });
+        let resistors = (1..=12).fold(String::new(), |mut parts, n| {
+            use std::fmt::Write as _;
+            let _ = write!(
+                parts,
+                "\n        component R{n}: resistor \"r_generic_0603\""
+            );
+            parts
+        });
+        let connects = (1..=11).fold(String::new(), |mut connects, n| {
+            use std::fmt::Write as _;
+            let _ = write!(connects, "\n        connect U1.iovdd -> TP{n}.p1");
+            connects
+        });
+        let board = board_from_source(
+            &format!(
+                "board \"probes\" {{
+        layers 2
+        outline 36mm x 36mm
+        component U1: mcu \"rp2350\"{probes}{resistors}{connects}
+    }}"
+            ),
+            "probes.synth",
+        );
+        let placement = place(&board).expect("a board of probes places");
+        assert_eq!(placement.components.len(), board.components.len());
+
+        // Stated budget: a probe is meant to sit beside what it measures, not
+        // merely somewhere on the board.
+        let stubs = test_point_stubs(&board, &placement);
+        assert_eq!(stubs.len(), 11, "{stubs:?}");
+        for stub in &stubs {
+            println!(
+                "{} -> {} at {:.1} mm ({:?})",
+                stub.refdes,
+                stub.nearest.as_deref().unwrap_or("no pad"),
+                stub.mm,
+                stub.layer
+            );
+            assert!(
+                stub.mm <= 22.0,
+                "{} is {:.1} mm from {}; the budget is 22 mm",
+                stub.refdes,
+                stub.mm,
+                stub.nearest.as_deref().unwrap_or("no pad")
+            );
+        }
+    }
+
+    /// A probe's own hint is kept: an `edge: left` probe lands in the left
+    /// band even when the middle of the board is free.
+    #[test]
+    fn a_hinted_test_point_keeps_its_edge() {
+        let board = board_from_source(
+            r#"board "probe_hint" {
+                layers 2
+                outline 40mm x 30mm
+                component U1: ic "stm32g030k8_lqfp32"
+                component TP1: testpoint "testpoint_pad_1_5" {
+                    placement_hint { edge: left priority: hard }
+                }
+                connect U1.vdd -> TP1.p1
+            }"#,
+            "probe_hint.synth",
+        );
+        let placement = place(&board).expect("place");
+        let tp = board
+            .components
+            .iter()
+            .find(|component| component.refdes == "TP1")
+            .expect("TP1");
+        let placed = placement
+            .components
+            .iter()
+            .find(|placed| placed.id == tp.id)
+            .expect("TP1 placed");
+        let width_mm = synth_geometry::nm_to_mm(placement.board_outline.width_nm());
+        assert!(
+            synth_geometry::nm_to_mm(placed.center.x_nm) <= width_mm / 3.0,
+            "TP1 at x={:.1} mm on a {width_mm:.1} mm board ignored its left edge hint",
+            synth_geometry::nm_to_mm(placed.center.x_nm),
+        );
+    }
+
+    /// No probe courtyard overlaps another courtyard on its own side, and no
+    /// probe sits over a mounting hole on either side.
+    #[test]
+    fn test_points_clear_courtyards_and_mounting_holes() {
+        let board = board_from_source(
+            r#"board "probe_clear" {
+                layers 2
+                outline 40mm x 34mm
+                component U1: ic "stm32g030k8_lqfp32"
+                component H1: mounting_hole "mounting_hole_m2_5"
+                component TP1: testpoint "testpoint_pad_1_5"
+                component TP2: testpoint "testpoint_pad_1_5"
+                component TP3: testpoint "testpoint_pad_1_5"
+                component TP4: testpoint "testpoint_pad_1_5"
+                connect U1.vdd -> TP1.p1
+                connect U1.vdd -> TP2.p1
+                connect U1.vdd -> TP3.p1
+                connect U1.vdd -> TP4.p1
+            }"#,
+            "probe_clear.synth",
+        );
+        let placement = place(&board).expect("place");
+        let courtyards = authoritative_courtyards(&board, &placement);
+        let hole = board
+            .components
+            .iter()
+            .find(|component| component.refdes == "H1")
+            .expect("H1");
+        let hole_rect = courtyards[placement
+            .components
+            .iter()
+            .position(|placed| placed.id == hole.id)
+            .expect("H1 placed")];
+        for (index, placed) in placement.components.iter().enumerate() {
+            let Some(component) = board.component(placed.id) else {
+                continue;
+            };
+            if component.kind != "testpoint" {
+                continue;
+            }
+            assert!(
+                !courtyards[index].intersects(&hole_rect),
+                "{} overlaps the mounting hole",
+                component.refdes
+            );
+            for (other_index, other) in placement.components.iter().enumerate() {
+                if index == other_index || other.layer != placed.layer {
+                    continue;
+                }
+                let Some(other_component) = board.component(other.id) else {
+                    continue;
+                };
+                if other_component.kind == "testpoint" {
+                    continue;
+                }
+                assert!(
+                    !courtyards[index].intersects(&courtyards[other_index]),
+                    "{} overlaps {} on {:?}",
+                    component.refdes,
+                    other_component.refdes,
+                    placed.layer
+                );
+            }
+        }
+    }
+
+    /// With no free cell the probe is still placed and the review names it;
+    /// the probe pass itself never returns an error.
+    #[test]
+    fn a_test_point_with_no_free_cell_warns_instead_of_failing() {
+        let board = board_from_source(
+            r#"board "probe_nowhere" {
+                layers 2
+                outline 6mm x 6mm
+                component TP1: testpoint "testpoint_pad_1_5"
+            }"#,
+            "probe_nowhere.synth",
+        );
+        let tp = board
+            .components
+            .iter()
+            .find(|component| component.refdes == "TP1")
+            .expect("TP1");
+        let (w_mm, h_mm) =
+            synth_layout::pcb_courtyard_geometry_for_part(tp.part.as_ref().expect("part")).1;
+        let lookup = std::collections::HashMap::from([(
+            tp.id,
+            (
+                w_mm + default_part_margin_mm(),
+                h_mm + default_part_margin_mm(),
+            ),
+        )]);
+        let offsets = std::collections::HashMap::from([(tp.id, PLACEMENT_COURTYARD_OFFSET_MM)]);
+        // A usable rect smaller than the probe's own courtyard: no cell can
+        // hold it, which is the no-free-spot case.
+        let usable = Rect::new(Point::new(0, 0), Point::new(mm_to_nm(3.0), mm_to_nm(3.0)));
+        let mut placements = Vec::new();
+        place_test_points(
+            &board,
+            &mut placements,
+            &[tp.id],
+            &lookup,
+            &offsets,
+            usable,
+            usable,
+        );
+        assert_eq!(placements.len(), 1, "the probe is placed anyway");
+        let placement = Placement {
+            board_outline: usable,
+            components: placements,
+        };
+        let warnings = describe_placement(&board, &placement).functional_warnings;
+        assert!(
+            warnings
+                .iter()
+                .any(|warning| warning.contains("TP1") && warning.contains("no free spot")),
+            "{warnings:?}"
+        );
+    }
+
+    #[test]
+    fn placing_the_same_board_twice_gives_the_same_test_point_positions() {
+        let board = board_from_source(
+            r#"board "probe_twice" {
+                layers 2
+                outline 34mm x 30mm
+                component U1: ic "stm32g030k8_lqfp32"
+                component TP1: testpoint "testpoint_pad_1_5"
+                component TP2: testpoint "testpoint_pad_1_5"
+                component TP3: testpoint "testpoint_pad_1_5"
+                connect U1.vdd -> TP1.p1
+                connect U1.vdd -> TP2.p1
+                connect U1.vdd -> TP3.p1
+            }"#,
+            "probe_twice.synth",
+        );
+        let first = place(&board).expect("first");
+        let second = place(&board).expect("second");
+        let positions = |placement: &Placement| -> Vec<(String, i64, i64, Layer)> {
+            placement
+                .components
+                .iter()
+                .filter_map(|placed| {
+                    board
+                        .component(placed.id)
+                        .filter(|component| component.kind == "testpoint")
+                        .map(|component| {
+                            (
+                                component.refdes.clone(),
+                                placed.center.x_nm,
+                                placed.center.y_nm,
+                                placed.layer,
+                            )
+                        })
+                })
+                .collect()
+        };
+        assert_eq!(positions(&first), positions(&second));
     }
 }

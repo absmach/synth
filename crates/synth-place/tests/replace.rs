@@ -134,3 +134,30 @@ fn a_guard_fallback_is_reported() {
         "a board with no two-pin net must report the fallback"
     );
 }
+
+/// The solver's `hard_anchor_positions` does not hold a part a hard `near` hint
+/// names, and nothing after the legalizer checks the distance. The seam must
+/// therefore veto the solve and report the fallback, so a hard hint is never
+/// broken silently.
+#[test]
+fn a_hard_near_hint_vetoes_the_replace_solver() {
+    let mut hinted = load_board("examples/sensor_logger/sensor_logger.synth");
+    let cap = hinted
+        .components
+        .iter_mut()
+        .find(|component| component.kind == "capacitor")
+        .expect("a capacitor");
+    cap.placement_hint = Some(synth_ir::PlacementConstraint {
+        region: None,
+        edge: None,
+        near: Some("U1".into()),
+        side: None,
+        priority: synth_ir::PlacementPriority::Hard,
+    });
+    let (_placement, fell_back) =
+        synth_place::place_with_replace(&hinted).expect("fallback places");
+    assert!(
+        fell_back,
+        "a hard near hint must veto the RePlAce solve and report the fallback"
+    );
+}

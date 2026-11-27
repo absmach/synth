@@ -858,7 +858,41 @@ fn place_for_export_default(
     // judge's 0.5 mm limit, because placement_key does not score the rules'
     // centring. One finish keeps the arrangement the key already chose.
     let finish_after = board.outline.is_none() && !has_sidecar;
-    let candidates = place_candidates(board, sidecar, !finish_after)?;
+    let candidates = place_candidates(board, sidecar, !finish_after);
+    let candidates = match candidates {
+        Ok(candidates) if !candidates.is_empty() => candidates,
+        // The candidate sweep failing used to end the export. The legal
+        // ladder is the fallback, and it costs nothing on a board the sweep
+        // already placed.
+        failed => {
+            // The ladder grows the canvas, so it is only a fallback for
+            // automatic sizing: a declared outline is authoritative, and a
+            // sidecar is the author's floorplan.
+            if board.outline.is_none()
+                && !has_sidecar
+                && let Ok(legal) =
+                    synth_place::place_legal(board, &synth_place::LegalOptions::default())
+            {
+                if let Some(warning) = legal.relaxation_warning() {
+                    eprintln!("placement fallback: {warning}");
+                }
+                let mut placement = legal.placement;
+                synth_place::finish_outline(board, &mut placement);
+                return Ok(placement);
+            }
+            return Err(failed
+                .err()
+                .unwrap_or_else(|| synth_place::PlaceError::NoLegalPosition {
+                    refdes: board
+                        .components
+                        .first()
+                        .map_or_else(|| "board".to_string(), |component| component.refdes.clone()),
+                    board_w_mm: board.outline.as_ref().map_or(0.0, |o| o.width.to_mm()),
+                    board_h_mm: board.outline.as_ref().map_or(0.0, |o| o.height.to_mm()),
+                    tried: board.components.len(),
+                }));
+        }
+    };
     let (source, mut best) = candidates
         .into_iter()
         .min_by_key(|(source, placement)| placement_key(source, placement))

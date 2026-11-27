@@ -43,11 +43,11 @@ board "boxed_in" {
    choice, and on a pinned part the author has already made it. Pinning
    every part therefore always places, which is the escape hatch for a
    board the greedy search cannot pack.
-2. **Try the next-larger board.** The placer escalates
-   through standard sizes (100×80, 160×100, 200×150, 230×230 mm)
-   but a tight design may need a hand-picked larger outline.
-   (Future work: the placer will accept a user-declared
-   `board_outline` in SynthSpec.)
+2. **Try the next-larger board.** The bounded ladder already grows the canvas
+   from the estimate in 1.2× steps, so the first sizes it tried are in the
+   diagnostic. A hand-picked `outline` larger than the reported `expected`
+   size is the manual version of the same move; it is authoritative once
+   declared (ADR 0001).
 3. **Choose a smaller footprint variant** for the offending
    component. Swapping `r_generic_0805` → `r_generic_0603` on
    the closest neighbours often frees enough adjacent space.
@@ -67,3 +67,18 @@ board "boxed_in" {
   patch.
 - **Message:** "After N grid-cell attempts on a W × H mm
   board, no position accommodates `<refdes>`..."
+
+`synth validate` emits it from the placement preflight only with
+`--placement-preflight` (the default stays cheap). From the preflight, the message
+carries the rest of the evidence: every canvas the bounded ladder tried (the
+declared outline, the board estimate, the grown sizes), the hand hint the
+ladder could not relax (`placement_hint { … }`), the number of solves, and the
+size the parts need from `W-SYNTH-BOARD-004`. An `error` from the preflight
+means the ladder exhausted every canvas and hint-level combination inside its
+budget, so the failure is proven rather than assumed. A budget cut-off is
+reported as a warning instead, because the absence of a placement was not
+established.
+
+The preflight's ladder (`docs/placement-preflight.md`) relaxes hints and grows
+the canvas before it reaches this error, so a board that only needs more room
+or a soft hint is reported as `W-SYNTH-PLACE-004`, not as this failure.
