@@ -182,3 +182,27 @@ fn every_obsolete_part_names_an_active_substitute() {
         );
     }
 }
+
+/// A diode's built-in SPICE model is anchored at `forward_current_ma`. An
+/// anchor above the part's absolute maximum current models it outside its
+/// datasheet envelope, so a quoted forward point must be a current the part
+/// may actually carry.
+#[test]
+fn diode_forward_point_is_within_the_absolute_maximum_current() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    for (_, part) in registry.iter() {
+        let Some(limits) = part.operating_conditions.as_ref() else {
+            continue;
+        };
+        let (Some(forward), Some(maximum)) = (limits.forward_current_ma, limits.max_current_ma)
+        else {
+            continue;
+        };
+        assert!(
+            forward <= maximum,
+            "part {} quotes Vf at {forward} mA, above its {maximum} mA absolute maximum",
+            part.id
+        );
+    }
+}
