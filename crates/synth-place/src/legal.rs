@@ -38,15 +38,17 @@ const MAX_CANVAS_SIDE_MM: f64 = 300.0;
 ///
 /// The CM4 carrier needs five 141 x 141 mm attempts before the 1.2x canvas
 /// succeeds, so 30 s cut the ladder mid-way and made the verdict depend on
-/// machine load. 60 s lets that ladder finish while `--no-placement-preflight`
-/// stays the escape for a faster check.
+/// machine load. 60 s lets that ladder finish; the preflight is opt-in
+/// (`--placement-preflight`), so the default `validate` never pays it.
 pub const DEFAULT_LEGAL_BUDGET: Duration = Duration::from_secs(60);
 
-/// Default attempt ceiling: one production solve plus five canvases at four
-/// hint levels, so the full cross-product is reachable. The wall-clock budget
-/// is the real bound on a slow board; this only stops a retry loop that would
-/// never end.
-pub const DEFAULT_LEGAL_ATTEMPTS: usize = 21;
+/// Default attempt ceiling: one production solve plus six canvases at four
+/// hint levels, so the full cross-product is reachable. Six is the most
+/// `fixed_canvases` returns: a declared outline smaller than the estimate,
+/// the estimate, then 1.2, 1.4, 1.7 and 2.0 times the estimate. The wall-clock
+/// budget is the real bound on a slow board; this only stops a retry loop
+/// that would never end.
+pub const DEFAULT_LEGAL_ATTEMPTS: usize = 25;
 
 /// What a caller will spend on the ladder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,8 +113,9 @@ pub struct LegalPlacement {
     /// Every hint relaxed to get here, in source order. Empty when the hints
     /// were honoured as written.
     pub dropped: Vec<DroppedHint>,
-    /// The canvases tried, in order, in millimetres. The production attempt
-    /// that auto-fits has no entry of its own.
+    /// The canvases tried, in order, in millimetres, each listed once however
+    /// many hint levels ran on it. The production attempt that auto-fits has
+    /// no entry of its own.
     pub canvases: Vec<(f64, f64)>,
     /// The canvas this placement solved on.
     pub final_canvas: (f64, f64),
@@ -125,8 +128,16 @@ impl LegalPlacement {
     /// was relaxed. Callers that only print can use this directly.
     #[must_use]
     pub fn relaxation_warning(&self) -> Option<String> {
+        let grew = self
+            .canvases
+            .first()
+            .is_some_and(|first| *first != self.final_canvas);
+        let growth = format!(
+            "grew the board to {:.1} x {:.1} mm",
+            self.final_canvas.0, self.final_canvas.1
+        );
         if self.dropped.is_empty() {
-            return None;
+            return grew.then(|| format!("placement {growth}"));
         }
         let hints = self
             .dropped
@@ -138,11 +149,8 @@ impl LegalPlacement {
             "placement relaxed {} hint(s) to {}{}: {hints}",
             self.dropped.len(),
             self.level.label(),
-            if self.canvases.len() > 1 {
-                format!(
-                    " and grew the board to {:.1} x {:.1} mm",
-                    self.final_canvas.0, self.final_canvas.1
-                )
+            if grew {
+                format!(" and {growth}")
             } else {
                 String::new()
             }
@@ -225,8 +233,8 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
         // a placement problem the solver can answer: `cem_region_assign`
         // clamps into an empty range and panics. Skip it, so the ladder ends
         // in a clean E-SYNTH-PLACE-002. It is still listed as ruled out.
+        canvases.push((width, height));
         if !canvas_holds(width, height, largest_part) {
-            canvases.push((width, height));
             continue;
         }
         for level in [
@@ -246,7 +254,6 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
                 ));
             }
             attempts += 1;
-            canvases.push((width, height));
             let (relaxed, dropped) = relaxed_board(board, level);
             let rung_start = Instant::now();
             let result = place_with_dimensions(&relaxed, width, height);
@@ -544,6 +551,40 @@ mod tests {
         let warning = legal.relaxation_warning().expect("a warning");
         assert!(warning.contains("grew the board"), "{warning}");
         assert!(warning.contains("J1"), "{warning}");
+    }
+
+    #[test]
+    fn each_canvas_is_listed_once_and_a_declared_outline_never_reads_as_grown() {
+        let options = LegalOptions {
+            grow_canvas: false,
+            ..LegalOptions::default()
+        };
+        let legal = place_legal(&board(), &options).expect("the hint levels place");
+        assert_eq!(legal.final_canvas, (40.0, 70.0));
+        let mut seen = legal.canvases.clone();
+        seen.dedup();
+        assert_eq!(seen, legal.canvases, "a canvas is listed once per size");
+        if let Some(warning) = legal.relaxation_warning() {
+            assert!(!warning.contains("grew the board"), "{warning}");
+        }
+    }
+
+    #[test]
+    fn growing_past_the_declared_outline_warns_even_with_no_hint_dropped() {
+        let board = crate::tests::board_from_source(
+            r#"board "grown" {
+                layers 2
+                outline 40mm x 40mm
+                component J1: connector "header_1x20"
+                component R1: resistor "r_generic_0603"
+            }"#,
+            "grown.synth",
+        );
+        let legal = place_legal(&board, &LegalOptions::default()).expect("the ladder places");
+        assert!(legal.dropped.is_empty());
+        assert_ne!(legal.final_canvas, (40.0, 40.0));
+        let warning = legal.relaxation_warning().expect("growth is a warning");
+        assert!(warning.contains("grew the board"), "{warning}");
     }
 
     #[test]

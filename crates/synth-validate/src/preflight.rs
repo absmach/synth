@@ -125,7 +125,9 @@ fn scratch_only(board: &Board, file: &str, options: &PreflightOptions) -> Vec<Di
     let legal_options = LegalOptions {
         budget: Some(options.budget),
         max_attempts: options.max_attempts,
-        grow_canvas: true,
+        // A declared outline is authoritative (ADR 0001): `synth place` and
+        // the export never grow it, so the preflight must not either.
+        grow_canvas: board.outline.is_none(),
     };
     match place_legal(board, &legal_options) {
         Ok(legal) => vec![legal_diagnostic(board, file, &legal, options.budget)],
@@ -207,7 +209,9 @@ fn sidecar_then_scratch(
         let legal_options = LegalOptions {
             budget: Some(options.budget),
             max_attempts: options.max_attempts,
-            grow_canvas: true,
+            // A declared outline is authoritative (ADR 0001): `synth place` and
+            // the export never grow it, so the preflight must not either.
+            grow_canvas: board.outline.is_none(),
         };
         match place_legal(board, &legal_options) {
             Ok(legal) => out.push(legal_diagnostic(board, file, &legal, options.budget)),
