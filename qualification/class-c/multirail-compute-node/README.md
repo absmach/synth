@@ -40,7 +40,7 @@ The prompt to reproduce the board is in [`PROMPT.md`](PROMPT.md), written from t
 | Track length            | 1270.8 mm                                                                                                                                                                     |
 | Zones and planes        | `GND` poured on all four layers; the rails are tracks, not planes; `hot_buck` keepout rule area on `U1`; 2.75 mm screw-head zones on `H1` and `H2`                            |
 | Fab package             | `fab/gerbers.zip` (16 files), `fab/bom.csv`, `fab/cpl.csv`; every file is in `SHA256SUMS`                                                                                     |
-| 3D models               | `models/` holds the STEP body of every part the board references and the board model `multirail_compute_node.step`. The board file reaches them by the relative path `${KIPRJMOD}/../models/`. Mounting holes and fiducials have no body. A part that KiCad's library has no model for is a simplified box of its envelope. |
+| 3D models               | `models/` holds the STEP body of every part the board references and the board model `multirail_compute_node.step`. The board file reaches them by the relative path `${KIPRJMOD}/../models/`. Mounting holes and fiducials have no body. `J1` uses the HRO TYPE-C-31-M-12 STEP from github.com/ai03-2725/Type-C.pretty (the repository states no licence), placed to match KiCad's footprint. Any other part that KiCad's library has no model for is a simplified box of its envelope. |
 | Schematic               | `images/schematic.pdf`: vector pages, one per sheet, plotted by `kicad-cli sch export pdf`. |
 
 ### Checks
