@@ -1256,8 +1256,8 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "example": "component R1: resistor \"r_generic_0603\" value \"10k\""
                 },
                 {
-                    "form": "component <REFDES>: <kind> \"<part_id>\" { escape { [method <channel|underpad>] [layers \"<layer>\", …] [off] } }",
-                    "description": "How this package's pins leave it. A dense grid array — three pad rows and three columns, at or below 1.3 mm pitch — is escaped before routing whether or not it says so, because a fine-pitch array left to a general router comes back with a stub on every lane. This block overrides that: `method` picks the engine (`underpad` drops a via inside each pad, the only method a fully populated array leaves open; `channel` routes out between the pads), `layers` limits which copper the escape may use, and `off` leaves the package to the general router. `off` wins over a method on the same package. The escape via is sized from the declared manufacturer's floor, not from this block.",
+                    "form": "component <REFDES>: <kind> \"<part_id>\" { escape { [method <channel|underpad|connector_dogbone>] [layers \"<layer>\", …] [off] } }",
+                    "description": "How this package's pins leave it. A dense grid array — three pad rows and three columns, at or below 1.3 mm pitch — is escaped before routing whether or not it says so, because a fine-pitch array left to a general router comes back with a stub on every lane. This block overrides that: `method` picks the engine (`underpad` drops a via inside each pad, the only method a fully populated array leaves open; `channel` routes out between the pads, `connector_dogbone` gives each pad of a two-row fine-pitch connector a stub into the channel between the rows and a one-pair laser microvia on a staggered grid there, landing on the layer next to the pads (In1.Cu under F.Cu, the last inner layer over B.Cu), so `layers` must list that layer), `layers` limits which copper the escape may use, and `off` leaves the package to the general router. `off` wins over a method on the same package. The escape via is sized from the declared manufacturer's floor, not from this block.",
                     "example": "component U1: fpga \"ice40hx4k_bg121\" { escape { method underpad layers \"In1.Cu\", \"In2.Cu\" } }"
                 },
                 {
@@ -1279,6 +1279,11 @@ fn execute_language_reference(_args: &Value) -> Value {
                     "form": "keepout <name> { radius <value><unit> [anchor \"<REFDES>\"] [at <x><unit> <y><unit>] [layers \"<layer>\", …] [allow \"<NET>\", …] }",
                     "description": "Declares a circular routing rule area. Centre it on a component with `anchor \"REFDES\"` or on an explicit `at x y` board coordinate; without either, the keepout name must match a component's refdes or kind or it cannot be exported (E-SYNTH-KEEPOUT-003). `layers` limits the copper. `allow` makes it a corridor: the listed nets' tracks and vias may pass, every other net is excluded by the exported `.kicad_dru` rules.",
                     "example": "keepout antenna { radius 15mm anchor \"U3\" layers \"F.Cu\", \"B.Cu\" }"
+                },
+                {
+                    "form": "ground_domain <net> { [join <REFDES>] [crossing <net> stitch <join | REFDES>]* }",
+                    "description": "Declares a ground domain of a split ground: the domain is its ground net, `join` names the one net tie or 0 ohm link that bridges it to another ground, and each `crossing` names a signal that runs to another domain and how its return current crosses, over the join or through a stitching capacitor between the two grounds. Copper is unchanged. Validation reports a declaration that does not hold together, or two or more domains not joined into one ground, as E-SYNTH-POWER-016, and a signal between parts on two domains with no declared crossing as E-SYNTH-POWER-017.",
+                    "example": "ground_domain AGND { join R_GND crossing ADC_SCLK stitch C20 }"
                 },
                 {
                     "form": "stackup { copper <thickness><unit> | insulator <thickness><unit> er <number> [material \"<name>\"] ... }",

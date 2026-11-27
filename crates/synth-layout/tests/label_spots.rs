@@ -129,6 +129,7 @@ fn board() -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         no_connects: Vec::new(),
+        ground_domains: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

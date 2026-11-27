@@ -380,6 +380,7 @@ mod tests {
             labels: true,
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             required_processes: std::collections::BTreeSet::new(),

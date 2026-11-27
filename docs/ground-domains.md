@@ -46,10 +46,32 @@ therefore manufacture a claim Synth cannot verify.
 - Where the single join point belongs.
 - Whether every signal crossing the boundary has a stitching capacitor or via.
 
+## Declaring the domains
+
+A `ground_domain` block states the intent the checks evaluate
+([#464](https://github.com/absmach/synth/issues/464)):
+
+```synth
+ground_domain AGND {
+  join R_GND                    // the one net tie or 0 ohm link to DGND
+  crossing ADC_SCLK stitch C20  // a stitching capacitor between the grounds
+  crossing ADC_DOUT stitch join // routed over the join
+}
+ground_domain DGND { join R_GND }
+```
+
+- [`E-SYNTH-POWER-016`](diagnostics/E-SYNTH-POWER-016.md) (error): a domain on
+  a missing or non-ground net, a join that does not bridge two grounds,
+  declared domains that the joins do not bring into one ground, or a crossing
+  whose stitching part is not between the grounds.
+- [`E-SYNTH-POWER-017`](diagnostics/E-SYNTH-POWER-017.md) (warning): a signal
+  between parts on two domains with no declared crossing.
+
+The block changes no copper. A part on two domain grounds, such as a
+mixed-signal converter, straddles the split and places no signal on either
+side; ground nets and supply rails are not checked as crossings.
+
 ## Follow-ups
 
-- A `ground_domain` block that declares a join and a stitching rule is worth
-  adding once the checks above have a reference board to test against
-  ([#464](https://github.com/absmach/synth/issues/464)).
 - The Class B analog front-end board (#69) is the first board that should
   exercise a declared AGND/DGND join.

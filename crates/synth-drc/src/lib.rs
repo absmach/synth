@@ -406,6 +406,26 @@ mod tests {
         assert!(critical.iter().any(|n| n == "SLOW_GPIO"), "{critical:?}");
     }
 
+    /// absmach/synth#280: a supply rail is DC, so its layer changes are not
+    /// held to a return via; the signal beside it still is.
+    #[test]
+    fn a_supply_rail_is_not_held_to_a_return_via() {
+        let board = board_from_source(
+            r#"board "returns" { layers 2
+                component U1: mcu "rp2350"
+                component U2: regulator "ams1117_5v"
+                component C1: capacitor "c_generic_0603" value "100nF"
+                component R1: resistor "r_generic_0603" value "10k"
+                net "V5" { U2.vout U1.vdd C1.p1 }
+                net "GND" { U2.gnd U1.gnd C1.p2 }
+                net "SIGNAL" { U1.gp0 R1.p1 }
+            }"#,
+        );
+        let critical = return_path_critical_net_names(&board);
+        assert!(!critical.iter().any(|n| n == "V5"), "{critical:?}");
+        assert!(critical.iter().any(|n| n == "SIGNAL"), "{critical:?}");
+    }
+
     /// The declaration the reviewer asked for: a class saying its nets change
     /// slowly is the one piece of evidence that allows an advisory. A fast
     /// class, and a net in no class, stay critical.

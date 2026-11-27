@@ -465,6 +465,9 @@ pub fn return_via_window_nm(stackup_reach_nm: i64, via_pad_nm: i64) -> i64 {
 /// signal via with no ground via within the stackup's thickest dielectric is a
 /// discontinuity a fast edge radiates from.
 ///
+/// A supply rail is not checked: it is DC, and its return is its decoupling.
+/// A rail whose pins prove a fast edge, such as a switching node, still is.
+///
 /// Advisory because the current path is only inferred from geometry and whether
 /// a discontinuity matters depends on the edge rate. Needs a declared stackup
 /// (the distance is a property of the dielectric), like the other
@@ -502,9 +505,13 @@ pub fn check_return_path_vias(
         .unwrap_or_else(|| mm_to_nm(0.6));
     let radius_nm = return_via_window_nm(radius_nm, via_pad_nm);
     let medium = medium_net_ids(board);
+    let (_, proven_fast) = return_path_net_classes(board);
+    let rails = dc_rail_net_ids(board, &proven_fast);
     let mut out = Vec::new();
     for via in &routing.vias {
-        if is_ground(via.net) {
+        // A DC rail's layer change is not a signal's: its return is the
+        // decoupling, not a via beside it (absmach/synth#280).
+        if is_ground(via.net) || rails.contains(&via.net) {
             continue;
         }
         let radius_nm = if medium.contains(&via.net) {
@@ -772,7 +779,33 @@ fn return_path_net_classes(
             }
         }
     }
+    // A DC supply rail is held to its ground by its decoupling, not by a via
+    // beside each layer change, and carries no edge of its own: a return via
+    // there takes room from the signals that need one (absmach/synth#280).
+    // A rail whose pins prove a fast edge (a switching node) stays held.
+    let rails = dc_rail_net_ids(board, &proven_fast);
+    critical.retain(|id| !rails.contains(id));
     (critical, proven_fast)
+}
+
+/// Supply rails by power-domain inference, less any net whose pins prove a
+/// fast edge.
+fn dc_rail_net_ids(
+    board: &Board,
+    proven_fast: &std::collections::BTreeSet<NetId>,
+) -> std::collections::BTreeSet<NetId> {
+    let domains = synth_ir::infer_power_domains(board);
+    board
+        .nets
+        .iter()
+        .filter(|net| {
+            domains
+                .get(net.id)
+                .is_some_and(synth_ir::PowerDomainKind::is_rail)
+        })
+        .filter(|net| !proven_fast.contains(&net.id))
+        .map(|net| net.id)
+        .collect()
 }
 
 /// Whether a net or pin name is a ground: it contains `gnd` or `vss`, or is

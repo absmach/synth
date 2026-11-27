@@ -73,6 +73,7 @@ pub enum StatementAst {
     Stackup(StackupStmt),
     Requires(RequiresStmt),
     NoConnect(NoConnectStmt),
+    GroundDomain(GroundDomainStmt),
 }
 
 impl StatementAst {
@@ -106,6 +107,7 @@ impl StatementAst {
             StatementAst::Stackup(s) => s.span,
             StatementAst::Requires(s) => s.span,
             StatementAst::NoConnect(s) => s.span,
+            StatementAst::GroundDomain(s) => s.span,
         }
     }
 }
@@ -698,6 +700,40 @@ pub struct PowerDeclAst {
     pub netclass: Option<String>,
     #[serde(default)]
     pub endpoints: Vec<EndpointAst>,
+    pub span: Span,
+}
+
+/// A declared ground domain (absmach/synth#464):
+///
+/// ```text
+/// ground_domain AGND {
+///   join R_GND
+///   crossing ADC_SCLK stitch C20
+///   crossing ADC_DOUT stitch join
+/// }
+/// ```
+///
+/// The domain is its ground net. `join` names the one part (a net tie or a
+/// 0 Ω link) that bridges it to another ground. Each `crossing` names a
+/// signal that runs between this domain and another, and how its return
+/// current crosses: over the `join`, or through a stitching part (a
+/// capacitor between the two grounds).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroundDomainStmt {
+    pub net: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub join: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub crossings: Vec<GroundCrossingAst>,
+    pub span: Span,
+}
+
+/// `crossing <net> stitch <join | refdes>` inside a `ground_domain`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GroundCrossingAst {
+    pub net: String,
+    /// `join`, or the reference designator of the stitching part.
+    pub stitch: String,
     pub span: Span,
 }
 

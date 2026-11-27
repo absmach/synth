@@ -1213,6 +1213,7 @@ fn multi_unit_rails_split_is_an_error() {
         notes: Vec::new(),
         keepouts: Vec::new(),
         no_connects: Vec::new(),
+        ground_domains: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],

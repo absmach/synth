@@ -58,6 +58,14 @@ pub struct KrtReport {
     pub design_rules: DesignRules,
     #[serde(default)]
     pub via_in_pad: ViaInPad,
+    /// The via cost the operator asked for, written by the helper; absent
+    /// when none was requested.
+    #[serde(default)]
+    pub requested_via_cost: Option<u32>,
+    /// The via cost of the attempt that wrote this board: a number, or
+    /// `default` for the engine's own.
+    #[serde(default)]
+    pub via_cost: Option<String>,
 }
 
 impl KrtReport {
@@ -182,6 +190,9 @@ pub fn build_command(
     }
     if options.strict_sizes {
         args.push("--strict-sizes".to_string());
+    }
+    if let Some(cost) = options.via_cost {
+        args.extend(["--via-cost".to_string(), cost.to_string()]);
     }
     // A pinned net is routed on its own layers before the general pass, so
     // the general router meets it as finished copper rather than free to
@@ -620,6 +631,19 @@ pub fn statistics_from(
                 .map_or_else(|| "unknown".to_string(), |n| n.to_string()),
         );
         findings.insert(
+            "via_cost".to_string(),
+            report
+                .via_cost
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
+        );
+        findings.insert(
+            "requested_via_cost".to_string(),
+            report
+                .requested_via_cost
+                .map_or_else(|| "none".to_string(), |cost| cost.to_string()),
+        );
+        findings.insert(
             "claimed_via_in_pad".to_string(),
             report.via_in_pad.count.to_string(),
         );
@@ -813,6 +837,7 @@ mod tests {
                 same_net_pad_clearance_mm: 0.25,
                 strict_sizes: true,
                 ordering: None,
+                via_cost: None,
             },
             ..request()
         };
@@ -1110,6 +1135,49 @@ mod tests {
 
         let strict = request();
         assert!(argv(&strict).contains("--same-net-pad-clearance 0.1000"));
+    }
+
+    /// absmach/synth#434: a board without `requires via_in_pad` gets a
+    /// positive same-net pad clearance and no via-in-pad permission.
+    #[test]
+    fn a_board_without_via_in_pad_never_permits_one() {
+        let args = argv(&request());
+        assert!(!args.contains("--same-net-pad-clearance -1"), "{args}");
+        assert!(!args.contains("--allow-via-in-pad"), "{args}");
+    }
+
+    #[test]
+    fn a_requested_via_cost_reaches_the_helper() {
+        let mut costed = request();
+        costed.kicad_routing_tools.via_cost = Some(250);
+        assert!(
+            argv(&costed).contains("--via-cost 250"),
+            "{}",
+            argv(&costed)
+        );
+        // Absent, the helper keeps its own 1000-then-default ladder.
+        assert!(!argv(&request()).contains("--via-cost"));
+    }
+
+    #[test]
+    fn the_route_report_records_the_requested_and_used_via_cost() {
+        let report: KrtReport = serde_json::from_str(
+            r#"{"successful": 2, "failed": 0, "total_vias": 7, "requested_via_cost": 250, "via_cost": "250"}"#,
+        )
+        .expect("parses");
+        let statistics = statistics_from(None, Some(&report));
+        let finding = |key: &str| statistics.engine_findings.get(key).cloned();
+        assert_eq!(finding("requested_via_cost").as_deref(), Some("250"));
+        assert_eq!(finding("via_cost").as_deref(), Some("250"));
+        assert_eq!(finding("claimed_total_vias").as_deref(), Some("7"));
+        let unrequested = statistics_from(None, Some(&KrtReport::default()));
+        assert_eq!(
+            unrequested
+                .engine_findings
+                .get("requested_via_cost")
+                .map(String::as_str),
+            Some("none")
+        );
     }
 
     #[test]

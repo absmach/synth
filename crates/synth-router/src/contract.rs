@@ -283,6 +283,11 @@ pub struct KiCadRoutingToolsOptions {
     /// others (see `route`).
     #[serde(default)]
     pub ordering: Option<String>,
+    /// The engine's via cost. Absent, the helper prices vias at 1000 first,
+    /// to keep signals on one layer, and retries at the engine's default; set,
+    /// every attempt uses this cost (absmach/synth#434).
+    #[serde(default)]
+    pub via_cost: Option<u32>,
 }
 
 impl Default for KiCadRoutingToolsOptions {
@@ -294,6 +299,7 @@ impl Default for KiCadRoutingToolsOptions {
             same_net_pad_clearance_mm: 0.1,
             strict_sizes: true,
             ordering: None,
+            via_cost: None,
         }
     }
 }
@@ -1039,6 +1045,7 @@ mod tests {
             labels: true,
             keepouts: Vec::new(),
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: Vec::new(),
             buses: Vec::new(),

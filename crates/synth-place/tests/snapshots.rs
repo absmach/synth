@@ -106,10 +106,16 @@ fn feather_m4_express_outline_area_does_not_grow_past_baseline() {
     );
 }
 
-/// `secure_tracker`'s outline after the placement rules (64.90 x 61.36 ->
-/// 63.40 x 59.30 mm): 3503.8 mm2, an intended 15.4% improvement over the
-/// 4143.9 mm2 the #158 guard was written against.
-const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 3503.8;
+/// `secure_tracker`'s outline: 66.43 x 37.78 mm, 2509.7 mm2.
+///
+/// This board packs on no canvas sized from its courtyards, only on the fixed
+/// 100 x 80 mm fallback, so its outline was the spread it reached there:
+/// 84.43 x 41.50 mm, 3503.8 mm2. Re-placing on the envelope the parts occupied
+/// (#233) takes it to the figure above, an intended 28% improvement; the
+/// placement judge passes both with no gate failure (scores 98.6 and 98.4).
+/// The 3503.8 mm2 baseline was itself 15.4% below the 4143.9 mm2 the #158
+/// guard was written against.
+const SECURE_TRACKER_BASELINE_OUTLINE_AREA_MM2: f64 = 2509.7;
 
 /// A 1 mm part correction must not move the board 44%.
 ///

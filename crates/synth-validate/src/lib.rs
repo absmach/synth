@@ -52,6 +52,7 @@ pub mod anomaly;
 pub mod config;
 pub mod deep_erc;
 pub mod divider_tolerance;
+pub mod ground_domains;
 mod module_deviations;
 pub use anomaly::{BoardFeatureVec, GraphAnomalyDetectorRule, extract_features};
 pub use config::{ErcConfig, PinConflictTable};
@@ -208,6 +209,7 @@ fn all_rules(config: &ErcConfig) -> Vec<Box<dyn ErcRule>> {
         Box::new(deep_erc::CeramicDcBiasDeratingRule::new(config)),
         Box::new(RegulatorFeedbackOnSwitchNodeRule),
         Box::new(divider_tolerance::FeedbackDividerToleranceRule),
+        Box::new(ground_domains::GroundDomainRule),
         Box::new(module_deviations::ModuleDeviationsRule),
     ]
 }
@@ -4659,6 +4661,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5078,6 +5081,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5252,6 +5256,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5363,6 +5368,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5434,6 +5440,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5601,6 +5608,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5747,6 +5755,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],
@@ -5821,6 +5830,7 @@ mod tests {
             notes: vec![],
             keepouts: vec![],
             no_connects: Vec::new(),
+            ground_domains: Vec::new(),
             stackup: None,
             netclasses: vec![],
             buses: vec![],

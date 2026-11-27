@@ -306,6 +306,20 @@ class LayerPinTest(unittest.TestCase):
         self.assertNotIn("--layers", " ".join(calls))
 
 
+class ViaCostTest(unittest.TestCase):
+    def test_a_requested_via_cost_is_used_on_every_attempt(self):
+        code, costs = run_adapter(
+            [{"successful": 0, "failed": 1}], ("--via-cost", "250")
+        )
+        self.assertEqual(costs, ["250"])
+        self.assertNotEqual(code, 0)
+
+    def test_a_requested_via_cost_on_a_clean_route(self):
+        code, costs = run_adapter([CLEAN], ("--via-cost", "250"))
+        self.assertEqual(costs, ["250"])
+        self.assertEqual(code, 0)
+
+
 class RetryTest(unittest.TestCase):
     def test_a_clean_high_via_cost_attempt_is_not_retried(self):
         code, costs = run_adapter([CLEAN])
@@ -660,6 +674,37 @@ class StagedAdapterTest(unittest.TestCase):
         self.assertEqual(logs["route"], [], "the general router must not run")
         self.assertFalse(routed, "a failed escape must leave no output board")
         self.assertIn("error: ", stderr)
+
+    def test_a_connector_dogbone_escape_runs_synths_helper_then_routes(self):
+        # absmach/synth#433: no bga_fanout is needed, and the general router
+        # is handed the board with the dogbone copper on it.
+        sys.path.insert(0, str(Path(__file__).parent))
+        from test_connector_fanout import connector_board
+
+        board, _ = connector_board()
+        code, stderr, logs, routed = run_staged(
+            ["J1:connector_dogbone:F.Cu,In1.Cu"],
+            extra=("--escape-required", "J1", "--escape-clearance", "0.1"),
+            missing=("bga_fanout",), board_text=board,
+        )
+        self.assertEqual((code, routed), (0, True), stderr)
+        self.assertEqual(logs["fanout"], [])
+        self.assertEqual(logs["route"][0].split()[0].rsplit("/", 1)[1],
+                         "in.fanned0.kicad_pcb")
+        self.assertEqual(logs["output"].count("(via micro"), 40)
+
+    def test_an_unescapable_dogbone_fails_the_route_with_the_pad(self):
+        sys.path.insert(0, str(Path(__file__).parent))
+        from test_connector_fanout import connector_board
+
+        board, _ = connector_board(row_spacing=1.0)
+        code, stderr, logs, routed = run_staged(
+            ["J1:connector_dogbone:F.Cu,In1.Cu"], extra=("--escape-required", "J1"),
+            missing=("bga_fanout",), board_text=board,
+        )
+        self.assertEqual(code, 4, stderr)
+        self.assertFalse(routed)
+        self.assertEqual(logs["route"], [])
 
     def test_a_failed_pour_fails_the_route(self):
         self.assert_escape_failed(*run_staged(["U1"], extra=self.FLOORS,

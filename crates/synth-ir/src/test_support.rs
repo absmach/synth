@@ -147,6 +147,7 @@ pub fn board(
         labels: true,
         keepouts: Vec::new(),
         no_connects: Vec::new(),
+        ground_domains: Vec::new(),
         stackup: None,
         outline: None,
         netclasses: Vec::new(),
