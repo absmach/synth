@@ -15,8 +15,8 @@
 
 use std::collections::BTreeMap;
 
-use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId};
-use synth_layout::Layout;
+use synth_ir::{Board, Component, ComponentId, Net, NetEndpoint, NetId, PinId, SchematicPaper};
+use synth_layout::{Layout, SheetSize};
 use synth_registry::{
     ElectricalType, Lifecycle, Part, PartId, Pin, PinCapability, PinNumber, RequiredDecoupling,
 };
@@ -282,6 +282,38 @@ fn above_fixture(name: &str) -> Option<Board> {
     ))
 }
 
+/// The ticket-01 singleton fixture plus a second group large enough that the
+/// global single-sheet layout overflows A0 under the default `Grow` policy.
+///
+/// That is the mechanism that splits Jeff's SDRAM design: its root page is
+/// A0 (see the exported `ice40_sdram_node.kicad_sch`), so the hierarchy comes
+/// from content overflow, not from declared `sheet` blocks or an explicit
+/// `overflow = "hierarchy"`. The bank holds 12 five-unit parts: their stacked
+/// bodies make the global single-sheet drawing overflow A0.
+///
+/// The FPGA content is given an explicit `sheet` name so the merged-onto-root
+/// rule cannot turn it into the root page: the page under test is a sub-sheet,
+/// as the FPGA is in the real design (its root carries the merged first
+/// group). The page under test is one group either way.
+fn split_fixture(name: &str) -> Option<Board> {
+    let mut b = cap_fixture(name, 16, false)?;
+    for component in &mut b.components {
+        if component.group.as_deref() == Some("FPGA") {
+            component.sheet = Some("FPGA".to_string());
+        }
+    }
+    let first = u32::try_from(b.components.len()).unwrap();
+    for i in 0..12_u32 {
+        b.components.push(component(
+            first + i,
+            &format!("B{}", i + 1),
+            fpga(Vec::new(), ElectricalType::Passive),
+            Some("BANK"),
+        ));
+    }
+    Some(b)
+}
+
 fn body_rect(board: &Board, layout: &Layout, id: ComponentId) -> (f64, f64, f64, f64) {
     let placed = layout.placement(id).expect("component is placed");
     let p = board
@@ -468,6 +500,145 @@ fn singleton_caps_wrap_beside_the_unit_stack() {
             "cap {i} at {r:?} is below/above the stacked FPGA body {anchor:?}"
         );
     }
+}
+
+/// The FPGA sheet of a split design holds one group, so the floorplan stage
+/// skips it. Its page must still fit the wrapped content instead of keeping
+/// the A1 the single long cap row produced.
+#[test]
+fn one_group_split_sheet_fits_its_content() {
+    let Some(board) = split_fixture("split_page") else {
+        return;
+    };
+    let global = synth_layout::layout(&board);
+    let sheets = synth_layout::sheets::layout_sheets(&board, global, None);
+    assert!(
+        sheets.len() > 1,
+        "the second group must force a split; got {} page(s)",
+        sheets.len()
+    );
+    let fpga = sheets
+        .iter()
+        .find(|s| s.name.as_deref() == Some("FPGA"))
+        .expect("the FPGA sheet");
+    assert_eq!(
+        fpga.layout
+            .group_boxes
+            .iter()
+            .filter(|b| b.group == "FPGA")
+            .count(),
+        1,
+        "the FPGA sheet is the one-group sheet"
+    );
+
+    // Cap geometry must survive the page change.
+    let caps = ids(&board, "C");
+    let cap_rects = rects(&board, &fpga.layout, &caps);
+    let rows = rows_of(&cap_rects);
+    assert!(rows.len() > 1, "the caps must still wrap");
+    assert_rows_within_limit(&rows);
+    assert_no_overlaps(&cap_rects);
+
+    // The group box hugs the anchor body and every cap body, sits inside the
+    // page frame, and stays clear of the title block (the same rule
+    // `page_needs` uses: the box clears it horizontally or vertically).
+    let anchor = body_rect(&board, &fpga.layout, ComponentId(0));
+    let group_box = fpga
+        .layout
+        .group_boxes
+        .iter()
+        .find(|b| b.group == "FPGA")
+        .expect("the FPGA group box");
+    let (pw, ph) = fpga.layout.sheet_size.dims_mm();
+    for (i, r) in cap_rects.iter().chain(std::iter::once(&anchor)).enumerate() {
+        assert!(
+            group_box.min_mm.0 <= r.0 + 1e-6
+                && group_box.min_mm.1 <= r.1 + 1e-6
+                && group_box.max_mm.0 >= r.2 - 1e-6
+                && group_box.max_mm.1 >= r.3 - 1e-6,
+            "body {i} at {r:?} is outside the group box {:?}",
+            (group_box.min_mm, group_box.max_mm)
+        );
+    }
+    assert!(
+        group_box.max_mm.0 <= pw - 10.0 + 1e-6 && group_box.max_mm.1 <= ph - 10.0 + 1e-6,
+        "group box {:?} runs past the page frame on {pw} × {ph}",
+        (group_box.min_mm, group_box.max_mm)
+    );
+    let (block_x, block_y) = synth_layout::title_block_origin((pw, ph));
+    assert!(
+        group_box.max_mm.0 <= block_x + 1e-6 || group_box.max_mm.1 <= block_y + 1e-6,
+        "group box {:?} overlaps the title block at ({block_x}, {block_y})",
+        (group_box.min_mm, group_box.max_mm)
+    );
+
+    // Page area against the drawn content area. A1 (841 × 594 = 499,554 mm²)
+    // with the wrapped ~226 × ~522 mm content is a ratio of about 4.3; a
+    // measured page holding the content plus its borders and title-block band
+    // is about 250 × 580 mm, a ratio of about 1.2. A factor of 2 therefore
+    // fails on the old A1 page and passes on the fitted one. (The content is
+    // 522 mm tall because the five stacked units extend below the anchor body,
+    // so A2's 420 mm turns out not to fit it; the fit has to be measured.)
+    let (cx0, cx1, cy0, cy1) =
+        synth_layout::content_bounds(&board, &fpga.layout).expect("the FPGA sheet draws content");
+    let page_area = pw * ph;
+    let content_area = (cx1 - cx0) * (cy1 - cy0);
+    let ratio = page_area / content_area;
+    assert!(
+        ratio <= 2.0,
+        "page {pw} × {ph} is {ratio:.2}× the {:.2} × {:.2} mm content; the old A1 page would be ~4.3×",
+        cx1 - cx0,
+        cy1 - cy0
+    );
+    assert_ne!(
+        fpga.layout.sheet_size,
+        SheetSize::A1,
+        "the one-group sheet kept the old A1 for content that fits a smaller page"
+    );
+}
+
+/// A declared `schematic { paper }` is the page, not a bound: it stays
+/// verbatim when the one-group page's content fits it and grows only when
+/// the content overflows.
+#[test]
+fn declared_paper_is_kept_and_grown_only_on_overflow() {
+    let page_of = |paper: SchematicPaper| {
+        let mut board = split_fixture("declared_paper").expect("the FPGA symbol is installed");
+        board.schematic_paper = Some(paper);
+        let global = synth_layout::layout(&board);
+        let sheets = synth_layout::sheets::layout_sheets(&board, global, None);
+        assert!(sheets.len() > 1, "the fixture must split");
+        let fpga = sheets
+            .iter()
+            .find(|s| s.name.as_deref() == Some("FPGA"))
+            .expect("the FPGA sheet");
+        let size = fpga.layout.sheet_size;
+        let bounds = synth_layout::content_bounds(&board, &fpga.layout)
+            .expect("the FPGA sheet draws content");
+        (size, bounds)
+    };
+
+    // A0 holds the 226 × 522 mm page with room to spare, so it is kept.
+    let (size, _) = page_of(SchematicPaper::A0);
+    assert_eq!(
+        size,
+        SheetSize::A0,
+        "a declared A0 was shrunk although the content fits it"
+    );
+
+    // A3 (420 × 297 mm) cannot hold the 522 mm-tall stack, so the page grows
+    // to the smallest standard page that does, and the content lands inside it.
+    let (size, (_, max_x, _, max_y)) = page_of(SchematicPaper::A3);
+    assert_ne!(
+        size,
+        SheetSize::A3,
+        "the page did not grow although the content overflows a declared A3"
+    );
+    let (width, height) = size.dims_mm();
+    assert!(
+        max_x <= width - 10.0 + 1e-6 && max_y <= height - 10.0 + 1e-6,
+        "grown page {width} × {height} still clips the content to ({max_x:.2}, {max_y:.2})"
+    );
 }
 
 /// Fixture C: 16 `Above` members (I²C pull-ups). The horizontal row above
