@@ -343,10 +343,12 @@ electrical_type = "bidirectional"
 capabilities = ["gpio", "i2c_scl", "i2c_sda"]
 
 [[pins]]
+# DS1040 v3.4, Signal Descriptions: the PLL ground connection is made on the FPGA,
+# so this pin must NOT be connected to the board ground. Leave it unconnected.
 name = "gndpll0"
 number = "53"
 electrical_type = "power_input"
-required = true
+required = false
 
 [[pins]]
 name = "vccpll0"
@@ -790,10 +792,12 @@ electrical_type = "power_input"
 required = true
 
 [[pins]]
+# DS1040 v3.4, Signal Descriptions: the PLL ground connection is made on the FPGA,
+# so this pin must NOT be connected to the board ground. Leave it unconnected.
 name = "gndpll1"
 number = "127"
 electrical_type = "power_input"
-required = true
+required = false
 
 [[pins]]
 name = "iot_197_gbin1"

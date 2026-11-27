@@ -309,8 +309,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H1]
-x = 55.94
-y = 3.99
+x = 4.0
+y = 4.0
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -318,8 +318,8 @@ dx = 0.0
 dy = 0.0
 
 [components.H2]
-x = 75.92
-y = 17.31
+x = 84.5
+y = 78.0
 rotation = 0
 source = "agent"
 priority = "hard"
@@ -336,7 +336,7 @@ dx = 0.0
 dy = 0.0
 
 [components.J2]
-x = 1.8
+x = 5.0
 y = 39.51
 rotation = 270
 source = "agent"
@@ -586,6 +586,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP2]
 x = 22.08
@@ -595,6 +596,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP3]
 x = 22.08
@@ -604,6 +606,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP4]
 x = 22.08
@@ -613,6 +616,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP5]
 x = 65.37
@@ -622,6 +626,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP6]
 x = 57.6
@@ -631,6 +636,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.TP7]
 x = 3.21
@@ -640,6 +646,7 @@ source = "agent"
 priority = "hard"
 dx = 0.0
 dy = 0.0
+layer = "bottom"
 
 [components.U1]
 x = 21.14

@@ -5,6 +5,7 @@
 //   HDMI Type-A: 3 data pairs + clock pair, DDC (level-shifted), HPD, +5V through PTC fuse
 board "ice40_hdmi_node" {
   layers 6
+  outline 88.5mm x 82mm
   manufacturer "jlc-advanced"
   requires via_in_pad
 
@@ -38,6 +39,16 @@ board "ice40_hdmi_node" {
     via_diameter 0.46mm
     via_drill 0.2mm
     color "#d55e00"
+  }
+  // The router retries a blocked route at the Default class width. Declare it at the board minimum
+  // used by the TMDS pairs, so a retry never widens a pair to the 0.2 mm Synth writes by default.
+  netclass "Default" {
+    trace_width 0.127mm
+    clearance 0.127mm
+    via_diameter 0.46mm
+    via_drill 0.2mm
+    edge_rate slow
+    color "#888888"
   }
   netclass "TMDS_SRC" {
     // Driven only by the iCE40 through a 270 ohm series resistor: Lattice's IBIS model (ice40.ibs rev 2.5) gives
@@ -269,12 +280,17 @@ board "ice40_hdmi_node" {
   net "LED1_A" class "SIG" { R22.p2 D6.anode }
   net "LED2_A" class "SIG" { R23.p2 D7.anode }
 
+  // GNDPLL is left unconnected. Lattice DS1040 v3.4, Signal Descriptions: the
+  // PLL's DC ground connection is made on the FPGA, so GNDPLL "must NOT be
+  // connected to the board's ground". The PLL is not used on this board.
+  no_connect U3.gndpll0, U3.gndpll1
+
   net "GND" class "PWR" {
     J1.p2 D1.anode C1.p2 TP4.p1
     U1.gnd C2.p2 C3.p2 C4.p2 C5.p2
     U2.gnd C6.p2 C7.p2
     U3.gnd U3.gnd_2 U3.gnd_3 U3.gnd_4 U3.gnd_5 U3.gnd_6 U3.gnd_7 U3.gnd_8 U3.gnd_9
-    U3.gndpll0 U3.gndpll1 U3.iob_103_cbsel0 U3.iob_104_cbsel1
+    U3.iob_103_cbsel0 U3.iob_104_cbsel1
     C10.p2 C11.p2 C12.p2 C13.p2 C14.p2 C15.p2 C16.p2 C17.p2 C18.p2 C19.p2 C20.p2 C25.p2 C26.p2 C27.p2 C21.p2 C22.p2 C23.p2 C24.p2 C8.p2
     X1.gnd U4.gnd
     J2.d2_shield J2.d1_shield J2.d0_shield J2.ck_shield J2.gnd J2.shield
