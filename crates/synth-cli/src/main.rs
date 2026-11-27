@@ -4006,6 +4006,9 @@ fn load_registry_strict(
     user_dir: Option<&Path>,
     strict: bool,
 ) -> Option<synth_registry::Registry> {
+    // A reload (including the automatic footprint repair below) may follow a
+    // Tier-2 footprint edit, so no value read before it may be reused.
+    synth_layout::kicad_footprint_loader::clear_cache();
     let user = user_dir
         .map(PathBuf::from)
         .or_else(synth_registry::user_registry_dir);
