@@ -271,8 +271,11 @@ pub struct SidecarPlacement {
     pub dy: f64,
     /// The board side a footprint goes on, `"top"` (the default) or
     /// `"bottom"`. Only a placement sidecar reads it, and only for a
-    /// footprint whose pads sit on its origin (a test point): the exporter
-    /// mirrors the footprint and moves it to the `B.` layers.
+    /// single-pad footprint on its origin (a test point): the exporter
+    /// mirrors the footprint and moves it to the `B.` layers. The placer
+    /// warns about any other value and keeps the part on top; a strict type
+    /// here would make one misspelt side drop the whole sidecar, because
+    /// [`SidecarLayout::load_from_file`] reads a parse error as no file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
 }

@@ -3513,7 +3513,6 @@ fn next_token(s: &str) -> &str {
     }
 }
 
-/// `(at x y)` arguments for a pad, with the angle added when it is not zero.
 /// Turn a top-side footprint body into the body of a bottom-side one, the way
 /// KiCad stores it: every `F.` layer becomes its `B.` twin and the other way
 /// round, and the geometry is mirrored about the footprint's x axis (a y
@@ -3596,6 +3595,7 @@ fn mirror_text_effects(body: &str) -> String {
     out
 }
 
+/// `(at x y)` arguments for a pad, with the angle added when it is not zero.
 fn pad_at_args(center_mm: (f64, f64), angle_deg: f64) -> Vec<Sexp> {
     let mut args = vec![num(center_mm.0), num(center_mm.1)];
     if angle_deg != 0.0 {
