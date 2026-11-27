@@ -524,6 +524,10 @@ impl ManufacturerProfile {
             microvia_drill_nm: mm_to_nm(0.1),
             microvia_diameter_nm: mm_to_nm(0.25),
             min_drill_diameter_nm: mm_to_nm(0.2),
+            // JLCPCB's capability table quotes 3.5 mil (0.09 mm) trace and
+            // space on 4- and 6-layer boards, against 5 mil (0.127 mm) on
+            // 1- and 2-layer boards. Clearance stays at the stock 0.127 mm.
+            min_trace_width_nm: mm_to_nm(0.09),
             // Quoted on the 4- and 6-layer builds only, which is what the
             // capability descriptor has always advertised.
             supported_layers: vec![4, 6],
