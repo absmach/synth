@@ -1343,6 +1343,7 @@ mod tests {
         sidecar.merge_override(
             "R1".to_string(),
             SidecarPlacement {
+                layer: None,
                 x: 30.0,
                 y: 30.0,
                 rotation: 0,

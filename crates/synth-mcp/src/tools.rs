@@ -532,6 +532,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "dx_mm":            { "type": "number", "description": "Relative X offset from relative_to in mm" },
                     "dy_mm":            { "type": "number", "description": "Relative Y offset from relative_to in mm" },
                     "rotation":         { "type": "integer", "description": "Rotation in degrees (0, 90, 180, 270)" },
+                    "layer":            { "type": "string", "enum": ["top", "bottom"], "description": "Board side, placement sidecar only. Only a single-pad part on its origin (a test point) can go on the bottom; any other part stays on top. Omit to keep the side the entry already has" },
                     "sheet":            { "type": "string", "description": "Optional sheet the component was placed on; recorded so a later sheet move invalidates the stale override" },
                     "source":           { "type": "string", "enum": ["human_drag", "agent"], "description": "Provenance tag" },
                     "priority":         { "type": "string", "enum": ["soft", "hard"], "description": "Override priority" }
@@ -3016,6 +3017,7 @@ fn persist_layout_op(
             continue;
         };
         let intended = SidecarPlacement {
+            layer: None,
             x: placement.center_mm.0,
             y: placement.center_mm.1,
             rotation: rotation_degrees(placement.rotation),
@@ -4862,6 +4864,7 @@ fn execute_compact_layout(args: &Value, default_registry: Option<&Path>) -> Resu
                 .components
                 .entry(comp.refdes.clone())
                 .or_insert_with(|| synth_layout::sidecar::SidecarPlacement {
+                    layer: None,
                     x: 0.0,
                     y: 0.0,
                     rotation: 0,
@@ -5686,6 +5689,18 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
             }
         },
     };
+    let layer = match &args["layer"] {
+        Value::Null => None,
+        v => match v.as_str() {
+            Some(side @ ("top" | "bottom")) => Some(side.to_string()),
+            _ => {
+                return Err(refusal(
+                    Some("layer"),
+                    format!("'layer' must be \"top\" or \"bottom\", got {v}"),
+                ));
+            }
+        },
+    };
 
     let path = Path::new(file_path_str);
     let mut sidecar = load_sidecar_for_write(path, "layout_file_path")?;
@@ -5693,7 +5708,16 @@ fn execute_write_layout_override(args: &Value) -> Result<Value, String> {
     // real contract, so stamp the current one before writing.
     sidecar.schema_version = synth_layout::sidecar::SIDECAR_SCHEMA_VERSION;
 
+    // Moving a part must not move it to the other side: an override that
+    // names no layer keeps the side the entry already has.
+    let layer = layer.or_else(|| {
+        sidecar
+            .components
+            .get(&refdes)
+            .and_then(|p| p.layer.clone())
+    });
     let placement = synth_layout::sidecar::SidecarPlacement {
+        layer,
         x: x_mm,
         y: y_mm,
         rotation,
@@ -8516,6 +8540,54 @@ mod gate_outcome_tests {
             outcome["written_paths"][0]["sha256"],
             crate::outcome::sha256_hex(&bytes)
         );
+    }
+
+    #[test]
+    fn moving_a_bottom_test_point_keeps_it_on_the_bottom() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        let write = |args: Value| {
+            let mut args = args;
+            args["layout_file_path"] = json!(sidecar.to_str().unwrap());
+            args["refdes"] = json!("TP1");
+            call_tool("synth_write_layout_override", &args, None).unwrap();
+            synth_layout::sidecar::SidecarLayout::load_from_file(&sidecar)
+                .unwrap()
+                .components["TP1"]
+                .layer
+                .clone()
+        };
+        let bottom = Some("bottom".to_string());
+        assert_eq!(
+            write(json!({ "x_mm": 1.0, "y_mm": 1.0, "layer": "bottom" })),
+            bottom
+        );
+        assert_eq!(
+            write(json!({ "x_mm": 4.0, "y_mm": 1.0 })),
+            bottom,
+            "a move that names no layer keeps the entry's side"
+        );
+        assert_eq!(
+            write(json!({ "x_mm": 4.0, "y_mm": 1.0, "layer": "top" })),
+            Some("top".to_string())
+        );
+    }
+
+    #[test]
+    fn write_layout_override_refuses_an_unknown_layer() {
+        let dir = tempfile::tempdir().unwrap();
+        let sidecar = dir.path().join("led.placement.layout.toml");
+        let err = call_tool(
+            "synth_write_layout_override",
+            &json!({
+                "layout_file_path": sidecar.to_str().unwrap(),
+                "refdes": "TP1", "x_mm": 1.0, "y_mm": 1.0, "layer": "botom"
+            }),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(refusal_of(&err)["field"], "layer", "{err}");
+        assert!(!sidecar.exists());
     }
 
     #[test]

@@ -207,6 +207,72 @@ pub fn courtyard_center_from_origin(
     Point::new(origin.x_nm + rot_x, origin.y_nm + rot_y)
 }
 
+/// The board side a sidecar entry's `layer` puts `comp` on.
+///
+/// The exporter mirrors a bottom footprint, but Synth's own DRC geometry
+/// (`synth_drc::geometry`) places its pads unmirrored and
+/// [`courtyard_center_from_origin`] keeps the top-side courtyard offset. The
+/// two agree only for a part with at most one pad and its courtyard centred
+/// on its origin, such as a test point, so any other part asked onto the
+/// bottom stays on the top with a warning rather than being checked against
+/// pads that are not where the board has them. A value other than `top` or
+/// `bottom` also warns and keeps the part on top.
+fn sidecar_layer(comp: &synth_ir::Component, layer: Option<&str>) -> Layer {
+    let Some(layer) = layer else {
+        return Layer::Top;
+    };
+    if layer.eq_ignore_ascii_case("top") {
+        return Layer::Top;
+    }
+    if !layer.eq_ignore_ascii_case("bottom") {
+        warn_once(
+            &comp.refdes,
+            &format!(
+                "warning: {} stays on the top side: its sidecar layer {layer:?} is not \
+                 \"top\" or \"bottom\"",
+                comp.refdes
+            ),
+        );
+        return Layer::Top;
+    }
+    if bottom_side_supported(comp.part.as_ref()) {
+        return Layer::Bottom;
+    }
+    warn_once(
+        &comp.refdes,
+        &format!(
+            "warning: {} stays on the top side: only a single-pad part centred on its \
+             origin (a test point) can be placed on the bottom",
+            comp.refdes
+        ),
+    );
+    Layer::Top
+}
+
+/// Print `message` the first time `refdes` is warned about. The sidecar
+/// overrides are applied once per placement candidate, so a warning per pass
+/// would repeat the same line many times.
+fn warn_once(refdes: &str, message: &str) {
+    static WARNED: std::sync::Mutex<std::collections::BTreeSet<String>> =
+        std::sync::Mutex::new(std::collections::BTreeSet::new());
+    let first = WARNED
+        .lock()
+        .map_or(true, |mut warned| warned.insert(refdes.to_string()));
+    if first {
+        eprintln!("{message}");
+    }
+}
+
+/// Whether a part can be mirrored to the bottom without moving its pads or
+/// courtyard: at most one pin, and a courtyard centred on the origin.
+fn bottom_side_supported(part: Option<&synth_registry::Part>) -> bool {
+    let Some(part) = part else {
+        return false;
+    };
+    let ((offset_x, offset_y), _) = synth_layout::pcb_courtyard_geometry_for_part(part);
+    part.pins.len() <= 1 && offset_x.abs() < 1e-6 && offset_y.abs() < 1e-6
+}
+
 /// A sidecar entry's rotation in degrees as a [`Rotation`].
 fn sidecar_rotation(degrees: u32) -> Rotation {
     match degrees {
@@ -581,6 +647,7 @@ pub fn apply_sidecar_overrides(
             }
             if let Some(p) = placement.components.iter_mut().find(|c| c.id == comp.id) {
                 p.rotation = sidecar_rotation(sidecar_comp.rotation);
+                p.layer = sidecar_layer(comp, sidecar_comp.layer.as_deref());
                 p.center = courtyard_center_from_origin(
                     comp.part.as_ref(),
                     Point::new(mm_to_nm(sidecar_comp.x), mm_to_nm(sidecar_comp.y)),
@@ -633,6 +700,7 @@ pub fn apply_sidecar_overrides(
                 }
                 p.center = center;
                 p.rotation = rotation;
+                p.layer = sidecar_layer(comp, sidecar_comp.layer.as_deref());
             }
         }
         if !changed {
@@ -10590,6 +10658,34 @@ mod tests {
         board_from_source(&source, path)
     }
 
+    #[test]
+    fn only_a_single_pad_part_on_its_origin_goes_on_the_bottom() {
+        let board = load_board(
+            "../../qualification/class-a/protected-power-entry/protected_power_entry.synth",
+        );
+        let comp = |refdes: &str| {
+            board
+                .components
+                .iter()
+                .find(|c| c.refdes == refdes)
+                .expect("component")
+        };
+        assert_eq!(sidecar_layer(comp("TP1"), Some("bottom")), Layer::Bottom);
+        assert_eq!(sidecar_layer(comp("TP1"), Some("Bottom")), Layer::Bottom);
+        assert_eq!(sidecar_layer(comp("TP1"), Some("top")), Layer::Top);
+        assert_eq!(sidecar_layer(comp("TP1"), None), Layer::Top);
+        assert_eq!(
+            sidecar_layer(comp("TP1"), Some("botom")),
+            Layer::Top,
+            "a misspelt side keeps the part on top"
+        );
+        assert_eq!(
+            sidecar_layer(comp("R1"), Some("bottom")),
+            Layer::Top,
+            "a two-pad part is not mirrored to the bottom"
+        );
+    }
+
     /// Lower a SynthSpec source held in the test itself.
     ///
     /// No shipped design declares a mounting hole, a fiducial or a test point,
@@ -14655,6 +14751,7 @@ board "near" {
             components: [(
                 "C2".to_string(),
                 synth_layout::sidecar::SidecarPlacement {
+                    layer: None,
                     x: synth_geometry::nm_to_mm(victim.center.x_nm),
                     y: synth_geometry::nm_to_mm(victim.center.y_nm),
                     rotation: 0,
@@ -14715,6 +14812,7 @@ board "near" {
             (
                 refdes.to_string(),
                 synth_layout::sidecar::SidecarPlacement {
+                    layer: None,
                     x: synth_geometry::nm_to_mm(center.x_nm),
                     y: synth_geometry::nm_to_mm(center.y_nm),
                     rotation: 0,
