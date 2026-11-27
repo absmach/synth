@@ -85,10 +85,14 @@ const POLL_INTERVAL: Duration = Duration::from_millis(25);
 /// leaves the reader thread blocked forever.
 const DRAIN_GRACE: Duration = Duration::from_secs(5);
 
+/// Grace allowed between the process group's SIGTERM and SIGKILL.
+#[cfg(unix)]
+const KILL_GRACE: Duration = Duration::from_millis(500);
+
 /// How much of the spawned process tree to stop on timeout or cancellation.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum KillScope {
-    /// Stop only the direct child. The default for router engines.
+    /// Stop only the direct child. The default for [`run`].
     #[default]
     Child,
     /// Stop the child and everything in its process group.
@@ -111,6 +115,34 @@ pub fn run(
     budget: Duration,
     max_output_bytes: usize,
 ) -> Result<Invocation, SpawnError> {
+    run_with_scope(binary, args, budget, max_output_bytes, KillScope::Child)
+}
+
+/// [`run`] for a helper that starts the engine without `exec`.
+///
+/// On Unix the helper leads its own process group, so a timeout stops the
+/// engine grandchild along with the wrapper. Other targets keep [`run`]'s
+/// direct-child behaviour.
+pub fn run_in_process_group(
+    binary: &Path,
+    args: &[String],
+    budget: Duration,
+    max_output_bytes: usize,
+) -> Result<Invocation, SpawnError> {
+    #[cfg(unix)]
+    let kill = KillScope::ProcessTree;
+    #[cfg(not(unix))]
+    let kill = KillScope::Child;
+    run_with_scope(binary, args, budget, max_output_bytes, kill)
+}
+
+fn run_with_scope(
+    binary: &Path,
+    args: &[String],
+    budget: Duration,
+    max_output_bytes: usize,
+    kill: KillScope,
+) -> Result<Invocation, SpawnError> {
     let ambient = ambient_cancel();
     run_cancellable(
         binary,
@@ -119,7 +151,7 @@ pub fn run(
         max_output_bytes,
         ambient.as_ref(),
         None,
-        KillScope::Child,
+        kill,
     )
 }
 
@@ -237,7 +269,7 @@ pub fn run_cancellable(
 
 fn stop(child: &mut std::process::Child, kill: KillScope) {
     if kill == KillScope::ProcessTree {
-        kill_process_group(child.id());
+        stop_process_group(child.id());
     }
     // The group kill is best-effort; the direct kill and wait always reap
     // the process the caller owns.
@@ -246,17 +278,22 @@ fn stop(child: &mut std::process::Child, kill: KillScope) {
 }
 
 #[cfg(unix)]
-fn kill_process_group(pid: u32) {
+fn stop_process_group(pid: u32) {
     use nix::sys::signal::{Signal, killpg};
     use nix::unistd::Pid;
 
     if let Ok(pid) = i32::try_from(pid) {
-        let _ = killpg(Pid::from_raw(pid), Signal::SIGKILL);
+        let group = Pid::from_raw(pid);
+        // Ask the whole group to stop, then kill whatever is still there:
+        // a grandchild that ignores TERM must not outlive its wrapper.
+        let _ = killpg(group, Signal::SIGTERM);
+        std::thread::sleep(KILL_GRACE);
+        let _ = killpg(group, Signal::SIGKILL);
     }
 }
 
 #[cfg(windows)]
-fn kill_process_group(pid: u32) {
+fn stop_process_group(pid: u32) {
     // Windows has no process group equivalent here; `/T` is the best-effort
     // tree kill. The direct kill below still stops the owned child.
     let _ = Command::new("taskkill")
@@ -268,7 +305,7 @@ fn kill_process_group(pid: u32) {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn kill_process_group(_pid: u32) {
+fn stop_process_group(_pid: u32) {
     // No process-group primitive on this target; the direct child is all we
     // can stop.
 }
@@ -535,6 +572,51 @@ mod tests {
                 "wrapper grandchild {pid} survived"
             );
             std::thread::sleep(Duration::from_millis(25));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_timed_out_helper_takes_its_sleeping_grandchild_with_it() {
+        let dir = std::env::temp_dir().join(format!("synth_proc_helper_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let helper_pid = dir.join("helper.pid");
+        let grandchild_pid = dir.join("grandchild.pid");
+        let script = format!(
+            "echo $$ > '{}'\n\
+             sh -c 'trap \"\" TERM; echo $$ > \"{}\"; exec sleep 60' &\nwait\n",
+            helper_pid.display(),
+            grandchild_pid.display()
+        );
+
+        let run = run_in_process_group(&shell(), &sh(&script), Duration::from_millis(500), 4096)
+            .expect("helper ran");
+        assert!(run.timed_out);
+
+        // The grandchild ignores TERM, so only the SIGKILL that follows the
+        // grace period can stop it.
+        for pid_file in [&helper_pid, &grandchild_pid] {
+            let pid: u32 = std::fs::read_to_string(pid_file)
+                .expect("child pid")
+                .trim()
+                .parse()
+                .expect("numeric pid");
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+            {
+                assert!(
+                    Instant::now() < deadline,
+                    "process {pid} survived the helper's timeout kill"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
