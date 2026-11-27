@@ -600,14 +600,16 @@ capabilities = ["gpio", "i2c_scl", "i2c_sda"]
 [[pins]]
 name = "vpp_fast"
 number = "B10"
-electrical_type = "power_input"
-required = true
+electrical_type = "passive"
+required = false
 
 [[pins]]
+# DS1040 v3.4, Signal Descriptions: the PLL ground connection is made on the FPGA,
+# so this pin must NOT be connected to the board ground. Leave it unconnected.
 name = "gndpll1"
 number = "C5"
 electrical_type = "power_input"
-required = true
+required = false
 
 [[pins]]
 name = "vccpll1"
@@ -730,10 +732,12 @@ electrical_type = "bidirectional"
 capabilities = ["gpio", "spi_cs"]
 
 [[pins]]
+# DS1040 v3.4, Signal Descriptions: the PLL ground connection is made on the FPGA,
+# so this pin must NOT be connected to the board ground. Leave it unconnected.
 name = "gndpll0"
 number = "L6"
 electrical_type = "power_input"
-required = true
+required = false
 
 [[pins]]
 name = "iob_107_sck"

@@ -1,0 +1,31 @@
+id = "tpd1e10b06"
+kind = "diode"
+description = "TI TPD1E10B06 single-channel bidirectional ESD TVS, 5.5 V reverse stand-off in both directions, 12 pF typical, SOD-523 (DYA). No rail connection: two terminals only."
+mpn = "TPD1E10B06DYAR"
+kicad_footprint = "Diode_SMD:D_SOD-523"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tpd1e10b06.pdf"
+# Ratings from the TI TPD1E10B06 datasheet: VRWM 5.5 V pin 1 to 2 or pin 2 to 1,
+# I/O capacitance 12 pF typical, SOD-523 (DYA) and X1SON (DPY) packages.
+[footprint_dimensions]
+width_mm = 1.6
+height_mm = 0.8
+courtyard_margin_mm = 0.25
+
+[operating_conditions]
+max_voltage_v = 5.5
+
+[[pins]]
+name = "p1"
+number = "1"
+electrical_type = "passive"
+
+[[pins]]
+name = "p2"
+number = "2"
+electrical_type = "passive"
+
+[provenance]
+source = "authored"
+datasheet_url = "https://www.ti.com/lit/ds/symlink/tpd1e10b06.pdf"
+reviewed_by = "JeffMboya"
+reviewed_at = "2026-11-26"

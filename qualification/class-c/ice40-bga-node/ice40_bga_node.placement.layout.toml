@@ -1,0 +1,575 @@
+schema_version = 2
+forced_net_labels = []
+fit_sheet = false
+
+[components.C8]
+x = 54.77
+y = 51.08
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C14]
+x = 58.03
+y = 35.88
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D3]
+x = 44.46
+y = 60.31
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R5]
+x = 48.80
+y = 54.88
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D2]
+x = 38.49
+y = 60.31
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R10]
+x = 54.23
+y = 54.88
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U4]
+x = 48.80
+y = 58.14
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C10]
+x = 58.03
+y = 34.26
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C5]
+x = 34.69
+y = 48.91
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R14]
+x = 55.86
+y = 28.83
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.FB1]
+x = 56.95
+y = 30.46
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R16]
+x = 58.03
+y = 28.83
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D4]
+x = 50.98
+y = 60.85
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C7]
+x = 52.06
+y = 58.14
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J1]
+x = 5.81
+y = 54.34
+rotation = 270
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP4]
+x = 50.98
+y = 54.88
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+layer = "bottom"
+
+[components.U3]
+x = 40.66
+y = 53.80
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R19]
+x = 53.69
+y = 41.86
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.H2]
+x = 57.55
+y = 59.39
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C22]
+x = 55.86
+y = 37.51
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R9]
+x = 47.72
+y = 60.85
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_CC2]
+x = 14.06
+y = 54.66
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C3]
+x = 34.69
+y = 56.51
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP2]
+x = 47.18
+y = 48.91
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+layer = "bottom"
+
+[components.C13]
+x = 32.52
+y = 47.83
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C26]
+x = 55.32
+y = 42.40
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D1]
+x = 25.46
+y = 60.31
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP3]
+x = 57.49
+y = 50.54
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+layer = "bottom"
+
+[components.C4]
+x = 34.69
+y = 52.71
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.U1]
+x = 39.58
+y = 38.06
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C1]
+x = 33.61
+y = 60.31
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C16]
+x = 33.06
+y = 51.63
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R20]
+x = 57.49
+y = 42.40
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R4]
+x = 47.72
+y = 54.88
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP5]
+x = 56.95
+y = 40.23
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+layer = "bottom"
+
+[components.J3]
+x = 18.43
+y = 22.31
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C2]
+x = 32.52
+y = 55.97
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.F1]
+x = 20.58
+y = 59.77
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R7]
+x = 35.78
+y = 60.31
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R8]
+x = 41.20
+y = 60.31
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R_CC1]
+x = 14.06
+y = 52.71
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.TP1]
+x = 57.49
+y = 53.25
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+layer = "bottom"
+
+[components.U2]
+x = 53.69
+y = 45.66
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C20]
+x = 54.23
+y = 28.29
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D6]
+x = 56.95
+y = 54.88
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C19]
+x = 58.03
+y = 32.63
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C11]
+x = 30.89
+y = 55.97
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C15]
+x = 30.35
+y = 57.05
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C17]
+x = 30.89
+y = 53.80
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C18]
+x = 54.77
+y = 40.23
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C6]
+x = 45.55
+y = 57.60
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R11]
+x = 56.95
+y = 35.34
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C21]
+x = 54.23
+y = 39.14
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.R15]
+x = 56.95
+y = 28.83
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.H1]
+x = 5.66
+y = 23.54
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C9]
+x = 33.06
+y = 49.45
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C12]
+x = 58.03
+y = 37.51
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D8]
+x = 22.75
+y = 55.43
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.X1]
+x = 39.58
+y = 28.29
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.C41]
+x = 43.38
+y = 28.29
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.Q2]
+x = 45.55
+y = 63.46
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.D9]
+x = 25.51
+y = 55.43
+rotation = 0
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
+
+[components.J2]
+x = 18.36
+y = 63.5
+rotation = 90
+source = "agent"
+priority = "hard"
+dx = 0.0
+dy = 0.0
