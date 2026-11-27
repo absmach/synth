@@ -1,68 +1,166 @@
 schema_version = "synth.qualification.v1"
 
-# The versioned reference-board corpus (#45). Each row is a board under
-# `qualification/` with the status its release command must produce; the
-# runner is `scripts/run_qualification_matrix.py` and CI runs it from
-# `.github/workflows/ci.yml` (the Qualification Matrix job). The schema is
-# #247's, so a row moves over unchanged when the full harness lands.
-#
-# `expect` is the release command's verdict: "pass" means source and DRC both
-# pass (a real DRC verdict with counts — a row that only reported an
-# unavailable router would fail this matrix, not pass it); "fail" means the
-# source gate must fail, because a negative board is a negative test, not an
-# accident. `expect_fab`, when a row declares it, is the manufacturing
-# stage's status under `synth check --fab`. `router` pins the engine the run
-# records (see #95: a pin outranks the flag and never falls back), and
-# `fab_router` names the engine whose copper the fab verdict judges.
-#
-# A row the corpus cannot run on this code declares `skip_reason`: the runner
-# records it and names it in the log, never silently dropping it, because
-# what cannot run is part of what the matrix reports. Every skip below was
-# verified on this branch on 2026-11-13 (KiCad 10.0.8, KiCadRoutingTools
-# 9399bfb, FreeRouting 2.4.1) and says exactly what blocked it.
-#
-# Class C and D rows have no boards in the corpus yet; the matrix runs the
-# rows that exist and reports which cannot.
-
 [matrix]
 release_command = "synth check <board> --json"
 fab_command = "synth check <board> --fab --json"
 
+# Every `expect` and `expect_fab` that names a gate result below was measured,
+# not assumed. The run: KiCad 10.0 (installed by
+# `.github/scripts/install-kicad.sh`), KiCadRoutingTools v0.23.0 (grid_router
+# 9399bfb), release build,
+# `synth check <board> --json [--fab] --router kicad-routing-tools`.
+#
+# `unestablished` is not a measurement and not a claim: it marks a board the
+# reference environment cannot yet give an honest verdict for. The gate records
+# what it observes for those and compares nothing, so a row can never pass for
+# a reason nobody checked.
+#
+# The rows below record the current KRT/main measurement. An earlier run on
+# `ubuntu-latest` silently installed KiCad 9 from the Ubuntu archive, and every
+# board's DRC reported `unknown` there; the workflow now pins `ubuntu-24.04`
+# and installs KiCad 10 through the checked script, so `unknown` here means the
+# stage could not run rather than the runner carried the wrong KiCad.
+#
+# `status` is unmoved by any of that. Clearing the gate is a measurement;
+# promotion to `qualified` takes a human review, so every positive board
+# here stays `experimental`.
+
 [[board]]
-id = "negative-broken-mcu-board"
-path = "qualification/class-a/negative-broken-mcu-board/negative_broken_mcu_board.synth"
+id = "hello"
+path = "fixtures/designs/hello.synth"
+fixture_sha256 = "a1047d5b79020d3b100c389ff4e97ebce5d15cf9badad9b15b41ab6d2b474706"
+class = "A"
+status = "experimental"
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "`board \"hello\" { layers 2 }` — no components, no nets. A board with nothing to route now routes trivially (#98): the empty route goes through the same repair and independent validation, and kicad-cli DRC runs on it, so source and DRC pass and the gate is `pass`."
+
+[[board]]
+id = "env_logger"
+path = "examples/env_logger/env_logger.synth"
+fixture_sha256 = "b89025f6eb05df789c317eb875f0efb6df86a85c61d48bf708b76972ec0f50d1"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "USB-C power, an AMS1117 LDO, an MCU, a BME680 on I2C and a debug header: the Class-A envelope. Source passes; on the pinned KiCad 10 + KiCadRoutingTools v0.23.0 run the routed copper still fails `kicad-cli pcb drc`, so the gate is `fail`. DRC is the blocker, not the source."
+
+[[board]]
+id = "sensor_logger"
+path = "examples/sensor_logger/sensor_logger.synth"
+fixture_sha256 = "9f51f969cc6a72cb30d1806fa49f3e219682834204ff55995205a274301cae63"
+class = "A"
+status = "experimental"
+expect = "fail"
+expect_fab = "unestablished"
+rationale = "Dual I2C sensors, SPI flash and status LEDs: a larger Class-A digital board. Source passes; the routed copper fails `kicad-cli pcb drc` on the pinned run, so the gate is `fail`."
+
+[[board]]
+id = "placement_and_diff_pair"
+path = "examples/placement_and_diff_pair/placement_and_diff_pair.synth"
+fixture_sha256 = "7afdadf42b3cf3f6cc93b0e485be6f51b82c6f7b2cbf00390def85e9b80e487d"
+class = "C"
+status = "experimental"
+expect = "unknown"
+expect_fab = "unestablished"
+rationale = "Differential-pair constraints, placement hints and keepouts: the Class-C constraint surface. Source passes; the DRC stage could not produce a verdict on the pinned run (`unknown`), which is not a pass."
+
+[[board]]
+id = "ref_ldo_sensor"
+path = "fixtures/kicad-reference/ref_ldo_sensor.synth"
+fixture_sha256 = "b437a5bc4946514aebf9934d3e4bc50d1b91845270613d184c0ee4fa38b68ba7"
 class = "A"
 status = "unsupported"
 expect = "fail"
-rationale = "A negative test: missing power pins, unconnected required pins, a duplicate designator and a value-less passive. It must fail at the source gate with E-SYNTH-CONNECT-001, E-SYNTH-NAME-001 and E-SYNTH-VALUE-001, so a compiler change cannot silently widen what a board may declare."
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-VALUE-001"]
+rationale = "Negative test, imported from a KiCad reference project. Four generic passives carry no `value`, so the BOM would not be orderable. The source stage fails, so manufacturing is never reached and reports `unknown`."
 
 [[board]]
-id = "i2c-sensor-node"
+id = "ref_crystal_mcu"
+path = "fixtures/kicad-reference/ref_crystal_mcu.synth"
+fixture_sha256 = "58a4c49a16c15d0df9f07329bfdad81ecab9fccd6070db7be27ccd3d77b07f6c"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-COMP-002", "E-SYNTH-CONNECT-001", "E-SYNTH-VALUE-001"]
+rationale = "Negative test. Two connections name pins their part does not declare, two required pins are left unconnected, and four passives carry no `value`. An imported design is held to the same rules as a written one."
+
+[[board]]
+id = "ref_usb_cdc"
+path = "fixtures/kicad-reference/ref_usb_cdc.synth"
+fixture_sha256 = "e8d47b6b67991eee715919ac18bd7c94757958c754c33f1eb9c697a3888f07b0"
+class = "B"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-COMP-002", "E-SYNTH-CONNECT-001", "E-SYNTH-VALUE-001"]
+rationale = "Negative test at the Class-B interface envelope: a USB CDC bridge. Six undefined pins, two required pins unconnected and nine valueless passives. It is the corpus's evidence that an unsupported board at this class fails loudly rather than exporting something unbuildable."
+
+[[board]]
+id = "secure_tracker"
+path = "fixtures/kicad-reference/secure_tracker.synth"
+fixture_sha256 = "1f7e2153d26790713cf073ab6bcc953ef8f18e8c0ed013fd60533168ec393935"
+class = "D"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-COMP-002", "E-SYNTH-CONNECT-001", "E-SYNTH-VALUE-001"]
+rationale = "Negative test and the corpus's only Class-D entry: the largest imported design, with eight undefined pins, two required pins unconnected and seventeen valueless passives. Class D's obligation is an auditable result and a stated limitation, and this is the stated limitation."
+
+# The nine boards below were measured in the reference environment by the run
+# recorded in this file's header. `sdram_memory` is the exception and says why
+# in its own rationale.
+
+[[board]]
+id = "i2c_sensor_node"
 path = "qualification/class-a/i2c-sensor-node/i2c_sensor_node.synth"
+fixture_sha256 = "8c3bc6d0741a22b1c4652367afdf50ddf9651b510f7c2a71295b2ecd72781e70"
 class = "A"
 status = "experimental"
-skip_reason = "the route does not validate on this branch: with KiCadRoutingTools 9399bfb (the corpus's pinned revision), the routed board is rejected with 99 blocking findings — one copper-to-edge DRC error (0.270 mm against the 0.300 mm rule), signal vias without a ground return via, and an untied GND island. The committed evidence passed at synth 0ceb7b80, KiCad 10.0.6. The row stays here, unrun, until the route validates again."
-rationale = "STM32G030 reading a BME680 and an EEPROM over I2C, from a protected 5 V rail. Two copper layers, 57 parts. The parts the shipped registry does not carry are in the row's reproduce/user-registry, which the reproduce script loads too."
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "A JST-fed 5 V input, a 3V3 LDO, an STM32G030 reading an environmental sensor and a config EEPROM on one I2C bus with one set of pull-ups, and a 4-pin UART break-out: the Class-A single-bus envelope. Source and DRC pass on the pinned run, so the board clears the gate; manufacturing is unestablished until it is measured on the pinned runner."
 
 [[board]]
-id = "protected-power-entry"
+id = "negative_broken_mcu_board"
+path = "qualification/class-a/negative-broken-mcu-board/negative_broken_mcu_board.synth"
+fixture_sha256 = "bcd85846f5995fc5134350dfaace26bca3280b1a9e704045cbf7bb07946439a5"
+class = "A"
+status = "unsupported"
+expect = "fail"
+expect_fab = "unknown"
+expect_source_codes = ["E-SYNTH-CONNECT-001", "E-SYNTH-NAME-001", "E-SYNTH-VALUE-001"]
+rationale = "Negative test, written to be wrong on purpose so the diagnostics can be read. The source stage fails with exactly three codes: a pin left floating, a refdes that does not match its part kind, and a generic passive with no value. Manufacturing is never reached, so its verdict can only be `unknown`. These are compiler diagnostics over declared source, so they do not depend on the installed KiCad libraries."
+
+[[board]]
+id = "protected_power_entry"
 path = "qualification/class-a/protected-power-entry/protected_power_entry.synth"
+fixture_sha256 = "4f745ce18c6a2fdf77350cca398ddfc30bf051b6605eedbf6c7744b6751a1749"
 class = "A"
 status = "experimental"
-skip_reason = "the release verdict is not established on this branch: the source gate passes with the row's user registry loaded, but its 84-part route did not complete within the local budget, so no DRC verdict exists to assert. The row stays here, unrun, until a machine that can route it within budget re-establishes the verdict."
-rationale = "12 V power entry through a polyfuse, TVS and reverse-polarity PFET into an MP2307 buck, a load switch and an AMS1117. Two copper layers, 84 parts, no microcontroller. The parts the shipped registry does not carry are in the row's reproduce/user-registry."
+expect = "fail"
+expect_source_codes = ["E-SYNTH-COMP-001", "E-SYNTH-COMP-002"]
+expect_fab = "unknown"
+rationale = "12 V in, a reverse-polarity P-FET, resettable over-current, a 15 V TVS, a buck to 5 V, a soft-start load switch and a 3V3 rail, with no MCU: the released 84-part power front end. Its P-FET and TVS live in the board's own reproduce/user-registry, which the gate does not load, so the source stage fails with unknown part and undefined pin. Manufacturing is never reached."
 
 [[board]]
 id = "buck"
 path = "qualification/class-b/buck/buck.synth"
+fixture_sha256 = "309b4839f4ea0dc1f0d86608d2c731c5a9ff9ac725331360d5e7fb095609c8b0"
 class = "B"
 status = "experimental"
-skip_reason = "the route/DRC verdict is not established on this branch: with the matrix's pinned router the DRC stage is unknown and the manufacturing stage fails, so the row cannot assert the committed pass. The row stays here, unrun, until the route and release verdict are re-established."
-rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array under the exposed pad. The FreeRouting copper routes with 0 DRC errors and 0 unconnected items, so source and DRC pass (verified 2026-11-13). The manufacturing package also passes the gate on this branch with KiCadRoutingTools 9399bfb — the 11 return-via findings the committed record describes no longer reproduce at that revision. The board stays `experimental`: no human has signed off its artifacts, and docs/qualification-followups.md keeps the review gates open."
+expect = "pass"
+expect_fab = "unestablished"
+rationale = "24 V in, 3.3 V out buck (LMR38010) with a PTC, reverse-block Schottky and TVS on the input, an EN divider, feedback, power-good and a thermal via array. Source and DRC pass on the pinned run, so the gate is `pass`; manufacturing is unestablished until it is measured on the pinned runner."
+
+# Retriggered after the Actions queue stalled; no measurement changed here.
 
 [[board]]
 id = "usb-uart"
 path = "qualification/class-b/usb-uart/usb_uart.synth"
+fixture_sha256 = "17636ac956014fd7022e12c5f9885b2e00558244877edf011c9137a2d6badeae"
 class = "B"
 status = "experimental"
 skip_reason = "cannot run on this branch: the source gate rejects the board with E-SYNTH-POWER-010 (rail load exceeds the regulator's current limit — the LP5907 LDO feeding VIO). The committed evidence predates that rule; the row stays here, unrun, until the board or the rule decides the mismatch."
@@ -71,6 +169,7 @@ rationale = "USB-C dual CH342F UART plus a THVD1450 RS-485 transceiver, with the
 [[board]]
 id = "rtd-afe"
 path = "qualification/class-b/rtd-afe/rtd_afe.synth"
+fixture_sha256 = "e22b0030df0f1b594bbde2febfe8cd99ebf65a1fdfb3b30f6cb48c111204b612"
 class = "B"
 status = "experimental"
 skip_reason = "the route does not validate on this branch: the FreeRouting copper leaves +3V3 and VREG_LX open, an untied GND island and signal vias without ground return vias — 13 blocking findings (verified 2026-11-13 with FreeRouting 2.4.1). The board's own QUALIFICATION.md already records that the current tree does not route. The row stays here, unrun, until the route validates again."
