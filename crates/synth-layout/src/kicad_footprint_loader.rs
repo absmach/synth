@@ -32,8 +32,10 @@
 //! the symbol-bbox approximation in
 //! [`super::body_size_for_part`].
 
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 /// Resolve the bundled-footprint directory.
 fn bundled_dir() -> Option<PathBuf> {
@@ -68,13 +70,104 @@ fn bundled_dir() -> Option<PathBuf> {
     .clone()
 }
 
-fn read_footprint(lib_id: &str) -> Option<String> {
+fn footprint_path(lib_id: &str) -> Option<PathBuf> {
     let (lib, name) = lib_id.split_once(':')?;
     let dir = bundled_dir()?;
-    let path = dir
-        .join(format!("{lib}.pretty"))
-        .join(format!("{name}.kicad_mod"));
-    std::fs::read_to_string(&path).ok()
+    Some(
+        dir.join(format!("{lib}.pretty"))
+            .join(format!("{name}.kicad_mod")),
+    )
+}
+
+fn read_footprint(lib_id: &str) -> Option<String> {
+    std::fs::read_to_string(footprint_path(lib_id)?).ok()
+}
+
+/// One value derived from a footprint file: not computed yet, computed, or
+/// computed to "this file has none". The third state matters because a file
+/// with no courtyard or no pads must not be re-read either.
+#[derive(Default)]
+enum Cached<T> {
+    #[default]
+    Missing,
+    Found(T),
+    Absent,
+}
+
+/// Parsed values derived from one footprint file. Read failures are never
+/// cached: only a successful parse can produce `Found` or `Absent`.
+#[derive(Default)]
+struct CachedFootprint {
+    /// The file's mtime, tracked only for `SYNTH_USER_FOOTPRINT_DIR` files.
+    modified: Option<SystemTime>,
+    pads: Cached<Vec<Pad>>,
+    courtyard: Cached<(f64, f64, f64, f64)>,
+}
+
+fn cache() -> &'static Mutex<HashMap<PathBuf, CachedFootprint>> {
+    static CACHE: OnceLock<Mutex<HashMap<PathBuf, CachedFootprint>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// Drop every memoized footprint. Called when the registry is loaded again,
+/// so a reload can never serve a value from before it.
+pub fn clear_cache() {
+    cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clear();
+}
+
+fn cached<T: Clone>(
+    lib_id: &str,
+    field: fn(&mut CachedFootprint) -> &mut Cached<T>,
+    parse: fn(&str) -> Option<T>,
+) -> Option<T> {
+    let path = footprint_path(lib_id)?;
+    // Tier-2 user footprints are written while the process runs; their mtime
+    // is the invalidation key. Bundled KiCad files are immutable in-process.
+    let watch_mtime = std::env::var_os("SYNTH_USER_FOOTPRINT_DIR").is_some();
+    let mut entries = cache()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let modified = if watch_mtime {
+        let modified = std::fs::metadata(&path)
+            .and_then(|meta| meta.modified())
+            .ok();
+        if modified.is_none() {
+            // Missing or unreadable now: answer exactly as a fresh read would.
+            entries.remove(&path);
+            return None;
+        }
+        modified
+    } else {
+        None
+    };
+    if let Some(entry) = entries.get_mut(&path) {
+        if watch_mtime && entry.modified != modified {
+            *entry = CachedFootprint {
+                modified,
+                ..CachedFootprint::default()
+            };
+        }
+        if let Cached::Found(value) = field(entry) {
+            return Some(value.clone());
+        }
+        if matches!(field(entry), Cached::Absent) {
+            return None;
+        }
+    }
+    let text = std::fs::read_to_string(&path).ok()?;
+    let value = parse(&text);
+    let entry = entries.entry(path).or_default();
+    if watch_mtime {
+        entry.modified = modified;
+    }
+    *field(entry) = match &value {
+        Some(value) => Cached::Found(value.clone()),
+        None => Cached::Absent,
+    };
+    value
 }
 
 /// Resolve only the Tier-2 user footprint directory (set via
@@ -268,7 +361,11 @@ fn should_keep_block(block: &str) -> bool {
 ///
 /// Return `(center_offset_x_mm, center_offset_y_mm, width_mm, height_mm)` of the footprint's courtyard.
 pub fn courtyard_rect(lib_id: &str) -> Option<(f64, f64, f64, f64)> {
-    courtyard_rect_from_text(&read_footprint(lib_id)?)
+    cached(
+        lib_id,
+        |entry| &mut entry.courtyard,
+        courtyard_rect_from_text,
+    )
 }
 
 /// [`courtyard_rect`] for a footprint file's text: `(center_x, center_y, width,
@@ -602,11 +699,14 @@ pub struct Footprint {
 /// order they're listed in the `.kicad_mod` file (matches the
 /// datasheet pin order in KiCad's curated libraries).
 pub fn pads(lib_id: &str) -> Option<Vec<Pad>> {
-    let text = read_footprint(lib_id)?;
+    cached(lib_id, |entry| &mut entry.pads, parse_pads)
+}
+
+fn parse_pads(text: &str) -> Option<Vec<Pad>> {
     let mut out = Vec::new();
     let mut pos = 0;
-    while let Some(block_start) = find_next_block(&text, pos, &["(pad "]) {
-        let Some(block_end) = balanced_paren_end(&text, block_start) else {
+    while let Some(block_start) = find_next_block(text, pos, &["(pad "]) {
+        let Some(block_end) = balanced_paren_end(text, block_start) else {
             break;
         };
         let block = &text[block_start..block_end];
@@ -909,6 +1009,160 @@ mod tests {
         assert!((pad.center_mm.1).abs() < 1e-9);
         assert_eq!(pad.size_mm, (0.8, 0.95));
         assert_eq!(pad.copper_layers, PadCopperLayers::Front);
+    }
+
+    const CACHE_FOOTPRINT: &str = r#"(footprint "CachePart"
+    (fp_rect
+        (start -1 -0.5)
+        (end 1 0.5)
+        (stroke (width 0.05) (type solid))
+        (fill no)
+        (layer "F.CrtYd")
+    )
+    (pad "1" smd roundrect
+        (at 0 0)
+        (size 1 1)
+        (layers "F.Cu" "F.Mask")
+    )
+)"#;
+
+    /// The second call answers from the process cache: deleting the file
+    /// between calls is invisible, which it could not be if the call read it.
+    #[test]
+    fn a_bundled_footprint_is_read_once() {
+        if std::env::var_os("SYNTH_FOOTPRINT_CACHE_CHILD").is_some() {
+            let dir = std::env::var_os("KICAD_FOOTPRINT_DIR").expect("bundled dir");
+            let path = std::path::PathBuf::from(dir)
+                .join("CacheLib.pretty")
+                .join("CachePart.kicad_mod");
+            let first = courtyard_rect("CacheLib:CachePart").expect("first read");
+            let first_pads = pads("CacheLib:CachePart").expect("first pads");
+            std::fs::remove_file(&path).expect("delete footprint");
+            let second = courtyard_rect("CacheLib:CachePart").expect("cached read");
+            let second_pads = pads("CacheLib:CachePart").expect("cached pads");
+            assert_eq!(
+                first, second,
+                "the second courtyard call did not use the cache"
+            );
+            assert_eq!(
+                first_pads, second_pads,
+                "the second pads call did not use the cache"
+            );
+            return;
+        }
+        let dir = tempfile::tempdir().expect("temp dir");
+        let lib = dir.path().join("CacheLib.pretty");
+        std::fs::create_dir(&lib).expect("library dir");
+        std::fs::write(lib.join("CachePart.kicad_mod"), CACHE_FOOTPRINT).expect("footprint");
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "kicad_footprint_loader::tests::a_bundled_footprint_is_read_once",
+                "--nocapture",
+            ])
+            .env("SYNTH_FOOTPRINT_CACHE_CHILD", "1")
+            .env("KICAD_FOOTPRINT_DIR", dir.path())
+            .env_remove("SYNTH_USER_FOOTPRINT_DIR")
+            .output()
+            .expect("child test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed; 0 failed"),
+            "child did not run exactly the cache test:\n{stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    /// A read failure is not cached: a footprint that appears after a failed
+    /// call is read on the next one.
+    #[test]
+    fn a_missing_footprint_is_retried() {
+        if std::env::var_os("SYNTH_FOOTPRINT_CACHE_CHILD").is_some() {
+            let dir = std::env::var_os("KICAD_FOOTPRINT_DIR").expect("bundled dir");
+            let path = std::path::PathBuf::from(dir)
+                .join("CacheLib.pretty")
+                .join("CachePart.kicad_mod");
+            assert!(
+                courtyard_rect("CacheLib:CachePart").is_none(),
+                "the missing file answered"
+            );
+            std::fs::write(&path, CACHE_FOOTPRINT).expect("write footprint");
+            let value = courtyard_rect("CacheLib:CachePart").expect("read after creation");
+            assert!((value.2 - 2.0).abs() < 1e-9, "width {}", value.2);
+            return;
+        }
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir(dir.path().join("CacheLib.pretty")).expect("library dir");
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "kicad_footprint_loader::tests::a_missing_footprint_is_retried",
+                "--nocapture",
+            ])
+            .env("SYNTH_FOOTPRINT_CACHE_CHILD", "1")
+            .env("KICAD_FOOTPRINT_DIR", dir.path())
+            .env_remove("SYNTH_USER_FOOTPRINT_DIR")
+            .output()
+            .expect("child test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed; 0 failed"),
+            "child did not run exactly the cache test:\n{stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    /// A user footprint is keyed by path and mtime: editing it between two
+    /// calls in one process is seen, because a stale courtyard would change
+    /// the placement.
+    #[test]
+    fn a_user_footprint_edit_is_seen() {
+        if std::env::var_os("SYNTH_FOOTPRINT_CACHE_CHILD").is_some() {
+            let dir = std::env::var_os("SYNTH_USER_FOOTPRINT_DIR").expect("user dir");
+            let path = std::path::PathBuf::from(dir)
+                .join("CacheLib.pretty")
+                .join("CachePart.kicad_mod");
+            let first = courtyard_rect("CacheLib:CachePart").expect("first read");
+            assert!((first.2 - 2.0).abs() < 1e-9, "first width {}", first.2);
+            let wider = CACHE_FOOTPRINT.replace("(end 1 0.5)", "(end 2 1.5)");
+            std::fs::write(&path, wider).expect("rewrite footprint");
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&path)
+                .expect("open footprint");
+            // The write can land in the same mtime tick; move it forward so the
+            // test exercises invalidation, not the filesystem's clock.
+            file.set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(5))
+                .expect("bump mtime");
+            let second = courtyard_rect("CacheLib:CachePart").expect("second read");
+            assert!(
+                (second.2 - 3.0).abs() < 1e-9,
+                "the edit was not seen: width {}",
+                second.2
+            );
+            return;
+        }
+        let dir = tempfile::tempdir().expect("temp dir");
+        let lib = dir.path().join("CacheLib.pretty");
+        std::fs::create_dir(&lib).expect("library dir");
+        std::fs::write(lib.join("CachePart.kicad_mod"), CACHE_FOOTPRINT).expect("footprint");
+        let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
+            .args([
+                "--exact",
+                "kicad_footprint_loader::tests::a_user_footprint_edit_is_seen",
+                "--nocapture",
+            ])
+            .env("SYNTH_FOOTPRINT_CACHE_CHILD", "1")
+            .env("SYNTH_USER_FOOTPRINT_DIR", dir.path())
+            .env_remove("KICAD_FOOTPRINT_DIR")
+            .output()
+            .expect("child test");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            output.status.success() && stdout.contains("1 passed; 0 failed"),
+            "child did not run exactly the cache test:\n{stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[test]

@@ -299,6 +299,11 @@ fn largest_empty_rect(hull: Rect, boxes: &[Rect], inflate: i64) -> (i64, Rect) {
 struct State<'a> {
     board: &'a Board,
     placed: Vec<ComponentPlacement>,
+    /// Courtyard size of each placed part, in `placed` order. Read once when
+    /// the state is built: `rect` only rotates and translates the size, so a
+    /// relax pass never opens a footprint file. The courtyard centre offset is
+    /// deliberately not kept or applied, as `sidecar_courtyard_rect` never did.
+    geometry: Vec<(f64, f64)>,
     /// Parts a hint pins or names; no rule moves them.
     pinned: Vec<bool>,
     /// `pinned` plus parts a rule has fixed; the push-apart never moves them.
@@ -406,6 +411,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
         anchored: Vec::new(),
         pinned: Vec::new(),
         placed: placement.components.clone(),
+        geometry: courtyard_geometries(board, &placement.components),
         outline: placement.board_outline,
         keep_clean: false,
         known: Vec::new(),
@@ -426,6 +432,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
             anchored: pinned.clone(),
             pinned: pinned.clone(),
             placed: placement.components.clone(),
+            geometry: courtyard_geometries(board, &placement.components),
             outline: placement.board_outline,
             keep_clean: true,
             known: known.clone(),
@@ -495,6 +502,7 @@ pub(crate) fn apply(board: &Board, placement: &mut Placement, with_groups: bool)
             anchored: pinned.clone(),
             pinned: pinned.clone(),
             placed: placement.components.clone(),
+            geometry: courtyard_geometries(board, &placement.components),
             outline: placement.board_outline,
             keep_clean: false,
             known: Vec::new(),
@@ -591,6 +599,7 @@ fn settle_edges(board: &Board, placement: &mut Placement, push_groups: bool) {
         anchored: pinned.clone(),
         pinned,
         placed: placement.components.clone(),
+        geometry: courtyard_geometries(board, &placement.components),
         outline: placement.board_outline,
         keep_clean: false,
         known: Vec::new(),
@@ -1816,6 +1825,7 @@ fn compression_state<'a>(board: &'a Board, placement: &Placement) -> State<'a> {
         anchored: pinned.clone(),
         pinned,
         placed: placement.components.clone(),
+        geometry: courtyard_geometries(board, &placement.components),
         outline: placement.board_outline,
         keep_clean: true,
         known: Vec::new(),
@@ -2326,6 +2336,7 @@ pub(crate) fn enforce_spacing(board: &Board, placement: &mut Placement) {
         anchored: pinned.clone(),
         pinned,
         placed: placement.components.clone(),
+        geometry: courtyard_geometries(board, &placement.components),
         outline: placement.board_outline,
         keep_clean: false,
         known: Vec::new(),
@@ -2459,6 +2470,22 @@ impl Frame {
     }
 }
 
+/// Courtyard size of every placed part, in `placed` order.
+fn courtyard_geometries(board: &Board, placed: &[ComponentPlacement]) -> Vec<(f64, f64)> {
+    placed
+        .iter()
+        .map(|placed| {
+            let component = board
+                .component(placed.id)
+                .expect("placement ids come from the board");
+            component.part.as_ref().map_or_else(
+                || crate::fallback_courtyard(&component.kind),
+                |part| synth_layout::pcb_courtyard_geometry_for_part(part).1,
+            )
+        })
+        .collect()
+}
+
 impl State<'_> {
     /// Snapshot the state into the stage trace without moving anything.
     fn trace(&self, stage: &str, since: std::time::Instant) {
@@ -2483,7 +2510,7 @@ impl State<'_> {
     }
 
     fn rect(&self, index: usize) -> Rect {
-        sidecar_courtyard_rect(self.board, self.component(index), &self.placed[index])
+        crate::rotated_courtyard_rect(&self.placed[index], self.geometry[index])
     }
 
     fn overlaps(&self) -> usize {
@@ -5751,10 +5778,10 @@ mod tests {
         assert_eq!(state.placed, before, "an over-long group was moved");
     }
 
-    fn load_group_corner_hole() -> Board {
+    fn load_fixture(relative: &str) -> Board {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let path = dir.join("tests/fixtures/group_corner_hole.synth");
-        let source = std::fs::read_to_string(&path).expect("group_corner_hole fixture");
+        let path = dir.join(relative);
+        let source = std::fs::read_to_string(&path).expect("fixture");
         let file = path.display().to_string();
         let parse = synth_parser::parse(&source, file.clone());
         let ast = parse.ast.as_ref().expect("parse");
@@ -5766,6 +5793,10 @@ mod tests {
         synth_ir::lower(&resolved.program, &registry, &file)
             .board
             .expect("board")
+    }
+
+    fn load_group_corner_hole() -> Board {
+        load_fixture("tests/fixtures/group_corner_hole.synth")
     }
 
     #[test]
@@ -5845,6 +5876,69 @@ mod tests {
         let hull = rect(0.0, 0.0, 100.0, 50.0);
         let (area, _) = largest_empty_rect(hull, &[], mm_to_nm(1.0));
         assert_eq!(area, mm_to_nm(100.0) * mm_to_nm(50.0));
+    }
+
+    /// The cached geometry must answer exactly what a fresh per-call read did,
+    /// for every part of two real boards and every rotation.
+    #[test]
+    fn cached_courtyard_geometry_matches_the_per_call_rect_for_every_rotation() {
+        for relative in [
+            "tests/fixtures/group_corner_hole.synth",
+            "../../fixtures/layout/usb_diff_pair.synth",
+        ] {
+            let board = load_fixture(relative);
+            let placed: Vec<ComponentPlacement> = board
+                .components
+                .iter()
+                .enumerate()
+                .map(|(index, component)| ComponentPlacement {
+                    id: component.id,
+                    center: Point::new(mm_to_nm(10.0 + 10.0 * index as f64), mm_to_nm(20.0)),
+                    rotation: Rotation::Zero,
+                    layer: synth_geometry::Layer::Top,
+                })
+                .collect();
+            let geometry = courtyard_geometries(&board, &placed);
+            let mut state = State {
+                board: &board,
+                anchored: vec![false; placed.len()],
+                pinned: vec![false; placed.len()],
+                placed,
+                geometry,
+                outline: rect(0.0, 0.0, 1000.0, 1000.0),
+                keep_clean: false,
+                known: Vec::new(),
+                usb_only: false,
+                gap_nm: 0,
+                infl: 0,
+                group_gap_nm: 0,
+                rim: 0,
+                reserved: Vec::new(),
+                spread_keep: Vec::new(),
+            };
+            for index in 0..state.placed.len() {
+                let component = board
+                    .component(state.placed[index].id)
+                    .expect("placed id comes from the board");
+                for rotation in [
+                    Rotation::Zero,
+                    Rotation::Ninety,
+                    Rotation::OneEighty,
+                    Rotation::TwoSeventy,
+                ] {
+                    state.placed[index].rotation = rotation;
+                    let expected = sidecar_courtyard_rect(&board, component, &state.placed[index]);
+                    assert_eq!(
+                        state.rect(index),
+                        expected,
+                        "{} {} at {} deg",
+                        relative,
+                        component.refdes,
+                        rotation.degrees()
+                    );
+                }
+            }
+        }
     }
 }
 

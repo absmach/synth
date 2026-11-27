@@ -1115,6 +1115,7 @@ fn load_registry_tiered(
     args: &Value,
     default_registry: Option<&Path>,
 ) -> Result<synth_registry::Registry, synth_registry::LoadError> {
+    synth_layout::kicad_footprint_loader::clear_cache();
     let tier1 = resolve_registry(args, default_registry);
     match resolve_user_registry_opt(args) {
         Some(tier2) if tier2.exists() => {
