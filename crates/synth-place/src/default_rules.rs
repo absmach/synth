@@ -2229,46 +2229,79 @@ fn nearest_wall(rect: Rect, outline: Rect) -> Option<BoardEdge> {
         .map(|(_, edge)| edge)
 }
 
-/// Slide each flush USB connector and its frame to the middle of its wall.
+/// Slide each group of flush USB connectors and their frames so the group's
+/// bounding box sits at the middle of its wall. One connector moves exactly as
+/// the single-connector rule did; a group keeps its spacing.
 fn centre_usb(state: &mut State<'_>) {
-    for index in 0..state.placed.len() {
-        if !is_usb_connector(state.component(index)) {
-            continue;
-        }
-        let Some(side) = wall_of(state.rect(index), state.outline) else {
+    for side in [
+        BoardEdge::Left,
+        BoardEdge::Right,
+        BoardEdge::Top,
+        BoardEdge::Bottom,
+    ] {
+        let usbs: Vec<usize> = (0..state.placed.len())
+            .filter(|&index| {
+                is_usb_connector(state.component(index))
+                    && wall_of(state.rect(index), state.outline) == Some(side)
+            })
+            .collect();
+        let Some(&first) = usbs.first() else {
             continue;
         };
-        let rect = state.rect(index);
+        let mut group = state.rect(first);
+        for &index in &usbs[1..] {
+            let rect = state.rect(index);
+            group = Rect::new(
+                Point::new(
+                    group.min.x_nm.min(rect.min.x_nm),
+                    group.min.y_nm.min(rect.min.y_nm),
+                ),
+                Point::new(
+                    group.max.x_nm.max(rect.max.x_nm),
+                    group.max.y_nm.max(rect.max.y_nm),
+                ),
+            );
+        }
         let outline = state.outline;
-        let (mut dx, mut dy) = match side {
-            BoardEdge::Left | BoardEdge::Right => {
-                let mid = outline.min.y_nm / 2 + outline.max.y_nm / 2;
-                let centre = rect.min.y_nm / 2 + rect.max.y_nm / 2;
-                (0, mid - centre)
-            }
-            BoardEdge::Top | BoardEdge::Bottom => {
-                let mid = outline.min.x_nm / 2 + outline.max.x_nm / 2;
-                let centre = rect.min.x_nm / 2 + rect.max.x_nm / 2;
-                (mid - centre, 0)
-            }
+        let vertical = matches!(side, BoardEdge::Left | BoardEdge::Right);
+        let (mut dx, mut dy) = if vertical {
+            let mid = outline.min.y_nm / 2 + outline.max.y_nm / 2;
+            let centre = group.min.y_nm / 2 + group.max.y_nm / 2;
+            (0, mid - centre)
+        } else {
+            let mid = outline.min.x_nm / 2 + outline.max.x_nm / 2;
+            let centre = group.min.x_nm / 2 + group.max.x_nm / 2;
+            (mid - centre, 0)
         };
         if dx == 0 && dy == 0 {
             continue;
         }
-        // Keep the connector inside the wall it just joined.
-        let (width, height) = (rect.width_nm(), rect.height_nm());
-        let x = (rect.min.x_nm + dx).clamp(
+        // A group longer than its wall cannot be centred without pushing a
+        // connector out, so a blocked group stays where it is.
+        let (width, height) = (group.width_nm(), group.height_nm());
+        let along_wall = if vertical {
+            height > outline.height_nm()
+        } else {
+            width > outline.width_nm()
+        };
+        if usbs.len() > 1 && along_wall {
+            continue;
+        }
+        // Keep the group inside the wall it just joined.
+        let x = (group.min.x_nm + dx).clamp(
             outline.min.x_nm,
             (outline.max.x_nm - width).max(outline.min.x_nm),
         );
-        let y = (rect.min.y_nm + dy).clamp(
+        let y = (group.min.y_nm + dy).clamp(
             outline.min.y_nm,
             (outline.max.y_nm - height).max(outline.min.y_nm),
         );
-        dx = x - rect.min.x_nm;
-        dy = y - rect.min.y_nm;
-        let frame = state.attached_frame(index).unwrap_or_default();
-        state.shift_with_attached(index, dx, dy, &frame);
+        dx = x - group.min.x_nm;
+        dy = y - group.min.y_nm;
+        for &index in &usbs {
+            let frame = state.attached_frame(index).unwrap_or_default();
+            state.shift_with_attached(index, dx, dy, &frame);
+        }
     }
 }
 
@@ -5645,6 +5678,77 @@ mod tests {
             Point::new(mm_to_nm(x0), mm_to_nm(y0)),
             Point::new(mm_to_nm(x1), mm_to_nm(y1)),
         )
+    }
+
+    fn load_usb_group() -> Board {
+        let source = r#"board "usb-group" {
+  layers 2
+  manufacturer "jlcpcb"
+  component J1: connector "usb_c_receptacle"
+  component J2: connector "usb_c_receptacle"
+}
+"#;
+        let file = "usb_group.synth".to_string();
+        let parse = synth_parser::parse(source, file.clone());
+        let ast = parse.ast.as_ref().expect("parse");
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .canonicalize()
+            .expect("workspace");
+        let registry =
+            synth_registry::load_dir(&root.join("registry").join("parts")).expect("registry");
+        let loader = synth_ir::FsImportLoader { root };
+        let resolved = synth_ir::resolve_imports(ast, &loader, &file);
+        synth_ir::lower(&resolved.program, &registry, &file)
+            .board
+            .expect("board")
+    }
+
+    /// Two USB connectors longer than the wall they are flush to. Only an
+    /// already-overflowing placement can be in this state; the rule must not
+    /// move the group further out.
+    #[test]
+    fn a_usb_group_longer_than_its_wall_is_not_moved() {
+        let board = load_usb_group();
+        // Both connectors overhang the right wall by the 0.15 mm flush slack,
+        // so they still count as Right; the pair overhangs the 40 mm wall by
+        // 0.2 mm.
+        let placement = Placement {
+            board_outline: rect(0.0, 0.0, 50.0, 40.0),
+            components: board
+                .components
+                .iter()
+                .enumerate()
+                .map(|(index, component)| ComponentPlacement {
+                    id: component.id,
+                    center: Point::new(
+                        mm_to_nm(44.83),
+                        mm_to_nm(if index == 0 { 4.61 } else { 35.39 }),
+                    ),
+                    rotation: Rotation::Zero,
+                    layer: synth_geometry::Layer::Top,
+                })
+                .collect(),
+        };
+        let before = placement.components.clone();
+        let mut state = compression_state(&board, &placement);
+        assert_eq!(
+            wall_of(state.rect(0), state.outline),
+            Some(BoardEdge::Right)
+        );
+        assert_eq!(
+            wall_of(state.rect(1), state.outline),
+            Some(BoardEdge::Right)
+        );
+        assert!(
+            state.rect(1).max.y_nm - state.rect(0).min.y_nm > state.outline.height_nm(),
+            "the fixture group is not longer than the wall"
+        );
+
+        centre_usb(&mut state);
+
+        assert_eq!(state.placed, before, "an over-long group was moved");
     }
 
     fn load_group_corner_hole() -> Board {
