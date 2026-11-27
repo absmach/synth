@@ -600,6 +600,18 @@ impl RouteReport {
     pub fn failed_stage(&self) -> Option<RouterStage> {
         self.failure.as_ref().map(|f| f.stage)
     }
+
+    /// Whether another net order is worth trying.
+    ///
+    /// The engine must have produced a candidate and the independent checks
+    /// must have rejected it. A run that stopped before a candidate existed —
+    /// a missing engine or unbuilt checkout, a failed pour or fanout
+    /// preflight, a timeout — has the same outcome in every order; retrying it
+    /// only multiplies the wall clock.
+    #[must_use]
+    pub fn retryable(&self) -> bool {
+        self.state == RouteState::ValidationFailed && self.validation.is_some()
+    }
 }
 
 #[cfg(test)]
@@ -890,5 +902,38 @@ mod portfolio_tests {
         // Fewer segments is better, all else equal.
         let leaner = candidate_report(RouteState::Routed, 0, 90);
         assert!(leaner.layout_cost() < routed.layout_cost());
+    }
+
+    #[test]
+    fn a_run_that_never_produced_a_candidate_is_not_retried() {
+        // The pour/fanout preflight and a timeout both fail before any board
+        // exists to judge; another net order cannot change that.
+        let failed = RouteReport::failed(
+            &request(),
+            &None,
+            RouterFailure::for_stage(
+                RouterEngine::KiCadRoutingTools,
+                RouterStage::Route,
+                RouterFailureReason::Rejected,
+                "the plane pour before escaping U1 failed",
+            ),
+        );
+        assert!(!failed.retryable(), "no candidate means nothing to retry");
+
+        // A candidate the independent checks rejected is worth another order.
+        let mut judged = candidate_report(RouteState::ValidationFailed, 1, 10);
+        judged.validation = Some(ValidationSummary {
+            fabrication_ready: false,
+            topology: crate::validate::TopologyReport::default(),
+            connectivity: crate::validate::ConnectivityReport::default(),
+            kicad_drc: None,
+            blocking_reasons: vec!["net +12V is not fully connected".to_string()],
+            unavailable_checks: Vec::new(),
+            advisories: Vec::new(),
+        });
+        assert!(judged.retryable());
+
+        let routed = candidate_report(RouteState::Routed, 0, 10);
+        assert!(!routed.retryable());
     }
 }

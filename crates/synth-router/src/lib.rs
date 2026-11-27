@@ -105,6 +105,7 @@ pub const ROUTE_REPORT_SCHEMA: &str = "synth.routing.v1";
 /// [`RouteRequest::report_path`] before this function returns, so a run
 /// that fails is as auditable as one that succeeds.
 pub fn route(request: &RouteRequest) -> RouteReport {
+    let started = std::time::Instant::now();
     let mut report = route_once(request);
     // Whether the engine puts a via in a pad, or leaves a net open, depends on
     // the order it routes the nets in, and the same board can route cleanly in
@@ -112,7 +113,17 @@ pub fn route(request: &RouteRequest) -> RouteReport {
     // is therefore tried again in the engine's other orders before it is given
     // up on; the first one that validates is kept.
     for ordering in retry_orderings(request) {
-        if report.state != result::RouteState::ValidationFailed {
+        if !report.retryable() {
+            break;
+        }
+        // The wall clock bounds the retry loop, not the whole command: the
+        // first attempt gets the full router budget, each retry gets what is
+        // left, and a retry with less than the minimum run time is not started
+        // (it would only delete the rejected candidate's copper and time out).
+        // The independent DRC has its own budget after routing.
+        let remaining = request.limits.wall_clock.saturating_sub(started.elapsed());
+        if !retry_has_budget(remaining) {
+            info!("the route budget is spent; not retrying with the {ordering} net order");
             break;
         }
         info!(
@@ -124,6 +135,7 @@ pub fn route(request: &RouteRequest) -> RouteReport {
         );
         let mut again = request.clone();
         again.kicad_routing_tools.ordering = Some((*ordering).to_string());
+        again.limits.wall_clock = remaining;
         report = route_once(&again);
     }
     report
@@ -151,6 +163,15 @@ fn ordering_retries() -> usize {
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
         .unwrap_or(ORDERING_RETRIES.len())
+}
+
+/// Whether a retry has enough of the wall clock left to finish.
+///
+/// A run given less than [`crate::search_budget::MIN_RUN_SECS`] cannot finish,
+/// so it is not started: it would only delete the rejected attempt's candidate
+/// and replace its findings with a timeout.
+fn retry_has_budget(remaining: std::time::Duration) -> bool {
+    remaining >= std::time::Duration::from_secs(crate::search_budget::MIN_RUN_SECS)
 }
 
 fn route_once(request: &RouteRequest) -> RouteReport {
@@ -1137,6 +1158,18 @@ mod order_tests {
         request.kicad_routing_tools.ordering = None;
         request.engine = RouterEngine::Freerouting;
         assert!(retry_orderings(&request).is_empty());
+    }
+
+    #[test]
+    fn a_retry_below_the_minimum_run_budget_is_not_started() {
+        use std::time::Duration;
+        assert!(retry_has_budget(Duration::from_secs(
+            crate::search_budget::MIN_RUN_SECS
+        )));
+        assert!(!retry_has_budget(Duration::from_secs(
+            crate::search_budget::MIN_RUN_SECS - 1
+        )));
+        assert!(!retry_has_budget(Duration::ZERO));
     }
 }
 
