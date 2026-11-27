@@ -160,3 +160,49 @@ fn no_two_active_parts_share_a_manufacturer_part_number() {
         "one canonical active id per physical part; mark the others obsolete with a substitute: {duplicates:?}"
     );
 }
+
+/// An obsolete entry is a retired name for a part, not a part to buy: it must
+/// point at an active substitute, so the procurement identity lives on an
+/// entry that is still offered.
+#[test]
+fn every_obsolete_part_names_an_active_substitute() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    for (_, part) in registry.iter() {
+        if part.lifecycle != synth_registry::Lifecycle::Obsolete {
+            continue;
+        }
+        assert!(
+            part.substitutes.iter().any(|id| registry
+                .lookup(id.as_str())
+                .is_some_and(|s| s.lifecycle == synth_registry::Lifecycle::Active)),
+            "obsolete part {} names no active substitute: {:?}",
+            part.id,
+            part.substitutes
+        );
+    }
+}
+
+/// A diode's built-in SPICE model is anchored at `forward_current_ma`. An
+/// anchor above the part's absolute maximum current models it outside its
+/// datasheet envelope, so a quoted forward point must be a current the part
+/// may actually carry.
+#[test]
+fn diode_forward_point_is_within_the_absolute_maximum_current() {
+    let dir = workspace_root().join("registry").join("parts");
+    let registry = synth_registry::load_dir(&dir).expect("seed registry must load without errors");
+    for (_, part) in registry.iter() {
+        let Some(limits) = part.operating_conditions.as_ref() else {
+            continue;
+        };
+        let (Some(forward), Some(maximum)) = (limits.forward_current_ma, limits.max_current_ma)
+        else {
+            continue;
+        };
+        assert!(
+            forward <= maximum,
+            "part {} quotes Vf at {forward} mA, above its {maximum} mA absolute maximum",
+            part.id
+        );
+    }
+}

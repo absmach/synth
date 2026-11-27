@@ -6,6 +6,7 @@ lifecycle = "active"
 signed_by = []
 substitutes = []
 mpn = "BME680"
+lcsc_pn = "C125972"
 kicad_symbol = "Sensor:BME680"
 kicad_footprint = "Package_LGA:Bosch_LGA-8_3x3mm_P0.8mm_ClockwisePinNumbering"
 

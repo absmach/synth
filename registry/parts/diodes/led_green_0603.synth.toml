@@ -1,8 +1,10 @@
 id = "led_green_0603"
 kind = "led"
-description = "Green LED, 0603 package, ~2.2V Vf"
-mpn = "0603-GREEN"
-lcsc_pn = "C72043"
+description = "DEPRECATED, use ltst_c190kgkt, which carries provenance and a reviewer. This entry once named a generic green 0603 LED; it now names the same LTST-C190KGKT, so a board that still uses it builds the same part"
+lifecycle = "obsolete"
+substitutes = ["ltst_c190kgkt"]
+mpn = "LTST-C190KGKT"
+lcsc_pn = "C125094"
 kicad_symbol = "Device:LED"
 kicad_footprint = "LED_SMD:LED_0603_1608Metric"
 
