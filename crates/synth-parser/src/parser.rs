@@ -2300,11 +2300,26 @@ impl Parser {
             match self.peek_kind().clone() {
                 TokenKind::RBrace | TokenKind::Eof => break,
                 TokenKind::Ident(word) if word == "join" => {
+                    let join_span = self.peek().span;
                     self.bump();
                     if let Some(refdes) =
                         self.expect_ident("E-SYNTH-PARSE-048", "expected the join part's refdes")
                     {
-                        join = Some(refdes);
+                        // A domain joins the other grounds at exactly one
+                        // point; a second `join` must not silently replace
+                        // the first.
+                        if let Some(first) = &join {
+                            self.emit(
+                                join_span,
+                                "E-SYNTH-PARSE-048",
+                                "a ground_domain takes one `join`",
+                                "one `join` per ground_domain",
+                                format!("a second `join {refdes}` after `join {first}`"),
+                                None,
+                            );
+                        } else {
+                            join = Some(refdes);
+                        }
                     }
                 }
                 TokenKind::Ident(word) if word == "crossing" => {

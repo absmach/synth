@@ -152,6 +152,34 @@ fn a_join_that_does_not_bridge_two_grounds_is_an_error() {
 }
 
 #[test]
+fn a_capacitor_between_the_grounds_is_not_a_join() {
+    // C1 touches both grounds, but a capacitor is a stitch, not a DC join.
+    let d = run("  ground_domain AGND { join C1 }\n  ground_domain DGND { join C1 }");
+    assert!(
+        d.iter()
+            .any(|d| d.code == "E-SYNTH-POWER-016"
+                && d.title.contains("not a net tie or a 0 ohm link")),
+        "{d:?}"
+    );
+}
+
+#[test]
+fn a_second_join_is_a_parse_error() {
+    let parse = synth_parser::parse(
+        r#"board "t" { layers 2 ground_domain AGND { join R1 join R2 } }"#,
+        "t.synth".to_string(),
+    );
+    assert!(
+        parse
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "E-SYNTH-PARSE-048" && d.title.contains("one `join`")),
+        "{:?}",
+        parse.diagnostics
+    );
+}
+
+#[test]
 fn a_domain_on_a_missing_or_non_ground_net_is_an_error() {
     assert_eq!(
         codes(&run("  ground_domain NOPE { }")),

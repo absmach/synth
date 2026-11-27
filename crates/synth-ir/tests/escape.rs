@@ -223,7 +223,7 @@ fn a_connector_dogbone_escape_round_trips_with_its_layers() {
         r#"board "b" {
     layers 6
     component U1: resistor "r_generic_0603" value "10k" {
-        escape { method connector_dogbone layers "F.Cu", "In2.Cu", "In3.Cu" }
+        escape { method connector_dogbone layers "F.Cu", "In1.Cu" }
     }
 }"#,
     );
@@ -231,7 +231,7 @@ fn a_connector_dogbone_escape_round_trips_with_its_layers() {
     let board = board.expect("a board");
     let intent = component(&board, "U1").escape.as_ref().expect("an escape");
     assert_eq!(intent.method, Some(EscapeMethod::ConnectorDogbone));
-    assert_eq!(intent.layers, vec!["F.Cu", "In2.Cu", "In3.Cu"]);
+    assert_eq!(intent.layers, vec!["F.Cu", "In1.Cu"]);
     assert_eq!(
         EscapeMethod::from_source(EscapeMethod::ConnectorDogbone.as_source()),
         Some(EscapeMethod::ConnectorDogbone)

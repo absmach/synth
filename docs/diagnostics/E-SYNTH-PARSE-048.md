@@ -7,8 +7,9 @@
 
 Inside `ground_domain <net> { … }` the parser accepts two items:
 `join <REFDES>` and `crossing <net> stitch <join | REFDES>`. It found
-something else, or a `crossing` without `stitch`, or no reference designator
-where one was expected.
+something else, a `crossing` without `stitch`, no reference designator where
+one was expected, or a second `join`: a domain joins the other grounds at one
+point, so a later `join` is reported rather than silently replacing the first.
 
 ## Minimal reproduction
 

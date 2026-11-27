@@ -12,7 +12,10 @@ declaration cannot be true of the design:
 - the domain names a net that does not exist, or one with no ground pin and
   no ground name (`gnd`, `vss`, `0v`);
 - its `join` names a part that does not exist, or one that does not have a pin
-  on the domain's net and a pin on another ground;
+  on the domain's net and a pin on another ground, or one that is not a net
+  tie (a `net_tie` part or a KiCad `NetTie` footprint) or a resistor of value
+  `0R`. A capacitor or ferrite that touches both grounds is a stitch or a
+  filter, not the DC join;
 - two or more domains are declared and their joins do not bring them into one
   ground, so one domain floats;
 - a `crossing` names a net that does not exist, or a stitching part that does

@@ -683,7 +683,7 @@ class StagedAdapterTest(unittest.TestCase):
 
         board, _ = connector_board()
         code, stderr, logs, routed = run_staged(
-            ["J1:connector_dogbone:F.Cu,In2.Cu,In3.Cu"],
+            ["J1:connector_dogbone:F.Cu,In1.Cu"],
             extra=("--escape-required", "J1", "--escape-clearance", "0.1"),
             missing=("bga_fanout",), board_text=board,
         )
@@ -691,7 +691,7 @@ class StagedAdapterTest(unittest.TestCase):
         self.assertEqual(logs["fanout"], [])
         self.assertEqual(logs["route"][0].split()[0].rsplit("/", 1)[1],
                          "in.fanned0.kicad_pcb")
-        self.assertEqual(logs["output"].count("(via blind"), 40)
+        self.assertEqual(logs["output"].count("(via micro"), 40)
 
     def test_an_unescapable_dogbone_fails_the_route_with_the_pad(self):
         sys.path.insert(0, str(Path(__file__).parent))
@@ -699,7 +699,7 @@ class StagedAdapterTest(unittest.TestCase):
 
         board, _ = connector_board(row_spacing=1.0)
         code, stderr, logs, routed = run_staged(
-            ["J1:connector_dogbone:F.Cu,In2.Cu"], extra=("--escape-required", "J1"),
+            ["J1:connector_dogbone:F.Cu,In1.Cu"], extra=("--escape-required", "J1"),
             missing=("bga_fanout",), board_text=board,
         )
         self.assertEqual(code, 4, stderr)

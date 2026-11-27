@@ -7,7 +7,8 @@
 //!
 //! - `E-SYNTH-POWER-016` (error): the declaration does not hold together. A
 //!   domain names a net that is missing or is not a ground; its `join` names
-//!   a part that is missing or does not bridge it to another ground; two or
+//!   a part that is missing, does not bridge it to another ground, or is not
+//!   a net tie or 0 ohm link; two or
 //!   more domains are declared and they are not all joined into one ground;
 //!   a `crossing` names a missing net or a stitching part that does not sit
 //!   between the two grounds.
@@ -117,6 +118,29 @@ impl<'a> Checker<'a> {
             .collect()
     }
 
+    /// Whether a part can be the one DC join between two grounds: a net tie
+    /// (a `net_tie` kind or a KiCad `NetTie` footprint) or a 0 ohm resistor.
+    /// A capacitor, ferrite or any other part that happens to touch both
+    /// grounds is a stitch or a filter, not a join.
+    fn is_ground_link(&self, part: ComponentId) -> bool {
+        let Some(component) = self.board.component(part) else {
+            return false;
+        };
+        let net_tie = component.kind == "net_tie"
+            || component
+                .part
+                .as_ref()
+                .and_then(|p| p.kicad_footprint.as_deref())
+                .is_some_and(|footprint| footprint.to_ascii_lowercase().contains("nettie"));
+        let zero_ohm = component.kind == "resistor"
+            && component
+                .value
+                .as_deref()
+                .and_then(|value| crate::value::parse_resistance(&value.replace(' ', "")))
+                .is_some_and(|ohms| ohms.abs() < 1e-9);
+        net_tie || zero_ohm
+    }
+
     fn net_name(&self, id: NetId) -> String {
         self.board
             .net(id)
@@ -211,6 +235,26 @@ impl<'a> Checker<'a> {
                     ),
                     domain.source_span,
                     "one pin on the domain's net and one on another ground",
+                );
+                continue;
+            }
+            if !self.is_ground_link(part) {
+                self.report(
+                    DECLARATION_CODE,
+                    Severity::Error,
+                    "ground_domain join is not a net tie or a 0 ohm link",
+                    format!(
+                        "`{refdes}` is a {}{}",
+                        self.board
+                            .component(part)
+                            .map_or("part", |c| c.kind.as_str()),
+                        self.board
+                            .component(part)
+                            .and_then(|c| c.value.as_deref())
+                            .map_or_else(String::new, |value| format!(" of value `{value}`"))
+                    ),
+                    domain.source_span,
+                    "a net tie (a `NetTie` footprint) or a resistor of value `0R`",
                 );
                 continue;
             }
