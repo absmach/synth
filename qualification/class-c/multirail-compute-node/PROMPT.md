@@ -1,0 +1,3 @@
+# Prompt
+
+Using synth mcp server design a four-layer multi-rail compute node for JLCPCB, about 85 x 63 mm. Accept 5 V to 12 V DC or USB-C VBUS, each protected by a resettable fuse and a TVS diode with Schottky reverse blocking. Make 3.6 V with an LMR33640 buck converter and 3.3 V with an LP5907 LDO, then use a TPS22918 load switch to sequence an AP2112K 1.8 V LDO and a TLV70012 1.2 V LDO. Use an STM32F103C8 with an 8 MHz crystal, USB data, a W25Q128 SPI flash, an SWD header and a reset button, with ESD protection on the USB lines. Add status LEDs, an expansion header, rail test points on the bottom side, fiducials, two M2.5 mounting holes in opposite corners and a keepout around the buck. Group the schematic by function and keep the design notes explicit.
