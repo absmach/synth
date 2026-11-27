@@ -299,11 +299,11 @@ fn largest_empty_rect(hull: Rect, boxes: &[Rect], inflate: i64) -> (i64, Rect) {
 struct State<'a> {
     board: &'a Board,
     placed: Vec<ComponentPlacement>,
-    /// `(centre offset, size)` of each placed part's courtyard, in `placed`
-    /// order, as `pcb_courtyard_geometry_for_part` returns them. Read once when
+    /// Courtyard size of each placed part, in `placed` order. Read once when
     /// the state is built: `rect` only rotates and translates the size, so a
-    /// relax pass never opens a footprint file.
-    geometry: Vec<((f64, f64), (f64, f64))>,
+    /// relax pass never opens a footprint file. The courtyard centre offset is
+    /// deliberately not kept or applied, as `sidecar_courtyard_rect` never did.
+    geometry: Vec<(f64, f64)>,
     /// Parts a hint pins or names; no rule moves them.
     pinned: Vec<bool>,
     /// `pinned` plus parts a rule has fixed; the push-apart never moves them.
@@ -2470,11 +2470,8 @@ impl Frame {
     }
 }
 
-/// Courtyard geometry of every placed part, in `placed` order.
-fn courtyard_geometries(
-    board: &Board,
-    placed: &[ComponentPlacement],
-) -> Vec<((f64, f64), (f64, f64))> {
+/// Courtyard size of every placed part, in `placed` order.
+fn courtyard_geometries(board: &Board, placed: &[ComponentPlacement]) -> Vec<(f64, f64)> {
     placed
         .iter()
         .map(|placed| {
@@ -2482,8 +2479,8 @@ fn courtyard_geometries(
                 .component(placed.id)
                 .expect("placement ids come from the board");
             component.part.as_ref().map_or_else(
-                || ((0.0, 0.0), crate::fallback_courtyard(&component.kind)),
-                synth_layout::pcb_courtyard_geometry_for_part,
+                || crate::fallback_courtyard(&component.kind),
+                |part| synth_layout::pcb_courtyard_geometry_for_part(part).1,
             )
         })
         .collect()
@@ -2513,7 +2510,7 @@ impl State<'_> {
     }
 
     fn rect(&self, index: usize) -> Rect {
-        crate::rotated_courtyard_rect(&self.placed[index], self.geometry[index].1)
+        crate::rotated_courtyard_rect(&self.placed[index], self.geometry[index])
     }
 
     fn overlaps(&self) -> usize {
