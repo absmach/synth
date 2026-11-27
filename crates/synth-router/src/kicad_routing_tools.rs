@@ -383,7 +383,7 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     check_baseline(request)?;
     let argv = build_command(request, &python, &helper, &repo);
     let start = std::time::Instant::now();
-    let invocation = crate::process::run(
+    let invocation = crate::process::run_in_process_group(
         &python,
         &argv,
         request.limits.wall_clock,
@@ -407,7 +407,16 @@ pub fn route(request: &RouteRequest) -> Result<Candidate, RouterFailure> {
     if let Some(parent) = log_path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let _ = std::fs::write(&log_path, invocation.combined_output());
+    // Append, not replace: a retry writes the same path, and a run killed
+    // before it printed anything must not erase the attempt before it.
+    if let Ok(mut log) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write as _;
+        let _ = log.write_all(invocation.combined_output().as_bytes());
+    }
 
     let report = read_report(&request.krt_stats_path());
     let mut settings = BTreeMap::new();
@@ -1277,5 +1286,43 @@ mod tests {
         assert!(statistics.engine_findings.is_empty());
         assert_eq!(statistics.open_nets, 0);
         assert_eq!(statistics.open_net_names.len(), 0);
+    }
+
+    /// Each attempt runs in the same output directory, so the session log it
+    /// writes must not erase the attempt before it.
+    #[cfg(unix)]
+    #[test]
+    fn each_route_attempt_appends_to_the_session_log() {
+        let (mut request, dir) = with_baseline(&grid_pads(1, 2, 2.54));
+        let repo = dir.join("krt");
+        std::fs::create_dir_all(repo.join("py_router")).expect("fake checkout");
+        std::fs::write(repo.join("py_router/route.py"), "").expect("entrypoint");
+        let python = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/stub-python.sh");
+        request.tools = crate::tools::ToolPaths {
+            krt_repo: Some(repo),
+            krt_python: Some(python),
+            ..crate::tools::ToolPaths::default()
+        };
+        request.limits.wall_clock = std::time::Duration::from_secs(5);
+        let mode = dir.join("stub-mode");
+
+        std::fs::write(&mode, "first").expect("first mode");
+        let _ = route(&request);
+
+        std::fs::write(&mode, "second").expect("second mode");
+        request.limits.wall_clock = std::time::Duration::from_millis(300);
+        let _ = route(&request);
+
+        let log_path = request.session_log_path();
+        let after_second = std::fs::read_to_string(&log_path).expect("session log after two runs");
+        assert!(after_second.contains("first run output"), "{after_second}");
+        assert!(after_second.contains("second run output"), "{after_second}");
+
+        std::fs::write(&mode, "silent").expect("silent mode");
+        let _ = route(&request);
+        let after_kill = std::fs::read_to_string(&log_path).expect("session log after the kill");
+        assert!(after_kill.contains("first run output"), "{after_kill}");
+        assert!(after_kill.contains("second run output"), "{after_kill}");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
