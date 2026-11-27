@@ -6019,20 +6019,27 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
         }
         let label = pick_net_label(board, net).unwrap_or_else(|| format!("NET_{}", net.id.0));
         // A label whose text only repeats the pin name beside it is visual
-        // noise. When another endpoint spells the net out, leave the
-        // self-named pins unlabelled and flag that endpoint instead. A net
-        // whose every pin is self-named keeps a label on each pin: those
-        // labels are the only thing naming the copper, and `wired_subnets`
-        // draws no wires for such a net, so reducing them to one flag leaves
-        // KiCad reporting the other pins unconnected. The comparison is
-        // deliberately exact: a lowercase pin name is not the same token as
-        // the uppercased label, and suppressing it leaves the pin unwired.
+        // noise. When exactly one other endpoint spells the net out, leave
+        // the self-named pins unlabelled and flag that endpoint alone:
+        // `wired_subnets` then wires the net, because one flag is what makes
+        // a region a wired piece. With two or more such endpoints the net
+        // stays label-only, so a self-named pin must keep its label or it is
+        // left with neither label nor wire and KiCad reports it unconnected.
+        // For the same reason a net whose every pin is self-named keeps a
+        // label on each pin. The comparison is deliberately exact: a
+        // lowercase pin name is not the same token as the uppercased label,
+        // and suppressing it leaves the pin unwired.
         let spells_net = |endpoint: &synth_ir::NetEndpoint| {
             board
                 .pin(endpoint.component, endpoint.pin)
                 .is_some_and(|pin| pin.name == label)
         };
-        let has_other_name = net.endpoints.iter().any(|endpoint| !spells_net(endpoint));
+        let one_other_name = net
+            .endpoints
+            .iter()
+            .filter(|endpoint| !spells_net(endpoint))
+            .count()
+            == 1;
         // A net that leaves its region is wired inside each region it touches
         // (see [`wired_subnets`]) and flagged once there, where it leaves.
         // The self-name suppression below only applies to a net contained in
@@ -6045,7 +6052,7 @@ fn classify_net_labels(board: &Board, layout: &Layout) -> Vec<NetLabel> {
                     continue;
                 }
                 flagged_regions.push(region);
-            } else if has_other_name && spells_net(ep) {
+            } else if one_other_name && spells_net(ep) {
                 continue;
             }
             labels.push(NetLabel {
@@ -9698,6 +9705,10 @@ mod documentation_tests {
             vec![ComponentId(1)],
             "label the pin that spells the net out"
         );
+        assert!(
+            wired_subnets(&b, &layout).iter().any(|net| net.id == NetId(0)),
+            "one flag makes the net a wired piece, so the unlabelled pins stay connected"
+        );
     }
 
     #[test]
@@ -9723,6 +9734,39 @@ mod documentation_tests {
             labels,
             vec![ComponentId(0), ComponentId(1), ComponentId(2)],
             "no endpoint spells the net out, so every self-name label stays"
+        );
+    }
+
+    #[test]
+    fn self_named_pins_keep_their_labels_beside_two_other_names() {
+        // Two endpoints spell the net out, so it is not wired: suppressing
+        // the self-named labels would leave R1 and R4 unconnected.
+        let part = |name: &str| part("resistor", vec![pin(name), pin("p2")]);
+        let b = board_with_notes(
+            vec![
+                component(0, "R1", part("USB_DP"), None),
+                component(1, "R2", part("D+"), None),
+                component(2, "R3", part("PA11"), None),
+                component(3, "R4", part("USB_DP"), None),
+            ],
+            vec![net(0, "USB_DP", &[(0, 0), (1, 0), (2, 0), (3, 0)])],
+            vec![],
+        );
+        let layout = layout(&b);
+        let labels: Vec<ComponentId> = layout
+            .net_labels
+            .iter()
+            .filter(|label| label.net == NetId(0))
+            .map(|label| label.component)
+            .collect();
+        assert_eq!(
+            labels,
+            vec![ComponentId(0), ComponentId(1), ComponentId(2), ComponentId(3)],
+            "a label-only net keeps every label"
+        );
+        assert!(
+            wired_subnets(&b, &layout).iter().all(|net| net.id != NetId(0)),
+            "the net is not wired, so the labels are its only connection"
         );
     }
 
