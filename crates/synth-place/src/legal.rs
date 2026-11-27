@@ -219,7 +219,16 @@ pub fn place_legal(board: &Board, options: &LegalOptions) -> Result<LegalPlaceme
     };
     rung_trace("production", None, None, production_start.elapsed());
 
+    let largest_part = largest_courtyard_mm(board);
     for (width, height) in fixed_canvases(board, &needed, options.grow_canvas) {
+        // A canvas that cannot hold the largest part in either rotation is not
+        // a placement problem the solver can answer: `cem_region_assign`
+        // clamps into an empty range and panics. Skip it, so the ladder ends
+        // in a clean E-SYNTH-PLACE-002. It is still listed as ruled out.
+        if !canvas_holds(width, height, largest_part) {
+            canvases.push((width, height));
+            continue;
+        }
         for level in [
             HintLevel::AsWritten,
             HintLevel::Soft,
@@ -285,6 +294,29 @@ fn rung_trace(stage: &str, level: Option<&str>, attempt: Option<usize>, elapsed:
     }
 }
 
+/// The long and short side of the largest part courtyard, millimetres.
+fn largest_courtyard_mm(board: &Board) -> (f64, f64) {
+    board
+        .components
+        .iter()
+        .map(|component| {
+            let (w_mm, h_mm) = component.part.as_ref().map_or_else(
+                || crate::fallback_courtyard(&component.kind),
+                synth_layout::pcb_courtyard_for_part,
+            );
+            (w_mm.max(h_mm), w_mm.min(h_mm))
+        })
+        .fold((0.0, 0.0), |(long, short): (f64, f64), (l, s)| {
+            (long.max(l), short.max(s))
+        })
+}
+
+/// Whether a `width` x `height` canvas can hold a part of `(long, short)`
+/// sides in some rotation.
+fn canvas_holds(width: f64, height: f64, (long, short): (f64, f64)) -> bool {
+    width.max(height) >= long && width.min(height) >= short
+}
+
 /// The fixed canvases the ladder tries, in order, deduplicated.
 fn fixed_canvases(board: &Board, needed: &(f64, f64), grow_canvas: bool) -> Vec<(f64, f64)> {
     let declared = board
@@ -305,12 +337,15 @@ fn fixed_canvases(board: &Board, needed: &(f64, f64), grow_canvas: bool) -> Vec<
         }
     };
     push(base);
-    // A declared outline smaller than the estimate gets the estimate as its
-    // first grown rung; a declared outline that is already larger keeps it.
-    if needed.0 > base.0 || needed.1 > base.1 {
-        push(*needed);
-    }
+    // The estimate and the growth steps are grown canvases. A declared
+    // outline is authoritative (ADR 0001), so without `grow_canvas` it is the
+    // only canvas the ladder tries.
     if grow_canvas {
+        // A declared outline smaller than the estimate gets the estimate as
+        // its first grown rung; one that is already larger keeps it.
+        if needed.0 > base.0 || needed.1 > base.1 {
+            push(*needed);
+        }
         for factor in &CANVAS_GROWTH[1..] {
             push((
                 (base.0 * factor).min(MAX_CANVAS_SIDE_MM),
@@ -530,6 +565,36 @@ mod tests {
             failure.needed.0 > 0.0 && failure.needed.1 > 0.0,
             "{failure:?}"
         );
+    }
+
+    #[test]
+    fn a_declared_outline_is_never_grown_without_grow_canvas() {
+        let board = board();
+        assert_eq!(
+            fixed_canvases(&board, &(60.0, 90.0), false),
+            vec![(40.0, 70.0)],
+            "the estimate is a grown canvas and must not be tried"
+        );
+        let grown = fixed_canvases(&board, &(60.0, 90.0), true);
+        assert_eq!(grown[0], (40.0, 70.0));
+        assert!(grown.contains(&(60.0, 90.0)), "{grown:?}");
+    }
+
+    #[test]
+    fn a_declared_outline_smaller_than_a_part_ends_in_a_clean_failure() {
+        let board = crate::tests::board_from_source(
+            &TIGHT.replace("outline 40mm x 70mm", "outline 10mm x 10mm"),
+            "tiny.synth",
+        );
+        for grow_canvas in [false, true] {
+            let options = LegalOptions {
+                grow_canvas,
+                ..LegalOptions::default()
+            };
+            // Must return, not panic in the solver's clamp.
+            let failure = place_legal(&board, &options).expect_err("no canvas holds the parts");
+            assert!(!failure.refdes.is_empty(), "{failure:?}");
+        }
     }
 
     #[test]
