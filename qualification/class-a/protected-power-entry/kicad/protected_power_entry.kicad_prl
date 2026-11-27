@@ -63,7 +63,7 @@
     "ssh_key": ""
   },
   "meta": {
-    "filename": "usb_uart.kicad_prl",
+    "filename": "protected_power_entry.kicad_prl",
     "version": 5
   },
   "net_inspector_panel": {

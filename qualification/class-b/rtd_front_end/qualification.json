@@ -1,0 +1,22 @@
+{
+  "qualified": false,
+  "meaning": "reports/release.json production_status and release_ready only say the route passed Synth's router and DRC gates. They are not review sign-off.",
+  "gates": {
+    "routing_and_drc": {
+      "passed": false,
+      "evidence": "DRC: 0 unconnected pads (all 7 nets connected). 4 DRC violations: 3 silk_overlap + 1 silk_over_copper (all silkscreen warnings, no electrical errors)."
+    },
+    "erc_dispositioned": {
+      "passed": true,
+      "evidence": "0 ERC errors, 4 warnings (supply identity, decoupling separation, junction fan-out). All non-blocking."
+    },
+    "analog_review": {
+      "passed": false,
+      "evidence": "LM358 non-inverting gain stage (gain=5x), RC low-pass filter (fc~160Hz). No independent analog expert review."
+    },
+    "class_b_scope": {
+      "passed": false,
+      "evidence": "Parent Class-B requirement calls for ADS124S08, REF5025, RP2350, 4-wire RTD, AGND/DGND single-point tie. These parts are not in the Synth registry. Current implementation is a simplified 2-layer board."
+    }
+  }
+}
