@@ -2907,10 +2907,11 @@ fn build_footprint_instance(
         hidden: ref_hidden,
     } = ref_label;
     // The placer works in the footprint's unflipped local frame. A
-    // top-bottom flip negates local y and the text angle, and KiCad marks
-    // back-side text as mirrored so it reads correctly from the bottom.
+    // top-bottom flip negates local y; text also takes a half turn on top of
+    // the angle reflection, and KiCad marks back-side text as mirrored so it
+    // reads correctly from the bottom.
     let (ref_y, ref_angle) = if bottom {
-        (mirrored(ref_local_y), mirrored(ref_text_angle))
+        (mirrored(ref_local_y), mirrored_text_angle(ref_text_angle))
     } else {
         (ref_local_y, ref_text_angle)
     };
@@ -2929,7 +2930,7 @@ fn build_footprint_instance(
         Rotation::TwoSeventy => (-(half_w + text_margin), 0.0, 90.0),
     };
     let (val_y, val_angle) = if bottom {
-        (mirrored(val_local_y), mirrored(val_text_angle))
+        (mirrored(val_local_y), mirrored_text_angle(val_text_angle))
     } else {
         (val_local_y, val_text_angle)
     };
@@ -3591,6 +3592,14 @@ fn mirrored(value: f64) -> f64 {
     if value == 0.0 { 0.0 } else { -value }
 }
 
+/// Text angle after KiCad's top-bottom flip: reflect across the X axis and
+/// add a half turn so the label reads from the back of the board. Pads only
+/// need the reflection below; a text turned by `-angle` alone would end up
+/// upside down on B.SilkS/B.Fab.
+fn mirrored_text_angle(angle_deg: f64) -> f64 {
+    (180.0 + mirrored(angle_deg)).rem_euclid(360.0)
+}
+
 /// `(at x y)` arguments for a pad, with the angle added when it is not zero.
 fn pad_at_args(center_mm: (f64, f64), angle_deg: f64) -> Vec<Sexp> {
     let mut args = vec![num(center_mm.0), num(center_mm.1)];
@@ -3612,10 +3621,29 @@ fn mirror_number(value: f64) -> String {
 /// KiCad's `FOOTPRINT::Flip(TOP_BOTTOM)` mirrors geometry across the X axis
 /// (local y is negated), negates the footprint's orientation, and moves the
 /// layers to the back. The stored `(at x y [angle])` is footprint-local, so
-/// this negates y and the angle; the caller negates the instance orientation
-/// and subtracts it from each pad. Negating x instead would only be correct
-/// at ±90°, and would put asymmetric packages 180° out of place at 0°/180°.
+/// this negates y; the caller negates the instance orientation and subtracts
+/// it from each pad. Pads need a plain angle reflection (`-angle`), while
+/// text takes a half turn as well (`180 - angle`) so it still reads from the
+/// back. Negating x instead would only be correct at ±90°, and would put
+/// asymmetric packages 180° out of place at 0°/180°.
+///
+/// `(model …)` offset and rotation are deliberately left alone: KiCad keeps
+/// those values in the file on a top-bottom flip and applies the flip at
+/// render time from the footprint's B.Cu side. Mirroring them here would
+/// double-transform the STEP body.
 fn flip_footprint_body(body: &str) -> String {
+    // An `(at …)` can belong to a pad or to a text item; they use different
+    // angle transforms, so record which byte ranges are pads first.
+    let mut pad_ranges = Vec::new();
+    let mut scan = 0;
+    while let Some(rel) = body[scan..].find("(pad ") {
+        let pad_start = scan + rel;
+        let Some(pad_end) = balanced_close(body, pad_start) else {
+            break;
+        };
+        pad_ranges.push((pad_start, pad_end));
+        scan = pad_end;
+    }
     let mut out = String::with_capacity(body.len() + 128);
     let mut pos = 0;
     while let Some(idx) = body[pos..].find("(at ") {
@@ -3635,10 +3663,21 @@ fn flip_footprint_body(body: &str) -> String {
             if let Ok(y) = words[1].parse::<f64>() {
                 words[1] = mirror_number(y);
             }
+            let is_pad = pad_ranges
+                .iter()
+                .any(|(pad_start, pad_end)| *pad_start <= start && start < *pad_end);
             if words.len() >= 3
                 && let Ok(angle) = words[2].parse::<f64>()
             {
-                words[2] = mirror_number(angle);
+                words[2] = if is_pad {
+                    mirror_number(angle)
+                } else {
+                    format_angle(mirrored_text_angle(angle))
+                };
+            } else if !is_pad {
+                // KiCad writes the half turn even when the source text had no
+                // explicit angle (a missing angle means 0 on load).
+                words.push("180".to_string());
             }
             out.push_str("(at ");
             out.push_str(&words.join(" "));
@@ -3706,8 +3745,8 @@ fn negate_y_in_lists(body: &str, heads: &[&str]) -> String {
     out
 }
 
-/// Mark every text item in a flipped library body as mirrored, the way
-/// KiCad writes back-side text. The body is kept as raw text, so the flag
+/// Toggle the mirror flag on every text item in a flipped library body, the
+/// way KiCad writes back-side text. The body is kept as raw text, so the flag
 /// is spliced into each `(effects …)` instead of re-serialising the library.
 fn mirror_text_items(body: &str) -> String {
     let mut out = String::with_capacity(body.len() + 128);
@@ -3755,11 +3794,28 @@ fn mirror_text_item(item: &str) -> String {
     let effects = &item[effects_rel..effects_end];
     let mirrored = if let Some(justify_rel) = effects.find("(justify") {
         match balanced_close(effects, justify_rel) {
-            Some(justify_end) if !effects[justify_rel..justify_end].contains("mirror") => {
-                let close = justify_end - 1;
-                format!("{} mirror{})", &effects[..close], &effects[close..])
+            Some(justify_end) => {
+                let block = &effects[justify_rel..justify_end];
+                if block.contains("mirror") {
+                    // KiCad toggles the flag; a library text already drawn
+                    // from the back becomes readable from the front.
+                    let toggled = block.replace(" mirror", "").replace("mirror ", "");
+                    if toggled == "(justify)" {
+                        format!("{}{}", &effects[..justify_rel], &effects[justify_end..])
+                    } else {
+                        format!(
+                            "{}{}{}",
+                            &effects[..justify_rel],
+                            toggled,
+                            &effects[justify_end..]
+                        )
+                    }
+                } else {
+                    let close = justify_end - 1;
+                    format!("{} mirror{})", &effects[..close], &effects[close..])
+                }
             }
-            _ => effects.to_string(),
+            None => effects.to_string(),
         }
     } else {
         let close = effects.len() - 1;
@@ -4495,6 +4551,68 @@ mod tests {
         );
     }
 
+    /// Numeric `(at x y [angle])` triples from a rendered fragment.
+    fn at_values(text: &str) -> Vec<(f64, f64, f64)> {
+        let mut values = Vec::new();
+        let mut pos = 0;
+        while let Some(rel) = text[pos..].find("(at ") {
+            let start = pos + rel;
+            let Some(end) = balanced_close(text, start) else {
+                break;
+            };
+            let args = &text[start + "(at ".len()..end - 1];
+            let nums: Vec<f64> = args
+                .split_whitespace()
+                .filter_map(|word| word.parse().ok())
+                .collect();
+            if nums.len() >= 3 {
+                values.push((nums[0], nums[1], nums[2]));
+            }
+            pos = end;
+        }
+        values
+    }
+
+    fn property_at_values(instance: &Sexp, name: &str) -> Vec<(f64, f64, f64)> {
+        let Sexp::List { children, .. } = instance else {
+            return Vec::new();
+        };
+        children
+            .iter()
+            .filter_map(|child| {
+                let Sexp::List { head, children } = child else {
+                    return None;
+                };
+                if head != "property"
+                    || !children
+                        .first()
+                        .and_then(|value| match value {
+                            Sexp::Str(value) => Some(value == name),
+                            _ => None,
+                        })
+                        .unwrap_or(false)
+                {
+                    return None;
+                }
+                let Sexp::List { children: at, .. } = children
+                    .iter()
+                    .find(|item| matches!(item, Sexp::List { head, .. } if head == "at"))?
+                else {
+                    return None;
+                };
+                let nums: Vec<f64> = at
+                    .iter()
+                    .filter_map(|value| match value {
+                        Sexp::Atom(value) => value.parse().ok(),
+                        _ => None,
+                    })
+                    .collect();
+                nums.get(..3)
+                    .map(|values| (values[0], values[1], values[2]))
+            })
+            .collect()
+    }
+
     fn bottom_instance(rotation: Rotation) -> Sexp {
         let part = no_footprint_part();
         let component = synth_ir::Component {
@@ -4593,7 +4711,7 @@ mod tests {
             (property ki_fp_filters "R_*")
         "#;
         let flipped = flip_footprint_body(body);
-        assert!(flipped.contains("(at -1.27 2.77 0)"), "{flipped}");
+        assert!(flipped.contains("(at -1.27 2.77 180)"), "{flipped}");
         assert!(flipped.contains("(at -0.8 -1.2 -30)"), "{flipped}");
         assert!(flipped.contains("(start 1 -2)"), "{flipped}");
         assert!(flipped.contains("(end 3 -4)"), "{flipped}");
@@ -4606,7 +4724,7 @@ mod tests {
             "both text items must be mirrored: {flipped}"
         );
         assert!(flipped.contains("(justify left mirror)"), "{flipped}");
-        assert!(flipped.contains("(at 1 -2 0)"), "{flipped}");
+        assert!(flipped.contains("(at 1 -2 180)"), "{flipped}");
         assert!(
             flipped.contains("(property ki_fp_filters \"R_*\")"),
             "metadata properties are not text: {flipped}"
@@ -4640,6 +4758,80 @@ mod tests {
         let absolute = |local: (f64, f64)| (origin.0 + local.1, origin.1 - local.0);
         assert_point(absolute((pads[0].0, pads[0].1)), (8.0, 18.5));
         assert_point(absolute((pads[1].0, pads[1].1)), (11.0, 23.0));
+    }
+
+    /// KiCad's top-bottom flip reflects a text angle and adds a half turn so
+    /// the label reads from the back; a pad only gets the reflection. Assert
+    /// the numbers, not just the presence of a `mirror` flag.
+    #[test]
+    fn a_bottom_text_takes_a_half_turn_more_than_a_pad() {
+        let body = r#"
+            (property "Reference" "REF**" (at -1.27 -2.77 0)
+                (layer "F.SilkS") (effects (font (size 1 1))))
+            (fp_text user "+" (at 1 2 30) (layer "F.SilkS")
+                (effects (font (size 1 1)) (justify left)))
+            (pad "1" smd rect (at 2 3 30) (size 1 1) (layers "F.Cu"))
+        "#;
+        let flipped = flip_footprint_body(body);
+        let at = at_values(&flipped);
+        assert_eq!(at.len(), 3, "{flipped}");
+        assert_point((at[0].0, at[0].1), (-1.27, 2.77));
+        assert!((at[0].2 - 180.0).abs() < 1e-6, "{at:?}");
+        assert_point((at[1].0, at[1].1), (1.0, -2.0));
+        assert!((at[1].2 - 150.0).abs() < 1e-6, "{at:?}");
+        // Pads stay on the plain reflection.
+        assert_point((at[2].0, at[2].1), (2.0, -3.0));
+        assert!((at[2].2 + 30.0).abs() < 1e-6, "{at:?}");
+    }
+
+    #[test]
+    fn flipping_a_body_toggles_an_existing_text_mirror_flag() {
+        let body = r#"
+            (fp_text user "+" (at 0 1 45) (layer "F.SilkS")
+                (effects (font (size 1 1)) (justify mirror)))
+        "#;
+        let flipped = flip_footprint_body(body);
+        assert!(
+            !flipped.contains("mirror"),
+            "KiCad toggles the flag on flip: {flipped}"
+        );
+    }
+
+    /// KiCad keeps a model's offset and rotation in the file on a top-bottom
+    /// flip and applies the mirror at render time from the footprint's B.Cu
+    /// side. Synth must not double-transform the STEP body.
+    #[test]
+    fn flipping_a_body_keeps_the_3d_model_transform() {
+        let body = r#"
+            (pad "1" smd rect (at 1 2 30) (size 1 1) (layers "F.Cu"))
+            (model "${KICAD10_3DMODEL_DIR}/x.3dshapes/x.step"
+                (at (xyz 1 2 3))
+                (scale (xyz 1 1 1))
+                (rotate (xyz 10 20 30))
+            )
+        "#;
+        let flipped = flip_footprint_body(body);
+        assert!(
+            flipped.contains("(at (xyz 1 2 3))"),
+            "model offset must stay as KiCad writes it: {flipped}"
+        );
+        assert!(
+            flipped.contains("(rotate (xyz 10 20 30))"),
+            "model rotation must stay as KiCad writes it: {flipped}"
+        );
+    }
+
+    #[test]
+    fn a_bottom_instance_turns_its_reference_and_value_text() {
+        let instance = bottom_instance(Rotation::Ninety);
+        let reference = property_at_values(&instance, "Reference");
+        assert_eq!(reference.len(), 1, "{instance:?}");
+        assert_point((reference[0].0, reference[0].1), (0.0, 4.5));
+        assert!((reference[0].2 - 180.0).abs() < 1e-6, "{reference:?}");
+        let value = property_at_values(&instance, "Value");
+        assert_eq!(value.len(), 1, "{instance:?}");
+        // The value text's unflipped angle at +90° is -90°; the flip makes 270°.
+        assert!((value[0].2 - 270.0).abs() < 1e-6, "{value:?}");
     }
 
     #[test]
@@ -5423,11 +5615,14 @@ mod tests {
         }
     }
 
-    /// Verify the flipped geometry with KiCad itself: load and re-save the
-    /// board, then render its back copper. If the mirror axis or pad angle
-    /// sign were wrong, KiCad's save would normalise them differently.
+    /// Check that KiCad accepts the bottom footprint and renders its back
+    /// copper. The re-save comparison only proves round-trip stability:
+    /// KiCad writes pad coordinates and angles back unchanged, so it cannot
+    /// catch a wrong mirror axis or angle sign. Those are asserted numerically
+    /// in `a_bottom_pad_lands_at_the_kicad_flip_position_and_angle` and
+    /// `a_bottom_text_takes_a_half_turn_more_than_a_pad`.
     #[test]
-    fn a_bottom_footprint_is_resaved_and_rendered_by_kicad() {
+    fn a_bottom_footprint_board_loads_and_renders_in_kicad() {
         let mut part = no_footprint_part();
         let mut pins = part.pins.clone();
         for (index, name) in ["3", "4"].iter().enumerate() {
@@ -5543,6 +5738,8 @@ mod tests {
             String::from_utf8_lossy(&upgrade.stderr)
         );
         let saved = saved.expect("KiCad re-saved the board");
+        // KiCad round-trips stored pad geometry unchanged; this is a
+        // stability check, not a verification of the flip transform.
         let after = pad_at_values(&saved);
         assert_eq!(after.len(), before.len(), "{saved}");
         let angle_close =
