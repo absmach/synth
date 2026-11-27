@@ -366,6 +366,46 @@ pub const KRT_REQUIRED_CAPABILITIES: &[&str] = &[
     "check_connected.py",
 ];
 
+/// The compiled module KRT's Python chain imports. It is built from
+/// `rust_router/` and is not in the checkout until `build_router.py` runs.
+pub const KRT_ROUTER_MODULE: &str = "grid_router";
+
+/// KRT's build entry point for [`KRT_ROUTER_MODULE`].
+pub const KRT_BUILD_SCRIPT: &str = "build_router.py";
+
+/// Assert that the checkout's Rust router can actually be imported.
+///
+/// A checkout can pass the manifest check — every script and flag is there —
+/// and still have no `grid_router`: the module is compiled from
+/// `rust_router/` into the checkout, and a fresh clone or a checkout of a
+/// pinned tag does not carry it. Every pour and fanout step then exits at
+/// startup with `No module named 'grid_router'`, which reads as a failed pour
+/// on this board and does not improve in another net order. Checking the
+/// import here turns that into one capability failure naming the build step.
+fn verify_krt_router_module(repo: &Path, python: &Path) -> Result<(), String> {
+    let rust_router = repo.join("rust_router");
+    // The path travels as an argv entry, not as Python source, so a checkout
+    // path with a quote or backslash cannot change the program being run.
+    let script = format!("import sys; sys.path.insert(0, sys.argv[1]); import {KRT_ROUTER_MODULE}");
+    let argv = vec!["-c".to_string(), script, rust_router.display().to_string()];
+    let invocation = crate::process::run(python, &argv, PROBE_BUDGET, 8192)
+        .map_err(|error| format!("could not run {}: {}", python.display(), error.detail))?;
+    if invocation.succeeded() {
+        return Ok(());
+    }
+    let detail = invocation.combined_output().trim().to_string();
+    Err(format!(
+        "the KiCadRoutingTools Rust router is not built for this checkout \
+         ({KRT_ROUTER_MODULE} could not be imported{}); run `python {KRT_BUILD_SCRIPT}` in {}",
+        if detail.is_empty() {
+            String::new()
+        } else {
+            format!(": {detail}")
+        },
+        repo.display()
+    ))
+}
+
 /// Assert that a checkout provides every module and flag Synth drives.
 ///
 /// The check is run with the same interpreter the route will use, so a
@@ -455,6 +495,17 @@ fn krt_capability(request: &RouteRequest) -> RouterCapability {
         return RouterCapability::unavailable(
             RouterEngine::KiCadRoutingTools,
             RouterFailureReason::CheckoutMissing,
+            detail,
+        );
+    }
+
+    // The manifest lists scripts; it cannot prove the compiled Rust router
+    // the pour and fanout steps import is present. A checkout without it
+    // fails every stage at startup, which reads as a board failure.
+    if let Err(detail) = verify_krt_router_module(&repo, &python) {
+        return RouterCapability::unavailable(
+            RouterEngine::KiCadRoutingTools,
+            RouterFailureReason::NotInstalled,
             detail,
         );
     }
@@ -800,6 +851,42 @@ mod tests {
         std::fs::write(dir.join(KRT_CAPABILITIES_SCRIPT), "manifest").expect("manifest");
         let python = fake_python(&dir, "exit 0");
         assert!(verify_krt_capabilities(&dir, &python).is_ok());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_checkout_without_the_built_rust_router_is_unusable() {
+        let dir = std::env::temp_dir().join(format!(
+            "krt-no-router-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let python = fake_python(
+            &dir,
+            "echo \"ModuleNotFoundError: No module named 'grid_router'\" >&2\nexit 1",
+        );
+        let error = verify_krt_router_module(&dir, &python)
+            .expect_err("a checkout without grid_router must fail verification");
+        assert!(error.contains(KRT_ROUTER_MODULE), "{error}");
+        assert!(error.contains(KRT_BUILD_SCRIPT), "{error}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_checkout_whose_rust_router_imports_is_usable() {
+        let dir = std::env::temp_dir().join(format!(
+            "krt-router-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        ));
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let python = fake_python(&dir, "exit 0");
+        assert!(verify_krt_router_module(&dir, &python).is_ok());
         std::fs::remove_dir_all(&dir).ok();
     }
 

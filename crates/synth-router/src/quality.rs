@@ -49,6 +49,8 @@ pub struct RouteQuality {
     pub undersized_tracks: usize,
     /// Vias whose drill is thinner than the fabrication floor.
     pub undersized_vias: usize,
+    /// Vias whose annular ring is thinner than the fabrication floor.
+    pub undersized_annular: usize,
     pub segments: usize,
     pub vias: usize,
     pub wire_length_mm: f64,
@@ -109,6 +111,7 @@ impl RouteQuality {
             via_in_pad: connectivity.map_or(0, |c| c.via_in_pad.len()),
             undersized_tracks: connectivity.map_or(0, |c| c.undersized_tracks.len()),
             undersized_vias: connectivity.map_or(0, |c| c.undersized_vias.len()),
+            undersized_annular: connectivity.map_or(0, |c| c.undersized_annular.len()),
             segments: report.statistics.segments,
             vias: report.statistics.vias,
             wire_length_mm: report.statistics.wire_length_mm,
