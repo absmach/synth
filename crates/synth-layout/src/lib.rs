@@ -686,11 +686,28 @@ fn compute_dynamic_member_dx(board: &Board, members: &[ComponentId]) -> f64 {
     snap_grid(20.32_f64.max(text_w))
 }
 
+/// Widest member body, so a row limit can count the body as well as the
+/// centre-to-centre pitch.
+fn max_member_body_width(board: &Board, members: &[ComponentId]) -> f64 {
+    members
+        .iter()
+        .map(|&id| {
+            board
+                .component(id)
+                .and_then(|c| c.part.as_ref())
+                .map_or(0.0, |part| body_size_for_part(part).0)
+        })
+        .fold(0.0_f64, f64::max)
+}
+
 /// Members per row and rows needed for `n` members at `member_dx` pitch:
 /// wrap only when the row exceeds [`CAP_ROW_MAX_MM`], and balance the rows
 /// (`16` at `13` per row is `8 + 8`, not `13 + 3`) so the grid is compact.
-fn cap_row_shape(n: usize, member_dx: f64) -> (usize, usize) {
-    let capacity = (CAP_ROW_MAX_MM / member_dx).floor() as usize + 1;
+/// The widest body is part of the row, so a long refdes that raises the
+/// pitch cannot leave a row over the limit.
+fn cap_row_shape(n: usize, member_dx: f64, max_body_w: f64) -> (usize, usize) {
+    let usable = (CAP_ROW_MAX_MM - max_body_w).max(0.0);
+    let capacity = (usable / member_dx).floor() as usize + 1;
     let per_row = capacity.max(1).min(n.max(1));
     let rows = n.div_ceil(per_row).max(1);
     (n.div_ceil(rows).max(1), rows)
@@ -704,7 +721,7 @@ fn member_row_pitch(board: &Board, members: &[ComponentId]) -> f64 {
         .iter()
         .map(|&id| text_inclusive_half_height(board, id))
         .fold(0.0_f64, f64::max);
-    ((2.0 * half + 2.0) / GRID_MM).ceil() * GRID_MM
+    grid_steps(2.0 * half + 2.0)
 }
 
 /// Refdes text sits above the body, value text below (§7.6.8's
@@ -5414,7 +5431,8 @@ fn place_cluster_into(
     if !below.is_empty() {
         let member_dx = compute_dynamic_member_dx(board, &below);
         let row_y = snap_grid(anchor_y + anchor_half_h + row_clearance(board, &below, true));
-        let (per_row, rows) = cap_row_shape(below.len(), member_dx);
+        let (per_row, rows) =
+            cap_row_shape(below.len(), member_dx, max_member_body_width(board, &below));
         if rows > 1 {
             let pitch = member_row_pitch(board, &below);
             for (row, members) in below.chunks(per_row).enumerate() {
@@ -5582,7 +5600,8 @@ fn place_cluster_into(
     if !above.is_empty() {
         let member_dx = compute_dynamic_member_dx(board, &above);
         let horizontal_row_y = snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE);
-        let (per_row, rows) = cap_row_shape(above.len(), member_dx);
+        let (per_row, rows) =
+            cap_row_shape(above.len(), member_dx, max_member_body_width(board, &above));
         if !cluster.anchor_vertical && rows > 1 {
             let pitch = member_row_pitch(board, &above);
             for (row, members) in above.chunks(per_row).enumerate() {
@@ -5747,10 +5766,11 @@ fn place_cluster_into(
 /// unit stack and every other cluster are untouched.
 ///
 /// A row is a set of equal-centre-y passives right of the anchor body and
-/// within the stacked body's height. It wraps only when its body span
-/// exceeds [`CAP_ROW_MAX_MM`]; the grid is filled row by row in id order,
-/// and if any target slot is occupied by a part that stays put the row is
-/// left exactly as it was rather than overlapping it.
+/// within the stacked body's height. When its body span exceeds
+/// [`CAP_ROW_MAX_MM`], it is re-spaced at the cap pitch and wrapped as
+/// needed, filled row by row in id order. If any target slot is occupied by
+/// a part that stays put the row is left exactly as it was rather than
+/// overlapping it.
 fn wrap_singleton_passive_rows(
     board: &Board,
     clusters: &[Cluster],
@@ -5837,10 +5857,7 @@ fn wrap_singleton_passive_rows(
             let mut ids = members;
             ids.sort_by_key(|id| id.0);
             let dx = compute_dynamic_member_dx(board, &ids);
-            let (per_row, rows) = cap_row_shape(ids.len(), dx);
-            if rows < 2 {
-                continue;
-            }
+            let (per_row, rows) = cap_row_shape(ids.len(), dx, max_member_body_width(board, &ids));
             let pitch = member_row_pitch(board, &ids);
             let start_x = snap_grid(anchor_pos.0 + anchor_w / 2.0 + MEMBER_CLEARANCE);
             let start_y = snap_grid(anchor_pos.1 - (rows.saturating_sub(1)) as f64 * pitch / 2.0);
@@ -5855,16 +5872,7 @@ fn wrap_singleton_passive_rows(
             // Adopt the grid only when every slot is clear of the parts that
             // stay put; a collision leaves the row exactly as it was.
             let moved: HashSet<ComponentId> = ids.iter().copied().collect();
-            let clear = target.iter().all(|&(_, (tx, ty))| {
-                placements
-                    .iter()
-                    .filter(|p| !moved.contains(&p.id))
-                    .all(|p| {
-                        (p.center_mm.0 - tx).abs() >= dx / 2.0
-                            || (p.center_mm.1 - ty).abs() >= pitch / 2.0
-                    })
-            });
-            if !clear {
+            if !wrapped_slots_clear(board, placements, &moved, &target) {
                 continue;
             }
             for (id, pos) in target {
@@ -5874,6 +5882,31 @@ fn wrap_singleton_passive_rows(
             }
         }
     }
+}
+
+/// True when every target centre's body clears every placement that is
+/// not moving with this row. Bodies, not centre distances: a wide part
+/// can overlap a slot from beyond half a pitch.
+fn wrapped_slots_clear(
+    board: &Board,
+    placements: &[ComponentPlacement],
+    moved: &HashSet<ComponentId>,
+    target: &[(ComponentId, (f64, f64))],
+) -> bool {
+    let body_rect = |id: ComponentId, (x, y): (f64, f64)| {
+        let (w, h) = board
+            .component(id)
+            .and_then(|c| c.part.as_ref())
+            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        (x - w / 2.0, y - h / 2.0, x + w / 2.0, y + h / 2.0)
+    };
+    target.iter().all(|&(id, pos)| {
+        let target_rect = body_rect(id, pos);
+        placements
+            .iter()
+            .filter(|p| !moved.contains(&p.id))
+            .all(|p| !rects_overlap(target_rect, body_rect(p.id, p.center_mm)))
+    })
 }
 
 /// Page dimensions a content bounding box needs, in mm.
@@ -8783,6 +8816,52 @@ mod patterns_tests {
             clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
             Some((ComponentId(2), PinId(0))),
             "VCC clamps pair like GND clamps"
+        );
+    }
+
+    #[test]
+    fn a_wide_neighbour_blocks_a_wrapped_slot() {
+        let wide_symbol = "MCU_ST_STM32F4:STM32F429ZITx";
+        if kicad_lib_loader::body_bbox(wide_symbol).is_none() {
+            eprintln!("KiCad symbol library not installed; skipping");
+            return;
+        }
+        let mut wide = part(
+            "mcu",
+            vec![
+                pin("p1", ElectricalType::Passive, &[]),
+                pin("p2", ElectricalType::Passive, &[]),
+            ],
+        );
+        wide.kicad_symbol = Some(wide_symbol.to_string());
+        let cap = part(
+            "capacitor",
+            vec![
+                pin("p1", ElectricalType::Passive, &[]),
+                pin("p2", ElectricalType::Passive, &[]),
+            ],
+        );
+        let b = board(
+            vec![component(0, "U1", wide), component(1, "C1", cap)],
+            vec![],
+        );
+        let placements = vec![
+            ComponentPlacement {
+                id: ComponentId(1),
+                center_mm: (0.0, 0.0),
+                rotation: Rotation::Zero,
+            },
+            ComponentPlacement {
+                id: ComponentId(0),
+                center_mm: (15.0, 0.0),
+                rotation: Rotation::Zero,
+            },
+        ];
+        let moved: HashSet<ComponentId> = [ComponentId(1)].into();
+        let target = [(ComponentId(1), (0.0, 0.0))];
+        assert!(
+            !wrapped_slots_clear(&b, &placements, &moved, &target),
+            "a 55.88 mm-wide neighbour 15 mm away overlaps the cap body; centre distance alone would admit the slot"
         );
     }
 }

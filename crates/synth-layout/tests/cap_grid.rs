@@ -130,6 +130,7 @@ fn board(name: &str, components: Vec<Component>, nets: Vec<Net>) -> Board {
         notes: vec![],
         keepouts: Vec::new(),
         no_connects: Vec::new(),
+        ground_domains: Vec::new(),
         stackup: None,
         netclasses: vec![],
         buses: vec![],
@@ -709,6 +710,94 @@ fn short_cap_row_does_not_move() {
         SHORT_ROW_ANCHOR,
         "the anchor must not move when no row wraps"
     );
+}
+
+/// A singleton row can be over the limit at the placer's pitch while a
+/// tighter wrap fits (10 caps). The over-limit row must be re-spaced, not
+/// left as one long line.
+#[test]
+fn over_limit_singleton_row_stays_within_the_limit() {
+    let Some(board) = cap_fixture("singleton_ten", 10, false) else {
+        return;
+    };
+    let layout = synth_layout::layout(&board);
+    let caps = ids(&board, "C");
+    assert_eq!(caps.len(), 10);
+    let rects = rects(&board, &layout, &caps);
+    let rows = rows_of(&rects);
+    assert!(!rows.is_empty(), "the caps must be placed");
+    assert_rows_within_limit(&rows);
+    assert_no_overlaps(&rects);
+
+    let anchor = body_rect(&board, &layout, ComponentId(0));
+    for (i, r) in rects.iter().enumerate() {
+        assert!(
+            r.0 >= anchor.2 - 1e-6,
+            "cap {i} at {r:?} is not beside the stacked FPGA body {anchor:?}"
+        );
+    }
+}
+
+/// The wrap boundary at the default 20.32 mm pitch: 13 caps fit exactly one
+/// row, 14 do not. Zero and one cap keep a single row too.
+#[test]
+fn cap_row_wraps_only_above_the_limit() {
+    for cap_count in [0, 1, 13] {
+        let Some(board) = cap_fixture("at_the_limit", cap_count, true) else {
+            return;
+        };
+        let layout = synth_layout::layout(&board);
+        let caps = ids(&board, "C");
+        let rows = rows_of(&rects(&board, &layout, &caps));
+        assert!(
+            rows.len() <= 1,
+            "{cap_count} caps at 20.32 mm pitch fit one row; got {} row(s)",
+            rows.len()
+        );
+        assert_rows_within_limit(&rows);
+    }
+
+    let Some(board) = cap_fixture("over_the_limit", 14, true) else {
+        return;
+    };
+    let layout = synth_layout::layout(&board);
+    let caps = ids(&board, "C");
+    let rows = rows_of(&rects(&board, &layout, &caps));
+    assert!(
+        rows.len() > 1,
+        "14 caps exceed the 13-cap row and must wrap; got {} row(s)",
+        rows.len()
+    );
+    assert_rows_within_limit(&rows);
+}
+
+/// A long refdes raises the member pitch to 25.4 mm. The row capacity must
+/// then count the cap body as well as the centres, or an 11-cap row is
+/// 261.62 mm wide against the 256.54 mm limit.
+#[test]
+fn long_refdes_rows_stay_within_the_limit() {
+    for as_members in [true, false] {
+        let Some(mut board) = cap_fixture("long_refdes", 22, as_members) else {
+            return;
+        };
+        for component in &mut board.components {
+            if component.refdes.starts_with('C') {
+                component.refdes = format!("CAPDECOUPLINGVCCIO{:08}", component.id.0);
+            }
+        }
+        let layout = synth_layout::layout(&board);
+        let caps = ids(&board, "C");
+        assert_eq!(caps.len(), 22);
+        let rects = rects(&board, &layout, &caps);
+        let rows = rows_of(&rects);
+        assert!(
+            rows.len() > 1,
+            "22 caps at a 25.4 mm pitch must wrap; got {} row(s)",
+            rows.len()
+        );
+        assert_rows_within_limit(&rows);
+        assert_no_overlaps(&rects);
+    }
 }
 
 const SHORT_ROW_EXPECTED: [(f64, f64); 4] = [

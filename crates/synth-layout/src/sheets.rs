@@ -686,9 +686,6 @@ fn fit_one_group_sheet(board: &Board, layout: &mut Layout) {
         .ceil()
         * grid;
     let height = ((max_y + crate::FRAME_INSET + crate::TITLE_BLOCK_H) / grid).ceil() * grid;
-    if width >= have_w || height >= have_h {
-        return;
-    }
     if width * height >= have_w * have_h * crate::CUSTOM_SHEET_MIN_SAVING {
         return;
     }
@@ -2087,6 +2084,36 @@ mod tests {
             1,
             "a partial global flag set left the Load sheet isolated: {:?}",
             load.layout.power_flags
+        );
+    }
+
+    #[test]
+    fn a_narrow_page_that_only_grows_its_height_still_fits() {
+        let b = board(
+            vec![component(0, "R1", None, vec![pin("p1"), pin("p2")])],
+            vec![],
+        );
+        let mut page = layout(vec![placed(0, 75.0, 275.0)], vec![]);
+        page.group_boxes.push(crate::GroupBox {
+            group: "G".to_string(),
+            min_mm: (0.0, 0.0),
+            max_mm: (150.0, 550.0),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        page.sheet_size = SheetSize::A1;
+
+        fit_one_group_sheet(&b, &mut page);
+
+        assert_ne!(
+            page.sheet_size,
+            SheetSize::A1,
+            "a 150 x 550 mm page on A1 was left blank; the fit refused because the measured height rounded 1 mm over A1"
+        );
+        let (width, height) = page.sheet_size.dims_mm();
+        assert!(
+            width < 841.0 && height <= 600.0,
+            "the fitted page is {width} x {height}, not the measured narrow page"
         );
     }
 }
