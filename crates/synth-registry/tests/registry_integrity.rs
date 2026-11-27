@@ -206,6 +206,7 @@ fn diode_forward_point_is_within_the_absolute_maximum_current() {
         );
     }
 }
+
 /// The sensor-logger reference board is the one a JLCPCB quote is taken from,
 /// so none of its components may be an obsolete registry entry.
 #[test]
