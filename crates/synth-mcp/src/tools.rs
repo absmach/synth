@@ -192,7 +192,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_route".into(),
-            description: "Route a SynthSpec design with an external autorouter and report the routing run record. Synth does not generate copper: this exports an un-routed board, hands it to the selected engine, and then re-derives connectivity from the copper that came back. Placement is checked first and `placement_requires_revision` is returned without entering the router when the layout is structurally poor. The terminal state is one of routed / review_required / router_unavailable / validation_failed — a router exit code of zero is never reported as success on its own. Check `synth_router_capabilities` first when the engine may not be installed: an unavailable engine is reported as router_unavailable with the remediation, never as a pass, and never silently retried on another engine.".into(),
+            description: "Route a SynthSpec design with an external autorouter and report the routing run record. Synth does not generate copper: it exports an un-routed board, hands it to the selected engine, and re-derives connectivity from the copper that came back. Placement is checked first; a structurally poor layout returns `placement_requires_revision` without entering the router. The terminal state is routed / review_required / router_unavailable / validation_failed; a zero router exit code is never success on its own. Check `synth_router_capabilities` first when the engine may be missing: it is reported as router_unavailable with the remediation, never as a pass, and never retried on another engine.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -216,7 +216,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_router_capabilities".into(),
-            description: "Report which external routing engines are installed and usable on this machine, with the version each would run at and, when unavailable, the reason and the remediation. Discovery is read-only and cheap: it locates the FreeRouting JAR and Java runtime, checks a KiCadRoutingTools checkout for its entry point, and reads each engine's version. Run this before `synth_route` on a new machine, or whenever a route reports router_unavailable.".into(),
+            description: "Report which external routing engines are installed and usable on this machine, with the version each would run at and, when unavailable, the reason and the remediation. Read-only and cheap: it locates the FreeRouting JAR, Java and the KiCadRoutingTools entry point, and reads each engine's version. Run this before `synth_route` on a new machine, or whenever a route reports router_unavailable.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -242,7 +242,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_mutate_layout".into(),
-            description: "Apply one structured edit to a SynthSpec design's auto-generated schematic layout — move or rotate a component, group several components into a tidy column beside an anchor, force a net to render as a label instead of a wire, or re-route a net. Never changes connectivity, only visual placement. Returns the updated layout as JSON, or a structured error if the op references an unknown component/net id. Set persist=true (or pass layout_file_path) to write the effect through to the <design>.schematic.layout.toml sidecar so it survives a recompile and is honoured by rendering and export. This tool edits the schematic sheet (sheet millimetres); PCB footprint placement lives in the separate <design>.placement.layout.toml sidecar.".into(),
+            description: "Apply one structured edit to a SynthSpec design's auto-generated schematic layout — move or rotate a component, group several components into a tidy column beside an anchor, force a net to render as a label instead of a wire, or re-route a net. Never changes connectivity, only visual placement. Returns the updated layout as JSON, or a structured error for an unknown component/net id. Set persist=true (or pass layout_file_path) to write it to the <design>.schematic.layout.toml sidecar, so it survives a recompile and is used by rendering and export. This edits the schematic sheet (sheet mm); PCB placement lives in <design>.placement.layout.toml.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -271,7 +271,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_export".into(),
-            description: "Export a validated SynthSpec design to KiCad schematic (.kicad_sch), PCB (.kicad_pcb) and BOM CSV. This tool does not write Gerber or drill files; `synth export-kicad --gerbers --drill` does, and refuses parts nobody has reviewed. Copper is generated by the external router named by `router` (default kicad-routing-tools) and is installed only when it passes independent validation; the un-routed export is always retained as <design>.synth.kicad_pcb. By default this is a release export and rejects a board that is not independently validated. Set allow_incomplete=true only to create explicitly draft artifacts for review/manual routing; draft artifacts are never release-ready. Layout overrides live in two separate sidecars with different coordinate spaces: layout_file_path / <design>.placement.layout.toml is board millimetres (footprints, routing) and schematic_layout_file_path / <design>.schematic.layout.toml is sheet millimetres (component placement on the page). Passing only one of them leaves the other at auto-layout. The result lists schematic findings under aesthetic_violations as a bounded sample (a few per code, spread across the parts they name, 40 at most); aesthetic_violation_counts gives the count of every code, aesthetic_violations_truncated and aesthetic_violations_omitted say whether and how many findings were left out, and aesthetic_findings_path names a JSON file in out_dir holding all of them.".into(),
+            description: "Export a validated SynthSpec design to KiCad schematic (.kicad_sch), PCB (.kicad_pcb) and BOM CSV. This tool does not write Gerber or drill files; `synth export-kicad --gerbers --drill` does, and refuses parts nobody has reviewed. Copper is generated by the external router named by `router` (default kicad-routing-tools) and is installed only when it passes independent validation; the un-routed export is always retained as <design>.synth.kicad_pcb. By default this is a release export and rejects a board that is not independently validated. Set allow_incomplete=true only to create explicitly draft artifacts for review/manual routing; draft artifacts are never release-ready. Two sidecars, two coordinate spaces: layout_file_path (<design>.placement.layout.toml) is board mm; schematic_layout_file_path (<design>.schematic.layout.toml) is sheet mm. Passing one leaves the other at auto-layout. Schematic findings come back as a bounded sample (40 at most) in aesthetic_violations, with aesthetic_violation_counts per code, aesthetic_violations_truncated, aesthetic_violations_omitted, and aesthetic_findings_path to a JSON file in out_dir with all of them.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -280,10 +280,10 @@ pub fn list_tools() -> Vec<McpToolInfo> {
                     "out_dir": { "type": "string", "description": "Output directory path (accepts 'out' or 'out_dir')" },
                     "out": { "type": "string", "description": "Alias for out_dir" },
                     "layout_file_path": { "type": "string", "description": "Optional agent or human PCB placement sidecar (<design>.placement.layout.toml; board millimetres); exact component positions and rotations are applied to placement and routing. Omit for auto-placement." },
-                    "schematic_layout_file_path": { "type": "string", "description": "Optional schematic layout sidecar (<design>.schematic.layout.toml; sheet millimetres); component positions on the exported sheet. Omit for auto-layout. Distinct from layout_file_path: the two files hold the same schema but different coordinate spaces, so passing one where the other is expected silently misplaces parts." },
+                    "schematic_layout_file_path": { "type": "string", "description": "Optional schematic layout sidecar (<design>.schematic.layout.toml; sheet mm). Omit for auto-layout. Not interchangeable with layout_file_path: the wrong file silently misplaces parts." },
                     "allow_incomplete": { "type": "boolean", "description": "Export a clearly labelled draft even when routing is incomplete or DRC has violations. Defaults to false; never use this output for fabrication." },
-                    "place_route_budget_secs": { "type": "integer", "minimum": 0, "description": "Wall-clock budget in seconds for place_route_iterate (0 or absent: 900). Every routing run is capped at what is left, a share for the final route is kept back, and the result's placement_search says how many candidates were routed and whether the budget cut the search short. A router_timeout_secs under 30 starts no candidate run (a run that short cannot finish), only the final route. A whole number of seconds; anything else is refused." },
-                    "place_route_iterate": { "type": "boolean", "description": "Choose the placement by routing each candidate and keeping the one that routes best, instead of the export path's route-free estimate. Opt-in: costs one extra route per candidate, and falls back to the normal choice when there is one candidate or the engine is unavailable." },
+                    "place_route_budget_secs": { "type": "integer", "minimum": 0, "description": "Wall-clock budget for place_route_iterate (0 or absent: 900). Each run is capped at what is left, and a share is kept for the final route. placement_search in the result reports candidates routed and whether the budget cut the search short. A router_timeout_secs under 30 starts no candidate run. A budget that is not a whole number of seconds is refused." },
+                    "place_route_iterate": { "type": "boolean", "description": "Route each placement candidate and keep the best, instead of the route-free estimate. Opt-in: one extra route per candidate. Falls back to the normal choice with one candidate or no engine." },
                     "router": { "type": "string", "description": "External engine: \"kicad-routing-tools\" (default, external checkout), \"freerouting\" (managed JAR) or \"fastroute\" (managed Java-free binary)" },
                     "freerouting_jar": { "type": "string", "description": "Path to the FreeRouting JAR" },
                     "freerouting_java": { "type": "string", "description": "Java executable for FreeRouting" },
@@ -300,7 +300,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_render_schematic".into(),
-            description: "Render the generated schematic to PNG so you can inspect your own output. Compiles the design, applies the schematic layout sidecar (<design>.schematic.layout.toml, sheet millimetres), exports the sheet with synth_kicad::export_schematic_only, plots it with `kicad-cli sch export svg`, and rasterizes with the pinned deterministic renderer. Returns per-sheet pixel dimensions and file paths; with inline=true (default) each sheet's PNG is returned as an MCP image content block so the model can actually look at the sheet. Use set_visual_baseline/compare via synth_schematic_baseline to detect drift, and fix what connectivity checks cannot: overlapping labels, confusing wire crossings, components outside their group box, content past the page edge.".into(),
+            description: "Render the generated schematic to PNG so you can inspect your own output. Compiles the design, applies the schematic layout sidecar, plots it with `kicad-cli sch export svg`, and rasterizes with the pinned deterministic renderer. Returns per-sheet pixel size and file paths; with inline=true (default) each PNG is also an MCP image block so the model can look at it. Use synth_schematic_baseline to detect drift, and fix what connectivity checks cannot: overlapping labels, confusing wire crossings, components outside their group box, content past the page edge.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -423,7 +423,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_compact_layout".into(),
-            description: "Compact a pinned placement sidecar until the router no longer closes. Each call makes ONE attempt: it scales the layout inward (3 % a step), exports it into out_dir/step_<permille> with the full release gates (every net routed, KiCad DRC clean, no via in a pad), and records pass or fail in out_dir/compact.json. After the first failure it bisects between the last good and the failed scale. Call it again until `done` is true; then the best passing layout has been written to the sidecar (the original is kept as <sidecar>.pre-compact). Takes file_path, layout_file_path, out_dir and the router options of synth_export, plus optional step_percent (default 3) and min_scale_percent (default 60). With mode `gap` the layout is not scaled: each attempt slides every part toward the top-left until the next one is `gap` away (step_mm, min_gap_mm and dense_gap_mm; the attempt directory step_<n> is the gap in hundredths of a millimetre), which closes lanes of empty space that scaling leaves. Connectors stay flush because the outline is refitted round each attempt.".into(),
+            description: "Compact a pinned placement sidecar until the router no longer closes. Each call makes ONE attempt: it scales the layout inward (3 % a step), exports it into out_dir/step_<permille> with the full release gates (every net routed, KiCad DRC clean, no via in a pad), and records pass or fail in out_dir/compact.json. After the first failure it bisects between the last good and failed scale. Call again until `done` is true; the best passing layout is then in the sidecar (the original is kept as <sidecar>.pre-compact). Takes file_path, layout_file_path, out_dir and the router options of synth_export, plus step_percent (default 3) and min_scale_percent (default 60). With mode `gap` nothing is scaled: each attempt slides parts toward the top-left until the next is `gap` away (step_mm, min_gap_mm, dense_gap_mm), closing lanes of empty space. Connectors stay flush.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -444,7 +444,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_place_with_hints".into(),
-            description: "Run the PCB placer with explicit semantic placement hints (region, edge, near/side) for one or more components. Does not modify the source file. Returns placement positions, hint satisfaction, structural visual-review findings, functional-cluster warnings, compactness warnings, unrouted net count, and full DRC violation reports. Call with run_routing=false first; if placement_quality.visual_review.requires_revision is true, revise the hints or sidecar before routing. A combined run also stops before the router when review requires revision; use synth_route with allow_placement_warnings=true only for deliberate manual/debug routing. For production layouts, keep MCU/flash/decouplers and interface passives close, keep connectors edge-oriented, then use a sidecar for relative or exact refinements. Each `component_placements[].center` is the footprint origin (the point KiCad writes as the footprint `(at x y)`), in nanometres, so it overlays the exported PCB exactly; it is not the placement sidecar's coordinate space.".into(),
+            description: "Run the PCB placer with explicit semantic placement hints (region, edge, near/side) for one or more components. Does not modify the source file. Returns placement positions, hint satisfaction, structural visual-review findings, functional-cluster warnings, compactness warnings, unrouted net count, and full DRC violation reports. Call with run_routing=false first; if placement_quality.visual_review.requires_revision is true, revise the hints or sidecar before routing. A combined run also stops before the router when review requires revision; use synth_route with allow_placement_warnings=true only for deliberate manual/debug routing. For production layouts, keep MCU/flash/decouplers and interface passives close and connectors edge-oriented, then refine with a sidecar. Each `component_placements[].center` is the footprint origin (KiCad `(at x y)`) in nanometres; it is not the placement sidecar's coordinate space.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -480,7 +480,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_resolve_footprints".into(),
-            description: "Find a real `.kicad_mod` for parts whose `kicad_footprint` names one that is not installed. A wrong footprint name is the common failure and the right footprint is usually already in the local KiCad libraries, so this searches them by name and reports scored candidates. With apply=true it writes confident, unambiguous corrections into the Tier-2 user registry (marked unverified, so W-SYNTH-PART-UNVERIFIED still fires). synth_export runs the same resolver automatically. A match is applied only when it is both confident and clearly ahead of the runner-up; an ambiguous result is reported, never guessed. Pin numbers are never touched — run synth_validate and act on E-SYNTH-PIN-001 for that, since an invented pin designator produces a board that routes and passes every check while being unbuildable.".into(),
+            description: "Find a real `.kicad_mod` for parts whose `kicad_footprint` names one that is not installed. A wrong footprint name is the common failure; the right one is usually in the local KiCad libraries, so this searches them by name and scores candidates. With apply=true it writes confident, unambiguous corrections into the Tier-2 user registry (marked unverified, so W-SYNTH-PART-UNVERIFIED still fires). synth_export runs the same resolver automatically. A match is applied only when it is both confident and clearly ahead of the runner-up; an ambiguous result is reported, never guessed. Pin numbers are never touched; run synth_validate and act on E-SYNTH-PIN-001, since an invented pin designator gives an unbuildable board that passes every check.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -509,7 +509,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_read_layout_overrides".into(),
-            description: "Read all persisted component placement overrides and forced net labels from a sidecar file. The two sidecars share a schema but not a coordinate space: <design>.schematic.layout.toml holds sheet millimetres (schematic) and <design>.placement.layout.toml holds board millimetres (PCB). Pass layout_file_path to choose. Includes provenance (human_drag vs agent), priority, and timestamp.".into(),
+            description: "Read all persisted component placement overrides and forced net labels from a sidecar file. Same schema, different coordinate spaces: <design>.schematic.layout.toml is sheet mm, <design>.placement.layout.toml is board mm. Pass layout_file_path to choose. Includes provenance (human_drag vs agent), priority, and timestamp.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -520,7 +520,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_write_layout_override".into(),
-            description: "Write or update a component placement override or forced net label in a sidecar file. Pass layout_file_path = <design>.placement.layout.toml for PCB footprints (board millimetres at the footprint origin, the same (at x y) the exported board and component_placements report, consumed by synth_place_with_hints / synth_route / synth_describe_placement) or <design>.schematic.layout.toml for schematic sheet positions (sheet millimetres, consumed by synth_render_schematic / synth_export). The two share a schema but not a coordinate space, so the wrong file misplaces parts silently. Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized.".into(),
+            description: "Write or update a component placement override or forced net label in a sidecar file. Pass layout_file_path = <design>.placement.layout.toml for PCB footprints (board mm at the footprint origin, used by synth_place_with_hints / synth_route / synth_describe_placement) or <design>.schematic.layout.toml for schematic sheet positions (sheet mm, used by synth_render_schematic / synth_export). Same schema, different coordinate spaces: the wrong file silently misplaces parts. Preserves existing overrides. Prefer relative_to with dx_mm/dy_mm for agent revisions so the arrangement remains robust when the board is resized.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -573,7 +573,7 @@ pub fn list_tools() -> Vec<McpToolInfo> {
         },
         McpToolInfo {
             name: "synth_import_part".into(),
-            description: "Import a component part into the Tier-2 (per-user) registry. Wraps the R15.4/R15.5 importers plus a zip-file importer: source 'lcsc' reads an EasyEDA CAD JSON (pass `from_file`; live fetch is best-effort) and emits a `.kicad_mod` + unverified `.synth.toml` (`provenance.source = generated`); source 'kicad' reads the physical pin inventory (number, name, electrical type) from an installed KiCad stock symbol and emits a pre-filled `.synth.toml` (`provenance.source = imported`); pass `footprint` as well, because the part's size is measured from that footprint; source 'kicad-zip' reads a SnapEDA/UltraLibrarian \"Export to KiCad\" zip already downloaded to disk (pass `zip_path`) — neither vendor has a public API and both prohibit automated site access in their ToS, so this never contacts snapeda.com/ultralibrarian.com, it only parses the zip the user already saved. All three land with `reviewed_by` empty until reviewed.".into(),
+            description: "Import a component part into the Tier-2 (per-user) registry. Source 'lcsc' reads an EasyEDA CAD JSON (pass `from_file`; live fetch is best-effort) and emits a `.kicad_mod` + unverified `.synth.toml` (`provenance.source = generated`). Source 'kicad' reads the pin inventory (number, name, electrical type) from an installed KiCad stock symbol and emits a pre-filled `.synth.toml` (`provenance.source = imported`); also pass `footprint`, since the part's size is measured from it. Source 'kicad-zip' parses a SnapEDA/UltraLibrarian \"Export to KiCad\" zip already on disk (pass `zip_path`); it never contacts those sites, whose terms prohibit automated access. All three land with `reviewed_by` empty until reviewed.".into(),
             input_schema: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -8650,5 +8650,53 @@ mod gate_outcome_tests {
         .unwrap_err();
         assert_eq!(refusal_of(&err)["field"], "router");
         assert!(!out.exists());
+    }
+}
+
+/// Size of the `tools/list` payload (issue #481). Context spent on tool
+/// schemas is context not spent on the design, so growth must be deliberate.
+#[cfg(test)]
+mod tools_list_cost_tests {
+    use super::list_tools;
+
+    /// Ceiling for the serialised `tools/list` result, in bytes. Lower it
+    /// when the catalogue shrinks. Raise it only on purpose, in its own commit.
+    const TOOLS_LIST_BYTES_CEILING: usize = 45_800;
+
+    /// Token estimate: bytes / 4. A rough rule of thumb, not a tokenizer count.
+    fn approx_tokens(bytes: usize) -> usize {
+        bytes.div_ceil(4)
+    }
+
+    fn per_tool_sizes() -> Vec<(String, usize)> {
+        let mut sizes: Vec<(String, usize)> = list_tools()
+            .iter()
+            .map(|t| {
+                let bytes = serde_json::to_string(t).expect("serialise tool").len();
+                (t.name.clone(), bytes)
+            })
+            .collect();
+        sizes.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        sizes
+    }
+
+    #[test]
+    fn tools_list_payload_stays_within_budget() {
+        let payload = serde_json::json!({ "tools": list_tools() });
+        let bytes = serde_json::to_string(&payload).expect("serialise").len();
+        println!(
+            "tools/list: {} tools, {bytes} bytes, about {} tokens (bytes/4 estimate)",
+            list_tools().len(),
+            approx_tokens(bytes)
+        );
+        for (name, size) in per_tool_sizes() {
+            println!("  {size:>6} {name}");
+        }
+        assert!(
+            bytes <= TOOLS_LIST_BYTES_CEILING,
+            "tools/list is {bytes} bytes (about {} tokens), over the {TOOLS_LIST_BYTES_CEILING} byte ceiling. \
+             Shrink descriptions or raise the ceiling on purpose.",
+            approx_tokens(bytes)
+        );
     }
 }
