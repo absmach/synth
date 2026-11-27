@@ -23,10 +23,14 @@ mating_face = "bottom"
 mating_plane_offset_mm = 6.25
 mating_overhang_mm = [-0.5, 0.5]
 
+# JST PH series ratings: 100 V AC/DC and 2 A (AWG #24 wire) as listed by distributors
+# (LCSC C131339, element14) and on a mirror of the JST PH series datasheet; the
+# JST datasheet itself was not retrieved. The earlier 1.8 to 5 V, 100 mA envelope
+# was not the connector's rating.
 [operating_conditions]
-min_voltage_v = 1.8
-max_voltage_v = 5.0
-max_current_ma = 100.0
+min_voltage_v = 0.0
+max_voltage_v = 100.0
+max_current_ma = 2000.0
 
 [[pins]]
 name = "p1"
