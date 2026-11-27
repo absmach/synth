@@ -5444,6 +5444,8 @@ mod tests {
             height_mm: 4.0,
             courtyard_margin_mm: None,
             mating_face: None,
+            mating_plane_offset_mm: None,
+            mating_overhang_mm: None,
             label_side: None,
             label_hidden: None,
         });

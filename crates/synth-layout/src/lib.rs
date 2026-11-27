@@ -9706,7 +9706,9 @@ mod documentation_tests {
             "label the pin that spells the net out"
         );
         assert!(
-            wired_subnets(&b, &layout).iter().any(|net| net.id == NetId(0)),
+            wired_subnets(&b, &layout)
+                .iter()
+                .any(|net| net.id == NetId(0)),
             "one flag makes the net a wired piece, so the unlabelled pins stay connected"
         );
     }
@@ -9761,11 +9763,18 @@ mod documentation_tests {
             .collect();
         assert_eq!(
             labels,
-            vec![ComponentId(0), ComponentId(1), ComponentId(2), ComponentId(3)],
+            vec![
+                ComponentId(0),
+                ComponentId(1),
+                ComponentId(2),
+                ComponentId(3)
+            ],
             "a label-only net keeps every label"
         );
         assert!(
-            wired_subnets(&b, &layout).iter().all(|net| net.id != NetId(0)),
+            wired_subnets(&b, &layout)
+                .iter()
+                .all(|net| net.id != NetId(0)),
             "the net is not wired, so the labels are its only connection"
         );
     }
