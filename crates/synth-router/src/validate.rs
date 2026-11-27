@@ -134,6 +134,9 @@ pub struct ConnectivityReport {
     pub via_in_pad: Vec<String>,
     /// Vias whose drill is thinner than the policy allows.
     pub undersized_vias: Vec<String>,
+    /// Vias whose annular ring is thinner than the policy allows.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undersized_annular: Vec<String>,
     /// Tracks thinner than the policy allows.
     pub undersized_tracks: Vec<String>,
     /// Signal tracks with no reference-plane copper under them (a plane split).
@@ -150,6 +153,7 @@ impl ConnectivityReport {
             && self.unconnected_pads.is_empty()
             && self.via_in_pad.is_empty()
             && self.undersized_vias.is_empty()
+            && self.undersized_annular.is_empty()
             && self.undersized_tracks.is_empty()
     }
 
@@ -184,6 +188,11 @@ impl ConnectivityReport {
         }
         for via in &self.undersized_vias {
             reasons.push(format!("via {via} is below the fabrication minimum drill"));
+        }
+        for via in &self.undersized_annular {
+            reasons.push(format!(
+                "via {via} has an annular ring below the fabrication minimum"
+            ));
         }
         for track in &self.undersized_tracks {
             reasons.push(format!(
@@ -597,12 +606,34 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
     }
 
     report.open.sort_by(|a, b| a.net.cmp(&b.net));
+    apply_policy_findings(board, policy, &mut report);
+    report.plane_splits = check_plane_splits(board);
+    report
+}
+
+/// Record the per-feature policy findings: via-in-pad, drill, annular ring
+/// and track width, measured from the copper the router wrote.
+fn apply_policy_findings(
+    board: &PcbBoard,
+    policy: &FabricationPolicy,
+    report: &mut ConnectivityReport,
+) {
     report.via_in_pad = find_via_in_pad(board);
     report.undersized_vias = board
         .vias
         .iter()
         .filter(|via| via.drill_nm > 0 && via.drill_nm < policy.min_drill_diameter_nm)
         .map(|via| describe_via(board, via))
+        .collect();
+    report.undersized_annular = board
+        .vias
+        .iter()
+        .filter(|via| {
+            via.drill_nm > 0
+                && (via.size_nm - via.drill_nm) / 2 < policy.min_annular_ring_nm
+                && !filled_via_in_pad(board, policy, via)
+        })
+        .map(|via| describe_annular(board, via, policy.min_annular_ring_nm))
         .collect();
     report.undersized_tracks = board
         .segments
@@ -621,8 +652,40 @@ pub fn check_connectivity(board: &PcbBoard, policy: &FabricationPolicy) -> Conne
             )
         })
         .collect();
-    report.plane_splits = check_plane_splits(board);
-    report
+}
+
+/// Whether a via is a filled and capped via-in-pad, judged by the land its
+/// process guide gives rather than by the plated-barrel ring.
+///
+/// A via-in-pad's land is the pad's own copper: drill plus the process's land
+/// allowance. On `jlc-filled-via` that is a 0.35 mm land on a 0.2 mm drill, a
+/// 0.075 mm ring, which is valid even though the tier's through-via floor is
+/// 0.13 mm. The board's DRC makes the same distinction
+/// (`synth-drc/src/rules.rs`, `check_min_annular_ring_in`); this guard must
+/// not refuse the process's own happy path.
+fn filled_via_in_pad(
+    board: &PcbBoard,
+    policy: &FabricationPolicy,
+    via: &crate::pcb_read::Via,
+) -> bool {
+    if !(policy.allow_via_in_pad
+        && policy.process_fills_via_in_pad
+        && policy.via_in_pad_land_extra_nm > 0)
+    {
+        return false;
+    }
+    let land = policy.min_drill_diameter_nm + policy.via_in_pad_land_extra_nm;
+    if via.size_nm > land || via.size_nm < via.drill_nm + policy.via_in_pad_land_extra_nm {
+        return false;
+    }
+    let Some(net) = via.net else {
+        return false;
+    };
+    board.pads().any(|pad| {
+        pad.net == Some(net)
+            && shares_layer(pad, &via.layers)
+            && pad.signed_distance_nm(via.at) <= (via.drill_nm / 2) as f64
+    })
 }
 
 /// Signal tracks with no reference-plane copper under them.
@@ -727,6 +790,15 @@ fn describe_via(board: &PcbBoard, via: &crate::pcb_read::Via) -> String {
             .unwrap_or_default(),
         via.at.x_mm(),
         via.at.y_mm()
+    )
+}
+
+fn describe_annular(board: &PcbBoard, via: &crate::pcb_read::Via, floor_nm: i64) -> String {
+    let ring_mm = (via.size_nm - via.drill_nm) as f64 / 2.0 / crate::pcb_read::NM_PER_MM;
+    let minimum_mm = floor_nm as f64 / crate::pcb_read::NM_PER_MM;
+    format!(
+        "{}: {ring_mm:.3} mm annular ring is below the {minimum_mm:.3} mm floor",
+        describe_via(board, via)
     )
 }
 
@@ -2140,6 +2212,112 @@ mod tests {
         let report = check_connectivity(&board(text), &FabricationPolicy::default());
         assert_eq!(report.open_nets, 0, "{:?}", report.open);
         assert_eq!(report.connected_nets, 1);
+    }
+
+    #[test]
+    fn a_via_below_the_annular_floor_is_reported() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "") (net 1 "SIG")
+          (footprint "a:1" (layer "F.Cu") (at 0 0)
+            (property "Reference" "R1" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG"))
+          )
+          (footprint "a:1" (layer "F.Cu") (at 10 0)
+            (property "Reference" "R2" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG"))
+          )
+          (segment (start 0 0) (end 5 0) (width 0.25) (layer "F.Cu") (net 1))
+          (via (at 5 0) (size 0.25) (drill 0.15) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 5 0) (end 10 0) (width 0.25) (layer "F.Cu") (net 1))
+          (gr_line (start 0 0) (end 20 10) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let policy = FabricationPolicy {
+            min_drill_diameter_nm: 100_000,
+            min_annular_ring_nm: 75_000,
+            ..FabricationPolicy::default()
+        };
+        let report = check_connectivity(&board(text), &policy);
+        assert_eq!(report.undersized_annular.len(), 1, "{report:?}");
+        assert!(report.undersized_annular[0].contains("SIG"), "{report:?}");
+        assert!(report.undersized_annular[0].contains("0.050"), "{report:?}");
+        assert!(
+            report
+                .blocking_reasons()
+                .iter()
+                .any(|reason| reason.contains("annular")),
+            "{report:?}"
+        );
+    }
+
+    /// `jlc-filled-via`'s own happy path: a 0.35 mm land on a 0.2 mm drill is
+    /// a 0.075 mm ring, valid for a filled and capped via-in-pad even though
+    /// the tier's through-via floor is 0.13 mm.
+    #[test]
+    fn a_filled_via_in_pad_is_judged_by_its_land_not_the_barrel_ring() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "") (net 1 "SIG")
+          (footprint "a:1" (layer "F.Cu") (at 0 0)
+            (property "Reference" "R1" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG"))
+          )
+          (footprint "a:1" (layer "F.Cu") (at 10 0)
+            (property "Reference" "R2" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG"))
+          )
+          (via (at 0 0) (size 0.35) (drill 0.2) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 0 0) (end 5 0) (width 0.25) (layer "F.Cu") (net 1))
+          (segment (start 5 0) (end 10 0) (width 0.25) (layer "F.Cu") (net 1))
+          (gr_line (start 0 0) (end 20 10) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            process_fills_via_in_pad: true,
+            via_in_pad_land_extra_nm: 150_000,
+            min_drill_diameter_nm: 200_000,
+            min_annular_ring_nm: 130_000,
+            ..FabricationPolicy::default()
+        };
+        let report = check_connectivity(&board(text), &policy);
+        assert!(report.undersized_annular.is_empty(), "{report:?}");
+    }
+
+    /// The exemption is the land the guide gives, not any via in a pad: a
+    /// 0.25/0.15 via is below the 0.30 mm land its 0.1 mm drill needs, so its
+    /// 0.05 mm ring is still reported.
+    #[test]
+    fn a_via_in_pad_below_the_process_land_is_still_reported() {
+        let text = r#"(kicad_pcb
+          (version 20260206)
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (net 0 "") (net 1 "SIG")
+          (footprint "a:1" (layer "F.Cu") (at 0 0)
+            (property "Reference" "R1" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG"))
+          )
+          (footprint "a:1" (layer "F.Cu") (at 10 0)
+            (property "Reference" "R2" (at 0 0) (layer "F.SilkS"))
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "SIG"))
+          )
+          (via (at 0 0) (size 0.25) (drill 0.15) (layers "F.Cu" "B.Cu") (net 1))
+          (segment (start 0 0) (end 5 0) (width 0.25) (layer "F.Cu") (net 1))
+          (segment (start 5 0) (end 10 0) (width 0.25) (layer "F.Cu") (net 1))
+          (gr_line (start 0 0) (end 20 10) (layer "Edge.Cuts") (width 0.1))
+        )"#;
+        let policy = FabricationPolicy {
+            allow_via_in_pad: true,
+            process_fills_via_in_pad: true,
+            via_in_pad_land_extra_nm: 150_000,
+            min_drill_diameter_nm: 100_000,
+            min_annular_ring_nm: 75_000,
+            ..FabricationPolicy::default()
+        };
+        let report = check_connectivity(&board(text), &policy);
+        assert_eq!(report.undersized_annular.len(), 1, "{report:?}");
+        assert!(report.undersized_annular[0].contains("0.050"), "{report:?}");
     }
 }
 
