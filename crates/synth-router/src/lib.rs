@@ -105,8 +105,14 @@ pub const ROUTE_REPORT_SCHEMA: &str = "synth.routing.v1";
 /// [`RouteRequest::report_path`] before this function returns, so a run
 /// that fails is as auditable as one that succeeds.
 pub fn route(request: &RouteRequest) -> RouteReport {
+    route_with(request, route_once)
+}
+
+/// [`route`] with the single-attempt runner supplied, so the retry policy can
+/// be tested without an engine.
+fn route_with(request: &RouteRequest, run: impl Fn(&RouteRequest) -> RouteReport) -> RouteReport {
     let started = std::time::Instant::now();
-    let mut report = route_once(request);
+    let mut report = run(request);
     // Whether the engine puts a via in a pad, or leaves a net open, depends on
     // the order it routes the nets in, and the same board can route cleanly in
     // one order and not in another. A board the independent validation rejected
@@ -136,9 +142,53 @@ pub fn route(request: &RouteRequest) -> RouteReport {
         let mut again = request.clone();
         again.kicad_routing_tools.ordering = Some((*ordering).to_string());
         again.limits.wall_clock = remaining;
-        report = route_once(&again);
+        // A retry removes the previous candidate before it routes, and writes
+        // its own report over the earlier one. Keep both until the retry has
+        // produced something to judge, so a retry that times out cannot
+        // replace the findings of the board it was meant to improve on.
+        let kept = KeptAttempt::save(request);
+        let retried = run(&again);
+        if retried.state == result::RouteState::Routed || retried.validation.is_some() {
+            report = retried;
+        } else {
+            info!("the {ordering} retry produced no candidate; keeping the earlier findings");
+            kept.restore();
+            write_report(&mut report, request);
+            break;
+        }
     }
     report
+}
+
+/// The rejected candidate's board file, held aside while a retry runs.
+struct KeptAttempt {
+    held: Option<(std::path::PathBuf, std::path::PathBuf)>,
+}
+
+impl KeptAttempt {
+    fn save(request: &RouteRequest) -> Self {
+        let candidate = request.candidate_path();
+        let aside = candidate.with_extension("kicad_pcb.rejected");
+        let held = std::fs::copy(&candidate, &aside)
+            .ok()
+            .map(|_| (candidate, aside));
+        Self { held }
+    }
+
+    /// Put the held board back; the retry's own file is dropped.
+    fn restore(&self) {
+        if let Some((candidate, aside)) = &self.held {
+            let _ = std::fs::copy(aside, candidate);
+        }
+    }
+}
+
+impl Drop for KeptAttempt {
+    fn drop(&mut self) {
+        if let Some((_, aside)) = &self.held {
+            let _ = std::fs::remove_file(aside);
+        }
+    }
 }
 
 /// The engine's net orders other than its default, in the order they are tried.
@@ -1158,6 +1208,84 @@ mod order_tests {
         request.kicad_routing_tools.ordering = None;
         request.engine = RouterEngine::Freerouting;
         assert!(retry_orderings(&request).is_empty());
+    }
+
+    #[test]
+    fn a_retry_that_times_out_keeps_the_rejected_candidates_findings() {
+        use std::cell::Cell;
+        let dir = std::env::temp_dir().join(format!("synth_retry_keep_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.stem = "demo".to_string();
+        request.limits.wall_clock = std::time::Duration::from_secs(3600);
+        std::fs::write(request.candidate_path(), b"first candidate").expect("candidate");
+
+        let calls = Cell::new(0);
+        let report = route_with(&request, |attempt| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                let mut judged = RouteReport::failed(
+                    attempt,
+                    &None,
+                    failure::RouterFailure::for_stage(
+                        attempt.engine,
+                        RouterStage::Route,
+                        RouterFailureReason::Rejected,
+                        "judged",
+                    ),
+                );
+                judged.validation = Some(result::ValidationSummary {
+                    fabrication_ready: false,
+                    topology: validate::TopologyReport::default(),
+                    connectivity: validate::ConnectivityReport::default(),
+                    kicad_drc: None,
+                    blocking_reasons: vec!["net +12V is not fully connected".to_string()],
+                    unavailable_checks: Vec::new(),
+                    advisories: Vec::new(),
+                });
+                judged
+            } else {
+                // The retry removes the board it replaces, then times out
+                // before it produces one.
+                let _ = std::fs::remove_file(attempt.candidate_path());
+                RouteReport::failed(
+                    attempt,
+                    &None,
+                    failure::RouterFailure::for_stage(
+                        attempt.engine,
+                        RouterStage::Route,
+                        RouterFailureReason::Timeout,
+                        "timed out",
+                    ),
+                )
+            }
+        });
+
+        assert_eq!(calls.get(), 2, "one retry, then the loop stops");
+        let validation = report.validation.as_ref().expect("the first findings");
+        assert!(
+            validation
+                .blocking_reasons
+                .iter()
+                .any(|reason| reason.contains("+12V")),
+            "{report:#?}"
+        );
+        assert_eq!(
+            std::fs::read(request.candidate_path()).expect("candidate restored"),
+            b"first candidate"
+        );
+        assert!(
+            !request
+                .candidate_path()
+                .with_extension("kicad_pcb.rejected")
+                .exists(),
+            "the held copy is cleaned up"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -86,6 +86,14 @@ pub fn install(out_dir: &Path) -> StubRouter {
     // for the purposes of a test that supplies its own router.
     std::fs::write(krt_repo.join("krt_capabilities.py"), b"# stub\n")
         .expect("write krt capability manifest");
+    // The capability probe imports KRT's compiled `grid_router` module from
+    // `rust_router/`; an empty module stands in for the build.
+    std::fs::create_dir_all(krt_repo.join("rust_router")).expect("rust_router dir");
+    std::fs::write(
+        krt_repo.join("rust_router").join("grid_router.py"),
+        b"# stub\n",
+    )
+    .expect("write grid_router stub");
 
     // The stub's directory goes first on the child's PATH, ahead of this
     // process's own PATH.

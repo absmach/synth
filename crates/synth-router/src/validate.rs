@@ -660,9 +660,13 @@ fn apply_policy_findings(
 /// A via-in-pad's land is the pad's own copper: drill plus the process's land
 /// allowance. On `jlc-filled-via` that is a 0.35 mm land on a 0.2 mm drill, a
 /// 0.075 mm ring, which is valid even though the tier's through-via floor is
-/// 0.13 mm. The board's DRC makes the same distinction
-/// (`synth-drc/src/rules.rs`, `check_min_annular_ring_in`); this guard must
-/// not refuse the process's own happy path.
+/// 0.13 mm. The board's DRC makes a similar distinction
+/// (`synth-drc/src/rules.rs`, `check_min_annular_ring_in`), but this check is
+/// broader: the DRC exempts a via only when its centre is inside the pad and
+/// the board declares `requires via_in_pad` and the component an underpad
+/// escape, none of which the router can see, and this one also accepts a via
+/// whose centre is within half its drill of the pad's edge. It must not
+/// refuse the process's own happy path.
 fn filled_via_in_pad(
     board: &PcbBoard,
     policy: &FabricationPolicy,
@@ -2286,7 +2290,7 @@ mod tests {
     }
 
     /// The exemption is the land the guide gives, not any via in a pad: a
-    /// 0.25/0.15 via is below the 0.30 mm land its 0.1 mm drill needs, so its
+    /// 0.25/0.15 via is below the 0.30 mm land its 0.15 mm drill needs, so its
     /// 0.05 mm ring is still reported.
     #[test]
     fn a_via_in_pad_below_the_process_land_is_still_reported() {
