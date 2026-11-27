@@ -994,6 +994,88 @@ fn plane_pad_targets(board: &Board, placement: &Placement, net: &synth_ir::Net) 
     out
 }
 
+/// Whether every declared-plane pad still gets a stitching via on `placement`.
+///
+/// Runs the exporter's own search for each pad, in the exporter's order and
+/// against the vias already placed: beside the pad ([`plane_via_offset`]),
+/// then in it on a board that allows via-in-pad, then past the pin tips
+/// ([`plane_via_past_tips`]), through [`choose_plane_via`]. A pad no step
+/// reaches would make the export fail with a [`PlaneFanoutError`], so
+/// compaction uses this after shrinking and a board that fails falls back to
+/// its fitted outline. The check cannot drift from the exporter: both call the
+/// same search. The one approximation is the radius it records for a placed
+/// via, the plane via's rather than a filled or micro land's.
+pub(crate) fn plane_pad_rim_kept(board: &Board, placement: &Placement) -> bool {
+    if board.layers < 4 || !board.netclasses.iter().any(|class| class.plane) {
+        return true;
+    }
+    let pad_rects = all_pad_rects(board, placement);
+    let process = synth_drc::ManufacturerProfile::from_name(
+        board.manufacturer.as_deref().unwrap_or("jlc-standard"),
+    );
+    let via_in_pad_allowed = board
+        .required_processes
+        .contains(&synth_ir::ProcessRequirement::ViaInPad)
+        && process.via_in_pad;
+    let plane_via = PlaneVia::for_process(&process);
+    let pad_via = PlaneVia::for_via_in_pad(&process);
+    let mut placed_vias: Vec<(synth_geometry::Point, i64)> = Vec::new();
+    let rails = board
+        .netclasses
+        .iter()
+        .filter(|class| class.plane)
+        .flat_map(|class| {
+            board
+                .nets
+                .iter()
+                .filter(move |net| net.netclass.as_deref() == Some(class.name.as_str()))
+        });
+    for net in rails {
+        for target in plane_pad_targets(board, placement, net) {
+            let beside = plane_via_offset(
+                target.centre,
+                target.origin,
+                placement.board_outline,
+                &PlaneCopper {
+                    pads: &pad_rects,
+                    vias: &placed_vias,
+                },
+                &plane_via,
+            );
+            let in_pad_rules = InPadRules {
+                pads: &pad_rects,
+                vias: &placed_vias,
+                clearance_nm: process.min_copper_clearance_nm,
+                drill_to_copper_nm: process.min_drill_to_copper_nm,
+            };
+            let in_pad = |land: &PlaneVia| plane_via_in_pad(&target, land, &in_pad_rules);
+            let (chosen, land) = choose_plane_via(
+                beside,
+                via_in_pad_allowed.then_some(&in_pad as &InPadAttempt<'_>),
+                pad_via.filter(|_| target.underpad),
+                plane_via,
+                || {
+                    plane_via_past_tips(
+                        target.centre,
+                        target.origin,
+                        placement.board_outline,
+                        &PlaneCopper {
+                            pads: &pad_rects,
+                            vias: &placed_vias,
+                        },
+                        &plane_via,
+                    )
+                },
+            );
+            match chosen {
+                Ok(at) => placed_vias.push((at, land.pad_radius_nm)),
+                Err(_) => return false,
+            }
+        }
+    }
+    true
+}
+
 /// Stitching-via pad radius in nanometres (a 0.6 mm via): the least the
 /// exporter uses, raised by [`PlaneVia::for_process`] when a process needs a
 /// wider ring.
