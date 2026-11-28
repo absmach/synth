@@ -111,8 +111,20 @@ pub fn route(request: &RouteRequest) -> RouteReport {
 /// [`route`] with the single-attempt runner supplied, so the retry policy can
 /// be tested without an engine.
 fn route_with(request: &RouteRequest, run: impl Fn(&RouteRequest) -> RouteReport) -> RouteReport {
-    let started = std::time::Instant::now();
+    route_with_clock(request, run, std::time::Instant::now)
+}
+
+/// [`route_with`] with the clock supplied, so the retry budget can be tested
+/// without waiting the measured attempt's wall time.
+fn route_with_clock(
+    request: &RouteRequest,
+    run: impl Fn(&RouteRequest) -> RouteReport,
+    now: impl Fn() -> std::time::Instant,
+) -> RouteReport {
+    let started = now();
+    let mut attempt_started = started;
     let mut report = run(request);
+    let mut attempt_duration = now().saturating_duration_since(attempt_started);
     // Whether the engine puts a via in a pad, or leaves a net open, depends on
     // the order it routes the nets in, and the same board can route cleanly in
     // one order and not in another. A board the independent validation rejected
@@ -124,11 +136,14 @@ fn route_with(request: &RouteRequest, run: impl Fn(&RouteRequest) -> RouteReport
         }
         // The wall clock bounds the retry loop, not the whole command: the
         // first attempt gets the full router budget, each retry gets what is
-        // left, and a retry with less than the minimum run time is not started
-        // (it would only delete the rejected candidate's copper and time out).
-        // The independent DRC has its own budget after routing.
-        let remaining = request.limits.wall_clock.saturating_sub(started.elapsed());
-        if !retry_has_budget(remaining) {
+        // left, and a retry with less time than the previous attempt took is
+        // not started (it would only delete the rejected candidate's copper and
+        // time out). The independent DRC has its own budget after routing.
+        let remaining = request
+            .limits
+            .wall_clock
+            .saturating_sub(now().saturating_duration_since(started));
+        if !retry_has_budget(remaining, attempt_duration) {
             info!("the route budget is spent; not retrying with the {ordering} net order");
             break;
         }
@@ -144,48 +159,66 @@ fn route_with(request: &RouteRequest, run: impl Fn(&RouteRequest) -> RouteReport
         again.limits.wall_clock = remaining;
         // A retry removes the previous candidate before it routes, and writes
         // its own report over the earlier one. Keep both until the retry has
-        // produced something to judge, so a retry that times out cannot
-        // replace the findings of the board it was meant to improve on.
+        // produced something better to judge, so neither a timeout nor a worse
+        // board can replace the findings of the one it was meant to improve on.
         let kept = KeptAttempt::save(request);
+        attempt_started = now();
         let retried = run(&again);
-        if retried.state == result::RouteState::Routed || retried.validation.is_some() {
+        attempt_duration = now().saturating_duration_since(attempt_started);
+        let judged = retried.state == result::RouteState::Routed || retried.validation.is_some();
+        if judged && retried.portfolio_rank() > report.portfolio_rank() {
             report = retried;
         } else {
-            info!("the {ordering} retry produced no candidate; keeping the earlier findings");
+            if judged {
+                info!("the {ordering} retry was not better; keeping the earlier findings");
+            } else {
+                info!("the {ordering} retry produced no candidate; keeping the earlier findings");
+            }
             kept.restore();
             write_report(&mut report, request);
-            break;
+            if !judged {
+                break;
+            }
         }
     }
     report
 }
 
-/// The rejected candidate's board file, held aside while a retry runs.
+/// The rejected attempt's board and sidecars, held aside while a retry runs.
 struct KeptAttempt {
-    held: Option<(std::path::PathBuf, std::path::PathBuf)>,
+    held: Vec<(std::path::PathBuf, std::path::PathBuf)>,
 }
 
 impl KeptAttempt {
     fn save(request: &RouteRequest) -> Self {
-        let candidate = request.candidate_path();
-        let aside = candidate.with_extension("kicad_pcb.rejected");
-        let held = std::fs::copy(&candidate, &aside)
-            .ok()
-            .map(|_| (candidate, aside));
+        let mut held = Vec::new();
+        for original in [
+            request.candidate_path(),
+            request.drc_report_path(),
+            request.router_report_path(),
+        ] {
+            let Some(name) = original.file_name() else {
+                continue;
+            };
+            let aside = original.with_file_name(format!("{}.rejected", name.to_string_lossy()));
+            if std::fs::copy(&original, &aside).is_ok() {
+                held.push((original, aside));
+            }
+        }
         Self { held }
     }
 
-    /// Put the held board back; the retry's own file is dropped.
+    /// Put the held files back; the retry's own files are dropped.
     fn restore(&self) {
-        if let Some((candidate, aside)) = &self.held {
-            let _ = std::fs::copy(aside, candidate);
+        for (original, aside) in &self.held {
+            let _ = std::fs::copy(aside, original);
         }
     }
 }
 
 impl Drop for KeptAttempt {
     fn drop(&mut self) {
-        if let Some((_, aside)) = &self.held {
+        for (_, aside) in &self.held {
             let _ = std::fs::remove_file(aside);
         }
     }
@@ -218,10 +251,15 @@ fn ordering_retries() -> usize {
 /// Whether a retry has enough of the wall clock left to finish.
 ///
 /// A run given less than [`crate::search_budget::MIN_RUN_SECS`] cannot finish,
-/// so it is not started: it would only delete the rejected attempt's candidate
-/// and replace its findings with a timeout.
-fn retry_has_budget(remaining: std::time::Duration) -> bool {
+/// and one given less than the previous attempt took is just as unlikely to;
+/// neither is started, because it would only delete the rejected attempt's
+/// candidate and replace its findings with a timeout.
+fn retry_has_budget(
+    remaining: std::time::Duration,
+    previous_attempt_duration: std::time::Duration,
+) -> bool {
     remaining >= std::time::Duration::from_secs(crate::search_budget::MIN_RUN_SECS)
+        && remaining >= previous_attempt_duration
 }
 
 fn route_once(request: &RouteRequest) -> RouteReport {
@@ -1291,13 +1329,294 @@ mod order_tests {
     #[test]
     fn a_retry_below_the_minimum_run_budget_is_not_started() {
         use std::time::Duration;
-        assert!(retry_has_budget(Duration::from_secs(
-            crate::search_budget::MIN_RUN_SECS
-        )));
-        assert!(!retry_has_budget(Duration::from_secs(
-            crate::search_budget::MIN_RUN_SECS - 1
-        )));
-        assert!(!retry_has_budget(Duration::ZERO));
+        assert!(retry_has_budget(
+            Duration::from_secs(crate::search_budget::MIN_RUN_SECS),
+            Duration::ZERO
+        ));
+        assert!(!retry_has_budget(
+            Duration::from_secs(crate::search_budget::MIN_RUN_SECS - 1),
+            Duration::ZERO
+        ));
+        assert!(!retry_has_budget(Duration::ZERO, Duration::ZERO));
+    }
+
+    fn judged_attempt(attempt: &RouteRequest, blocking: usize) -> RouteReport {
+        judged_with(
+            attempt,
+            (0..blocking)
+                .map(|index| format!("blocking finding {index}"))
+                .collect(),
+        )
+    }
+
+    fn judged_with(attempt: &RouteRequest, blocking_reasons: Vec<String>) -> RouteReport {
+        let mut report = RouteReport::failed(
+            attempt,
+            &None,
+            failure::RouterFailure::for_stage(
+                attempt.engine,
+                RouterStage::Route,
+                RouterFailureReason::Rejected,
+                "judged",
+            ),
+        );
+        report.validation = Some(result::ValidationSummary {
+            fabrication_ready: false,
+            topology: validate::TopologyReport::default(),
+            connectivity: validate::ConnectivityReport::default(),
+            kicad_drc: None,
+            blocking_reasons,
+            unavailable_checks: Vec::new(),
+            advisories: Vec::new(),
+        });
+        report
+    }
+
+    fn routed_attempt(attempt: &RouteRequest) -> RouteReport {
+        let mut report = judged_attempt(attempt, 0);
+        report.state = RouteState::Routed;
+        report.failure = None;
+        report
+    }
+
+    #[test]
+    fn a_retry_with_less_time_left_than_the_previous_attempt_is_not_started() {
+        use std::cell::Cell;
+        use std::time::{Duration, Instant};
+
+        let dir = std::env::temp_dir().join(format!("synth_retry_budget_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.stem = "demo".to_string();
+        request.limits.wall_clock = Duration::from_secs(200);
+
+        let started = Instant::now();
+        let elapsed = Cell::new(Duration::ZERO);
+        let calls = Cell::new(0);
+        let report = route_with_clock(
+            &request,
+            |attempt| {
+                calls.set(calls.get() + 1);
+                // The attempt used 150 s of the 200 s budget; 50 s remain,
+                // more than the 30 s floor but less than that attempt took.
+                elapsed.set(elapsed.get() + Duration::from_secs(150));
+                judged_attempt(attempt, 1)
+            },
+            || started + elapsed.get(),
+        );
+
+        assert_eq!(
+            calls.get(),
+            1,
+            "a retry without the time the last attempt took must not start"
+        );
+        assert!(
+            report.retryable(),
+            "the rejected attempt's findings are still reported"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_retry_with_at_least_the_previous_attempts_time_is_started() {
+        use std::cell::Cell;
+        use std::time::{Duration, Instant};
+
+        let dir =
+            std::env::temp_dir().join(format!("synth_retry_budget_ok_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.stem = "demo".to_string();
+        request.limits.wall_clock = Duration::from_secs(200);
+
+        let started = Instant::now();
+        let elapsed = Cell::new(Duration::ZERO);
+        let calls = Cell::new(0);
+        let report = route_with_clock(
+            &request,
+            |attempt| {
+                calls.set(calls.get() + 1);
+                if calls.get() == 1 {
+                    // Exactly half the budget: the 100 s left is the time the
+                    // first attempt took, so the retry may start.
+                    elapsed.set(elapsed.get() + Duration::from_secs(100));
+                    judged_attempt(attempt, 1)
+                } else {
+                    routed_attempt(attempt)
+                }
+            },
+            || started + elapsed.get(),
+        );
+
+        assert_eq!(calls.get(), 2, "a retry with the last attempt's time runs");
+        assert_eq!(report.state, RouteState::Routed);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn budgeted_request(label: &str) -> (RouteRequest, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("synth_retry_{label}_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let mut request = RouteRequest::new(
+            &dir.join("demo.kicad_pcb"),
+            &dir,
+            RouterEngine::KiCadRoutingTools,
+        );
+        request.stem = "demo".to_string();
+        request.limits.wall_clock = std::time::Duration::from_secs(3600);
+        (request, dir)
+    }
+
+    #[test]
+    fn a_worse_judged_retry_keeps_the_first_report_and_board() {
+        use std::cell::Cell;
+
+        let (request, dir) = budgeted_request("worse");
+        let calls = Cell::new(0);
+        let report = route_with(&request, |attempt| {
+            calls.set(calls.get() + 1);
+            let board = if calls.get() == 1 { "first" } else { "retry" };
+            std::fs::write(attempt.candidate_path(), board).expect("candidate");
+            std::fs::write(attempt.drc_report_path(), format!("{board} drc")).expect("drc");
+            std::fs::write(attempt.router_report_path(), format!("{board} stats")).expect("stats");
+            if calls.get() == 1 {
+                judged_with(attempt, vec!["first finding".to_string()])
+            } else {
+                judged_with(
+                    attempt,
+                    vec!["worse finding 1".to_string(), "worse finding 2".to_string()],
+                )
+            }
+        });
+
+        assert_eq!(calls.get(), 4, "every order was tried");
+        let validation = report.validation.as_ref().expect("the first findings");
+        assert_eq!(validation.blocking_reasons, vec!["first finding"]);
+        assert_eq!(
+            std::fs::read(request.candidate_path()).expect("candidate"),
+            b"first"
+        );
+        assert_eq!(
+            std::fs::read(request.drc_report_path()).expect("drc report"),
+            b"first drc"
+        );
+        assert_eq!(
+            std::fs::read(request.router_report_path()).expect("router report"),
+            b"first stats"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_judged_retry_that_ties_keeps_the_first_report_and_board() {
+        use std::cell::Cell;
+
+        let (request, dir) = budgeted_request("tie");
+        let calls = Cell::new(0);
+        let report = route_with(&request, |attempt| {
+            calls.set(calls.get() + 1);
+            let board = if calls.get() == 1 { "first" } else { "retry" };
+            std::fs::write(attempt.candidate_path(), board).expect("candidate");
+            std::fs::write(attempt.drc_report_path(), format!("{board} drc")).expect("drc");
+            std::fs::write(attempt.router_report_path(), format!("{board} stats")).expect("stats");
+            let mut judged = judged_with(attempt, vec!["same finding".to_string()]);
+            judged.statistics.vias = 4;
+            judged
+        });
+
+        assert_eq!(calls.get(), 4, "every order was tried");
+        let validation = report.validation.as_ref().expect("the first findings");
+        assert_eq!(validation.blocking_reasons, vec!["same finding"]);
+        assert_eq!(
+            std::fs::read(request.candidate_path()).expect("candidate"),
+            b"first"
+        );
+        assert_eq!(
+            std::fs::read(request.drc_report_path()).expect("drc report"),
+            b"first drc"
+        );
+        assert_eq!(
+            std::fs::read(request.router_report_path()).expect("router report"),
+            b"first stats"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_better_judged_retry_replaces_the_first_report_and_board() {
+        use std::cell::Cell;
+
+        let (request, dir) = budgeted_request("better");
+        let calls = Cell::new(0);
+        let report = route_with(&request, |attempt| {
+            calls.set(calls.get() + 1);
+            match calls.get() {
+                1 => {
+                    std::fs::write(attempt.candidate_path(), b"first").expect("first candidate");
+                    judged_with(
+                        attempt,
+                        vec!["first finding 1".to_string(), "first finding 2".to_string()],
+                    )
+                }
+                2 => {
+                    std::fs::write(attempt.candidate_path(), b"better").expect("better candidate");
+                    judged_with(attempt, vec!["better finding".to_string()])
+                }
+                _ => {
+                    std::fs::write(attempt.candidate_path(), b"worse").expect("worse candidate");
+                    judged_with(
+                        attempt,
+                        vec![
+                            "worse finding 1".to_string(),
+                            "worse finding 2".to_string(),
+                            "worse finding 3".to_string(),
+                        ],
+                    )
+                }
+            }
+        });
+
+        assert_eq!(calls.get(), 4, "every order was tried");
+        let validation = report.validation.as_ref().expect("the better findings");
+        assert_eq!(validation.blocking_reasons, vec!["better finding"]);
+        assert_eq!(
+            std::fs::read(request.candidate_path()).expect("candidate"),
+            b"better"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_routed_retry_replaces_the_first_report_and_board() {
+        use std::cell::Cell;
+
+        let (request, dir) = budgeted_request("routed");
+        let calls = Cell::new(0);
+        let report = route_with(&request, |attempt| {
+            calls.set(calls.get() + 1);
+            if calls.get() == 1 {
+                std::fs::write(attempt.candidate_path(), b"first").expect("first candidate");
+                judged_with(attempt, vec!["first finding".to_string()])
+            } else {
+                std::fs::write(attempt.candidate_path(), b"routed").expect("routed candidate");
+                routed_attempt(attempt)
+            }
+        });
+
+        assert_eq!(calls.get(), 2, "a routed board ends the retry loop");
+        assert_eq!(report.state, RouteState::Routed);
+        assert_eq!(
+            std::fs::read(request.candidate_path()).expect("candidate"),
+            b"routed"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

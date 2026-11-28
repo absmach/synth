@@ -85,10 +85,101 @@ const POLL_INTERVAL: Duration = Duration::from_millis(25);
 /// leaves the reader thread blocked forever.
 const DRAIN_GRACE: Duration = Duration::from_secs(5);
 
+/// Grace allowed between the process group's SIGTERM and SIGKILL.
+#[cfg(unix)]
+const KILL_GRACE: Duration = Duration::from_millis(500);
+
+/// Stops the helper groups when synth itself is told to exit.
+///
+/// The signal handler only wakes this module's own thread; the group kill and
+/// the 500 ms grace run outside signal context, where sleeping and allocating
+/// are safe.
+#[cfg(unix)]
+mod signal_cleanup {
+    use std::sync::atomic::{AtomicI32, Ordering};
+    use std::sync::{Mutex, MutexGuard, Once};
+
+    use nix::sys::signal::{Signal, killpg};
+    use nix::unistd::Pid;
+    use signal_hook::consts::{SIGINT, SIGTERM};
+    use signal_hook::iterator::Signals;
+
+    const MAX_ACTIVE_GROUPS: usize = 16;
+    static ACTIVE_GROUPS: [AtomicI32; MAX_ACTIVE_GROUPS] =
+        [const { AtomicI32::new(0) }; MAX_ACTIVE_GROUPS];
+    static INSTALL: Once = Once::new();
+    /// Serialises spawn-and-register against the signal supervisor's snapshot.
+    static SPAWN_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(super) fn lock_spawn() -> MutexGuard<'static, ()> {
+        SPAWN_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    pub(super) fn install() {
+        INSTALL.call_once(|| {
+            let Ok(mut signals) = Signals::new([SIGINT, SIGTERM]) else {
+                return;
+            };
+            std::thread::spawn(move || {
+                let Some(signal) = signals.forever().next() else {
+                    return;
+                };
+                terminate_active_groups();
+                std::process::exit(128 + signal);
+            });
+        });
+    }
+
+    /// Keeps one helper's process group registered until its run returns.
+    pub(super) struct ActiveGroup {
+        slot: usize,
+    }
+
+    impl ActiveGroup {
+        pub(super) fn register(pid: u32) -> Option<Self> {
+            let pid = i32::try_from(pid).ok()?;
+            ACTIVE_GROUPS.iter().enumerate().find_map(|(slot, cell)| {
+                cell.compare_exchange(0, pid, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                    .then_some(Self { slot })
+            })
+        }
+    }
+
+    impl Drop for ActiveGroup {
+        fn drop(&mut self) {
+            ACTIVE_GROUPS[self.slot].store(0, Ordering::SeqCst);
+        }
+    }
+
+    fn terminate_active_groups() {
+        // Wait for a helper that is between spawn and registration; a signal
+        // must not pass that window and leave the new group unannounced.
+        let _spawn = lock_spawn();
+        let groups: Vec<i32> = ACTIVE_GROUPS
+            .iter()
+            .map(|group| group.load(Ordering::SeqCst))
+            .filter(|pid| *pid != 0)
+            .collect();
+        if groups.is_empty() {
+            return;
+        }
+        for pid in &groups {
+            let _ = killpg(Pid::from_raw(*pid), Signal::SIGTERM);
+        }
+        std::thread::sleep(super::KILL_GRACE);
+        for pid in &groups {
+            let _ = killpg(Pid::from_raw(*pid), Signal::SIGKILL);
+        }
+    }
+}
+
 /// How much of the spawned process tree to stop on timeout or cancellation.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum KillScope {
-    /// Stop only the direct child. The default for router engines.
+    /// Stop only the direct child. The default for [`run`].
     #[default]
     Child,
     /// Stop the child and everything in its process group.
@@ -111,15 +202,45 @@ pub fn run(
     budget: Duration,
     max_output_bytes: usize,
 ) -> Result<Invocation, SpawnError> {
+    run_with_scope(binary, args, budget, max_output_bytes, KillScope::Child)
+}
+
+/// [`run`] for a helper that starts the engine without `exec`.
+///
+/// On Unix the helper leads its own process group, so a timeout stops the
+/// engine grandchild along with the wrapper. SIGINT and SIGTERM delivered to
+/// synth stop the registered group before synth exits. Other targets keep
+/// [`run`]'s direct-child behaviour.
+pub fn run_in_process_group(
+    binary: &Path,
+    args: &[String],
+    budget: Duration,
+    max_output_bytes: usize,
+) -> Result<Invocation, SpawnError> {
+    #[cfg(unix)]
+    let kill = KillScope::ProcessTree;
+    #[cfg(not(unix))]
+    let kill = KillScope::Child;
+    run_with_scope(binary, args, budget, max_output_bytes, kill)
+}
+
+fn run_with_scope(
+    binary: &Path,
+    args: &[String],
+    budget: Duration,
+    max_output_bytes: usize,
+    kill: KillScope,
+) -> Result<Invocation, SpawnError> {
     let ambient = ambient_cancel();
-    run_cancellable(
+    run_cancellable_inner(
         binary,
         args,
         budget,
         max_output_bytes,
         ambient.as_ref(),
         None,
-        KillScope::Child,
+        kill,
+        kill == KillScope::ProcessTree,
     )
 }
 
@@ -153,6 +274,36 @@ pub fn run_cancellable(
     cwd: Option<&Path>,
     kill: KillScope,
 ) -> Result<Invocation, SpawnError> {
+    run_cancellable_inner(
+        binary,
+        args,
+        budget,
+        max_output_bytes,
+        cancel,
+        cwd,
+        kill,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_cancellable_inner(
+    binary: &Path,
+    args: &[String],
+    budget: Duration,
+    max_output_bytes: usize,
+    cancel: Option<&CancelToken>,
+    cwd: Option<&Path>,
+    kill: KillScope,
+    announce_group: bool,
+) -> Result<Invocation, SpawnError> {
+    #[cfg(unix)]
+    if announce_group {
+        signal_cleanup::install();
+    }
+    #[cfg(not(unix))]
+    let _ = announce_group;
+
     let mut command_repr = Vec::with_capacity(args.len() + 1);
     command_repr.push(binary.display().to_string());
     command_repr.extend(args.iter().cloned());
@@ -177,11 +328,23 @@ pub fn run_cancellable(
         }
     }
 
+    #[cfg(unix)]
+    let spawn_guard = announce_group.then(signal_cleanup::lock_spawn);
+
     let mut child = command.spawn().map_err(|e| SpawnError {
         detail: format!("could not start `{}`: {e}", binary.display()),
         not_found: e.kind() == std::io::ErrorKind::NotFound,
         command: command_repr_for_error.clone(),
     })?;
+
+    // Registered after spawn so a signal during the wait can reach the group
+    // the child just became the leader of. Dropped when this run returns.
+    #[cfg(unix)]
+    let _active = announce_group
+        .then(|| signal_cleanup::ActiveGroup::register(child.id()))
+        .flatten();
+    #[cfg(unix)]
+    drop(spawn_guard);
 
     let stdout_reader = drain(child.stdout.take(), max_output_bytes);
     let stderr_reader = drain(child.stderr.take(), max_output_bytes);
@@ -237,7 +400,7 @@ pub fn run_cancellable(
 
 fn stop(child: &mut std::process::Child, kill: KillScope) {
     if kill == KillScope::ProcessTree {
-        kill_process_group(child.id());
+        stop_process_group(child.id());
     }
     // The group kill is best-effort; the direct kill and wait always reap
     // the process the caller owns.
@@ -246,17 +409,22 @@ fn stop(child: &mut std::process::Child, kill: KillScope) {
 }
 
 #[cfg(unix)]
-fn kill_process_group(pid: u32) {
+fn stop_process_group(pid: u32) {
     use nix::sys::signal::{Signal, killpg};
     use nix::unistd::Pid;
 
     if let Ok(pid) = i32::try_from(pid) {
-        let _ = killpg(Pid::from_raw(pid), Signal::SIGKILL);
+        let group = Pid::from_raw(pid);
+        // Ask the whole group to stop, then kill whatever is still there:
+        // a grandchild that ignores TERM must not outlive its wrapper.
+        let _ = killpg(group, Signal::SIGTERM);
+        std::thread::sleep(KILL_GRACE);
+        let _ = killpg(group, Signal::SIGKILL);
     }
 }
 
 #[cfg(windows)]
-fn kill_process_group(pid: u32) {
+fn stop_process_group(pid: u32) {
     // Windows has no process group equivalent here; `/T` is the best-effort
     // tree kill. The direct kill below still stops the owned child.
     let _ = Command::new("taskkill")
@@ -268,7 +436,7 @@ fn kill_process_group(pid: u32) {
 }
 
 #[cfg(not(any(unix, windows)))]
-fn kill_process_group(_pid: u32) {
+fn stop_process_group(_pid: u32) {
     // No process-group primitive on this target; the direct child is all we
     // can stop.
 }
@@ -537,6 +705,172 @@ mod tests {
             std::thread::sleep(Duration::from_millis(25));
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_timed_out_helper_takes_its_sleeping_grandchild_with_it() {
+        let dir = std::env::temp_dir().join(format!("synth_proc_helper_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        let helper_pid = dir.join("helper.pid");
+        let grandchild_pid = dir.join("grandchild.pid");
+        let script = format!(
+            "echo $$ > '{}'\n\
+             sh -c 'trap \"\" TERM; echo $$ > \"{}\"; exec sleep 60' &\nwait\n",
+            helper_pid.display(),
+            grandchild_pid.display()
+        );
+
+        let run = run_in_process_group(&shell(), &sh(&script), Duration::from_millis(500), 4096)
+            .expect("helper ran");
+        assert!(run.timed_out);
+
+        // The grandchild ignores TERM, so only the SIGKILL that follows the
+        // grace period can stop it.
+        for pid_file in [&helper_pid, &grandchild_pid] {
+            let pid: u32 = std::fs::read_to_string(pid_file)
+                .expect("child pid")
+                .trim()
+                .parse()
+                .expect("numeric pid");
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .is_ok_and(|status| status.success())
+            {
+                assert!(
+                    Instant::now() < deadline,
+                    "process {pid} survived the helper's timeout kill"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    fn helper_group_script(helper_pid: &Path, grandchild_pid: &Path) -> String {
+        format!(
+            "echo $$ > '{}'\n\
+             sh -c 'trap \"\" TERM INT; echo $$ > \"{}\"; exec sleep 60' &\nwait\n",
+            helper_pid.display(),
+            grandchild_pid.display()
+        )
+    }
+
+    /// Runs inside a child test binary: start the helper in its own group,
+    /// signal this process, and leave the exit to the signal supervisor.
+    #[cfg(unix)]
+    fn run_signal_child() {
+        let signal: i32 = std::env::var("SYNTH_SIGNAL_CHILD_SIGNAL")
+            .expect("child signal")
+            .parse()
+            .expect("numeric signal");
+        let dir = PathBuf::from(std::env::var_os("SYNTH_SIGNAL_CHILD_DIR").expect("child dir"));
+        let helper_pid = dir.join("helper.pid");
+        let grandchild_pid = dir.join("grandchild.pid");
+        let script = helper_group_script(&helper_pid, &grandchild_pid);
+        std::thread::spawn(move || {
+            let _ = run_in_process_group(&shell(), &sh(&script), Duration::from_secs(60), 4096);
+        });
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !(helper_pid.exists() && grandchild_pid.exists()) {
+            assert!(Instant::now() < deadline, "the helper did not start");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let _ = Command::new("kill")
+            .args([format!("-{signal}"), std::process::id().to_string()])
+            .status();
+        std::thread::sleep(Duration::from_secs(10));
+        std::process::exit(91);
+    }
+
+    /// A Ctrl-C or SIGTERM ends the helper group before synth itself exits.
+    #[cfg(unix)]
+    #[test]
+    fn a_sigint_or_sigterm_stops_the_helper_group_before_synth_exits() {
+        if std::env::var_os("SYNTH_SIGNAL_CHILD_SIGNAL").is_some() {
+            run_signal_child();
+            return;
+        }
+
+        let test_name =
+            "process::tests::a_sigint_or_sigterm_stops_the_helper_group_before_synth_exits";
+        for signal in [15, 2] {
+            let dir = std::env::temp_dir().join(format!(
+                "synth_proc_signal_{}_{}",
+                std::process::id(),
+                signal
+            ));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("scratch");
+            let mut child = Command::new(std::env::current_exe().expect("test binary"))
+                .args(["--exact", test_name])
+                .env("SYNTH_SIGNAL_CHILD_SIGNAL", signal.to_string())
+                .env("SYNTH_SIGNAL_CHILD_DIR", &dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("signal child");
+
+            let deadline = Instant::now() + Duration::from_secs(8);
+            let mut status = None;
+            while status.is_none() && Instant::now() < deadline {
+                if let Some(done) = child.try_wait().expect("wait for the signal child") {
+                    status = Some(done);
+                } else {
+                    std::thread::sleep(Duration::from_millis(25));
+                }
+            }
+            if status.is_none() {
+                let _ = child.kill();
+            }
+            let status = child.wait().expect("reap the signal child");
+
+            let helper: u32 = std::fs::read_to_string(dir.join("helper.pid"))
+                .expect("helper pid")
+                .trim()
+                .parse()
+                .expect("numeric helper pid");
+            let grandchild: u32 = std::fs::read_to_string(dir.join("grandchild.pid"))
+                .expect("grandchild pid")
+                .trim()
+                .parse()
+                .expect("numeric grandchild pid");
+            let alive = |pid: u32| {
+                Command::new("kill")
+                    .args(["-0", &pid.to_string()])
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .is_ok_and(|status| status.success())
+            };
+            let helper_alive = alive(helper);
+            let grandchild_alive = alive(grandchild);
+            for (pid, is_alive) in [(helper, helper_alive), (grandchild, grandchild_alive)] {
+                if is_alive {
+                    let _ = Command::new("kill")
+                        .args(["-KILL", &pid.to_string()])
+                        .status();
+                }
+            }
+
+            assert_eq!(
+                status.code(),
+                Some(128 + signal),
+                "signal {signal} must exit after the group kill"
+            );
+            assert!(!helper_alive, "helper {helper} survived signal {signal}");
+            assert!(
+                !grandchild_alive,
+                "grandchild {grandchild} survived signal {signal}"
+            );
+            let _ = std::fs::remove_dir_all(&dir);
+        }
     }
 
     #[test]
