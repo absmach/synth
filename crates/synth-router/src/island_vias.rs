@@ -1561,6 +1561,37 @@ fn best_spot(
     best.map(|(_, (x, y))| Point::new(mm_to_nm(x), mm_to_nm(y)))
 }
 
+/// Whether a track or via written into `board` must name its net by code.
+///
+/// A KiCad 10 board names the net of every track and via, and its pads carry
+/// both, `(net 6 "GND")`, so a parsed net table does not say how a track is
+/// spelled. A track written with a bare code there joins no net and the pad it
+/// was meant to reach reads as open. The board's own tracks and vias decide: if
+/// any of them names its net, so does the copper added here.
+fn spells_nets_by_code(text: &str, board: &PcbBoard) -> bool {
+    !board.nets.is_empty() && !tracks_name_their_nets(text)
+}
+
+/// Whether the first track or via in `text` that carries a net writes it as a
+/// name, `(net "GND")`, rather than a code, `(net 1)`.
+fn tracks_name_their_nets(text: &str) -> bool {
+    let mut from = 0;
+    while let Some(rel) = text[from..]
+        .find("(segment")
+        .into_iter()
+        .chain(text[from..].find("(via"))
+        .min()
+    {
+        let start = from + rel;
+        let window = &text[start..text.len().min(start + 400)];
+        if let Some(at) = window.find("(net ") {
+            return window[at + 5..].starts_with('"');
+        }
+        from = start + 4;
+    }
+    false
+}
+
 /// `text` with `vias` written in, in the net spelling the board already uses.
 fn with_vias(text: &str, board: &PcbBoard, vias: &[TieVia]) -> Result<String, String> {
     let copper = board.copper_layers();
@@ -1569,7 +1600,7 @@ fn with_vias(text: &str, board: &PcbBoard, vias: &[TieVia]) -> Result<String, St
     };
     // A board with a net table spells a net by its code; one without carries
     // names. The parsed table says which, whatever the file's whitespace.
-    let numbered = !board.nets.is_empty();
+    let numbered = spells_nets_by_code(text, board);
     let close = text
         .rfind(')')
         .ok_or_else(|| "the board has no closing parenthesis".to_string())?;
@@ -2619,6 +2650,7 @@ fn add_stub(
         .nets
         .iter()
         .find(|(_, name)| name.as_str() == net)
+        .filter(|_| spells_nets_by_code(text, board))
         .map_or_else(
             || format!("\"{}\"", escape_net_name(net)),
             |(code, _)| code.to_string(),
@@ -3373,6 +3405,35 @@ mod tests {
             assert_eq!(back.vias.len(), 1, "{text}");
             assert_eq!(back.vias[0].net, Some(1), "numeric code for {text}");
         }
+    }
+
+    /// KiCad 10 names the net of every track and via but keeps `(net 6 "GND")`
+    /// on pads, so a parsed net table must not turn added copper numeric.
+    #[test]
+    fn copper_added_to_a_board_that_names_its_nets_names_its_net() {
+        let text = r#"(kicad_pcb (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (footprint "X" (layer "F.Cu") (at 0 0)
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 6 "GND")))
+          (segment (start 5 5) (end 6 5) (width 0.2) (layer "F.Cu") (net "GND")))"#;
+        let board = PcbBoard::parse(text).expect("parses");
+        assert!(!board.nets.is_empty());
+        let stub = add_stub(text, &board, "GND", "F.Cu", (0.0, 0.0), (1.0, 0.0));
+        assert!(stub.contains("(net \"GND\")"), "{stub}");
+        let via = TieVia {
+            net: "GND".to_string(),
+            at: Point::new(mm_to_nm(1.0), mm_to_nm(2.0)),
+            size_nm: 600_000,
+            drill_nm: 300_000,
+        };
+        let tied = with_vias(text, &board, &[via]).expect("tied");
+        assert!(tied.contains("(net \"GND\")"), "{tied}");
+        let back = PcbBoard::parse(&stub).expect("parses");
+        assert_eq!(back.segments.len(), 2);
+        assert!(
+            back.segments
+                .iter()
+                .all(|s| s.net_name.as_deref() == Some("GND"))
+        );
     }
 
     #[test]
