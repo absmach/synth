@@ -75,3 +75,11 @@ class = "B"
 status = "experimental"
 skip_reason = "the route does not validate on this branch: the FreeRouting copper leaves +3V3 and VREG_LX open, an untied GND island and signal vias without ground return vias — 13 blocking findings (verified 2026-11-13 with FreeRouting 2.4.1). The board's own QUALIFICATION.md already records that the current tree does not route. The row stays here, unrun, until the route validates again."
 rationale = "PT100 four-wire RTD front end (ADS124S08, REF5025, RP2350 as the host side). The committed evidence was routed by FreeRouting and passed Synth's release gate at its recorded revision, with the parts reviewed in the registry; its own QUALIFICATION.md records what is still open (SI/PI review, historical committed package)."
+
+[[board]]
+id = "ice40-hdmi-node"
+path = "qualification/class-c/ice40-hdmi-node/ice40_hdmi_node.synth"
+class = "C"
+status = "experimental"
+skip_reason = "not run by this job: the route takes longer than the CI budget, so no verdict is asserted here. The committed package comes from the author's own export."
+rationale = "HDMI TMDS node (iCE40HX4K, six layers, four TMDS pairs). Its package comes from the author's `synth mcp` exports; the route takes about 30 minutes, beyond the CI budget, so the matrix does not run it. See its README for what is and is not claimed."
