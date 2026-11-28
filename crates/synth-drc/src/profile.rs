@@ -524,6 +524,10 @@ impl ManufacturerProfile {
             microvia_drill_nm: mm_to_nm(0.1),
             microvia_diameter_nm: mm_to_nm(0.25),
             min_drill_diameter_nm: mm_to_nm(0.2),
+            // JLCPCB's capability table quotes 3.5 mil (0.09 mm) trace and
+            // space on 4- and 6-layer boards, against 5 mil (0.127 mm) on
+            // 1- and 2-layer boards. Clearance stays at the stock 0.127 mm.
+            min_trace_width_nm: mm_to_nm(0.09),
             // Quoted on the 4- and 6-layer builds only, which is what the
             // capability descriptor has always advertised.
             supported_layers: vec![4, 6],
@@ -892,7 +896,7 @@ mod tests {
     }
 
     #[test]
-    fn jlc_advanced_moves_the_drill_and_nothing_else() {
+    fn jlc_advanced_moves_the_drill_and_the_track_and_nothing_else() {
         let standard = ManufacturerProfile::jlc_standard();
         let advanced = ManufacturerProfile::jlc_advanced();
 
@@ -901,9 +905,14 @@ mod tests {
         assert_eq!(advanced.min_drill_diameter_nm, mm_to_nm(0.2));
         assert!(advanced.via_in_pad);
 
-        // Everything else stays on the conservative floor. A finer hole is
-        // not a licence to draw a narrower track.
-        assert_eq!(advanced.min_trace_width_nm, standard.min_trace_width_nm);
+        // JLCPCB quotes 3.5 mil (0.09 mm) track and space on its 4- and 6-layer
+        // boards, the boards that take the 0.2 mm hole. The router necks a
+        // pair down to the floor at a fine-pitch pad, so the floor is the
+        // fab's own figure, not a rounded-up one.
+        assert_eq!(advanced.min_trace_width_nm, mm_to_nm(0.09));
+        assert!(advanced.min_trace_width_nm < standard.min_trace_width_nm);
+
+        // Everything else stays on the conservative floor.
         assert_eq!(
             advanced.min_copper_clearance_nm,
             standard.min_copper_clearance_nm
