@@ -395,8 +395,10 @@ pub fn build_pcb(
                     Some((centre, mm_to_nm(width_mm / 2.0)))
                 })
                 .collect();
+            let fence_pads = all_pad_rects(board, placement);
             for (stitch_index, point) in ground_fence_points(outline, inset, &holes)
                 .into_iter()
+                .map(|point| clear_of_pads(point, outline, inset, &fence_pads))
                 .enumerate()
             {
                 if region
@@ -1659,6 +1661,40 @@ fn ground_fence_points(outline: Rect, inset_nm: i64, holes: &[(Point, i64)]) -> 
             holes,
         )),
     ]
+}
+
+/// Slide a fence via along the board edge to the nearest spot that keeps the
+/// fabrication clearance from every pad, so a connector at the edge midpoint
+/// does not take the via onto its own copper. A via that is already clear, or
+/// that has no clear spot on its edge, is returned as it is.
+#[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+fn clear_of_pads(
+    via: Point,
+    outline: synth_geometry::Rect,
+    inset_nm: i64,
+    pads: &[PadRect],
+) -> Point {
+    let need = mm_to_nm(GROUND_VIA_RADIUS_MM) + PLANE_VIA_FAB_CLEARANCE_NM;
+    let clear = |at: Point| {
+        pads.iter()
+            .all(|(centre, half)| point_to_rect_nm(at, *centre, *half) >= need as f64)
+    };
+    if clear(via) {
+        return via;
+    }
+    let (low, high) = (outline.min.x_nm + inset_nm, outline.max.x_nm - inset_nm);
+    let step = mm_to_nm(0.1);
+    let mut offset = step;
+    while via.x_nm - offset >= low || via.x_nm + offset <= high {
+        for x in [via.x_nm - offset, via.x_nm + offset] {
+            let at = Point::new(x, via.y_nm);
+            if (low..=high).contains(&x) && clear(at) {
+                return at;
+            }
+        }
+        offset += step;
+    }
+    via
 }
 
 /// Slide a corner fence via along the board edge, toward the inside (`inward`
@@ -4187,6 +4223,26 @@ mod tests {
         let flipped = flip_footprint_body(body);
         assert!(flipped.contains("(justify mirror)"), "{flipped}");
         assert!(flipped.contains("\"B.Fab\""));
+    }
+
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // nanometres on a board are far below 2^52
+    fn a_midpoint_fence_via_slides_off_a_pad() {
+        let outline =
+            synth_geometry::Rect::new(Point::new(0, 0), Point::new(mm_to_nm(60.0), mm_to_nm(30.0)));
+        let pad = (
+            Point::new(mm_to_nm(30.0), mm_to_nm(1.5)),
+            (mm_to_nm(0.85), mm_to_nm(0.85)),
+        );
+        let via = Point::new(mm_to_nm(30.0), mm_to_nm(1.5));
+        let moved = clear_of_pads(via, outline, mm_to_nm(1.5), &[pad]);
+        assert_ne!(moved, via);
+        assert_eq!(moved.y_nm, via.y_nm);
+        assert!(
+            point_to_rect_nm(moved, pad.0, pad.1)
+                >= (mm_to_nm(GROUND_VIA_RADIUS_MM) + PLANE_VIA_FAB_CLEARANCE_NM) as f64
+        );
+        assert_eq!(clear_of_pads(via, outline, mm_to_nm(1.5), &[]), via);
     }
 
     #[test]
