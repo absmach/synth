@@ -986,6 +986,25 @@ fn from_unit(_work: &Work<'_>, value: f64) -> i64 {
     value.round() as i64
 }
 
+/// How a track written for `s` spells its net: by name when the board's own
+/// tracks name theirs (KiCad 10), else by code. Pads carry both, so a net table
+/// alone does not decide, and a bare code on a board that names its nets joins
+/// no net.
+fn net_token(text: &str, board: &PcbBoard, s: &Segment) -> String {
+    let by_name = |name: String| format!("\"{}\"", name.replace('"', "\\\""));
+    if crate::island_vias::tracks_name_their_nets(text) {
+        return by_name(
+            net_name(board, s.net, s.net_name.as_ref())
+                .or_else(|| s.net_name.clone())
+                .unwrap_or_default(),
+        );
+    }
+    s.net.map_or_else(
+        || by_name(s.net_name.clone().unwrap_or_default()),
+        |code| code.to_string(),
+    )
+}
+
 /// Tune the board text in memory: the new text and the report.
 ///
 /// # Errors
@@ -1010,15 +1029,7 @@ pub fn tune_text(
             ),
             &s.layer,
         );
-        let token = s.net.map_or_else(
-            || {
-                format!(
-                    "\"{}\"",
-                    s.net_name.clone().unwrap_or_default().replace('"', "\\\"")
-                )
-            },
-            |code| code.to_string(),
-        );
+        let token = net_token(text, &board, s);
         let Some(close) = out.rfind(')') else {
             return Err("board text has no closing parenthesis".to_string());
         };
@@ -1415,5 +1426,24 @@ mod tests {
             .unwrap()
             .added_nm;
         assert!((added - 12).abs() <= 1, "{report:#?}");
+    }
+}
+
+#[cfg(test)]
+mod net_token_tests {
+    use super::*;
+
+    #[test]
+    fn a_tuned_track_names_its_net_on_a_board_that_names_its_nets() {
+        let named = r#"(kicad_pcb (layers (0 "F.Cu" signal))
+          (footprint "X" (layer "F.Cu") (at 0 0)
+            (pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 3 "D_P")))
+          (segment (start 0 0) (end 5 0) (width 0.127) (layer "F.Cu") (net "D_P")))"#;
+        let board = PcbBoard::parse(named).expect("parses");
+        assert_eq!(net_token(named, &board, &board.segments[0]), "\"D_P\"");
+        let numbered = r#"(kicad_pcb (layers (0 "F.Cu" signal)) (net 0 "") (net 3 "D_P")
+          (segment (start 0 0) (end 5 0) (width 0.127) (layer "F.Cu") (net 3)))"#;
+        let board = PcbBoard::parse(numbered).expect("parses");
+        assert_eq!(net_token(numbered, &board, &board.segments[0]), "3");
     }
 }

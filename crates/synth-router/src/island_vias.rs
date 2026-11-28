@@ -1574,7 +1574,7 @@ fn spells_nets_by_code(text: &str, board: &PcbBoard) -> bool {
 
 /// Whether the first track or via in `text` that carries a net writes it as a
 /// name, `(net "GND")`, rather than a code, `(net 1)`.
-fn tracks_name_their_nets(text: &str) -> bool {
+pub(crate) fn tracks_name_their_nets(text: &str) -> bool {
     let mut from = 0;
     while let Some(rel) = text[from..]
         .find("(segment")
