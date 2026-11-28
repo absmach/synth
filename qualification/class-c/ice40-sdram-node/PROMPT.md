@@ -1,0 +1,4 @@
+# Prompt
+
+
+Using synth mcp server design a six-layer iCE40 SDR SDRAM memory node for JLCPCB on the JLC06161H-3313 stackup, about 70 x 61 mm, with 50 ohm outer traces. Power it from a 5 V USB-C sink receptacle with 5.1 k CC pull-downs and TPD1E10B06 ESD diodes on CC1 and CC2, through a 1.1 A resettable fuse, a PTVS6V0S1UR TVS diode and a 1 ohm surge resistor. Regulate 3.3 V with an AP7361C-33E and the 1.2 V core with a TLV70012, and filter the PLL supply with a ferrite bead. Use an iCE40HX4K-TQ144 FPGA with a 25 MHz oscillator on a global buffer input and an IS42S16400J SDR SDRAM with 22 ohm series resistors, declared net classes, length-match groups and skew budgets. Add a W25Q128JVSIQ SPI boot flash, a 1x6 programming header on the bottom edge, status LEDs, a row of test points on the bottom side along the bottom edge and two M2.5 mounting holes in opposite corners. Group the schematic by function and keep the design notes explicit.
