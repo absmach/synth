@@ -87,6 +87,19 @@ pub struct TieVia {
     pub drill_nm: i64,
 }
 
+/// A track from an island's pad to the tie via placed for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TieStub {
+    pub net: String,
+    pub layer: String,
+    pub from: Point,
+    pub to: Point,
+}
+
+/// The width of a tie stub: above the fab's narrowest track, and narrow enough
+/// to leave a 0.5 mm pitch pad's neighbours their gap.
+const TIE_STUB_WIDTH_MM: f64 = 0.15;
+
 /// What the pass did to a candidate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TieOutcome {
@@ -187,7 +200,18 @@ fn run_rounds(
                 advisory: plan.advisory,
             });
         }
-        let tied = with_vias(&text, &board, &plan.vias)?;
+        let mut tied = with_vias(&text, &board, &plan.vias)?;
+        for stub in &plan.stubs {
+            tied = add_track(
+                &tied,
+                &board,
+                &stub.net,
+                &stub.layer,
+                (stub.from.x_mm(), stub.from.y_mm()),
+                (stub.to.x_mm(), stub.to.y_mm()),
+                TIE_STUB_WIDTH_MM,
+            );
+        }
         PcbBoard::parse(&tied).map_err(|e| format!("the tied board does not parse: {e}"))?;
         std::fs::write(candidate, tied)
             .map_err(|e| format!("could not write {}: {e}", candidate.display()))?;
@@ -422,6 +446,9 @@ impl Groups {
 pub struct TiePlan {
     /// The vias that tie an island to its net's main pour.
     pub vias: Vec<TieVia>,
+    /// The tracks that join an island's pad to a tie via that sits outside the
+    /// island, for a pad too fine for a via of its own.
+    pub stubs: Vec<TieStub>,
     /// Copper-bearing pad ties no via fits in: a finding, not a success.
     pub unresolved: Vec<String>,
     /// Islands no via fits in, and signal vias with no room for a return via:
@@ -534,6 +561,11 @@ pub fn plan_ties(board: &PcbBoard, declared: &ViaDeclarations) -> TiePlan {
             });
             if let Some(tie) = tie {
                 plan.vias.push(tie);
+            } else if let Some((tie, stub)) =
+                stub_tie(board, regions, &members, &mains, &via, need, &keepout)
+            {
+                plan.vias.push(tie);
+                plan.stubs.push(stub);
             } else {
                 let first = &regions[members[0]];
                 plan.advisory.push(format!(
@@ -1470,6 +1502,78 @@ fn join(groups: &mut Groups, attached: &mut [bool], hit: &[usize]) {
         attached[i] = true;
         groups.union(hit[0], i);
     }
+}
+
+/// A tie for an island that holds a fine pad no via fits in: a via on the main
+/// pour within a few millimetres of the pad, and a short track from the pad to
+/// it. The via keeps the gap from foreign copper, and the track keeps the gap
+/// too along its whole length, so the tie never shorts the pad's neighbours.
+fn stub_tie(
+    board: &PcbBoard,
+    regions: &[Region],
+    island: &[usize],
+    main: &[usize],
+    via: &TieVia,
+    need: f64,
+    keepout: &Keepout,
+) -> Option<(TieVia, TieStub)> {
+    let radius = need - EDGE_SLACK_MM;
+    let layer = regions.get(*island.first()?)?.layer.clone();
+    let track_keepout = Keepout::from_board_in_pad(board, &via.net, TRACK_GAP_MM);
+    let half = TIE_STUB_WIDTH_MM / 2.0;
+    let pads: Vec<(f64, f64)> = board
+        .pads()
+        .filter(|pad| {
+            pad.kind == "smd"
+                && pad.layers.contains(&layer)
+                && net_of(board, pad.net, pad.net_name.as_ref()).as_deref()
+                    == Some(via.net.as_str())
+                && island
+                    .iter()
+                    .any(|&i| regions[i].contains((pad.at.x_mm(), pad.at.y_mm())))
+        })
+        .map(|pad| (pad.at.x_mm(), pad.at.y_mm()))
+        .collect();
+    for centre in pads {
+        for step in 5..=40_u32 {
+            let r = f64::from(step) * 0.1;
+            for k in 0..36_u32 {
+                let angle = f64::from(k) * std::f64::consts::TAU / 36.0;
+                let at = (centre.0 + r * angle.cos(), centre.1 + r * angle.sin());
+                if !keepout.clear(at, radius)
+                    || !main.iter().map(|&b| &regions[b]).any(|b| {
+                        b.layer != layer && b.contains(at) && b.edge_distance(at) >= need - EPS
+                    })
+                {
+                    continue;
+                }
+                let n = (step * 2).max(1);
+                let clear = (0..=n).all(|i| {
+                    let t = f64::from(i) / f64::from(n);
+                    let p = (
+                        centre.0 + (at.0 - centre.0) * t,
+                        centre.1 + (at.1 - centre.1) * t,
+                    );
+                    track_keepout.track_clear(p, half, (f64::MAX, f64::MAX))
+                });
+                if clear {
+                    return Some((
+                        TieVia {
+                            at: Point::new(mm_to_nm(at.0), mm_to_nm(at.1)),
+                            ..via.clone()
+                        },
+                        TieStub {
+                            net: via.net.clone(),
+                            layer,
+                            from: Point::new(mm_to_nm(centre.0), mm_to_nm(centre.1)),
+                            to: Point::new(mm_to_nm(at.0), mm_to_nm(at.1)),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    None
 }
 
 /// The point inside an island and a region of the main pour on another layer
@@ -2642,6 +2746,19 @@ fn add_stub(
     from: (f64, f64),
     to: (f64, f64),
 ) -> String {
+    add_track(text, board, net, layer, from, to, STUB_WIDTH_MM)
+}
+
+/// [`add_stub`] with the track's width.
+fn add_track(
+    text: &str,
+    board: &PcbBoard,
+    net: &str,
+    layer: &str,
+    from: (f64, f64),
+    to: (f64, f64),
+    width_mm: f64,
+) -> String {
     let Some(close) = text.rfind(')') else {
         return text.to_string();
     };
@@ -2658,7 +2775,7 @@ fn add_stub(
     let id = uuid_for(&TieVia {
         net: net.to_string(),
         at: Point::new(mm_to_nm(to.0), mm_to_nm(to.1)),
-        size_nm: mm_to_nm(STUB_WIDTH_MM),
+        size_nm: mm_to_nm(width_mm),
         drill_nm: 0,
     });
     let mut out = String::with_capacity(text.len() + 200);
@@ -2670,7 +2787,7 @@ fn add_stub(
         mm(mm_to_nm(from.1)),
         mm(mm_to_nm(to.0)),
         mm(mm_to_nm(to.1)),
-        mm(mm_to_nm(STUB_WIDTH_MM)),
+        mm(mm_to_nm(width_mm)),
     );
     out.push_str(&text[body_end..]);
     out
@@ -3434,6 +3551,45 @@ mod tests {
                 .iter()
                 .all(|s| s.net_name.as_deref() == Some("GND"))
         );
+    }
+
+    /// A ground pad too fine for a tie via, alone in a pour island, is joined
+    /// to a via on the main pour by a short track.
+    #[test]
+    fn an_island_holding_a_fine_pad_is_tied_by_a_via_and_a_stub() {
+        let text = r#"(kicad_pcb
+          (layers (0 "F.Cu" signal) (2 "B.Cu" signal))
+          (net 0 "") (net 1 "GND")
+          (footprint "X" (layer "F.Cu") (at 10 10)
+            (property "Reference" "J1")
+            (pad "1" smd rect (at 0 0) (size 0.3 1.5) (layers "F.Cu") (net 1 "GND")))
+          (zone (net 1) (net_name "GND") (layer "F.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "F.Cu") (pts (xy 9.6 9) (xy 10.4 9) (xy 10.4 11) (xy 9.6 11))))
+          (zone (net 1) (net_name "GND") (layer "B.Cu") (fill yes)
+            (polygon (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))
+            (filled_polygon (layer "B.Cu") (pts (xy 0 0) (xy 40 0) (xy 40 20) (xy 0 20)))))"#;
+        let board = PcbBoard::parse(text).expect("parses");
+        let plan = plan_ties(&board, &ViaDeclarations::new());
+        assert_eq!(plan.vias.len(), 1, "{plan:?}");
+        assert_eq!(plan.stubs.len(), 1, "{plan:?}");
+        let stub = &plan.stubs[0];
+        assert_eq!(stub.layer, "F.Cu");
+        assert_eq!(stub.to, plan.vias[0].at, "the track ends at the via");
+        assert!(
+            (stub.from.x_mm() - 10.0).abs() < 1e-6 && (stub.from.y_mm() - 10.0).abs() < 1e-6,
+            "the track starts at the pad: {stub:?}"
+        );
+        let tied = add_track(
+            text,
+            &board,
+            "GND",
+            "F.Cu",
+            (10.0, 10.0),
+            (12.0, 10.0),
+            0.15,
+        );
+        assert!(PcbBoard::parse(&tied).is_ok());
     }
 
     #[test]
