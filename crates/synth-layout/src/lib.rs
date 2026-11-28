@@ -423,6 +423,17 @@ fn snap_grid(v: f64) -> f64 {
 /// Clearance between the anchor body edge and a cluster member's
 /// centre. Leaves room for wire stubs + anchor labels + power flags.
 const MEMBER_CLEARANCE: f64 = 17.78;
+/// Fixed maximum width of one row of cluster members, in mm: A4
+/// landscape (297 mm) less the 20 mm page margin on both sides, snapped
+/// down to the 2.54 mm grid. A row wider than this must wrap.
+///
+/// Fixed rather than derived from the anchor's stacked body height: a
+/// tall multi-unit symbol (an ICE40 TQ144 is ~386 mm tall) is larger
+/// than any row worth wrapping (16 caps at 20.32 mm pitch is ~305 mm),
+/// so a stack-derived limit would never fire. A4's usable width is the
+/// page shape the placer targets, and it stays above the longest row
+/// today's snapshots contain, so short rows keep their geometry.
+const CAP_ROW_MAX_MM: f64 = 256.54;
 /// Spare margin between the page-frame border and any placed
 /// component. KiCad's stock title-block leaves ~10–15 mm on each
 /// side; 20 mm covers most variants.
@@ -673,6 +684,44 @@ fn compute_dynamic_member_dx(board: &Board, members: &[ComponentId]) -> f64 {
     }
     let text_w = (max_label_len as f64) * 0.762 + 5.08;
     snap_grid(20.32_f64.max(text_w))
+}
+
+/// Widest member body, so a row limit can count the body as well as the
+/// centre-to-centre pitch.
+fn max_member_body_width(board: &Board, members: &[ComponentId]) -> f64 {
+    members
+        .iter()
+        .map(|&id| {
+            board
+                .component(id)
+                .and_then(|c| c.part.as_ref())
+                .map_or(0.0, |part| body_size_for_part(part).0)
+        })
+        .fold(0.0_f64, f64::max)
+}
+
+/// Members per row and rows needed for `n` members at `member_dx` pitch:
+/// wrap only when the row exceeds [`CAP_ROW_MAX_MM`], and balance the rows
+/// (`16` at `13` per row is `8 + 8`, not `13 + 3`) so the grid is compact.
+/// The widest body is part of the row, so a long refdes that raises the
+/// pitch cannot leave a row over the limit.
+fn cap_row_shape(n: usize, member_dx: f64, max_body_w: f64) -> (usize, usize) {
+    let usable = (CAP_ROW_MAX_MM - max_body_w).max(0.0);
+    let capacity = (usable / member_dx).floor() as usize + 1;
+    let per_row = capacity.max(1).min(n.max(1));
+    let rows = n.div_ceil(per_row).max(1);
+    (n.div_ceil(rows).max(1), rows)
+}
+
+/// Vertical pitch of wrapped member rows: two text-inclusive half-heights
+/// plus a 2 mm readability margin, rounded *up* so rounding can never eat
+/// the clearance the labels need.
+fn member_row_pitch(board: &Board, members: &[ComponentId]) -> f64 {
+    let half = members
+        .iter()
+        .map(|&id| text_inclusive_half_height(board, id))
+        .fold(0.0_f64, f64::max);
+    grid_steps(2.0 * half + 2.0)
 }
 
 /// Refdes text sits above the body, value text below (§7.6.8's
@@ -4866,6 +4915,10 @@ fn place_clusters(board: &Board, clusters: &[Cluster]) -> Layout {
         // Restore IR component order in the output so consumers that
         // iterate by index see the same order as `board.components`.
         placements.sort_by_key(|p| p.id.0);
+        // A multi-unit anchor whose caps are singleton clusters does not go
+        // through `place_cluster_into`'s member rows; wrap that row here,
+        // before the content bounds size the page.
+        wrap_singleton_passive_rows(board, clusters, &mut placements);
 
         // Fit the sheet to the *actual* content bounding box rather than
         // the theoretical grid. The grid over-counts: cells are padded
@@ -5368,58 +5421,88 @@ fn place_cluster_into(
         .map(|m| m.id)
         .collect();
 
-    // Below: members fan out in a single row beneath the anchor,
-    // horizontally aligned with their connected pins where possible.
+    // Below: members fan out beneath the anchor, horizontally aligned
+    // with their connected pins where possible. A row wider than the
+    // fixed cap-row limit wraps into balanced rows centred on the
+    // anchor, filled in member order. Row 0 keeps the historic
+    // clearance and every later row steps further down, so the whole
+    // grid clears the anchor body — which already spans the full unit
+    // stack.
     if !below.is_empty() {
         let member_dx = compute_dynamic_member_dx(board, &below);
         let row_y = snap_grid(anchor_y + anchor_half_h + row_clearance(board, &below, true));
-        let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
-        let row_start_x = snap_grid(anchor_x - total_width / 2.0);
-        let mut last_x: Option<f64> = None;
-        for (i, id) in below.iter().enumerate() {
-            let mut placed_x = snap_grid(row_start_x + i as f64 * member_dx);
-            if let Some(lx) = last_x {
-                placed_x = placed_x.max(snap_grid(lx + member_dx));
-            }
-            if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id)
-                && let Some(anchor) = board.component(cluster.anchor)
-                && let Some(part) = anchor.part.as_ref()
-            {
-                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                let target_x = snap_grid(anchor_x + px);
-                let coord_key = (
-                    (target_x * 10.0).round() as i64,
-                    (row_y * 10.0).round() as i64,
+        let (per_row, rows) =
+            cap_row_shape(below.len(), member_dx, max_member_body_width(board, &below));
+        if rows > 1 {
+            let pitch = member_row_pitch(board, &below);
+            for (row, members) in below.chunks(per_row).enumerate() {
+                let start_x = snap_grid(
+                    anchor_x - (members.len().saturating_sub(1)) as f64 * member_dx / 2.0,
                 );
-                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                let clears_neighbour = placements.iter().all(|placed| {
-                    (placed.center_mm.1 - row_y).abs() > 0.1
-                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                });
-                let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                if remains_local
-                    && clears_neighbour
-                    && clears_last
-                    && !occupied.contains(&coord_key)
-                {
-                    placed_x = target_x;
+                let placed_y = snap_grid(row_y + row as f64 * pitch);
+                for (i, id) in members.iter().enumerate() {
+                    let placed_x = snap_grid(start_x + i as f64 * member_dx);
+                    let coord_key = (
+                        (placed_x * 10.0).round() as i64,
+                        (placed_y * 10.0).round() as i64,
+                    );
+                    occupied.insert(coord_key);
+                    placements.push(ComponentPlacement {
+                        id: *id,
+                        center_mm: (placed_x, placed_y),
+                        rotation: Rotation::Zero,
+                    });
                 }
             }
-            if let Some(lx) = last_x {
-                placed_x = placed_x.max(snap_grid(lx + member_dx));
-            }
-            last_x = Some(placed_x);
-            let coord_key = (
-                (placed_x * 10.0).round() as i64,
-                (row_y * 10.0).round() as i64,
-            );
-            occupied.insert(coord_key);
+        } else {
+            let total_width = (below.len().saturating_sub(1)) as f64 * member_dx;
+            let row_start_x = snap_grid(anchor_x - total_width / 2.0);
+            let mut last_x: Option<f64> = None;
+            for (i, id) in below.iter().enumerate() {
+                let mut placed_x = snap_grid(row_start_x + i as f64 * member_dx);
+                if let Some(lx) = last_x {
+                    placed_x = placed_x.max(snap_grid(lx + member_dx));
+                }
+                if let Some(pin_idx) = find_connecting_active_pin(board, cluster.anchor, *id)
+                    && let Some(anchor) = board.component(cluster.anchor)
+                    && let Some(part) = anchor.part.as_ref()
+                {
+                    let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                    let target_x = snap_grid(anchor_x + px);
+                    let coord_key = (
+                        (target_x * 10.0).round() as i64,
+                        (row_y * 10.0).round() as i64,
+                    );
+                    let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                    let clears_neighbour = placements.iter().all(|placed| {
+                        (placed.center_mm.1 - row_y).abs() > 0.1
+                            || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                    });
+                    let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                    if remains_local
+                        && clears_neighbour
+                        && clears_last
+                        && !occupied.contains(&coord_key)
+                    {
+                        placed_x = target_x;
+                    }
+                }
+                if let Some(lx) = last_x {
+                    placed_x = placed_x.max(snap_grid(lx + member_dx));
+                }
+                last_x = Some(placed_x);
+                let coord_key = (
+                    (placed_x * 10.0).round() as i64,
+                    (row_y * 10.0).round() as i64,
+                );
+                occupied.insert(coord_key);
 
-            placements.push(ComponentPlacement {
-                id: *id,
-                center_mm: (placed_x, row_y),
-                rotation: Rotation::Zero,
-            });
+                placements.push(ComponentPlacement {
+                    id: *id,
+                    center_mm: (placed_x, row_y),
+                    rotation: Rotation::Zero,
+                });
+            }
         }
     }
 
@@ -5511,74 +5594,101 @@ fn place_cluster_into(
 
     // Above: LED limit resistors remain in a vertical chain.
     // Pull-ups for an IC fan into a horizontal row above it,
-    // which is the usual readable bus-pull-up arrangement.
+    // which is the usual readable bus-pull-up arrangement. A row wider
+    // than the fixed cap-row limit wraps upwards, the mirror image of the
+    // Below grid: rows centred on the anchor, filled in member order.
     if !above.is_empty() {
         let member_dx = compute_dynamic_member_dx(board, &above);
         let horizontal_row_y = snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE);
-        let horizontal_width = (above.len().saturating_sub(1)) as f64 * member_dx;
-        let horizontal_start_x = snap_grid(anchor_x - horizontal_width / 2.0);
-        let mut last_x: Option<f64> = None;
-        for (i, id) in above.iter().enumerate() {
-            let mut placed_x = if cluster.anchor_vertical {
-                anchor_x
-            } else {
-                snap_grid(horizontal_start_x + i as f64 * member_dx)
-            };
-            let target_y = if cluster.anchor_vertical {
-                snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE - (i as f64) * MEMBER_DX)
-            } else {
-                horizontal_row_y
-            };
-            if !cluster.anchor_vertical
-                && let Some(lx) = last_x
-            {
-                placed_x = placed_x.max(snap_grid(lx + member_dx));
-            }
-            // A turned anchor shows its pins on its own centre line, so the
-            // unturned pin offset would only push the member off that line.
-            let aligning_pin = find_connecting_active_pin(board, cluster.anchor, *id)
-                .filter(|_| !cluster.anchor_vertical);
-            if let Some(pin_idx) = aligning_pin
-                && let Some(anchor) = board.component(cluster.anchor)
-                && let Some(part) = anchor.part.as_ref()
-            {
-                let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
-                let target_x = snap_grid(anchor_x + px);
-                let coord_key = (
-                    (target_x * 10.0).round() as i64,
-                    (target_y * 10.0).round() as i64,
+        let (per_row, rows) =
+            cap_row_shape(above.len(), member_dx, max_member_body_width(board, &above));
+        if !cluster.anchor_vertical && rows > 1 {
+            let pitch = member_row_pitch(board, &above);
+            for (row, members) in above.chunks(per_row).enumerate() {
+                let start_x = snap_grid(
+                    anchor_x - (members.len().saturating_sub(1)) as f64 * member_dx / 2.0,
                 );
-                let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
-                let clears_neighbour = placements.iter().all(|placed| {
-                    (placed.center_mm.1 - target_y).abs() > 0.1
-                        || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
-                });
-                let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
-                if remains_local
-                    && clears_neighbour
-                    && clears_last
-                    && !occupied.contains(&coord_key)
-                {
-                    placed_x = target_x;
+                let placed_y = snap_grid(horizontal_row_y - row as f64 * pitch);
+                for (i, id) in members.iter().enumerate() {
+                    let placed_x = snap_grid(start_x + i as f64 * member_dx);
+                    let coord_key = (
+                        (placed_x * 10.0).round() as i64,
+                        (placed_y * 10.0).round() as i64,
+                    );
+                    occupied.insert(coord_key);
+                    placements.push(ComponentPlacement {
+                        id: *id,
+                        center_mm: (placed_x, placed_y),
+                        rotation: Rotation::Zero,
+                    });
                 }
             }
-            if !cluster.anchor_vertical {
-                if let Some(lx) = last_x {
+        } else {
+            let horizontal_width = (above.len().saturating_sub(1)) as f64 * member_dx;
+            let horizontal_start_x = snap_grid(anchor_x - horizontal_width / 2.0);
+            let mut last_x: Option<f64> = None;
+            for (i, id) in above.iter().enumerate() {
+                let mut placed_x = if cluster.anchor_vertical {
+                    anchor_x
+                } else {
+                    snap_grid(horizontal_start_x + i as f64 * member_dx)
+                };
+                let target_y = if cluster.anchor_vertical {
+                    snap_grid(anchor_y - anchor_half_h - MEMBER_CLEARANCE - (i as f64) * MEMBER_DX)
+                } else {
+                    horizontal_row_y
+                };
+                if !cluster.anchor_vertical
+                    && let Some(lx) = last_x
+                {
                     placed_x = placed_x.max(snap_grid(lx + member_dx));
                 }
-                last_x = Some(placed_x);
-            }
-            let coord_key = (
-                (placed_x * 10.0).round() as i64,
-                (target_y * 10.0).round() as i64,
-            );
-            occupied.insert(coord_key);
+                // A turned anchor shows its pins on its own centre line, so the
+                // unturned pin offset would only push the member off that line.
+                let aligning_pin = find_connecting_active_pin(board, cluster.anchor, *id)
+                    .filter(|_| !cluster.anchor_vertical);
+                if let Some(pin_idx) = aligning_pin
+                    && let Some(anchor) = board.component(cluster.anchor)
+                    && let Some(part) = anchor.part.as_ref()
+                {
+                    let (px, _py, _side) = compute_anchor_pin_offset(part, pin_idx);
+                    let target_x = snap_grid(anchor_x + px);
+                    let coord_key = (
+                        (target_x * 10.0).round() as i64,
+                        (target_y * 10.0).round() as i64,
+                    );
+                    let remains_local = (target_x - anchor_x).abs() <= grid_w / 3.0;
+                    let clears_neighbour = placements.iter().all(|placed| {
+                        (placed.center_mm.1 - target_y).abs() > 0.1
+                            || (placed.center_mm.0 - target_x).abs() >= member_dx * 0.8
+                    });
+                    let clears_last = last_x.is_none_or(|lx| target_x >= lx + member_dx * 0.8);
+                    if remains_local
+                        && clears_neighbour
+                        && clears_last
+                        && !occupied.contains(&coord_key)
+                    {
+                        placed_x = target_x;
+                    }
+                }
+                if !cluster.anchor_vertical {
+                    if let Some(lx) = last_x {
+                        placed_x = placed_x.max(snap_grid(lx + member_dx));
+                    }
+                    last_x = Some(placed_x);
+                }
+                let coord_key = (
+                    (placed_x * 10.0).round() as i64,
+                    (target_y * 10.0).round() as i64,
+                );
+                occupied.insert(coord_key);
 
-            placements.push(ComponentPlacement {
-                id: *id,
-                center_mm: (placed_x, target_y),
-                rotation: Rotation::Zero,
-            });
+                placements.push(ComponentPlacement {
+                    id: *id,
+                    center_mm: (placed_x, target_y),
+                    rotation: Rotation::Zero,
+                });
+            }
         }
     }
 
@@ -5643,6 +5753,160 @@ fn place_cluster_into(
             prev = Some((*id, placed_y));
         }
     }
+}
+
+/// Wrap a long row of same-group singleton passives that sits beside a
+/// multi-unit anchor into a compact grid to the right of the unit stack.
+///
+/// A part that declares no `required_decoupling` (Jeff's ICE40) leaves its
+/// caps as singleton clusters. `grid_h` is then the anchor's full stacked
+/// height (~386 mm), which collapses the column-height sweep to one row per
+/// column and leaves the caps in a 650 mm line at `INTRA_GROUP_CLUSTER_DX`
+/// pitch. This pass moves only those singleton passives; the anchor, its
+/// unit stack and every other cluster are untouched.
+///
+/// A row is a set of equal-centre-y passives right of the anchor body and
+/// within the stacked body's height. When its body span exceeds
+/// [`CAP_ROW_MAX_MM`], it is re-spaced at the cap pitch and wrapped as
+/// needed, filled row by row in id order. If any target slot is occupied by
+/// a part that stays put the row is left exactly as it was rather than
+/// overlapping it.
+fn wrap_singleton_passive_rows(
+    board: &Board,
+    clusters: &[Cluster],
+    placements: &mut [ComponentPlacement],
+) {
+    use std::collections::{BTreeMap, HashSet};
+
+    let singleton: HashSet<ComponentId> = clusters
+        .iter()
+        .filter(|c| c.members.is_empty())
+        .map(|c| c.anchor)
+        .collect();
+    let multi_unit: Vec<ComponentId> = clusters
+        .iter()
+        .filter_map(|c| {
+            let part = board.component(c.anchor)?.part.as_ref()?;
+            let lib_id = part.kicad_symbol.as_deref()?;
+            (kicad_lib_loader::symbol_units(lib_id)?.1 > 1).then_some(c.anchor)
+        })
+        .collect();
+
+    for anchor_id in multi_unit {
+        let Some(anchor_part) = board.component(anchor_id).and_then(|c| c.part.as_ref()) else {
+            continue;
+        };
+        let Some(anchor_pos) = placements
+            .iter()
+            .find(|p| p.id == anchor_id)
+            .map(|p| p.center_mm)
+        else {
+            continue;
+        };
+        let (anchor_w, anchor_h) = body_size_for_part(anchor_part);
+        let group = effective_group(board, anchor_id);
+
+        // Singleton two-pin passives beside the stack, bucketed by row.
+        let mut by_row: BTreeMap<i64, Vec<ComponentId>> = BTreeMap::new();
+        for placement in placements.iter() {
+            if !singleton.contains(&placement.id) || effective_group(board, placement.id) != group {
+                continue;
+            }
+            let Some(part) = board.component(placement.id).and_then(|c| c.part.as_ref()) else {
+                continue;
+            };
+            if part.pins.len() != 2
+                || !matches!(part.kind.as_str(), "capacitor" | "resistor" | "inductor")
+            {
+                continue;
+            }
+            let (x, y) = placement.center_mm;
+            let (w, _) = body_size_for_part(part);
+            let beside = x - w / 2.0 >= anchor_pos.0 + anchor_w / 2.0 - 1e-6;
+            let within_stack =
+                y >= anchor_pos.1 - anchor_h / 2.0 && y <= anchor_pos.1 + anchor_h / 2.0;
+            if beside && within_stack {
+                by_row
+                    .entry((y * 100.0).round() as i64)
+                    .or_default()
+                    .push(placement.id);
+            }
+        }
+
+        for members in by_row.into_values() {
+            if members.len() < 2 {
+                continue;
+            }
+            let mut span_lo = f64::INFINITY;
+            let mut span_hi = f64::NEG_INFINITY;
+            for &id in &members {
+                let Some(p) = placements.iter().find(|p| p.id == id) else {
+                    continue;
+                };
+                let Some(part) = board.component(id).and_then(|c| c.part.as_ref()) else {
+                    continue;
+                };
+                let (w, _) = body_size_for_part(part);
+                span_lo = span_lo.min(p.center_mm.0 - w / 2.0);
+                span_hi = span_hi.max(p.center_mm.0 + w / 2.0);
+            }
+            if span_hi - span_lo <= CAP_ROW_MAX_MM {
+                continue;
+            }
+
+            let mut ids = members;
+            ids.sort_by_key(|id| id.0);
+            let dx = compute_dynamic_member_dx(board, &ids);
+            let (per_row, rows) = cap_row_shape(ids.len(), dx, max_member_body_width(board, &ids));
+            let pitch = member_row_pitch(board, &ids);
+            let start_x = snap_grid(anchor_pos.0 + anchor_w / 2.0 + MEMBER_CLEARANCE);
+            let start_y = snap_grid(anchor_pos.1 - (rows.saturating_sub(1)) as f64 * pitch / 2.0);
+            let mut target: Vec<(ComponentId, (f64, f64))> = Vec::with_capacity(ids.len());
+            for (row, row_ids) in ids.chunks(per_row).enumerate() {
+                let y = snap_grid(start_y + row as f64 * pitch);
+                for (col, &id) in row_ids.iter().enumerate() {
+                    target.push((id, (snap_grid(start_x + col as f64 * dx), y)));
+                }
+            }
+
+            // Adopt the grid only when every slot is clear of the parts that
+            // stay put; a collision leaves the row exactly as it was.
+            let moved: HashSet<ComponentId> = ids.iter().copied().collect();
+            if !wrapped_slots_clear(board, placements, &moved, &target) {
+                continue;
+            }
+            for (id, pos) in target {
+                if let Some(p) = placements.iter_mut().find(|p| p.id == id) {
+                    p.center_mm = pos;
+                }
+            }
+        }
+    }
+}
+
+/// True when every target centre's body clears every placement that is
+/// not moving with this row. Bodies, not centre distances: a wide part
+/// can overlap a slot from beyond half a pitch.
+fn wrapped_slots_clear(
+    board: &Board,
+    placements: &[ComponentPlacement],
+    moved: &HashSet<ComponentId>,
+    target: &[(ComponentId, (f64, f64))],
+) -> bool {
+    let body_rect = |id: ComponentId, (x, y): (f64, f64)| {
+        let (w, h) = board
+            .component(id)
+            .and_then(|c| c.part.as_ref())
+            .map_or((BODY_FALLBACK_W, BODY_FALLBACK_H), body_size_for_part);
+        (x - w / 2.0, y - h / 2.0, x + w / 2.0, y + h / 2.0)
+    };
+    target.iter().all(|&(id, pos)| {
+        let target_rect = body_rect(id, pos);
+        placements
+            .iter()
+            .filter(|p| !moved.contains(&p.id))
+            .all(|p| !rects_overlap(target_rect, body_rect(p.id, p.center_mm)))
+    })
 }
 
 /// Page dimensions a content bounding box needs, in mm.
@@ -8552,6 +8816,52 @@ mod patterns_tests {
             clamp_partner(&b, &series_member(Some(0)), &HashSet::new()),
             Some((ComponentId(2), PinId(0))),
             "VCC clamps pair like GND clamps"
+        );
+    }
+
+    #[test]
+    fn a_wide_neighbour_blocks_a_wrapped_slot() {
+        let wide_symbol = "MCU_ST_STM32F4:STM32F429ZITx";
+        if kicad_lib_loader::body_bbox(wide_symbol).is_none() {
+            eprintln!("KiCad symbol library not installed; skipping");
+            return;
+        }
+        let mut wide = part(
+            "mcu",
+            vec![
+                pin("p1", ElectricalType::Passive, &[]),
+                pin("p2", ElectricalType::Passive, &[]),
+            ],
+        );
+        wide.kicad_symbol = Some(wide_symbol.to_string());
+        let cap = part(
+            "capacitor",
+            vec![
+                pin("p1", ElectricalType::Passive, &[]),
+                pin("p2", ElectricalType::Passive, &[]),
+            ],
+        );
+        let b = board(
+            vec![component(0, "U1", wide), component(1, "C1", cap)],
+            vec![],
+        );
+        let placements = vec![
+            ComponentPlacement {
+                id: ComponentId(1),
+                center_mm: (0.0, 0.0),
+                rotation: Rotation::Zero,
+            },
+            ComponentPlacement {
+                id: ComponentId(0),
+                center_mm: (15.0, 0.0),
+                rotation: Rotation::Zero,
+            },
+        ];
+        let moved: HashSet<ComponentId> = [ComponentId(1)].into();
+        let target = [(ComponentId(1), (0.0, 0.0))];
+        assert!(
+            !wrapped_slots_clear(&b, &placements, &moved, &target),
+            "a 55.88 mm-wide neighbour 15 mm away overlaps the cap body; centre distance alone would admit the slot"
         );
     }
 }

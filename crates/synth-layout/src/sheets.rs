@@ -321,6 +321,9 @@ fn split_layout_with_pinned(
             grow_boxes_for_stubs(board, &mut layout, &stubs);
             anchor_sheet(board, &mut layout, &stubs);
             resolve_text_overlaps(board, &mut layout);
+            if !pinned && pi > 0 {
+                fit_one_group_sheet(board, &mut layout);
+            }
             if pinned {
                 grow_sheet_to_fit(board, &mut layout);
                 compact_sheet_to_fit(board, &mut layout);
@@ -648,6 +651,48 @@ fn anchor_sheet(
     if dx != 0.0 || dy != 0.0 {
         crate::translate_layout(layout, dx, dy);
     }
+}
+
+/// Fit a split sheet that holds one group to what it draws.
+///
+/// The floorplan skips a sheet with fewer than two regions, and the page
+/// pipeline sizes the page from the drawing's position before
+/// [`anchor_sheet`] slides it onto the sheet border. For a tall drawing that
+/// leaves a mostly blank A1 (or A0): no standard page between A2 and A1 holds
+/// the content, while a page measured to the drawing does. Only an auto page
+/// changes — a `schematic { paper }` request is kept verbatim — and only when
+/// the measured page saves at least [`crate::CUSTOM_SHEET_MIN_SAVING`] of the
+/// standard page, so a marginal trim keeps the standard frame. The root page
+/// and multi-group sheets never reach this pass.
+fn fit_one_group_sheet(board: &Board, layout: &mut Layout) {
+    if board.schematic_paper.is_some() || layout.group_boxes.len() != 1 {
+        return;
+    }
+    let (have_w, have_h) = layout.sheet_size.dims_mm();
+    // A4/A3/A2 are already the compact standard choice; only the roomy rungs
+    // need a measured alternative.
+    if !matches!(layout.sheet_size, SheetSize::A1 | SheetSize::A0) {
+        return;
+    }
+    let Some((_, max_x, _, max_y)) = crate::content_bounds(board, layout) else {
+        return;
+    };
+    // The page is only as wide as the drawing plus the border, so the title
+    // block always sits under the drawing's right edge: reserve its band, as
+    // `page_needs` does for a box that overlaps the block's column.
+    let grid = crate::CUSTOM_SHEET_QUANTUM_MM;
+    let width = ((max_x + SHEET_BORDER_MM).max(crate::TITLE_BLOCK_W + 2.0 * crate::FRAME_INSET)
+        / grid)
+        .ceil()
+        * grid;
+    let height = ((max_y + crate::FRAME_INSET + crate::TITLE_BLOCK_H) / grid).ceil() * grid;
+    if width * height >= have_w * have_h * crate::CUSTOM_SHEET_MIN_SAVING {
+        return;
+    }
+    layout.sheet_size = SheetSize::Custom {
+        width_mm: width,
+        height_mm: height,
+    };
 }
 
 /// Design notes for one sheet: its own `notes` (by sheet name),
@@ -2039,6 +2084,36 @@ mod tests {
             1,
             "a partial global flag set left the Load sheet isolated: {:?}",
             load.layout.power_flags
+        );
+    }
+
+    #[test]
+    fn a_narrow_page_that_only_grows_its_height_still_fits() {
+        let b = board(
+            vec![component(0, "R1", None, vec![pin("p1"), pin("p2")])],
+            vec![],
+        );
+        let mut page = layout(vec![placed(0, 75.0, 275.0)], vec![]);
+        page.group_boxes.push(crate::GroupBox {
+            group: "G".to_string(),
+            min_mm: (0.0, 0.0),
+            max_mm: (150.0, 550.0),
+            color: [0, 0, 0],
+            caption_inside: true,
+        });
+        page.sheet_size = SheetSize::A1;
+
+        fit_one_group_sheet(&b, &mut page);
+
+        assert_ne!(
+            page.sheet_size,
+            SheetSize::A1,
+            "a 150 x 550 mm page on A1 was left blank; the fit refused because the measured height rounded 1 mm over A1"
+        );
+        let (width, height) = page.sheet_size.dims_mm();
+        assert!(
+            width < 841.0 && height <= 600.0,
+            "the fitted page is {width} x {height}, not the measured narrow page"
         );
     }
 }
