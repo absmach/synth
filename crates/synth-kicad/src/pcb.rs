@@ -3812,7 +3812,7 @@ fn mirror_text_item(item: &str) -> String {
                     }
                 } else {
                     let close = justify_end - 1;
-                    format!("{} mirror{})", &effects[..close], &effects[close..])
+                    format!("{} mirror{}", &effects[..close], &effects[close..])
                 }
             }
             None => effects.to_string(),
@@ -3820,7 +3820,7 @@ fn mirror_text_item(item: &str) -> String {
     } else {
         let close = effects.len() - 1;
         format!(
-            "{} (justify mirror){})",
+            "{} (justify mirror){}",
             &effects[..close],
             &effects[close..]
         )
@@ -4179,6 +4179,24 @@ mod tests {
         assert!(flipped.contains("(start -1 0.25) (end 1 -0.75) (layer \"B.SilkS\")"));
         assert!(flipped.contains("\"B.CrtYd\""));
         assert!(!flipped.contains("F."));
+    }
+
+    /// A multi-line `(effects ...)` block, the way KiCad writes library text,
+    /// must stay balanced after the mirror flag is spliced in.
+    #[test]
+    #[allow(clippy::cast_possible_wrap)] // a handful of parentheses
+    fn mirroring_text_keeps_the_parentheses_balanced() {
+        let depth = |s: &str| s.matches('(').count() as i64 - s.matches(')').count() as i64;
+        let bodies = [
+            "(fp_text user \"${REFERENCE}\"\n\t(at 0 1.65)\n\t(layer \"F.Fab\")\n\t(effects\n\t\t(font\n\t\t\t(size 1 1)\n\t\t\t(thickness 0.15)\n\t\t)\n\t)\n)",
+            "(fp_text user \"x\" (at 0 1) (layer \"F.Fab\") (effects (font (size 1 1)) (justify left)))",
+            "(fp_text user \"x\" (at 0 1) (layer \"F.Fab\"))",
+        ];
+        for body in bodies {
+            let mirrored = mirror_text_items(body);
+            assert!(mirrored.contains("mirror"), "{mirrored}");
+            assert_eq!(depth(&mirrored), depth(body), "{mirrored}");
+        }
     }
 
     #[test]
