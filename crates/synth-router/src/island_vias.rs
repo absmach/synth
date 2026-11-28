@@ -92,13 +92,13 @@ pub struct TieVia {
 pub struct TieStub {
     pub net: String,
     pub layer: String,
-    pub from: Point,
-    pub to: Point,
+    /// The track's corners, from the pad's centre to the tie via.
+    pub path: Vec<Point>,
 }
 
 /// The width of a tie stub: above the fab's narrowest track, and narrow enough
 /// to leave a 0.5 mm pitch pad's neighbours their gap.
-const TIE_STUB_WIDTH_MM: f64 = 0.15;
+const TIE_STUB_WIDTH_MM: f64 = 0.127;
 
 /// What the pass did to a candidate.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -202,15 +202,17 @@ fn run_rounds(
         }
         let mut tied = with_vias(&text, &board, &plan.vias)?;
         for stub in &plan.stubs {
-            tied = add_track(
-                &tied,
-                &board,
-                &stub.net,
-                &stub.layer,
-                (stub.from.x_mm(), stub.from.y_mm()),
-                (stub.to.x_mm(), stub.to.y_mm()),
-                TIE_STUB_WIDTH_MM,
-            );
+            for leg in stub.path.windows(2) {
+                tied = add_track(
+                    &tied,
+                    &board,
+                    &stub.net,
+                    &stub.layer,
+                    (leg[0].x_mm(), leg[0].y_mm()),
+                    (leg[1].x_mm(), leg[1].y_mm()),
+                    TIE_STUB_WIDTH_MM,
+                );
+            }
         }
         PcbBoard::parse(&tied).map_err(|e| format!("the tied board does not parse: {e}"))?;
         std::fs::write(candidate, tied)
@@ -975,16 +977,29 @@ impl Keepout {
     /// The obstacles on `board` for a via of net `own`. Tracks of `own` are not
     /// obstacles, since a via may sit on its own net's copper.
     fn from_board(board: &PcbBoard, own: &str, gap_mm: f64) -> Self {
-        Self::build(board, own, gap_mm, false)
+        Self::build(board, own, gap_mm, false, None)
     }
 
     /// [`Self::from_board`] without the pads of `own`: a via of `own` filled and
     /// capped in a pad of its own net touches no foreign copper there.
     fn from_board_in_pad(board: &PcbBoard, own: &str, gap_mm: f64) -> Self {
-        Self::build(board, own, gap_mm, true)
+        Self::build(board, own, gap_mm, true, None)
     }
 
-    fn build(board: &PcbBoard, own: &str, gap_mm: f64, skip_own_pads: bool) -> Self {
+    /// [`Self::from_board_in_pad`] for a track laid on `layer`: only the tracks
+    /// on that layer are obstacles, since copper on another layer is not in the
+    /// way of a track here.
+    fn from_board_on_layer(board: &PcbBoard, own: &str, gap_mm: f64, layer: &str) -> Self {
+        Self::build(board, own, gap_mm, true, Some(layer))
+    }
+
+    fn build(
+        board: &PcbBoard,
+        own: &str,
+        gap_mm: f64,
+        skip_own_pads: bool,
+        layer: Option<&str>,
+    ) -> Self {
         let mut pads = Vec::new();
         for footprint in &board.footprints {
             for pad in &footprint.pads {
@@ -999,6 +1014,7 @@ impl Keepout {
             .iter()
             .filter(|segment| {
                 net_of(board, segment.net, segment.net_name.as_ref()).as_deref() != Some(own)
+                    && layer.is_none_or(|l| segment.layer == l)
             })
             .map(|segment| {
                 (
@@ -1504,10 +1520,89 @@ fn join(groups: &mut Groups, attached: &mut [bool], hit: &[usize]) {
     }
 }
 
+/// How far from its pad a tie track may run, in millimetres.
+const TIE_STUB_REACH_MM: f64 = 6.0;
+
+/// The gap a tie track keeps from other nets' copper: the board's 0.127 mm
+/// minimum, with a hair for rounding.
+const TIE_STUB_GAP_MM: f64 = 0.13;
+
+/// The step of the tie track's search grid, in millimetres.
+const TIE_GRID_MM: f64 = 0.05;
+
+/// A route from `start` over free copper to the first spot `goal` accepts, found
+/// by breadth-first search on a grid, so a corridor between other nets' tracks
+/// is followed round its bends. The route is returned as the corners of its
+/// straight runs. `free` says whether a track may pass a point.
+fn maze_route(
+    start: (f64, f64),
+    reach_mm: f64,
+    free: &dyn Fn((f64, f64)) -> bool,
+    goal: &dyn Fn((f64, f64)) -> bool,
+) -> Option<Vec<(f64, f64)>> {
+    use std::collections::VecDeque;
+    let limit = (reach_mm / TIE_GRID_MM).round() as i32;
+    let at = |node: (i32, i32)| {
+        (
+            start.0 + f64::from(node.0) * TIE_GRID_MM,
+            start.1 + f64::from(node.1) * TIE_GRID_MM,
+        )
+    };
+    let mut parent: HashMap<(i32, i32), (i32, i32)> = HashMap::new();
+    let mut queue = VecDeque::from([(0_i32, 0_i32)]);
+    parent.insert((0, 0), (0, 0));
+    while let Some(node) = queue.pop_front() {
+        if node != (0, 0) && goal(at(node)) {
+            let mut nodes = vec![node];
+            let mut here = node;
+            while here != (0, 0) {
+                here = parent[&here];
+                nodes.push(here);
+            }
+            nodes.reverse();
+            // Keep only the corners: a node whose step differs from the last.
+            let mut corners = vec![at(nodes[0])];
+            for w in nodes.windows(3) {
+                let d1 = (w[1].0 - w[0].0, w[1].1 - w[0].1);
+                let d2 = (w[2].0 - w[1].0, w[2].1 - w[1].1);
+                if d1 != d2 {
+                    corners.push(at(w[1]));
+                }
+            }
+            corners.push(at(node));
+            return Some(corners);
+        }
+        for (dx, dy) in [
+            (1, 0),
+            (-1, 0),
+            (0, 1),
+            (0, -1),
+            (1, 1),
+            (1, -1),
+            (-1, 1),
+            (-1, -1),
+        ] {
+            let next = (node.0 + dx, node.1 + dy);
+            if next.0.abs() > limit || next.1.abs() > limit || parent.contains_key(&next) {
+                continue;
+            }
+            if free(at(next)) {
+                parent.insert(next, node);
+                queue.push_back(next);
+            }
+        }
+    }
+    None
+}
+
 /// A tie for an island that holds a fine pad no via fits in: a via on the main
 /// pour within a few millimetres of the pad, and a short track from the pad to
 /// it. The via keeps the gap from foreign copper, and the track keeps the gap
 /// too along its whole length, so the tie never shorts the pad's neighbours.
+///
+/// A fine pad is boxed in by its neighbours' tracks, so a straight track from
+/// its centre rarely reaches open copper. The track may bend once: it leaves
+/// the pad on a straight line, then runs to the via.
 fn stub_tie(
     board: &PcbBoard,
     regions: &[Region],
@@ -1519,8 +1614,18 @@ fn stub_tie(
 ) -> Option<(TieVia, TieStub)> {
     let radius = need - EDGE_SLACK_MM;
     let layer = regions.get(*island.first()?)?.layer.clone();
-    let track_keepout = Keepout::from_board_in_pad(board, &via.net, TRACK_GAP_MM);
+    let track_keepout = Keepout::from_board_on_layer(board, &via.net, TIE_STUB_GAP_MM, &layer);
     let half = TIE_STUB_WIDTH_MM / 2.0;
+    let leg_clear = |p: (f64, f64), _q: (f64, f64)| -> bool {
+        track_keepout.track_clear(p, half, (f64::MAX, f64::MAX))
+    };
+    let via_spot = |at: (f64, f64)| -> bool {
+        keepout.clear(at, radius)
+            && main
+                .iter()
+                .map(|&b| &regions[b])
+                .any(|b| b.layer != layer && b.contains(at) && b.edge_distance(at) >= need - EPS)
+    };
     let pads: Vec<(f64, f64)> = board
         .pads()
         .filter(|pad| {
@@ -1535,42 +1640,21 @@ fn stub_tie(
         .map(|pad| (pad.at.x_mm(), pad.at.y_mm()))
         .collect();
     for centre in pads {
-        for step in 5..=40_u32 {
-            let r = f64::from(step) * 0.1;
-            for k in 0..36_u32 {
-                let angle = f64::from(k) * std::f64::consts::TAU / 36.0;
-                let at = (centre.0 + r * angle.cos(), centre.1 + r * angle.sin());
-                if !keepout.clear(at, radius)
-                    || !main.iter().map(|&b| &regions[b]).any(|b| {
-                        b.layer != layer && b.contains(at) && b.edge_distance(at) >= need - EPS
-                    })
-                {
-                    continue;
-                }
-                let n = (step * 2).max(1);
-                let clear = (0..=n).all(|i| {
-                    let t = f64::from(i) / f64::from(n);
-                    let p = (
-                        centre.0 + (at.0 - centre.0) * t,
-                        centre.1 + (at.1 - centre.1) * t,
-                    );
-                    track_keepout.track_clear(p, half, (f64::MAX, f64::MAX))
-                });
-                if clear {
-                    return Some((
-                        TieVia {
-                            at: Point::new(mm_to_nm(at.0), mm_to_nm(at.1)),
-                            ..via.clone()
-                        },
-                        TieStub {
-                            net: via.net.clone(),
-                            layer,
-                            from: Point::new(mm_to_nm(centre.0), mm_to_nm(centre.1)),
-                            to: Point::new(mm_to_nm(at.0), mm_to_nm(at.1)),
-                        },
-                    ));
-                }
-            }
+        let found = maze_route(centre, TIE_STUB_REACH_MM, &|p| leg_clear(p, p), &via_spot);
+        if let Some(path) = found {
+            let to_point = |p: (f64, f64)| Point::new(mm_to_nm(p.0), mm_to_nm(p.1));
+            let end = *path.last()?;
+            return Some((
+                TieVia {
+                    at: to_point(end),
+                    ..via.clone()
+                },
+                TieStub {
+                    net: via.net.clone(),
+                    layer,
+                    path: path.into_iter().map(to_point).collect(),
+                },
+            ));
         }
     }
     None
@@ -3575,9 +3659,14 @@ mod tests {
         assert_eq!(plan.stubs.len(), 1, "{plan:?}");
         let stub = &plan.stubs[0];
         assert_eq!(stub.layer, "F.Cu");
-        assert_eq!(stub.to, plan.vias[0].at, "the track ends at the via");
+        assert_eq!(
+            stub.path.last(),
+            Some(&plan.vias[0].at),
+            "the track ends at the via"
+        );
+        let start = stub.path[0];
         assert!(
-            (stub.from.x_mm() - 10.0).abs() < 1e-6 && (stub.from.y_mm() - 10.0).abs() < 1e-6,
+            (start.x_mm() - 10.0).abs() < 1e-6 && (start.y_mm() - 10.0).abs() < 1e-6,
             "the track starts at the pad: {stub:?}"
         );
         let tied = add_track(
